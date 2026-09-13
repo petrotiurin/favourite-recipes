@@ -62,6 +62,49 @@ main {
   padding: 0 1.25rem 3rem;
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.filter-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filter-label {
+  display: inline-block;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.filter-input:checked + .filter-label {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.filter-input:focus-visible + .filter-label {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+main:has(#filter-breakfast:checked) .tile-grid .tile:not(.course-breakfast),
+main:has(#filter-lunch:checked) .tile-grid .tile:not(.course-lunch),
+main:has(#filter-dinner:checked) .tile-grid .tile:not(.course-dinner),
+main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack) {
+  display: none;
+}
+
 .tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
