@@ -16,8 +16,8 @@ total_mins: 15
 
 ## Instructions
 
-1. Optional sides: poach an egg to the side, and thinly slice the avocado.
+1. Optional sides: poach an **egg** to the side, and thinly slice the **avocado**.
 2. Toast the bread.
-3. Spread the burratta on top.
-4. Finish with the prosciutto.
-5. Don't forget a drizzle of balsamic vinegar.
+3. Spread the **burratta** on top.
+4. Finish with the **prosciutto**.
+5. Don't forget a drizzle of **balsamic vinegar**.
