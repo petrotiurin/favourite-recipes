@@ -42,6 +42,7 @@ image: /images/recipes/ultimate-chicken-salad.jpg
 course: [Lunch]                    # any of: Breakfast, Lunch, Dinner, Snack, Drink
 tags: [High Protein]               # optional, free text list
 total_mins: 15
+serves: 2                          # number of people the recipe serves, required
 ---
 ```
 

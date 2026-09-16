@@ -5,6 +5,7 @@ image: /images/recipes/avocado-toast.jpg
 course: [Breakfast, Snack]
 tags: [Low Carb]
 total_mins: 5
+serves: 2
 ---
 
 ## Ingredients

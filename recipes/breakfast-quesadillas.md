@@ -4,6 +4,7 @@ slug: breakfast-quesadillas
 image: /images/recipes/breakfast-quesadillas.jpg
 course: [Breakfast]
 total_mins: 20
+serves: 2
 ---
 
 ## Ingredients

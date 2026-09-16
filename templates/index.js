@@ -23,7 +23,7 @@ function renderIndex(recipes) {
         <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="${escapeHtml(r.title)}" loading="lazy">
         <div class="tile-body">
           <h2 class="tile-title">${escapeHtml(r.title)}</h2>
-          <p class="tile-meta">🕒 ${r.total_mins} mins</p>
+          <p class="tile-meta">🕒 ${r.total_mins} mins &middot; 🍽️ Serves ${r.serves}</p>
         </div>
       </a>`;
     })

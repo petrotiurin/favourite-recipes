@@ -4,6 +4,7 @@ slug: big-batch-raspberry-ripple-bircher
 image: /images/recipes/big-batch-raspberry-ripple-bircher.jpg
 course: [Breakfast]
 total_mins: 5
+serves: 4
 ---
 
 ## Ingredients

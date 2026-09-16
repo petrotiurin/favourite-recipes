@@ -4,6 +4,7 @@ slug: scramble-on-toast
 image: /images/recipes/scramble-on-toast.jpg
 course: [Breakfast]
 total_mins: 10
+serves: 2
 ---
 
 ## Ingredients

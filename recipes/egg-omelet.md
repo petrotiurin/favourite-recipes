@@ -5,6 +5,7 @@ image: /images/recipes/egg-omelet.jpg
 course: [Breakfast]
 tags: [High Protein, Low Carb]
 total_mins: 10
+serves: 2
 ---
 
 ## Ingredients

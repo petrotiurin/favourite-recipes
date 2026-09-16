@@ -5,6 +5,7 @@ image: /images/recipes/harissa-tuna-pitta.jpg
 course: [Lunch]
 tags: [High Protein]
 total_mins: 8
+serves: 1
 ---
 
 ## Ingredients

@@ -5,6 +5,7 @@ image: /images/recipes/overnight-oats.jpg
 course: [Breakfast]
 tags: [Low Fat]
 total_mins: 10
+serves: 1
 ---
 
 ## Ingredients

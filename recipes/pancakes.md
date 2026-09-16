@@ -4,6 +4,7 @@ slug: pancakes
 image: /images/recipes/pancakes.jpg
 course: [Breakfast]
 total_mins: 15
+serves: 4
 ---
 
 ## Ingredients

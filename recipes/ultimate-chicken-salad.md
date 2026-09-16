@@ -5,6 +5,7 @@ image: /images/recipes/ultimate-chicken-salad.jpg
 course: [Lunch]
 tags: [High Protein]
 total_mins: 15
+serves: 2
 ---
 
 ## Ingredients

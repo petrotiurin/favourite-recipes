@@ -5,6 +5,7 @@ image: /images/recipes/thai-style-weeping-steak-bowls-with-pickled-cucumber-slaw
 course: [Dinner]
 tags: [High Protein]
 total_mins: 15
+serves: 2
 ---
 
 ## Ingredients

@@ -4,6 +4,7 @@ slug: klopotenko-syrnyky
 image: /images/recipes/klopotenko-syrnyky.jpg
 course: [Breakfast]
 total_mins: 20
+serves: 4
 ---
 
 ## Ingredients

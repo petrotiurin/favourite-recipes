@@ -4,6 +4,7 @@ slug: steamed-rice
 image: /images/recipes/steamed-rice.webp
 course: [Dinner, Lunch]
 total_mins: 23
+serves: 2
 ---
 
 ## Ingredients
