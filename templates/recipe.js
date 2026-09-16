@@ -13,6 +13,7 @@ function renderRecipe(recipe, bodyHtml) {
     ...(recipe.course || []).map((c) => `<span>${escapeHtml(c)}</span>`),
     ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
     `<span>🕒 ${recipe.total_mins} mins</span>`,
+    `<span>🍽️ Serves ${recipe.serves}</span>`,
   ].join("\n      ");
 
   const content = `  <main>

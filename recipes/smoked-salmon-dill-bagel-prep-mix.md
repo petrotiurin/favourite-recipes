@@ -4,6 +4,7 @@ slug: smoked-salmon-dill-bagel-prep-mix
 image: /images/recipes/smoked-salmon-dill-bagel-prep-mix.jpg
 course: [Lunch]
 total_mins: 10
+serves: 4
 ---
 
 ## Ingredients

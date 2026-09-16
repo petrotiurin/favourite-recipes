@@ -3,6 +3,7 @@ title: Classic Syrna Zapikanka (Cottage Cheese Casserole)
 slug: classic-syrna-zapikanka
 image: /images/recipes/classic-syrna-zapikanka.jpg
 total_mins: 70
+serves: 4
 ---
 
 ## Ingredients (half batch)

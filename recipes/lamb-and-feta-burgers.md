@@ -4,6 +4,7 @@ slug: lamb-and-feta-burgers
 image: /images/recipes/lamb-and-feta-burgers-with-cucumber-slaw-and-garlic-yogurt.jpg
 course: [Dinner]
 total_mins: 45
+serves: 4
 ---
 
 ## Ingredients

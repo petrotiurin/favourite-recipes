@@ -4,6 +4,7 @@ slug: french-toast
 image: /images/recipes/french-toast.jpg
 course: [Breakfast]
 total_mins: 10
+serves: 2
 ---
 
 ## Ingredients

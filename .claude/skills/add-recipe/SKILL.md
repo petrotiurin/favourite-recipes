@@ -15,6 +15,7 @@ From whatever the user gives you (pasted text, a photo of a recipe card, a link,
 - **Course** — one or more of: `Breakfast`, `Lunch`, `Dinner`, `Snack`, `Drink`
 - **Tags** — optional, free text (e.g. `High Protein`, `Low Carb`)
 - **Total minutes** — a single number. If the source gives prep+cook separately, sum them.
+- **Serves** — a single number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
 - **Ingredients** — a full list, each with a quantity
 - **Instructions** — numbered steps
 - **One hero image**
@@ -33,6 +34,7 @@ image: /images/recipes/<slug>.<ext>
 course: [<Course>, ...]
 tags: [<Tag>, ...]     # omit the key entirely if there are no tags
 total_mins: <number>
+serves: <number>
 ---
 ```
 

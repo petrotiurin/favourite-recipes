@@ -4,6 +4,7 @@ slug: smoked-salmon-cream-cheese-flatbreads
 image: /images/recipes/smoked-salmon-and-cream-cheese-sesame-flatbreads.jpg
 course: [Breakfast]
 total_mins: 25
+serves: 2
 ---
 
 ## Ingredients

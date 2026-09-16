@@ -5,6 +5,7 @@ image: /images/recipes/crushed-piperade-potatoes-with-garlic-yogurt-and-sea-bass
 course: [Dinner]
 tags: [High Protein]
 total_mins: 35
+serves: 2
 ---
 
 ## Ingredients

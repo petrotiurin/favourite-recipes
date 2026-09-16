@@ -5,6 +5,7 @@ image: /images/recipes/blt-pasta-salad.jpg
 course: [Lunch]
 tags: [High Protein]
 total_mins: 25
+serves: 2
 ---
 
 ## Ingredients

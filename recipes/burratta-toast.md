@@ -4,6 +4,7 @@ slug: burratta-toast
 image: /images/recipes/burratta-toast.jpg
 course: [Breakfast]
 total_mins: 15
+serves: 1
 ---
 
 ## Ingredients
