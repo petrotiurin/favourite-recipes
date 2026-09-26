@@ -65,13 +65,22 @@ main {
 .search-input {
   display: block;
   width: 100%;
+  max-width: 420px;
+  margin: 0 auto 1.5rem;
   font: inherit;
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 0.55rem 1rem;
-  margin-bottom: 1rem;
+  padding: 0.6rem 1.25rem;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+.search-input::-webkit-search-cancel-button,
+.search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
 }
 
 .search-input:focus-visible {
