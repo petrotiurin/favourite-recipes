@@ -4,7 +4,14 @@ Static GitHub Pages site for the family's favourite recipes. Originally migrated
 
 ## Hard constraint: static only
 
-This site has **no client-side dynamism** by design — no framework runtime, no client-side data fetching, no build-time CMS calls at request time. Everything is plain HTML/CSS generated at build time from Markdown files checked into this repo. Do not add React/Vue/etc., a bundler, or any JS dependency to `dist/` output. The only allowed "moving part" is the Node build script that runs before deploy.
+This site has **no framework, no bundler, and no client-side data fetching** by design — no framework runtime, no build-time CMS calls at request time. Everything is plain HTML/CSS generated at build time from Markdown files checked into this repo. Do not add React/Vue/etc., a bundler, or any JS *dependency* to `dist/` output.
+
+One exception: small, dependency-free vanilla JS is allowed for progressive-enhancement UI (e.g. `templates/search.js`, which does client-side title filtering over the already-rendered recipe list). Rules for that JS:
+- No frameworks, no bundler, no npm packages shipped to `dist/` — hand-written vanilla JS only.
+- No fetching/loading data at runtime — it must only operate on data already baked into the rendered HTML at build time (DOM already in the page, or a JSON literal the build script embedded).
+- It must be optional enhancement: the page's core content (recipe list, recipe pages) must already be fully present and readable with JS disabled: JS only adds interactivity (filtering, search) on top.
+
+The only allowed "moving part" beyond that is the Node build script that runs before deploy.
 
 ## How new recipes get added
 
@@ -16,6 +23,7 @@ New recipes are added by asking Claude Code, in chat, to add one. **Always use t
 recipes/            source of truth: one .md file per recipe (frontmatter + body)
 images/recipes/     source of truth: one hero image per recipe
 templates/          JS functions that render HTML strings (layout.js, index.js, recipe.js)
+templates/search.js client-side search script, copied verbatim into dist/ (see "Hard constraint" above)
 styles/style.css    the one stylesheet, copied verbatim into dist/
 build.js            reads recipes/*.md -> writes dist/ (index.html + recipes/<slug>.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build

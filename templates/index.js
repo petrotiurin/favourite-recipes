@@ -49,6 +49,7 @@ function renderIndex(recipes) {
     <p>A collection of the recipes we keep coming back to.</p>
   </header>
   <main>
+    <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes by name&hellip;" autocomplete="off">
     <div class="filter-bar">
 ${filterInputs}
 ${filterLabels}
@@ -56,7 +57,8 @@ ${filterLabels}
     <div class="tile-grid">
 ${tiles}
     </div>
-  </main>`;
+  </main>
+  <script src="search.js" defer></script>`;
 
   return layout({ title: "Our Favourite Recipes", content, rootPrefix: "" });
 }
