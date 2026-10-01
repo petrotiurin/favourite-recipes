@@ -13,6 +13,8 @@ One exception: small, dependency-free vanilla JS is allowed for progressive-enha
 
 The only allowed "moving part" beyond that is the Node build script that runs before deploy.
 
+The `mcp-server/` folder is **not part of the site**: it's a separate MCP server deployed to Vercel (see `mcp-server/README.md`) that lets an agent add/edit recipes by committing `recipes/*.md` and `images/recipes/*` to `main`. It never ships anything into `dist/`, and its tools mirror the `add-recipe` skill rules (`mcp-server/lib/recipe-format.js` — keep the two in sync if the format changes).
+
 ## How new recipes get added
 
 New recipes are added by asking Claude Code, in chat, to add one. **Always use the `add-recipe` skill** (`.claude/skills/add-recipe/SKILL.md`) for this — it has the exact Markdown formatting rules, the ingredient-bolding rule, and the image rules. Don't freehand a recipe file without it.
@@ -27,7 +29,8 @@ templates/search.js client-side search script, copied verbatim into dist/ (see "
 styles/style.css    the one stylesheet, copied verbatim into dist/
 build.js            reads recipes/*.md -> writes dist/ (index.html + recipes/<slug>.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
-.github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main
+.github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
+mcp-server/         separate MCP server on Vercel for adding/editing recipes (not part of the site)
 ```
 
 ## Build / preview locally

@@ -1,0 +1,19 @@
+{
+  "name": "favourite-recipes-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP server that lets an agent add/edit recipes by committing to the favourite-recipes repo",
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "gray-matter": "^4.0.3",
+    "sharp": "^0.34.5",
+    "zod": "^3.25.76"
+  }
+}

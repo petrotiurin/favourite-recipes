@@ -3,6 +3,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # The MCP server deploys to Vercel on its own; changes to it don't need a site rebuild.
+    paths-ignore:
+      - "mcp-server/**"
   workflow_dispatch:
 
 permissions:
