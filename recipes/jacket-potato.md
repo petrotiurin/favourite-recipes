@@ -4,6 +4,7 @@ slug: jacket-potato
 image: /images/recipes/jacket-potato.jpg
 total_mins: 16
 serves: 1
+calories: 650
 ---
 
 ## Ingredients

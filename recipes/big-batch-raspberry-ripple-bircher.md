@@ -5,6 +5,7 @@ image: /images/recipes/big-batch-raspberry-ripple-bircher.jpg
 course: [Breakfast]
 total_mins: 5
 serves: 4
+calories: 300
 ---
 
 ## Ingredients

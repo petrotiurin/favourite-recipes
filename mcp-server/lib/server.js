@@ -23,6 +23,7 @@ Rules the server enforces or expects:
   Bold EVERY ingredient mention with **double asterisks**, ingredient noun only, e.g. "Stir the **oats** into the **yogurt**".
   Don't bold the dish itself ("the batter", "the burgers").
 - course: one or more of ${COURSES.join(", ")}. total_mins = prep + cook. serves is required: if the source doesn't say, estimate and confirm with the user.
+- calories is required: kcal per serving. Use the source's figure when it gives one; otherwise estimate from the ingredients and tell the user it's an estimate.
 - Every recipe needs a real hero photo. Never invent a placeholder.
 
 Adding the photo, best option first:
@@ -94,7 +95,7 @@ export function buildServer({ origin }) {
     "list_recipes",
     {
       title: "List recipes",
-      description: "List every recipe on the site with its slug, title, course, tags, time and servings.",
+      description: "List every recipe on the site with its slug, title, course, tags, time, servings and calories.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -179,6 +180,7 @@ export function buildServer({ origin }) {
         tags: tagsSchema.optional(),
         total_mins: z.number().int().positive().describe("Total time in minutes (prep + cook)"),
         serves: z.number().int().positive().describe("How many people it serves"),
+        calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
         ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
         instructions: instructionsSchema,
         notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
@@ -203,6 +205,7 @@ export function buildServer({ origin }) {
         tags: tagsSchema.optional(),
         total_mins: z.number().int().positive().optional(),
         serves: z.number().int().positive().optional(),
+        calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
         ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
         instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
         notes: z.string().optional(),

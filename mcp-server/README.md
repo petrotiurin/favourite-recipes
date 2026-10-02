@@ -8,7 +8,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 
 | Tool | What it does |
 | --- | --- |
-| `list_recipes` | All recipes: slug, title, course, tags, time, servings |
+| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
 | `create_image_upload_link` | Returns a one-hour link where a person can upload the dish photo from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit |
@@ -19,7 +19,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 - **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md` and `images/recipes/<slug>.{jpg,jpeg,png,webp}`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
-  - `total_mins` and `serves` must be positive integers.
+  - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
   - Each ingredient is `{quantity, name, note}`. The server bolds the name, and a missing quantity is rejected unless the note says "to taste"/"to serve".
   - Instructions are numbered by the server, and you get a warning if an ingredient is mentioned without being bolded.
   - The slug is derived from the title.

@@ -5,6 +5,7 @@ image: /images/recipes/breakfast-quesadillas.jpg
 course: [Breakfast]
 total_mins: 20
 serves: 2
+calories: 600
 ---
 
 ## Ingredients

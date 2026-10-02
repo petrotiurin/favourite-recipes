@@ -5,6 +5,7 @@ image: /images/recipes/klopotenko-syrnyky.jpg
 course: [Breakfast]
 total_mins: 20
 serves: 2
+calories: 810
 ---
 
 ## Ingredients

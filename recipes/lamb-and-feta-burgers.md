@@ -5,6 +5,7 @@ image: /images/recipes/lamb-and-feta-burgers-with-cucumber-slaw-and-garlic-yogur
 course: [Dinner]
 total_mins: 45
 serves: 4
+calories: 685
 ---
 
 ## Ingredients

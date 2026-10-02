@@ -5,6 +5,7 @@ image: /images/recipes/classic-syrna-zapikanka.jpg
 course: [Breakfast]
 total_mins: 70
 serves: 4
+calories: 305
 ---
 
 ## Ingredients (half batch)

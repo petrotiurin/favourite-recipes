@@ -6,6 +6,7 @@ course: [Dinner]
 tags: [High Protein]
 total_mins: 35
 serves: 2
+calories: 540
 ---
 
 ## Ingredients

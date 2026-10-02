@@ -6,6 +6,7 @@ course: [Breakfast]
 tags: [Low Fat]
 total_mins: 10
 serves: 1
+calories: 400
 ---
 
 ## Ingredients
