@@ -78,7 +78,7 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["create_image_upload_link", "create_recipe", "get_recipe", "list_recipes", "update_recipe"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["create_image_upload_link", "create_recipe", "get_recipe", "list_recipes", "promote_recipe", "update_recipe"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
@@ -125,6 +125,7 @@ tags: [Vegan]
 total_mins: 40
 serves: 4
 calories: 320
+draft: true
 ---
 
 ## Ingredients
@@ -141,6 +142,29 @@ calories: 320
   assert.equal(meta.format, "jpeg");
   assert.equal(Math.max(meta.width, meta.height), 1600);
   assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/test-lentil-soup.jpg", "recipes/test-lentil-soup.md"]);
+});
+
+test("drafts are listed first and promote_recipe turns them into regular recipes", async () => {
+  const list = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
+  assert.equal(list[0].slug, "test-lentil-soup");
+  assert.equal(list[0].draft, true);
+
+  const before = files.get("recipes/test-lentil-soup.md").toString();
+  const r = await client.callTool({ name: "promote_recipe", arguments: { slug: "test-lentil-soup" } });
+  assert.ok(!r.isError, text(r));
+  assert.equal(files.get("recipes/test-lentil-soup.md").toString(), before.replace("draft: true\n", ""));
+  assert.deepEqual(commitLog.at(-1).paths, ["recipes/test-lentil-soup.md"]);
+  assert.match(commitLog.at(-1).message, /^Promote recipe: Test Lentil Soup/);
+
+  const again = await client.callTool({ name: "promote_recipe", arguments: { slug: "test-lentil-soup" } });
+  assert.ok(again.isError);
+  assert.match(text(again), /not a draft/);
+});
+
+test("draft: false creates a regular recipe straight away", async () => {
+  const r = await client.callTool({ name: "create_recipe", arguments: { ...base, title: "Test Regular Soup", draft: false, image: { url: "https://img.example/dish.png" } } });
+  assert.ok(!r.isError, text(r));
+  assert.doesNotMatch(files.get("recipes/test-regular-soup.md").toString(), /draft/);
 });
 
 test("refuses duplicate slug", async () => {

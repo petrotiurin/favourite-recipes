@@ -38,10 +38,12 @@ export async function listRecipes() {
         serves: data.serves,
         calories: data.calories,
         ...(data.scalable === false ? { scalable: false } : {}),
+        ...(data.draft === true ? { draft: true } : {}),
       };
     })
   );
-  return recipes.sort((a, b) => a.title.localeCompare(b.title));
+  // Same order as the site: drafts first, then alphabetical.
+  return recipes.sort((a, b) => (b.draft === true) - (a.draft === true) || a.title.localeCompare(b.title));
 }
 
 export async function getRecipe(slug) {
@@ -130,6 +132,7 @@ export async function createRecipe(input) {
     serves: input.serves,
     calories: input.calories,
     ...(input.scalable === false ? { scalable: false } : {}),
+    ...(input.draft !== false ? { draft: true } : {}), // new recipes start as drafts unless told otherwise
   };
   const sections = [
     { heading: "Ingredients", content: input.ingredients.map(renderIngredient).join("\n") },
@@ -141,8 +144,23 @@ export async function createRecipe(input) {
   const changes = [{ path: recipePath(slug), content: Buffer.from(markdown) }];
   if (imageBuffer) changes.push({ path: imagePathFor(slug), content: imageBuffer });
 
-  const commit = await commitChanges(changes, `Add recipe: ${title}\n\nAdded via the recipes MCP server.`);
-  return { slug, markdown, commit, warnings: instructionWarnings(input.ingredients, input.instructions) };
+  const verb = data.draft ? "Add draft recipe" : "Add recipe";
+  const commit = await commitChanges(changes, `${verb}: ${title}\n\nAdded via the recipes MCP server.`);
+  return { slug, markdown, commit, draft: !!data.draft, warnings: instructionWarnings(input.ingredients, input.instructions) };
+}
+
+/** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. */
+export async function promoteRecipe(slug) {
+  const { markdown: before } = await getRecipe(slug);
+  const { data, sections } = parseRecipe(before);
+  if (data.draft !== true) throw new UserError(`"${slug}" is not a draft, it's already a regular recipe.`);
+  delete data.draft;
+  const markdown = serializeRecipe(data, sections);
+  const commit = await commitChanges(
+    [{ path: recipePath(slug), content: Buffer.from(markdown) }],
+    `Promote recipe: ${data.title} (draft -> regular)\n\nPromoted via the recipes MCP server.`
+  );
+  return { slug, markdown, commit };
 }
 
 export async function updateRecipe(input) {

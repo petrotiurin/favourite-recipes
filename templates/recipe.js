@@ -11,6 +11,7 @@ function escapeHtml(str) {
 
 function renderRecipe(recipe, bodyHtml) {
   const metaChips = [
+    ...(recipe.draft === true ? [`<span class="draft-chip">Draft</span>`] : []),
     ...(recipe.course || []).map((c) => `<span>${escapeHtml(c)}</span>`),
     ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
     `<span>🕒 ${recipe.total_mins} mins</span>`,
@@ -38,7 +39,7 @@ function renderRecipe(recipe, bodyHtml) {
   const content = `  <main>
     <a class="back-link" href="../index.html">&larr; All recipes</a>
     <img class="recipe-hero" src="../${recipe.image.replace(/^\//, "")}" alt="${escapeHtml(recipe.title)}">
-    <h1 class="recipe-title">${escapeHtml(recipe.title)}</h1>
+${recipe.draft === true ? `    <p class="draft-note">This is a draft: we haven't tried it enough yet to call it a favourite.</p>\n` : ""}    <h1 class="recipe-title">${escapeHtml(recipe.title)}</h1>
     <div class="recipe-meta">
       ${metaChips}
     </div>

@@ -13,6 +13,7 @@ const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 function courseClasses(r) {
   return (r.course || [])
     .map((c) => `course-${String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`)
+    .concat(r.draft === true ? ["is-draft"] : [])
     .join(" ");
 }
 
@@ -20,7 +21,7 @@ function renderIndex(recipes) {
   const tiles = recipes
     .map((r) => {
       return `      <a class="tile ${courseClasses(r)}" href="recipes/${r.slug}.html">
-        <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="${escapeHtml(r.title)}" loading="lazy">
+${r.draft === true ? '        <span class="draft-badge">Draft</span>\n' : ""}        <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="${escapeHtml(r.title)}" loading="lazy">
         <div class="tile-body">
           <h2 class="tile-title">${escapeHtml(r.title)}</h2>
           <p class="tile-meta">🕒 ${r.total_mins} mins &middot; 🍽️ Serves ${r.serves} &middot; 🔥 ${r.calories} kcal</p>
@@ -29,9 +30,12 @@ function renderIndex(recipes) {
     })
     .join("\n");
 
+  // The Drafts tab only appears while there are drafts to show.
+  const filters = COURSES.concat(recipes.some((r) => r.draft === true) ? ["Drafts"] : []);
+
   const filterInputs = [`      <input type="radio" name="course-filter" id="filter-all" class="filter-input" checked>`]
     .concat(
-      COURSES.map((c) => {
+      filters.map((c) => {
         const id = `filter-${c.toLowerCase()}`;
         return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">`;
       })
@@ -40,7 +44,7 @@ function renderIndex(recipes) {
 
   const filterLabels = [`      <label for="filter-all" class="filter-label">All</label>`]
     .concat(
-      COURSES.map((c) => `      <label for="filter-${c.toLowerCase()}" class="filter-label">${c}</label>`)
+      filters.map((c) => `      <label for="filter-${c.toLowerCase()}" class="filter-label${c === "Drafts" ? " filter-label-draft" : ""}">${c}</label>`)
     )
     .join("\n");
 

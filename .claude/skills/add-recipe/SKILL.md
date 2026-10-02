@@ -37,8 +37,11 @@ tags: [<Tag>, ...]     # omit the key entirely if there are no tags
 total_mins: <number>
 serves: <number>
 calories: <number>   # kcal per serving
+draft: true          # new recipes start as drafts; omit only if the user says it's already a tried-and-tested favourite
 ---
 ```
+
+**Drafts.** Add new recipes as drafts (`draft: true`) by default — they're highlighted on the site, sorted first and tagged "Draft" until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe).
 
 Body:
 

@@ -8,6 +8,8 @@
   --accent: #c9622c;
   --shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 1px 2px rgba(30, 25, 20, 0.06);
   --shadow-hover: 0 6px 16px rgba(30, 25, 20, 0.12);
+  --draft: #7a5bc4;
+  --draft-soft: #f3effc;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,6 +22,8 @@
     --accent: #e08a4f;
     --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-hover: 0 6px 18px rgba(0, 0, 0, 0.5);
+    --draft: #b39ae8;
+    --draft-soft: #2a2336;
   }
 }
 
@@ -127,7 +131,8 @@ main {
 main:has(#filter-breakfast:checked) .tile-grid .tile:not(.course-breakfast),
 main:has(#filter-lunch:checked) .tile-grid .tile:not(.course-lunch),
 main:has(#filter-dinner:checked) .tile-grid .tile:not(.course-dinner),
-main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack) {
+main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack),
+main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
   display: none;
 }
 
@@ -178,6 +183,57 @@ main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack) {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+/* Drafts: recipes still being tried out (`draft: true`) */
+.filter-label-draft {
+  border-style: dashed;
+  border-color: var(--draft);
+  color: var(--draft);
+}
+
+.filter-input:checked + .filter-label-draft {
+  background: var(--draft);
+  border-color: var(--draft);
+  border-style: solid;
+}
+
+.tile.is-draft {
+  position: relative;
+  background: var(--draft-soft);
+  border: 2px dashed var(--draft);
+}
+
+.draft-badge {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--draft);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+}
+
+.recipe-meta span.draft-chip {
+  color: #fff;
+  background: var(--draft);
+  border-color: var(--draft);
+  font-weight: 600;
+}
+
+.draft-note {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--draft);
+  background: var(--draft-soft);
+  border: 1px dashed var(--draft);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
 }
 
 /* Recipe page */

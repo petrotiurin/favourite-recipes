@@ -57,8 +57,11 @@ total_mins: 15
 serves: 2                          # number of people the recipe serves, required
 calories: 195                      # kcal per serving, required (source's figure, else estimated from ingredients)
 scalable: false                    # optional: hides the servings selector (only when the ingredient list already gives per-person amounts)
+draft: true                        # optional: not tried yet. Highlighted, sorted first, "Draft" badge + filter tab. Remove the key to promote it.
 ---
 ```
+
+New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe by deleting that line (the MCP server's `promote_recipe` tool does exactly this).
 
 Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) and `## Instructions` (numbered). See the `add-recipe` skill for the exact rules.
 

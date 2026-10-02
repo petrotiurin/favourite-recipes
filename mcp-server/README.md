@@ -8,10 +8,11 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 
 | Tool | What it does |
 | --- | --- |
-| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories |
+| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, and `draft: true` for drafts (listed first) |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
 | `create_image_upload_link` | Returns a one-hour link where a person can upload the dish photo from their phone |
-| `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit |
+| `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
+| `promote_recipe` | Turns a draft into a regular recipe (removes `draft: true`, one commit) |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
 
 ## What's enforced
@@ -24,6 +25,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
   - Instructions are numbered by the server, and you get a warning if an ingredient is mentioned without being bolded.
   - Quantities stay in the ingredient list, because the site's servings selector rescales only that list. ASCII fractions ("1/2") are converted to "½" so they scale. You get a warning if a step repeats an amount (e.g. "add 37.5g **sugar**"); the server's instructions tell the agent to write "half the **sugar**" / "the remaining **sugar**" instead.
   - `scalable: false` (optional) hides the servings selector, for recipes whose ingredient list can't be multiplied.
+  - New recipes are drafts (`draft: true`) by default, and the server's instructions tell the agent to keep it that way until the family has tried the dish, then call `promote_recipe`. Drafts are highlighted on the site, sorted first and get a "Draft" filter tab.
   - The slug is derived from the title.
   - Creating a recipe whose slug already exists is refused.
 - **Photos are required and normalised.** The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.

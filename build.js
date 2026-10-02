@@ -54,7 +54,8 @@ function build() {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
 
-  const recipes = loadRecipes().sort((a, b) => a.title.localeCompare(b.title));
+  // Drafts (`draft: true`) always come first, then alphabetical within each group.
+  const recipes = loadRecipes().sort((a, b) => (b.draft === true) - (a.draft === true) || a.title.localeCompare(b.title));
 
   fs.writeFileSync(path.join(DIST_DIR, "index.html"), renderIndex(recipes));
 
