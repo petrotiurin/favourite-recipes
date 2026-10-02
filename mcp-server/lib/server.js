@@ -8,6 +8,7 @@ import {
   getRecipe,
   createRecipe,
   updateRecipe,
+  promoteRecipe,
   readRecipeImage,
   pageUrl,
   UserError,
@@ -15,6 +16,11 @@ import {
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
+
+Drafts first: a recipe the family hasn't cooked and liked yet should be created as a DRAFT (create_recipe's draft defaults to
+true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
+promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
+tried-and-tested favourite (e.g. migrating an existing family recipe).
 
 Rules the server enforces or expects:
 - Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
@@ -101,11 +107,14 @@ const safe = (fn) => async (args) => {
   }
 };
 
-function resultText(verb, { slug, markdown, commit, warnings }) {
+function resultText(verb, { slug, markdown, commit, draft, warnings }) {
   const lines = [];
   if (commit) {
     lines.push(`${verb} "${slug}" and committed to main: ${commit.url}`);
     lines.push(`It will be live in about a minute at ${pageUrl(slug)}`);
+  }
+  if (draft) {
+    lines.push("", `It's a draft. Once the user has cooked it and wants to keep it, call promote_recipe with slug "${slug}".`);
   }
   if (warnings?.length) {
     lines.push("", "Warnings (consider fixing with update_recipe):", ...warnings.map((w) => `- ${w}`));
@@ -121,7 +130,9 @@ export function buildServer({ origin }) {
     "list_recipes",
     {
       title: "List recipes",
-      description: "List every recipe on the site with its slug, title, course, tags, time, servings and calories.",
+      description:
+        "List every recipe on the site with its slug, title, course, tags, time, servings and calories. " +
+        "Drafts (not yet promoted) have draft: true and are listed first.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -199,7 +210,8 @@ export function buildServer({ origin }) {
       title: "Create recipe",
       description:
         "Add a new recipe to the site. Writes recipes/<slug>.md (+ the photo) in one commit to main. The slug is derived from the title. " +
-        "Fails if a recipe with that slug already exists.",
+        "Fails if a recipe with that slug already exists. New recipes are drafts by default (recommended): promote them with " +
+        "promote_recipe once the user has tried and liked them.",
       inputSchema: {
         title: z.string().min(1).describe("Title Case recipe title"),
         course: courseSchema,
@@ -212,9 +224,30 @@ export function buildServer({ origin }) {
         instructions: instructionsSchema,
         notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
         image: imageSchema,
+        draft: z
+          .boolean()
+          .optional()
+          .describe(
+            "Default true (recommended): the recipe is added as a highlighted draft until promoted with promote_recipe. " +
+              "Pass false only if the user says it's already a tried-and-tested favourite."
+          ),
       },
     },
     safe(async (args) => ok(resultText("Created", await createRecipe(args))))
+  );
+
+  server.registerTool(
+    "promote_recipe",
+    {
+      title: "Promote draft recipe",
+      description:
+        "Turn a draft into a regular recipe (the user cooked it and wants to keep it). Removes draft: true from its frontmatter " +
+        "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft.",
+      inputSchema: {
+        slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
+      },
+    },
+    safe(async ({ slug }) => ok(resultText("Promoted", await promoteRecipe(slug))))
   );
 
   server.registerTool(
