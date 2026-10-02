@@ -17,11 +17,31 @@ const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a st
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
 
 Rules the server enforces or expects:
-- Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (2/3 cup)", "2", "Juice of 1/2"),
+- Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
   or put "to taste"/"to serve" in the note. Names are plain text; the server bolds them. Keep them in the order they are used.
+- Quantities are rescaled on the site: each recipe page has a servings selector (1, 2, 4 and the recipe's own serves) that
+  multiplies every number in the ingredient list. So write amounts as numerals ("2", "½", "1¾", "150g", "2-3"), never words
+  ("one", "two"); ASCII fractions like "1/2" are converted to "½" for you. Numbers that must NOT scale: percentages ("0% fat"),
+  the per-item size after an "x" ("2 x 150g" scales the 2 only), and anything in a parenthetical containing "each"
+  ("(about 120g each)").
+- If an ingredient is used in two places, put the split in the ingredient line ("75g sugar, split in half",
+  "1 tbsp olive oil, plus 2 tsp for the fish"), and let the instructions refer to the parts.
 - Instructions: one action per array item, sentence case, no numbering (the server numbers them).
   Bold EVERY ingredient mention with **double asterisks**, ingredient noun only, e.g. "Stir the **oats** into the **yogurt**".
   Don't bold the dish itself ("the batter", "the burgers").
+- Never repeat an amount in the instructions: it won't rescale with the servings selector, so it goes wrong as soon as someone
+  cooks for a different number of people. Refer to the ingredient list instead. Wording to use:
+    "add 37.5g **sugar**"                 -> "add half the **sugar**"; later "add the remaining **sugar**"
+    "heat 1 tbsp **olive oil**"            -> "heat the **olive oil**" (or "heat the **olive oil** for the vegetables")
+    "stir in 3 tbsp **flour**"             -> "stir in the **flour**" ("the **flour**, keeping some back for dusting")
+    "use a third of the dressing"          -> fine: fractions of a listed amount scale with it ("a third", "half", "the rest")
+    "divide the dough into 2 portions"     -> "divide the dough into equal portions, one per person"
+    "shape into 4 patties"                 -> "shape into equal patties, one per **burger roll**"
+    "press 2 **sausages** on each tortilla" -> "divide the **sausages** evenly between the **tortillas**"
+  Keep: times, temperatures, oven/hob settings, pan sizes, and per-item sizes that don't depend on servings
+  ("about 50g per patty", "fry 2 slices at a time"). The server warns when a step looks like it repeats an amount.
+- scalable: false hides the servings selector. Only use it when the ingredient list genuinely can't be multiplied, e.g. it
+  already lists separate amounts per number of people ("One person: 60g rice; Two people: 120g rice").
 - course: one or more of ${COURSES.join(", ")}. total_mins = prep + cook. serves is required: if the source doesn't say, estimate and confirm with the user.
 - calories is required: kcal per serving. Use the source's figure when it gives one; otherwise estimate from the ingredients and tell the user it's an estimate.
 - Every recipe needs a real hero photo. Never invent a placeholder.
@@ -37,7 +57,7 @@ const ingredientSchema = z.object({
   quantity: z
     .string()
     .optional()
-    .describe('Amount including units, e.g. "150g (2/3 cup)", "2", "Juice of 1/2", "Small handful of". Omit only for "to taste"/"to serve" items.'),
+    .describe('Amount including units, as numerals so the servings selector can rescale it, e.g. "150g (⅔ cup)", "2", "Juice of ½", "Small handful of". Omit only for "to taste"/"to serve" items.'),
   name: z.string().min(1).describe('Ingredient name, plain text (no asterisks), e.g. "Greek yogurt". Bolded automatically.'),
   note: z.string().optional().describe('Prep note after the name, e.g. "finely diced", "to taste", "(0% or full-fat)".'),
 });
@@ -55,7 +75,13 @@ const tagsSchema = z.array(z.string().min(1)).describe('Free-text tags, e.g. ["H
 const instructionsSchema = z
   .array(z.string().min(1))
   .min(1)
-  .describe("Ordered steps, one action each, no numbering. Bold every ingredient mention with **...**.");
+  .describe(
+    "Ordered steps, one action each, no numbering. Bold every ingredient mention with **...**. " +
+      'Don\'t repeat amounts from the ingredient list: say "the **sugar**", "half the **sugar**", "the remaining **sugar**".'
+  );
+const scalableSchema = z
+  .boolean()
+  .describe("Set false only if the ingredient list can't be rescaled (e.g. it lists amounts per number of people). Hides the servings selector.");
 
 function ok(text, extra = []) {
   return { content: [{ type: "text", text }, ...extra] };
@@ -181,6 +207,7 @@ export function buildServer({ origin }) {
         total_mins: z.number().int().positive().describe("Total time in minutes (prep + cook)"),
         serves: z.number().int().positive().describe("How many people it serves"),
         calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
+        scalable: scalableSchema.optional(),
         ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
         instructions: instructionsSchema,
         notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
@@ -206,6 +233,7 @@ export function buildServer({ origin }) {
         total_mins: z.number().int().positive().optional(),
         serves: z.number().int().positive().optional(),
         calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
+        scalable: scalableSchema.optional().describe("false hides the servings selector; true turns it back on."),
         ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
         instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
         notes: z.string().optional(),
