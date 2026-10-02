@@ -16,6 +16,7 @@ From whatever the user gives you (pasted text, a photo of a recipe card, a link,
 - **Tags** — optional, free text (e.g. `High Protein`, `Low Carb`)
 - **Total minutes** — a single number. If the source gives prep+cook separately, sum them.
 - **Serves** — a single number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
+- **Calories** — kcal per serving, a single whole number. Always required. Use the source's figure if it gives one (Emily English recipes usually state "xxx kcal per portion"); otherwise estimate from the ingredient quantities divided by `serves`, and tell the user it's an estimate.
 - **Ingredients** — a full list, each with a quantity
 - **Instructions** — numbered steps
 - **One hero image**
@@ -35,6 +36,7 @@ course: [<Course>, ...]
 tags: [<Tag>, ...]     # omit the key entirely if there are no tags
 total_mins: <number>
 serves: <number>
+calories: <number>   # kcal per serving
 ---
 ```
 
@@ -74,7 +76,7 @@ After writing the `.md` file and saving the image:
 npm run build
 ```
 
-Confirm it completes without error, then open `dist/index.html` (or the new `dist/recipes/<slug>.html`) and check: the new tile appears with its image and time, the ingredient bullets render with bold ingredient names (quantities not bolded), the instructions bold each ingredient mention, and the instructions are numbered correctly.
+Confirm it completes without error, then open `dist/index.html` (or the new `dist/recipes/<slug>.html`) and check: the new tile appears with its image, time and calories, the ingredient bullets render with bold ingredient names (quantities not bolded), the instructions bold each ingredient mention, and the instructions are numbered correctly.
 
 ## 5. Done
 

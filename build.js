@@ -34,8 +34,8 @@ function loadRecipes() {
   return files.map((file) => {
     const raw = fs.readFileSync(path.join(RECIPES_DIR, file), "utf8");
     const { data, content } = matter(raw);
-    if (!data.title || !data.slug || !data.image || !data.total_mins || !data.serves) {
-      throw new Error(`Recipe ${file} is missing required frontmatter (title, slug, image, total_mins, serves)`);
+    if (!data.title || !data.slug || !data.image || !data.total_mins || !data.serves || !data.calories) {
+      throw new Error(`Recipe ${file} is missing required frontmatter (title, slug, image, total_mins, serves, calories)`);
     }
     return { ...data, body: content };
   });

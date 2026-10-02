@@ -6,6 +6,7 @@ course: [Lunch]
 tags: [High Protein]
 total_mins: 25
 serves: 2
+calories: 427
 ---
 
 ## Ingredients

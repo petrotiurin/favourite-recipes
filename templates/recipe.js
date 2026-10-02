@@ -14,6 +14,7 @@ function renderRecipe(recipe, bodyHtml) {
     ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
     `<span>🕒 ${recipe.total_mins} mins</span>`,
     `<span>🍽️ Serves ${recipe.serves}</span>`,
+    `<span>🔥 ${recipe.calories} kcal per serving</span>`,
   ].join("\n      ");
 
   const content = `  <main>

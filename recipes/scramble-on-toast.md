@@ -5,6 +5,7 @@ image: /images/recipes/scramble-on-toast.jpg
 course: [Breakfast]
 total_mins: 10
 serves: 2
+calories: 330
 ---
 
 ## Ingredients

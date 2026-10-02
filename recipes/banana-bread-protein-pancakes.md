@@ -6,6 +6,7 @@ course: [Breakfast]
 tags: [High Protein]
 total_mins: 11
 serves: 2
+calories: 257
 ---
 
 ## Ingredients

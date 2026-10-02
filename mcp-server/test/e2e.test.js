@@ -90,6 +90,7 @@ const base = {
   tags: ["Vegan"],
   total_mins: 40,
   serves: 4,
+  calories: 320,
   ingredients: [
     { quantity: "200g", name: "red lentils", note: "rinsed" },
     { name: "Salt", note: "to taste" },
@@ -123,6 +124,7 @@ course: [Lunch, Dinner]
 tags: [Vegan]
 total_mins: 40
 serves: 4
+calories: 320
 ---
 
 ## Ingredients

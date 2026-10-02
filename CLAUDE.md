@@ -54,6 +54,7 @@ course: [Lunch]                    # any of: Breakfast, Lunch, Dinner, Snack, Dr
 tags: [High Protein]               # optional, free text list
 total_mins: 15
 serves: 2                          # number of people the recipe serves, required
+calories: 195                      # kcal per serving, required (source's figure, else estimated from ingredients)
 ---
 ```
 

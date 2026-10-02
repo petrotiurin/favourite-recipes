@@ -36,6 +36,7 @@ export async function listRecipes() {
         tags: data.tags || [],
         total_mins: data.total_mins,
         serves: data.serves,
+        calories: data.calories,
       };
     })
   );
@@ -79,7 +80,7 @@ async function resolveImageInput(image, slug) {
   }
 }
 
-function validateCommon({ course, total_mins, serves, ingredients, instructions }) {
+function validateCommon({ course, total_mins, serves, calories, ingredients, instructions }) {
   const errors = [];
   if (course) {
     const bad = course.filter((c) => !COURSES.includes(c));
@@ -88,6 +89,7 @@ function validateCommon({ course, total_mins, serves, ingredients, instructions 
   }
   if (total_mins !== undefined && !(Number.isInteger(total_mins) && total_mins > 0)) errors.push("total_mins must be a positive whole number");
   if (serves !== undefined && !(Number.isInteger(serves) && serves > 0)) errors.push("serves must be a positive whole number");
+  if (calories !== undefined && !(Number.isInteger(calories) && calories > 0)) errors.push("calories must be a positive whole number (kcal per serving)");
   if (ingredients) {
     if (!ingredients.length) errors.push("ingredients: at least one is required");
     ingredients.forEach((ing, i) => errors.push(...validateIngredient(ing, i)));
@@ -125,6 +127,7 @@ export async function createRecipe(input) {
     tags: tidyTags(input.tags),
     total_mins: input.total_mins,
     serves: input.serves,
+    calories: input.calories,
   };
   const sections = [
     { heading: "Ingredients", content: input.ingredients.map(renderIngredient).join("\n") },
@@ -154,6 +157,7 @@ export async function updateRecipe(input) {
   if (input.tags !== undefined) { data.tags = tidyTags(input.tags); summary.push("tags"); }
   if (input.total_mins !== undefined) { data.total_mins = input.total_mins; summary.push("time"); }
   if (input.serves !== undefined) { data.serves = input.serves; summary.push("serves"); }
+  if (input.calories !== undefined) { data.calories = input.calories; summary.push("calories"); }
 
   if (input.ingredients !== undefined) {
     setSection(sections, "Ingredients", input.ingredients.map(renderIngredient).join("\n"));
