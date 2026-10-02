@@ -1,4 +1,5 @@
 const { layout } = require("./layout");
+const { markScalableQuantities } = require("./quantities");
 
 function escapeHtml(str) {
   return String(str)
@@ -13,9 +14,23 @@ function renderRecipe(recipe, bodyHtml) {
     ...(recipe.course || []).map((c) => `<span>${escapeHtml(c)}</span>`),
     ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
     `<span>🕒 ${recipe.total_mins} mins</span>`,
-    `<span>🍽️ Serves ${recipe.serves}</span>`,
+    `<span class="serves-chip">🍽️ Serves ${recipe.serves}</span>`,
     `<span>🔥 ${recipe.calories} kcal per serving</span>`,
   ].join("\n      ");
+
+  const { html: scaledBodyHtml, scalable } = markScalableQuantities(bodyHtml);
+  // Hidden until servings.js runs, so the page reads normally with JS disabled.
+  const servingOptions = [...new Set([1, 2, 4, Number(recipe.serves)])].sort((a, b) => a - b);
+  const servingsPicker = scalable
+    ? `<div class="servings-picker" data-base="${recipe.serves}" role="group" aria-label="Servings" hidden>
+  <span class="servings-label">Servings</span>
+  ${servingOptions
+    .map((n) => `<button type="button" data-serves="${n}" aria-pressed="${n === Number(recipe.serves)}">${n}</button>`)
+    .join("\n  ")}
+</div>
+`
+    : "";
+  const body = scaledBodyHtml.replace(/(<h2[^>]*>\s*Ingredients\b[^<]*<\/h2>\n?)/i, `$1${servingsPicker}`);
 
   const content = `  <main>
     <a class="back-link" href="../index.html">&larr; All recipes</a>
@@ -24,8 +39,8 @@ function renderRecipe(recipe, bodyHtml) {
     <div class="recipe-meta">
       ${metaChips}
     </div>
-${bodyHtml}
-  </main>`;
+${body}
+  </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}`;
 
   return layout({
     title: `${recipe.title} — Our Favourite Recipes`,

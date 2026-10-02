@@ -10,6 +10,7 @@ const RECIPES_DIR = path.join(ROOT, "recipes");
 const IMAGES_DIR = path.join(ROOT, "images");
 const STYLES_FILE = path.join(ROOT, "styles", "style.css");
 const SEARCH_SCRIPT_FILE = path.join(ROOT, "templates", "search.js");
+const SERVINGS_SCRIPT_FILE = path.join(ROOT, "templates", "servings.js");
 const DIST_DIR = path.join(ROOT, "dist");
 
 function rimraf(dir) {
@@ -48,6 +49,7 @@ function build() {
 
   fs.copyFileSync(STYLES_FILE, path.join(DIST_DIR, "style.css"));
   fs.copyFileSync(SEARCH_SCRIPT_FILE, path.join(DIST_DIR, "search.js"));
+  fs.copyFileSync(SERVINGS_SCRIPT_FILE, path.join(DIST_DIR, "servings.js"));
   if (fs.existsSync(IMAGES_DIR)) {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
