@@ -61,9 +61,19 @@ export function validateIngredient(ing, i) {
   return errors;
 }
 
+const FRACTIONS = { "1/4": "¼", "1/2": "½", "3/4": "¾", "1/3": "⅓", "2/3": "⅔", "1/8": "⅛" };
+
+/** "1 1/2 cups" -> "1½ cups", "2/3 cup" -> "⅔ cup": the site's servings selector only scales unicode fractions. */
+export function normalizeFractions(text) {
+  return text.replace(/(?<![\d/])(?:(\d+)\s+)?([1-3])\/([2-48])(?![\d/])/g, (m, whole, a, b) => {
+    const f = FRACTIONS[`${a}/${b}`];
+    return f ? `${whole || ""}${f}` : m;
+  });
+}
+
 export function renderIngredient({ quantity, name, note }) {
   let line = "- ";
-  if (quantity?.trim()) line += `${quantity.trim()} `;
+  if (quantity?.trim()) line += `${normalizeFractions(quantity.trim())} `;
   line += `**${name.trim()}**`;
   const n = note?.trim();
   if (n) {
@@ -98,6 +108,30 @@ export function instructionWarnings(ingredients, instructions) {
       if (re.test(s)) warnings.push(`Step ${idx + 1} mentions "${ing.name}" without bolding it.`);
     });
   }
+  return [...warnings, ...instructionQuantityWarnings(instructions)];
+}
+
+// An amount with a unit (or a bare number) right before a bolded ingredient,
+// e.g. "add 37.5 g **sugar**", "heat 1 tablespoon of **olive oil**", "3 ст. л. **цукру**".
+const UNIT = "(?:g|kg|ml|l|tsp|tbsp|teaspoons?|tablespoons?|cups?|oz|lb|pinch(?:es)?|г|кг|мл|л|ст\\.\\s*л\\.|ч\\.\\s*л\\.)";
+const QTY_BEFORE_INGREDIENT = new RegExp(
+  `(\\d+(?:[.,]\\d+)?[¼½¾⅓⅔⅛]?|[¼½¾⅓⅔⅛])(?:\\s*[-–]\\s*\\d+(?:[.,]\\d+)?)?\\s*(?:${UNIT}(?![\\p{L}])\\s*(?:of\\s+)?)?(?:the\\s+)?\\*\\*`,
+  "giu"
+);
+
+/** Soft check: warn when the method repeats an amount that belongs in the ingredient list. */
+export function instructionQuantityWarnings(instructions) {
+  const warnings = [];
+  instructions.forEach((s, idx) => {
+    for (const m of s.matchAll(QTY_BEFORE_INGREDIENT)) {
+      const amount = m[0].replace(/\s*(?:of\s+)?(?:the\s+)?\*\*$/i, "").trim();
+      const name = s.slice(m.index + m[0].length).match(/^[^*]+/)?.[0] || "ingredient";
+      warnings.push(
+        `Step ${idx + 1} repeats a quantity ("${amount} ${name}"). The servings selector only rescales the ingredient list, ` +
+          `so refer to it instead: "the **${name}**", "half the **${name}**", "the remaining **${name}**".`
+      );
+    }
+  });
   return warnings;
 }
 

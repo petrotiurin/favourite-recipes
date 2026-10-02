@@ -22,6 +22,8 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
   - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
   - Each ingredient is `{quantity, name, note}`. The server bolds the name, and a missing quantity is rejected unless the note says "to taste"/"to serve".
   - Instructions are numbered by the server, and you get a warning if an ingredient is mentioned without being bolded.
+  - Quantities stay in the ingredient list, because the site's servings selector rescales only that list. ASCII fractions ("1/2") are converted to "½" so they scale. You get a warning if a step repeats an amount (e.g. "add 37.5g **sugar**"); the server's instructions tell the agent to write "half the **sugar**" / "the remaining **sugar**" instead.
+  - `scalable: false` (optional) hides the servings selector, for recipes whose ingredient list can't be multiplied.
   - The slug is derived from the title.
   - Creating a recipe whose slug already exists is refused.
 - **Photos are required and normalised.** The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.

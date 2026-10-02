@@ -37,6 +37,7 @@ export async function listRecipes() {
         total_mins: data.total_mins,
         serves: data.serves,
         calories: data.calories,
+        ...(data.scalable === false ? { scalable: false } : {}),
       };
     })
   );
@@ -128,6 +129,7 @@ export async function createRecipe(input) {
     total_mins: input.total_mins,
     serves: input.serves,
     calories: input.calories,
+    ...(input.scalable === false ? { scalable: false } : {}),
   };
   const sections = [
     { heading: "Ingredients", content: input.ingredients.map(renderIngredient).join("\n") },
@@ -158,6 +160,11 @@ export async function updateRecipe(input) {
   if (input.total_mins !== undefined) { data.total_mins = input.total_mins; summary.push("time"); }
   if (input.serves !== undefined) { data.serves = input.serves; summary.push("serves"); }
   if (input.calories !== undefined) { data.calories = input.calories; summary.push("calories"); }
+  if (input.scalable !== undefined) {
+    if (input.scalable === false) data.scalable = false;
+    else delete data.scalable; // scaling is the default, so drop the key
+    summary.push("scalable");
+  }
 
   if (input.ingredients !== undefined) {
     setSection(sections, "Ingredients", input.ingredients.map(renderIngredient).join("\n"));

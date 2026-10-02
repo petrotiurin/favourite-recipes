@@ -50,3 +50,21 @@ test("path allowlist", () => {
     assert.ok(!isAllowedPath(p), p);
   }
 });
+
+test("instruction warnings flag quantities repeated in the method", () => {
+  const w = instructionWarnings([{ name: "sugar" }, { name: "olive oil" }], [
+    "Add 37.5 g **sugar** and stir",
+    "Heat 1 tablespoon of **olive oil**",
+    "Add half the **sugar**, then the remaining **olive oil**",
+    "Bake for 45 minutes at 180°C",
+  ]);
+  assert.equal(w.length, 2);
+  assert.match(w[0], /^Step 1 repeats a quantity \("37\.5 g sugar"\)/);
+  assert.match(w[1], /^Step 2 repeats a quantity \("1 tablespoon olive oil"\)/);
+});
+
+test("ASCII fractions in quantities become unicode so they rescale", () => {
+  assert.equal(renderIngredient({ quantity: "1 1/2 cups", name: "flour" }), "- 1½ cups **flour**");
+  assert.equal(renderIngredient({ quantity: "150g (2/3 cup)", name: "Greek yogurt" }), "- 150g (⅔ cup) **Greek yogurt**");
+  assert.equal(renderIngredient({ quantity: "Juice of 1/2", name: "lemon" }), "- Juice of ½ **lemon**");
+});

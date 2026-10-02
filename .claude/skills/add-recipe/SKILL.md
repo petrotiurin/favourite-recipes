@@ -57,8 +57,20 @@ Rules that matter:
 - **Every ingredient line must state a quantity.** Never write a bare ingredient with no amount. If a recipe genuinely has no fixed amount for something, write the words `to taste` or `to serve` explicitly rather than omitting quantity language.
 - **Bold only the ingredient name itself, not the quantity.** e.g. `150g (⅔ cup) **Greek yogurt**`, or `2 **celery sticks**, finely diced`. The quantity/measurement stays outside the bold, and so do prep notes after the ingredient (diced, finely chopped, to taste, etc.). If a line has no quantity at all (e.g. `**Salt and pepper**, to taste`), the whole ingredient name is still bolded.
 - **In the Instructions section, bold every mention of an ingredient** from the list above wherever it's referenced (e.g. "stir together the **oats**, **yogurt** and **honey**"). Only bold the ingredient noun itself, not surrounding words, and don't bold references to the dish being made (e.g. "the lamb burgers", "the batter").
-- **Write quantities as numerals** (`1`, `½`, `1¾`, `150g`, `2-3`), not words ("one", "two"), so the recipe page's servings selector can rescale them. Every number in an ingredient line outside the bolded name is scaled, except percentages, numbers after an `x` (`2 x 150g` — the 150g is per item) and numbers inside a parenthetical containing `each`.
-- **Don't repeat quantities in the Instructions** — they won't rescale with the servings selector. Rely on the ingredient list: "add the **sugar**", or for split ingredients "add half the **sugar**" … "the remaining **sugar**" (and note the split in the ingredient line, e.g. `75 g **sugar**, split in half`). Likewise avoid fixed counts that depend on servings ("divide into 2 portions" → "one portion per person"). Times, temperatures and per-item sizes ("2 slices at a time", "50-60 g per patty") are fine.
+- **Write quantities as numerals** (`1`, `½`, `1¾`, `150g`, `2-3`), not words ("one", "two"), and fractions as `½` `¼` `¾` `⅓` `⅔` rather than `1/2`, so the recipe page's servings selector can rescale them. Every number in an ingredient line outside the bolded name is scaled, except percentages, numbers after an `x` (`2 x 150g` — the 150g is per item) and numbers inside a parenthetical containing `each`.
+- **If an ingredient is used in two places, put the split in the ingredient line** (`75 g **sugar**, split in half`, `1 tbsp **olive oil**, plus 2 tsp for the fish`) and let the instructions refer to the parts.
+- **Never repeat an amount in the Instructions.** The servings selector only rescales the ingredient list, so a number in the method is wrong as soon as someone cooks for a different number of people. Refer to the ingredient instead:
+
+  | Instead of | Write |
+  | --- | --- |
+  | add 37.5 g **sugar** … add the other 37.5 g **sugar** | add half the **sugar** … add the remaining **sugar** |
+  | heat 1 tbsp **olive oil** | heat the **olive oil** (or "the **olive oil** for the vegetables") |
+  | stir in 3 tbsp **flour** | stir in the **flour** (keeping some back for dusting) |
+  | divide the dough into 2 portions | divide the dough into equal portions, one per person |
+  | shape into 4 patties | shape into equal patties, one per **burger roll** |
+  | press 2 **sausages** onto each tortilla | divide the **sausages** evenly between the **tortillas** |
+
+  Fractions of a listed amount are fine ("half the **yogurt**", "a third of the dressing", "the rest"), because they scale with it. Times, temperatures, hob/oven settings, pan sizes and per-item sizes that don't depend on servings ("about 50 g per patty", "fry 2 slices at a time") stay as they are.
 - If the ingredient list genuinely can't be scaled (e.g. it already lists amounts per number of people), add `scalable: false` to the frontmatter to hide the servings selector.
 - Ingredients as a flat bulleted list (`-`), no sub-headings, in the order they're used.
 - Instructions as a numbered list (`1.`, `2.`, ...), one clear action per step, sentence case, no trailing period requirement but be consistent within the file.
