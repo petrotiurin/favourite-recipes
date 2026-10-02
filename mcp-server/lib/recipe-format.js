@@ -25,7 +25,7 @@ function yamlFlowList(items) {
   return `[${items.map((i) => yamlScalar(i, { inFlow: true })).join(", ")}]`;
 }
 
-const KEY_ORDER = ["title", "slug", "image", "course", "tags", "total_mins", "serves", "calories"];
+const KEY_ORDER = ["title", "slug", "image", "course", "tags", "total_mins", "serves", "calories", "scalable"];
 
 export function renderFrontmatter(data) {
   const keys = [...KEY_ORDER.filter((k) => k in data), ...Object.keys(data).filter((k) => !KEY_ORDER.includes(k))];

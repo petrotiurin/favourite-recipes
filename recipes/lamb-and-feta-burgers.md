@@ -16,7 +16,7 @@ calories: 685
 - ½ tsp **garlic granules**
 - Zest and juice of 1 **lemon**
 - 1 tsp **dried rosemary**
-- **Olive oil**, for cooking
+- 1 tbsp **olive oil**
 - **Salt and pepper**, to taste
 
 **For the Burgers**
@@ -28,8 +28,8 @@ calories: 685
 - 1 tsp **onion granules**
 - Zest of 1 **lemon**
 - 1 tsp **dried rosemary**
-- **Salt and pepper**, to taste
-- **Olive oil**, for cooking
+- 1 tsp **salt** and a grind of **pepper**
+- **Olive oil**, for frying
 - 4 **burger rolls**
 
 **For the Cucumber Mint Slaw**
@@ -48,8 +48,8 @@ calories: 685
 ## Instructions
 
 1. Preheat the oven to 200°C fan/220°C (400°F) Gas Mark 6.
-2. In a large bowl, toss the **potato** wedges with 1 tablespoon of **olive oil**, the **garlic granules**, **lemon** zest and juice, **dried rosemary** and some salt and pepper. Spread the wedges in a single layer on a baking tray and roast for 25–30 minutes, turning halfway through, until golden brown and crispy.
-3. Meanwhile, in a bowl, combine the **minced lamb**, **courgette**, **garlic granules**, **onion granules**, **lemon** zest, **dried rosemary**, 1 teaspoon of salt and a grind of pepper. Crumble in the **feta**. Gently fold the mixture together until well combined. Shape into 4 equal-sized patties.
+2. In a large bowl, toss the **potato** wedges with the **olive oil**, the **garlic granules**, **lemon** zest and juice, **dried rosemary** and some salt and pepper. Spread the wedges in a single layer on a baking tray and roast for 25–30 minutes, turning halfway through, until golden brown and crispy.
+3. Meanwhile, in a bowl, combine the **minced lamb**, **courgette**, **garlic granules**, **onion granules**, **lemon** zest, **dried rosemary**, **salt** and **pepper**. Crumble in the **feta**. Gently fold the mixture together until well combined. Shape into equal-sized patties, one per **burger roll**.
 4. Heat a little **olive oil** in a frying pan over a medium heat. Fry the lamb burgers until golden brown and cooked through, about 4–5 minutes on each side. While the burgers cook, toast the **burger** buns in the oven or grill (broiler).
 5. In a small bowl, combine the **cucumber** ribbons with the **lemon** zest and juice and **mint**. Season with salt and pepper to taste and set aside.
 6. In another small bowl, combine the **yogurt** with the **garlic granules**, **mint**, and a pinch each of salt and pepper. Mix well and set aside.

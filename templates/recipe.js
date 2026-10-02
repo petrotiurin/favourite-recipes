@@ -18,7 +18,10 @@ function renderRecipe(recipe, bodyHtml) {
     `<span>🔥 ${recipe.calories} kcal per serving</span>`,
   ].join("\n      ");
 
-  const { html: scaledBodyHtml, scalable } = markScalableQuantities(bodyHtml);
+  // `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list
+  // already gives amounts per number of people).
+  const { html: scaledBodyHtml, scalable } =
+    recipe.scalable === false ? { html: bodyHtml, scalable: false } : markScalableQuantities(bodyHtml);
   // Hidden until servings.js runs, so the page reads normally with JS disabled.
   const servingOptions = [...new Set([1, 2, 4, Number(recipe.serves)])].sort((a, b) => a - b);
   const servingsPicker = scalable

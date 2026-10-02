@@ -29,5 +29,5 @@ calories: 510
 ## Instructions
 
 1. In a bowl, combine the salsa ingredients (**avocado**, **tomatoes**, **spring onions**, chopped herbs, **Tabasco** and **feta cheese**), seasoning with salt and pepper to taste. Mix well and set aside.
-2. Press 2 **sausages** gently on to each **tortilla**, using a fork or your fingers to spread them evenly to cover the surface. Heat a little **olive oil** in a large nonstick frying pan over a medium heat. Place the sausage-covered tortillas in the pan, sausage side down. Cook until the sausage is golden and cooked through, about 3–4 minutes. Flip and cook the other side for 1–2 minutes, until lightly toasted.
+2. Divide the **sausages** evenly between the **tortillas**, pressing them on gently with a fork or your fingers to spread them to cover the surface. Heat a little **olive oil** in a large nonstick frying pan over a medium heat. Place the sausage-covered tortillas in the pan, sausage side down. Cook until the sausage is golden and cooked through, about 3–4 minutes. Flip and cook the other side for 1–2 minutes, until lightly toasted.
 3. Remove the tacos from the pan and top with the salsa. Sprinkle with **chilli flakes** and place a **lime** wedge on the side, if desired.

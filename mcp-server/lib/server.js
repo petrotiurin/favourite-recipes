@@ -22,6 +22,8 @@ Rules the server enforces or expects:
 - Instructions: one action per array item, sentence case, no numbering (the server numbers them).
   Bold EVERY ingredient mention with **double asterisks**, ingredient noun only, e.g. "Stir the **oats** into the **yogurt**".
   Don't bold the dish itself ("the batter", "the burgers").
+  Don't repeat quantities in instructions (the site rescales only the ingredient list): say "half the **sugar**" / "the remaining **sugar**",
+  and "one portion per person" rather than "divide into 2 portions". Times, temperatures and per-item sizes are fine.
 - course: one or more of ${COURSES.join(", ")}. total_mins = prep + cook. serves is required: if the source doesn't say, estimate and confirm with the user.
 - calories is required: kcal per serving. Use the source's figure when it gives one; otherwise estimate from the ingredients and tell the user it's an estimate.
 - Every recipe needs a real hero photo. Never invent a placeholder.
