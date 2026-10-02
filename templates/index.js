@@ -33,18 +33,16 @@ ${r.draft === true ? '        <span class="draft-badge">Draft</span>\n' : ""}   
   // The Drafts tab only appears while there are drafts to show.
   const filters = COURSES.concat(recipes.some((r) => r.draft === true) ? ["Drafts"] : []);
 
-  const filterInputs = [`      <input type="radio" name="course-filter" id="filter-all" class="filter-input" checked>`]
+  // Each input must sit directly before its label: the CSS highlights the
+  // active filter with `.filter-input:checked + .filter-label`.
+  const filterControls = [`      <input type="radio" name="course-filter" id="filter-all" class="filter-input" checked>
+      <label for="filter-all" class="filter-label">All</label>`]
     .concat(
       filters.map((c) => {
         const id = `filter-${c.toLowerCase()}`;
-        return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">`;
+        return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">
+      <label for="${id}" class="filter-label${c === "Drafts" ? " filter-label-draft" : ""}">${c}</label>`;
       })
-    )
-    .join("\n");
-
-  const filterLabels = [`      <label for="filter-all" class="filter-label">All</label>`]
-    .concat(
-      filters.map((c) => `      <label for="filter-${c.toLowerCase()}" class="filter-label${c === "Drafts" ? " filter-label-draft" : ""}">${c}</label>`)
     )
     .join("\n");
 
@@ -55,8 +53,7 @@ ${r.draft === true ? '        <span class="draft-badge">Draft</span>\n' : ""}   
   <main>
     <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes by name&hellip;" autocomplete="off">
     <div class="filter-bar">
-${filterInputs}
-${filterLabels}
+${filterControls}
     </div>
     <div class="tile-grid">
 ${tiles}
