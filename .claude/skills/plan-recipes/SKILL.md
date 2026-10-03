@@ -37,7 +37,47 @@ Before changing anything, write a short plan back to the user: "New: A, B. Exist
 
 Skip to 2 if there are no new recipes.
 
-**Read each source.** For a link, open it and read the recipe. For a screenshot, read the text off the image. Extract title, course, tags, total minutes, serves, calories, ingredients and instructions. Follow the format rules in the recipes MCP server's instructions and tool schemas (structured ingredients with a numeral quantity, bold every ingredient mention in the steps, never repeat amounts in the steps, one action per step, etc.). Don't re-invent them here. If `serves` or `calories` isn't in the source, estimate it and say it's an estimate in the summary. If something essential is missing (no quantities, unreadable image, unclear course), ask.
+**Read each source.** For a link, open it and read the recipe. For a screenshot, read the text off the image. Extract title, course, tags, total minutes, serves, calories, ingredients and instructions, and write them following **"Writing a recipe that passes first time"** below. If `serves` or `calories` isn't in the source, estimate it and say it's an estimate in the summary. If something essential is missing (no quantities, unreadable image, unclear course), ask.
+
+### Writing a recipe that passes first time
+
+These are the mistakes that cost extra round-trips: a rejected recipe, or warnings to fix afterwards. Check every recipe against this list **before** the dry run. The recipes MCP server's instructions and tool schemas have the full rules; these are the ones that matter most.
+
+**1. Every ingredient has a `quantity`, or a `note` containing "to taste" or "to serve". Otherwise the whole recipe is rejected.**
+Sources often list seasoning, oil and garnish without amounts. Never leave both fields empty:
+
+| Source says | Bad (rejected) | Good |
+| --- | --- | --- |
+| "olive oil, for brushing" | `{ name: "olive oil", note: "for brushing" }` | `{ quantity: "1 tbsp", name: "olive oil", note: "for brushing" }` if you can estimate an amount, else `{ name: "olive oil", note: "for brushing, to taste" }` |
+| "salt and pepper" | `{ name: "salt and pepper" }` | `{ name: "salt", note: "to taste" }`, `{ name: "black pepper", note: "to taste" }` |
+| "chives, to garnish" | `{ name: "chives", note: "to garnish" }` | `{ quantity: "Small handful of", name: "chives", note: "chopped, to serve" }` or `{ name: "chives", note: "chopped, to serve" }` |
+
+"to garnish", "for brushing", "optional" and "as needed" do **not** count: the note must literally contain "to taste" or "to serve".
+
+**2. One ingredient per line.** Split combined lines ("olive oil, salt and pepper" → three ingredients). The `name` is plain text: no `**`, no quantity, no prep. Those go in `quantity` and `note`.
+
+**3. Bold every mention of an ingredient in every step, including later steps and passing references.** The server warns about any ingredient name that appears in a step without `**`. Don't write steps first and bold some of them afterwards: bold as you write.
+
+| Bad (warning) | Good |
+| --- | --- |
+| "Whisk the **eggs**. … Pour in the eggs." | "Whisk the **eggs**. … Pour in the **eggs**." |
+| "Squeeze over the lemon juice" (ingredient: lemon) | "Squeeze over the **lemon** juice" |
+| "Adjust the lemon, mustard and seasoning" | "Adjust the **lemon**, **mustard**, **salt** and **pepper**" |
+| "Top with the rest of the ham" | "Top with the rest of the **ham**" |
+
+Bold the ingredient noun only, not the dish ("the batter", "the salad", "the meatballs").
+
+**4. Never repeat an amount in a step.** The servings selector rescales the ingredient list but not the steps, so a number in a step is wrong as soon as someone cooks for a different number of people.
+
+| Bad (warning) | Good |
+| --- | --- |
+| "Add 1 tsp of the **garlic granules**" | "Add the **garlic granules**" |
+| "Stir in 100g **feta**, keep 50g back" | ingredient `"150g"` with note `"split: 100g + 50g"`, step "Stir in most of the **feta**, keeping some back for the top" |
+| "Shape into 8 **meatballs**" | "Shape into equal meatballs, two per person" |
+
+Fractions of a listed amount ("half the **sugar**", "the remaining **sugar**") are fine. So are times, temperatures, pan sizes and per-item sizes ("about 50g each").
+
+**5. Other format rules.** One action per step, no numbering (the server numbers them). Quantities are numerals ("2", "½", "150g"), never words ("two"). `serves` and `calories` (kcal per serving) are required: estimate them if the source doesn't give them.
 
 **Photos.** Every recipe needs a real photo of the dish; never invent a placeholder.
 - A recipe from a **link**: try the page's dish photo (usually `og:image`) with `create_recipe`'s `image: { url }`. If that fails, fall back to an upload link.
@@ -78,8 +118,8 @@ This step always happens, even if nothing was added and the user only picked exi
 ## 4. Commit everything in one go
 
 1. Put the operations in this order: `create_recipe` for each new recipe, `promote_recipe` for drafts leaving the rotation, the `set_current_recipes` operations, then `update_shopping_list`.
-2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed. Fix every warning it reports (unbolded ingredient, repeated amount) in your operations, and any rejected operation (duplicate shopping item, missing photo, bad field). Repeat the dry run until it's clean.
-3. Call `batch_changes({ operations })` once. It's all or nothing: if an operation is rejected, nothing was committed, so fix it and send the whole batch again.
+2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed, so fixing things here is free. Fix any rejected operation (missing quantity / "to taste" note, duplicate shopping item, missing photo, bad field) and **every** warning (unbolded ingredient, repeated amount) in your operations. Warnings don't block the commit, but don't leave any as "minor": an unbolded or loosely referenced ingredient is still an inconsistency on the site, and fixing it after the commit costs another commit and deploy. Repeat the dry run until it reports no warnings.
+3. Call `batch_changes({ operations })` once. It's all or nothing: if an operation is rejected, nothing was committed, so fix it and send the whole batch again. Never fix things afterwards with separate `update_recipe` calls.
 
 That's one commit and one site deploy for the whole plan. If you have to change something afterwards (the user corrects a recipe), gather the fixes and send them as one more batch, ending with `update_shopping_list` if ingredients or the current set changed.
 
