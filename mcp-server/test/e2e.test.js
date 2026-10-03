@@ -144,7 +144,7 @@ draft: true
   assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/test-lentil-soup.jpg", "recipes/test-lentil-soup.md"]);
 });
 
-test("drafts are listed first and promote_recipe turns them into regular recipes", async () => {
+test("drafts are listed first and promote_recipe turns them into regular recipes that stay current", async () => {
   const list = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
   assert.equal(list[0].slug, "test-lentil-soup");
   assert.equal(list[0].draft, true);
@@ -152,13 +152,22 @@ test("drafts are listed first and promote_recipe turns them into regular recipes
   const before = files.get("recipes/test-lentil-soup.md").toString();
   const r = await client.callTool({ name: "promote_recipe", arguments: { slug: "test-lentil-soup" } });
   assert.ok(!r.isError, text(r));
-  assert.equal(files.get("recipes/test-lentil-soup.md").toString(), before.replace("draft: true\n", ""));
+  assert.equal(files.get("recipes/test-lentil-soup.md").toString(), before.replace("draft: true\n", "current: true\n"));
   assert.deepEqual(commitLog.at(-1).paths, ["recipes/test-lentil-soup.md"]);
   assert.match(commitLog.at(-1).message, /^Promote recipe: Test Lentil Soup/);
 
   const again = await client.callTool({ name: "promote_recipe", arguments: { slug: "test-lentil-soup" } });
   assert.ok(again.isError);
   assert.match(text(again), /not a draft/);
+
+  // Promoting left it current; take it out of the rotation so later tests start from a clean slate.
+  const listed2 = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
+  assert.equal(listed2[0].slug, "test-lentil-soup");
+  assert.equal(listed2[0].current, true);
+  assert.equal(listed2[0].draft, undefined);
+  const off = await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["test-lentil-soup"], current: false } });
+  assert.ok(!off.isError, text(off));
+  assert.doesNotMatch(files.get("recipes/test-lentil-soup.md").toString(), /^(draft|current):/m);
 });
 
 test("draft: false creates a regular recipe straight away", async () => {
@@ -214,7 +223,7 @@ test("current recipes: marking is one minimal commit, idempotent, and drafts can
   assert.match(files.get("recipes/steamed-rice.md").toString(), /current: true/); // nothing committed from the failed call
 });
 
-test("shopping list covers current recipes (drafts + marked) and goes stale when that set changes", async () => {
+test("shopping list covers current recipes; it stays until rewritten and goes blank only when nothing is current", async () => {
   const dup = await client.callTool({
     name: "update_shopping_list",
     arguments: { sections: [{ name: "A", items: [{ name: "Onions" }] }, { name: "B", items: [{ name: "onions" }] }] },
@@ -232,29 +241,39 @@ test("shopping list covers current recipes (drafts + marked) and goes stale when
   assert.deepEqual(stored.sections[0].items[1], { name: "Parsley" });
   assert.match(await shopping(), /Status: current/);
 
-  // Unmarking a regular recipe changes the set -> stale.
+  // Unmarking one recipe changes the set: the list is flagged outdated but kept (the draft is still current).
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice"], current: false } });
   assert.doesNotMatch(files.get("recipes/steamed-rice.md").toString(), /^current:/m);
-  const stale = await shopping();
-  assert.match(stale, /Status: stale/);
-  assert.match(stale, /test-draft-salad.*\[draft\]/);
-  assert.doesNotMatch(stale, /- Steamed Rice/);
+  assert.ok(files.has("shopping-list.json"));
+  const outdated = await shopping();
+  assert.match(outdated, /Status: outdated/);
+  assert.match(outdated, /test-draft-salad.*\[draft\]/);
+  assert.doesNotMatch(outdated, /- Steamed Rice/);
 
-  // Marking an existing recipe is enough on its own: no drafts needed.
-  await client.callTool({ name: "update_shopping_list", arguments: { sections } });
-  assert.match(await shopping(), /Status: current/);
+  // Marking existing recipes is enough on its own: no drafts needed.
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice", "harissa-tuna-pitta"], current: true } });
-  assert.match(await shopping(), /Status: stale/);
-
-  // Promoting the draft drops it from the rotation; the others stay current.
-  await client.callTool({ name: "promote_recipe", arguments: { slug: "test-draft-salad" } });
-  assert.doesNotMatch(files.get("recipes/test-draft-salad.md").toString(), /^(draft|current):/m);
-  assert.deepEqual((await listed()).filter((x) => x.current).map((x) => x.slug), ["harissa-tuna-pitta", "steamed-rice"]);
   await client.callTool({ name: "update_shopping_list", arguments: { sections } });
-  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).recipes, ["harissa-tuna-pitta", "steamed-rice"]);
+  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).recipes, ["harissa-tuna-pitta", "steamed-rice", "test-draft-salad"]);
+  assert.match(await shopping(), /Status: current/);
 
-  // Nothing current -> nothing to shop for.
+  // Promoting only touches that recipe's file: it stays current and the shopping list is unaffected.
+  const commits = commitLog.length;
+  await client.callTool({ name: "promote_recipe", arguments: { slug: "test-draft-salad" } });
+  assert.equal(commitLog.length, commits + 1);
+  assert.deepEqual(commitLog.at(-1).paths, ["recipes/test-draft-salad.md"]);
+  assert.match(files.get("recipes/test-draft-salad.md").toString(), /^current: true$/m);
+  assert.doesNotMatch(files.get("recipes/test-draft-salad.md").toString(), /^draft:/m);
+  assert.deepEqual((await listed()).filter((x) => x.current).map((x) => x.slug), ["harissa-tuna-pitta", "steamed-rice", "test-draft-salad"]);
+  assert.match(await shopping(), /Status: current/);
+
+  // Unmarking the last current recipes deletes the saved list in the same commit, so it can't resurface later.
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["harissa-tuna-pitta", "steamed-rice"], current: false } });
+  assert.ok(files.has("shopping-list.json"));
+  const last = await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["test-draft-salad"], current: false } });
+  assert.match(text(last), /shopping list was cleared/);
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/test-draft-salad.md", "shopping-list.json"]);
+  assert.equal(files.has("shopping-list.json"), false);
+  assert.match(await shopping(), /Status: none/);
   const none = await client.callTool({ name: "update_shopping_list", arguments: { sections } });
   assert.ok(none.isError);
   assert.match(text(none), /no current recipes/);

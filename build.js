@@ -47,13 +47,12 @@ function loadRecipes() {
 
 /**
  * The shopping list is written by the agent (via the MCP server's
- * update_shopping_list tool) and records which current recipes it was built
- * from. It is only shown while that set still matches the recipes that are
- * current now: promoting a draft, or adding/removing a current recipe, makes it
- * stale, so the page goes blank until the agent refreshes it.
+ * update_shopping_list tool) and shown as-is until the agent writes a new one.
+ * It is blank only when there is no list or no recipe is current. The recipes
+ * it links to are the ones it was built from that still exist.
  */
-function loadShoppingList(currentRecipes) {
-  if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
+function loadShoppingList(currentRecipes, allRecipes) {
+  if (!currentRecipes.length || !fs.existsSync(SHOPPING_LIST_FILE)) return null;
   let list;
   try {
     list = JSON.parse(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"));
@@ -61,13 +60,12 @@ function loadShoppingList(currentRecipes) {
     console.warn(`Ignoring shopping-list.json: ${err.message}`);
     return null;
   }
-  const covered = Array.isArray(list.recipes) ? [...list.recipes].sort() : [];
-  const current = currentRecipes.map((r) => r.slug).sort();
   const sections = (Array.isArray(list.sections) ? list.sections : []).filter(
     (s) => s && s.name && Array.isArray(s.items) && s.items.length
   );
-  if (!sections.length || !current.length || covered.join("\n") !== current.join("\n")) return null;
-  return { ...list, sections };
+  if (!sections.length) return null;
+  const covered = new Set(Array.isArray(list.recipes) ? list.recipes : []);
+  return { list: { ...list, sections }, recipes: allRecipes.filter((r) => covered.has(r.slug)) };
 }
 
 function build() {
@@ -94,8 +92,8 @@ function build() {
   }
 
   const currentRecipes = recipes.filter(isCurrent);
-  const shoppingList = loadShoppingList(currentRecipes);
-  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shoppingList, currentRecipes));
+  const shopping = loadShoppingList(currentRecipes, recipes);
+  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shopping?.list ?? null, shopping?.recipes ?? []));
 
   console.log(`Built ${recipes.length} recipe(s) into dist/`);
 }

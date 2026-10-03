@@ -22,12 +22,12 @@ function renderItem({ quantity, name, note }) {
 
 /**
  * `list` is the agent-written shopping-list.json, or null when there is nothing
- * current to show. `recipes` are the current recipes the list covers (for the links).
+ * current to show. `recipes` are the recipes the list was built from (for the links).
  */
 function renderShoppingList(list, recipes) {
   let body;
   if (!list) {
-    body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes to shop for, and clears itself when the current recipes change.</p>`;
+    body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes and a shopping list has been made for them.</p>`;
   } else {
     const links = recipes
       .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${escapeHtml(r.title)}</a>`)
@@ -43,7 +43,7 @@ ${s.items.map(renderItem).join("\n")}
     </section>`
       )
       .join("\n");
-    body = `    <p class="shopping-intro">Everything for the current recipes below${updated ? ` &middot; updated ${updated}` : ""}</p>
+    body = `    <p class="shopping-intro">Everything for the recipes below${updated ? ` &middot; updated ${updated}` : ""}</p>
     <div class="shopping-recipes">
       ${links}
     </div>

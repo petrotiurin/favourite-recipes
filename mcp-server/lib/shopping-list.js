@@ -1,6 +1,6 @@
 import { readFile, commitChanges } from "./github.js";
 import { listRecipes, isCurrent } from "./recipes.js";
-import { config } from "./config.js";
+import { config, SHOPPING_LIST_PATH } from "./config.js";
 
 // The agent combines the current recipes' ingredients itself; this module only
 // validates and stores the result as shopping-list.json at the repo root, which
@@ -9,7 +9,6 @@ import { config } from "./config.js";
 // while that still matches the recipes that are current now (keep in sync with
 // loadShoppingList in build.js).
 
-export const SHOPPING_LIST_PATH = "shopping-list.json";
 export const shoppingPageUrl = () => `${config.siteUrl}/shopping-list.html`;
 
 export class ShoppingListError extends Error {}
@@ -52,11 +51,14 @@ export function buildShoppingList(sections, currentSlugs, now = new Date()) {
 
 export const serializeShoppingList = (list) => `${JSON.stringify(list, null, 2)}\n`;
 
-/** "current" when the stored list covers exactly the recipes that are current now, "stale" when it doesn't, "none" when there's no list. */
+/**
+ * "current" when the stored list covers exactly the recipes that are current now, "outdated" when the set has
+ * changed since (the site keeps showing the old list until it is rewritten), "none" when there's no list.
+ */
 export function shoppingListStatus(list, currentSlugs) {
   if (!list || !Array.isArray(list.sections) || !list.sections.length) return "none";
   const covered = [...(list.recipes || [])].sort().join("\n");
-  return covered === [...currentSlugs].sort().join("\n") ? "current" : "stale";
+  return covered === [...currentSlugs].sort().join("\n") ? "current" : "outdated";
 }
 
 async function readStoredList() {

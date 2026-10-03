@@ -1,4 +1,4 @@
-import { config, COURSES } from "./config.js";
+import { config, COURSES, SHOPPING_LIST_PATH } from "./config.js";
 import { readFile, listDir, commitChanges } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import {
@@ -161,7 +161,7 @@ export async function promoteRecipe(slug) {
   const { data, sections } = parseRecipe(before);
   if (data.draft !== true) throw new UserError(`"${slug}" is not a draft, it's already a regular recipe.`);
   delete data.draft;
-  delete data.current; // promoting takes it out of the rotation; use set_current_recipes to keep it current
+  data.current = true; // drafts are implicitly current, so promoting keeps the recipe in the rotation
   const markdown = serializeRecipe(data, sections);
   const commit = await commitChanges(
     [{ path: recipePath(slug), content: Buffer.from(markdown) }],
@@ -186,7 +186,7 @@ export async function setCurrentRecipes(slugs, current) {
       throw new UserError(
         current
           ? `"${slug}" is a draft, and drafts are always current already.`
-          : `"${slug}" is a draft, and drafts are always current. Use promote_recipe once it's tried to take it out of the rotation.`
+          : `"${slug}" is a draft, and drafts are always current. Promote it with promote_recipe once it's tried (it stays current), then unmark it.`
       );
     }
     if ((data.current === true) === current) {
@@ -199,13 +199,24 @@ export async function setCurrentRecipes(slugs, current) {
     titles.push(data.title);
   }
   const changed = changes.map((c) => c.path.slice("recipes/".length, -".md".length));
-  if (!changes.length) return { changed, unchanged, commit: null };
+  if (!changes.length) return { changed, unchanged, commit: null, clearedShoppingList: false };
+
+  // Nothing current any more -> the shopping list goes too (in the same commit), so an old list
+  // can't reappear when something else becomes current later.
+  let clearedShoppingList = false;
+  if (!current) {
+    const stillCurrent = (await listRecipes()).filter((r) => isCurrent(r) && !changed.includes(r.slug));
+    if (!stillCurrent.length && (await readFile(SHOPPING_LIST_PATH))) {
+      changes.push({ path: SHOPPING_LIST_PATH, delete: true });
+      clearedShoppingList = true;
+    }
+  }
   const verb = current ? "Make current" : "Remove from current";
   const commit = await commitChanges(
     changes,
     `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}\n\nUpdated via the recipes MCP server.`
   );
-  return { changed, unchanged, commit };
+  return { changed, unchanged, commit, clearedShoppingList };
 }
 
 export async function updateRecipe(input) {

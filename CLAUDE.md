@@ -60,13 +60,13 @@ serves: 2                          # number of people the recipe serves, require
 calories: 195                      # kcal per serving, required (source's figure, else estimated from ingredients)
 scalable: false                    # optional: hides the servings selector (only when the ingredient list already gives per-person amounts)
 current: true                      # optional: a regular recipe in the current rotation. Highlighted, sorted after drafts, "Current" badge + filter tab, on the shopping list. Drafts are always current and don't need it.
-draft: true                        # optional: not tried yet. Highlighted, sorted first, "Draft" badge + filter tab. Remove the key to promote it.
+draft: true                        # optional: not tried yet. Highlighted, sorted first, "Draft" badge + filter tab. Promoting swaps this line for `current: true`.
 ---
 ```
 
-New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe by deleting that line (the MCP server's `promote_recipe` tool does exactly this).
+New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe (the MCP server's `promote_recipe` tool replaces `draft: true` with `current: true`, so promoting does not change whether the recipe is current).
 
-**Current recipes** are the ones the family is cooking right now: every draft, plus any regular recipe marked `current: true`. The index (and the MCP's `list_recipes`) orders recipes in three tiers: 1. drafts, 2. other current recipes, 3. everything else (alphabetical within each tier). Promoting a draft removes it from the current rotation (and drops any `current` key); mark it current again if it should stay. The MCP server's `set_current_recipes` tool adds/removes `current: true` for existing recipes (agent-driven; drafts can't be toggled).
+**Current recipes** are the ones the family is cooking right now: every draft, plus any regular recipe marked `current: true`. The index (and the MCP's `list_recipes`) orders recipes in three tiers: 1. drafts, 2. other current recipes, 3. everything else (alphabetical within each tier). Promoting a draft keeps it current until it's explicitly unmarked. The MCP server's `set_current_recipes` tool adds/removes `current: true` for existing recipes (agent-driven; drafts can't be toggled, promote first).
 
 Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) and `## Instructions` (numbered). See the `add-recipe` skill for the exact rules.
 
@@ -79,7 +79,7 @@ Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) 
   "sections": [{ "name": "Fresh produce", "items": [{ "name": "Red onions", "quantity": "3", "note": "optional" }] }] }
 ```
 
-`recipes` is filled in by the server with the slugs of the recipes that are current at that moment. At build time `build.js` shows the list only if `recipes` matches the current set exactly; if a draft is added or promoted, or a recipe is marked/unmarked current or removed, the page renders blank until the agent refreshes it. Never hand-edit `shopping-list.json`; go through the tool. Keep `loadShoppingList` in `build.js` and `mcp-server/lib/shopping-list.js` in sync if the format changes.
+`recipes` is filled in by the server with the slugs the list was built from; the page links to those that still exist. The page keeps showing the saved list as-is until the agent saves a new one (changing which recipes are current does not alter it), and is blank only when no recipe is current. `set_current_recipes` deletes `shopping-list.json` in the same commit when it unmarks the last current recipe, so an old list can't resurface. Never hand-edit `shopping-list.json`; go through the tool. Keep `loadShoppingList` in `build.js` and `mcp-server/lib/shopping-list.js` in sync if the format changes.
 
 ## Deployment
 

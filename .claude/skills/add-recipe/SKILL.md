@@ -42,7 +42,7 @@ draft: true          # new recipes start as drafts; omit only if the user says i
 ---
 ```
 
-**Drafts.** Add new recipes as drafts (`draft: true`) by default — they're highlighted on the site, sorted first and tagged "Draft" until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Drafts are always "current" (listed first and put on the shopping list); a regular recipe only becomes current via `current: true`, so don't add that key when adding a new recipe.
+**Drafts.** Add new recipes as drafts (`draft: true`) by default — they're highlighted on the site, sorted first and tagged "Draft" until the family has tried them. When the user says a draft is a keeper, promote it by replacing the `draft: true` line with `current: true` (nothing else changes; it stays in the current rotation until the user says otherwise). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Drafts are always "current" (listed first and put on the shopping list); a regular recipe only becomes current via `current: true`, so don't add that key to a brand-new regular recipe unless asked.
 
 Body:
 
