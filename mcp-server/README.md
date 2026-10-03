@@ -8,16 +8,19 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 
 | Tool | What it does |
 | --- | --- |
-| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, and `draft: true` for drafts (listed first) |
+| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts and `current: true` for every current recipe. Order: drafts, other current recipes, the rest |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
 | `create_image_upload_link` | Returns a one-hour link where a person can upload the dish photo from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
-| `promote_recipe` | Turns a draft into a regular recipe (removes `draft: true`, one commit) |
+| `promote_recipe` | Turns a draft into a regular recipe (replaces `draft: true` with `current: true`, one commit). Its currency is unchanged: it stays current |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
+| `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
+| `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
+| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`) |
 
 ## What's enforced
 
-- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md` and `images/recipes/<slug>.{jpg,jpeg,png,webp}`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
+- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
   - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
@@ -30,6 +33,20 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
   - Creating a recipe whose slug already exists is refused.
 - **Photos are required and normalised.** The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.
 - **Edits are minimal.** Existing recipes round-trip byte-for-byte (see the tests), so editing one field doesn't reformat the rest of the file.
+
+## Current recipes and the shopping list
+
+A recipe is *current* when the family is cooking it right now: every draft is, plus any regular recipe the agent marks with `set_current_recipes` (`current: true` in its frontmatter). The site and `list_recipes` order recipes as drafts, then other current recipes, then the rest. The rotation can hold only existing recipes, only drafts, or both.
+
+The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?}]}]`.
+
+- The server fills in `recipes` (the current slugs) itself and the page links to them. It refuses when nothing is current and when an ingredient is listed twice.
+- **The page shows the saved list until it is rewritten.** Changing which recipes are current does not alter it. `build.js` blanks the page only when no recipe is current. Unmarking the last current recipe (`set_current_recipes`) deletes `shopping-list.json` in the same commit, so an old list can't resurface once something becomes current again.
+- `get_shopping_list` reports `current` (covers exactly the current recipes), `outdated` (the set changed since, so the agent should rewrite it) or `none`.
+- Promoting a draft doesn't change its currency, so it doesn't make the list outdated.
+- Editing a current recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
+
+The end-to-end agent flow (add recipes, select existing ones, build the list, summarise) is the `plan-recipes` skill in `.claude/skills/plan-recipes/SKILL.md`.
 
 ## Adding photos
 

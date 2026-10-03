@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { COURSES } from "./config.js";
+import { COURSES, config } from "./config.js";
 import { createUploadToken } from "./auth.js";
 import { slugify } from "./recipe-format.js";
 import {
@@ -9,10 +9,12 @@ import {
   createRecipe,
   updateRecipe,
   promoteRecipe,
+  setCurrentRecipes,
   readRecipeImage,
   pageUrl,
   UserError,
 } from "./recipes.js";
+import { getShoppingList, updateShoppingList, shoppingPageUrl, ShoppingListError } from "./shopping-list.js";
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
@@ -21,6 +23,21 @@ Drafts first: a recipe the family hasn't cooked and liked yet should be created 
 true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
 promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
+
+Current recipes: the recipes the family is cooking right now. Three tiers, always listed in this order on the site and in
+list_recipes: (1) drafts, which are always current, (2) regular recipes marked current, (3) all the others. Mark existing recipes
+current (or take them out again) with set_current_recipes; list_recipes shows current: true on every current recipe. A recipe can
+be current without being a draft, so the rotation may hold only existing recipes, only drafts, or a mix. Promoting a draft does
+NOT change its currency: it stays current (promote_recipe writes current: true) until you unmark it with set_current_recipes.
+
+Shopping list: the site has a separate shopping page that covers the ingredients of ALL current recipes (drafts and current ones).
+You write it: whenever the current set changes (get_shopping_list says "outdated"), read every current recipe (get_recipe), combine
+the ingredients into one deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the
+recipes' own units; keep different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if
+clearly pantry basics, else list them without a quantity), group it into shop-aisle sections, and call update_shopping_list.
+The server links the recipes itself. The page keeps showing the last list you saved, even if the current set has since changed,
+so refresh it after every such change. It goes blank only when no recipe is current (unmarking the last one also deletes the
+saved list) or when you replace the list.
 
 Rules the server enforces or expects:
 - Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
@@ -94,8 +111,9 @@ function ok(text, extra = []) {
 }
 
 function fail(err) {
-  const msg = err instanceof UserError ? err.message : `Server error: ${err.message}`;
-  if (!(err instanceof UserError)) console.error(err);
+  const expected = err instanceof UserError || err instanceof ShoppingListError;
+  const msg = expected ? err.message : `Server error: ${err.message}`;
+  if (!expected) console.error(err);
   return { content: [{ type: "text", text: msg }], isError: true };
 }
 
@@ -106,6 +124,19 @@ const safe = (fn) => async (args) => {
     return fail(err);
   }
 };
+
+function shoppingResult({ list, current, commit }) {
+  const items = list.sections.reduce((n, s) => n + s.items.length, 0);
+  return [
+    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${current.length} current recipe${current.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
+    `It will be live in about a minute at ${shoppingPageUrl()}`,
+    "",
+    "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever the current recipes change. It only goes blank when no recipe is current.",
+    "",
+    "Covers:",
+    ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
+  ].join("\n");
+}
 
 function resultText(verb, { slug, markdown, commit, draft, warnings }) {
   const lines = [];
@@ -132,7 +163,7 @@ export function buildServer({ origin }) {
       title: "List recipes",
       description:
         "List every recipe on the site with its slug, title, course, tags, time, servings and calories. " +
-        "Drafts (not yet promoted) have draft: true and are listed first.",
+        "Order: drafts (draft: true), then other current recipes, then the rest. Every current recipe, drafts included, has current: true.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -242,7 +273,8 @@ export function buildServer({ origin }) {
       title: "Promote draft recipe",
       description:
         "Turn a draft into a regular recipe (the user cooked it and wants to keep it). Removes draft: true from its frontmatter " +
-        "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft.",
+        "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft. " +
+        "The recipe's currency is unchanged: it stays current (current: true is written) until you unmark it with set_current_recipes.",
       inputSchema: {
         slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
       },
@@ -274,6 +306,94 @@ export function buildServer({ origin }) {
       },
     },
     safe(async (args) => ok(resultText("Updated", await updateRecipe(args))))
+  );
+
+  server.registerTool(
+    "set_current_recipes",
+    {
+      title: "Set recipes current",
+      description:
+        "Add regular recipes to the current rotation (current: true) or take them out of it, in one commit to main. Current recipes are " +
+        "highlighted on the site, listed after the drafts and before all other recipes, and their ingredients go on the shopping list. " +
+        "Drafts are always current and can't be changed here (promote one first, it stays current, then unmark it). Slugs already in the " +
+        "requested state are skipped. If nothing is current afterwards, the saved shopping list is deleted too; otherwise call update_shopping_list.",
+      inputSchema: {
+        slugs: z.array(z.string()).min(1).describe("Slugs from list_recipes"),
+        current: z.boolean().describe("true = make current, false = no longer current"),
+      },
+    },
+    safe(async ({ slugs, current }) => {
+      const { changed, unchanged, commit, clearedShoppingList } = await setCurrentRecipes(slugs, current);
+      const lines = [];
+      if (commit) {
+        lines.push(`${current ? "Marked current" : "Removed from current"}: ${changed.join(", ")}`, `Committed to main: ${commit.url}`);
+        lines.push(`The site updates in about a minute at ${config.siteUrl}/`);
+      } else {
+        lines.push("Nothing changed.");
+      }
+      if (unchanged.length) lines.push(`Already ${current ? "current" : "not current"}: ${unchanged.join(", ")}`);
+      if (clearedShoppingList) lines.push("", "No recipe is current any more, so the shopping list was cleared too.");
+      else if (commit) lines.push("", "The current set changed: call update_shopping_list to refresh the shopping list.");
+      return ok(lines.join("\n"));
+    })
+  );
+
+  server.registerTool(
+    "get_shopping_list",
+    {
+      title: "Get shopping list",
+      description:
+        "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
+        "'outdated' (the current recipes changed since it was written; the site still shows it, so rewrite it) or 'none'. " +
+        "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    safe(async () => {
+      const { list, current, status } = await getShoppingList();
+      const lines = [
+        `Status: ${status}${status === "outdated" ? " (the current recipes changed; the site still shows the old list until you call update_shopping_list)" : ""}`,
+        `Page: ${shoppingPageUrl()}`,
+        "",
+        current.length ? "Current recipes (the ones to combine):" : "There are no current recipes right now.",
+        ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
+      ];
+      if (list) lines.push("", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
+      return ok(lines.join("\n"));
+    })
+  );
+
+  server.registerTool(
+    "update_shopping_list",
+    {
+      title: "Update shopping list",
+      description:
+        "Replace the site's shopping page with a combined ingredient list for ALL current recipes (drafts and recipes marked current). " +
+        "You do the combining: read each current recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
+        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which recipes the list covers " +
+        "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
+        "so call it after adding a draft or marking/unmarking recipes current. It goes blank only when no recipe is current. Fails if there are no current recipes.",
+      inputSchema: {
+        sections: z
+          .array(
+            z.object({
+              name: z.string().min(1).describe('Section heading, e.g. "Fresh produce"'),
+              items: z
+                .array(
+                  z.object({
+                    name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
+                    quantity: z.string().optional().describe('Combined amount with units, e.g. "3", "450g", "2 tbsp". Omit for "to taste" items.'),
+                    note: z.string().optional().describe('Short extra, e.g. "for the fish tacos and the salsa", "finely diced".'),
+                  })
+                )
+                .min(1)
+            })
+          )
+          .min(1)
+          .describe("The whole list, grouped into shop sections. Replaces whatever list is there."),
+      },
+    },
+    safe(async ({ sections }) => ok(shoppingResult(await updateShoppingList(sections))))
   );
 
   return server;

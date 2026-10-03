@@ -68,3 +68,9 @@ test("ASCII fractions in quantities become unicode so they rescale", () => {
   assert.equal(renderIngredient({ quantity: "150g (2/3 cup)", name: "Greek yogurt" }), "- 150g (⅔ cup) **Greek yogurt**");
   assert.equal(renderIngredient({ quantity: "Juice of 1/2", name: "lemon" }), "- Juice of ½ **lemon**");
 });
+
+test("shopping-list.json is writable; other root files still aren't", () => {
+  assert.equal(isAllowedPath("shopping-list.json"), true);
+  assert.equal(isAllowedPath("build.js"), false);
+  assert.equal(isAllowedPath("data/shopping-list.json"), false);
+});

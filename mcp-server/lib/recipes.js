@@ -1,4 +1,4 @@
-import { config, COURSES } from "./config.js";
+import { config, COURSES, SHOPPING_LIST_PATH } from "./config.js";
 import { readFile, listDir, commitChanges } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import {
@@ -20,6 +20,11 @@ export const pageUrl = (slug) => `${config.siteUrl}/recipes/${slug}.html`;
 
 export class UserError extends Error {}
 
+// Keep in sync with templates/status.js: drafts are always current, `current: true` marks regular recipes in the rotation.
+export const isDraft = (r) => r.draft === true;
+export const isCurrent = (r) => r.draft === true || r.current === true;
+const rank = (r) => (isDraft(r) ? 0 : isCurrent(r) ? 1 : 2);
+
 function assertSlug(slug) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new UserError(`"${slug}" is not a valid recipe slug`);
 }
@@ -39,11 +44,12 @@ export async function listRecipes() {
         calories: data.calories,
         ...(data.scalable === false ? { scalable: false } : {}),
         ...(data.draft === true ? { draft: true } : {}),
+        ...(isCurrent(data) ? { current: true } : {}), // drafts are always current
       };
     })
   );
-  // Same order as the site: drafts first, then alphabetical.
-  return recipes.sort((a, b) => (b.draft === true) - (a.draft === true) || a.title.localeCompare(b.title));
+  // Same order as the site: drafts, then current recipes, then the rest; alphabetical within each.
+  return recipes.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
 export async function getRecipe(slug) {
@@ -155,12 +161,62 @@ export async function promoteRecipe(slug) {
   const { data, sections } = parseRecipe(before);
   if (data.draft !== true) throw new UserError(`"${slug}" is not a draft, it's already a regular recipe.`);
   delete data.draft;
+  data.current = true; // drafts are implicitly current, so promoting keeps the recipe in the rotation
   const markdown = serializeRecipe(data, sections);
   const commit = await commitChanges(
     [{ path: recipePath(slug), content: Buffer.from(markdown) }],
     `Promote recipe: ${data.title} (draft -> regular)\n\nPromoted via the recipes MCP server.`
   );
   return { slug, markdown, commit };
+}
+
+/**
+ * Adds regular recipes to / removes them from the current rotation (`current: true`),
+ * all in one commit. Drafts are always current, so they can't be added or removed here.
+ */
+export async function setCurrentRecipes(slugs, current) {
+  const unique = [...new Set(slugs)];
+  const changes = [];
+  const unchanged = [];
+  const titles = [];
+  for (const slug of unique) {
+    const { markdown: before } = await getRecipe(slug);
+    const { data, sections } = parseRecipe(before);
+    if (data.draft === true) {
+      throw new UserError(
+        current
+          ? `"${slug}" is a draft, and drafts are always current already.`
+          : `"${slug}" is a draft, and drafts are always current. Promote it with promote_recipe once it's tried (it stays current), then unmark it.`
+      );
+    }
+    if ((data.current === true) === current) {
+      unchanged.push(slug);
+      continue;
+    }
+    if (current) data.current = true;
+    else delete data.current;
+    changes.push({ path: recipePath(slug), content: Buffer.from(serializeRecipe(data, sections)) });
+    titles.push(data.title);
+  }
+  const changed = changes.map((c) => c.path.slice("recipes/".length, -".md".length));
+  if (!changes.length) return { changed, unchanged, commit: null, clearedShoppingList: false };
+
+  // Nothing current any more -> the shopping list goes too (in the same commit), so an old list
+  // can't reappear when something else becomes current later.
+  let clearedShoppingList = false;
+  if (!current) {
+    const stillCurrent = (await listRecipes()).filter((r) => isCurrent(r) && !changed.includes(r.slug));
+    if (!stillCurrent.length && (await readFile(SHOPPING_LIST_PATH))) {
+      changes.push({ path: SHOPPING_LIST_PATH, delete: true });
+      clearedShoppingList = true;
+    }
+  }
+  const verb = current ? "Make current" : "Remove from current";
+  const commit = await commitChanges(
+    changes,
+    `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}\n\nUpdated via the recipes MCP server.`
+  );
+  return { changed, unchanged, commit, clearedShoppingList };
 }
 
 export async function updateRecipe(input) {

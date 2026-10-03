@@ -5,6 +5,8 @@ description: Add a new recipe to the favourite-recipes static site — collects 
 
 # Add a recipe
 
+> Handing over recipes to cook this week, or want a shopping list too? Use the `plan-recipes` skill instead (it works through the recipes MCP server and builds the shopping list). This skill is for editing the repo's files directly.
+
 This site is 100% static (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/`, save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
 
 ## 1. Collect the recipe
@@ -37,11 +39,12 @@ tags: [<Tag>, ...]     # omit the key entirely if there are no tags
 total_mins: <number>
 serves: <number>
 calories: <number>   # kcal per serving
+current: true        # optional: regular recipe in the current rotation (not needed on drafts, which are always current)
 draft: true          # new recipes start as drafts; omit only if the user says it's already a tried-and-tested favourite
 ---
 ```
 
-**Drafts.** Add new recipes as drafts (`draft: true`) by default — they're highlighted on the site, sorted first and tagged "Draft" until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe).
+**Drafts.** Add new recipes as drafts (`draft: true`) by default — they're highlighted on the site, sorted first and tagged "Draft" until the family has tried them. When the user says a draft is a keeper, promote it by replacing the `draft: true` line with `current: true` (nothing else changes; it stays in the current rotation until the user says otherwise). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Drafts are always "current" (listed first and put on the shopping list); a regular recipe only becomes current via `current: true`, so don't add that key to a brand-new regular recipe unless asked.
 
 Body:
 

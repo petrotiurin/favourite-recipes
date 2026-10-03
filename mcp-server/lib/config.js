@@ -16,5 +16,6 @@ export function assertConfigured() {
   }
 }
 
+export const SHOPPING_LIST_PATH = "shopping-list.json";
 export const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack", "Drink"];
 export const MAX_IMAGE_EDGE = 1600;
