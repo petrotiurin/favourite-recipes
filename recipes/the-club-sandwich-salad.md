@@ -34,9 +34,9 @@ draft: true
 2. Heat the oven or air fryer to 190°C.
 3. Add the **sourdough** cubes to a tray and toss through with olive oil, salt, pepper and some of the **garlic granules**. Bake until crisp and golden.
 4. Lay the **Parma ham** out in a single layer and cook for 5 to 7 minutes until crisp. Set aside to cool.
-5. Mix the **Greek yoghurt**, **American mustard**, **honey**, **lemon** juice and the remaining **garlic granules** in the base of a mixing bowl, then season with salt and pepper. Taste and adjust the lemon, mustard and seasoning to suit you.
+5. Mix the **Greek yoghurt**, **American mustard**, **honey**, the **lemon** juice and the remaining **garlic granules** in the base of a mixing bowl, then season with salt and pepper. Taste and adjust the lemon, mustard and seasoning to suit you.
 6. Add the **little gem lettuce**, **cherry tomatoes**, **red onion**, the crispy ham, the croutons and the **grilled chicken breast** to the dressing.
-7. Roughly chop the eggs into large chunks and fold in, along with the **avocado**.
+7. Roughly chop the **eggs** into large chunks and fold in, along with the **avocado**.
 8. Finish with extra **chives** and dive in.
 
 ## Notes
