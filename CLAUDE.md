@@ -19,6 +19,8 @@ The `mcp-server/` folder is **not part of the site**: it's a separate MCP server
 
 New recipes are added by asking Claude Code, in chat, to add one. **Always use the `add-recipe` skill** (`.claude/skills/add-recipe/SKILL.md`) for this — it has the exact Markdown formatting rules, the ingredient-bolding rule, and the image rules. Don't freehand a recipe file without it.
 
+The other flow is the agent working through the recipes MCP server: **use the `plan-recipes` skill** (`.claude/skills/plan-recipes/SKILL.md`) when the user hands over screenshots, links and/or names of recipes we already have. It adds the new ones as drafts (asking the user to upload photos via numbered upload links), marks existing ones current, then always builds the shopping list and finishes with a summary. It uses the MCP tools only, never local files.
+
 ## Directory layout
 
 ```

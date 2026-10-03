@@ -46,6 +46,8 @@ The site has a shopping page (`shopping-list.html`, linked by a button in the in
 - Promoting a draft doesn't change its currency, so it doesn't make the list outdated.
 - Editing a current recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
 
+The end-to-end agent flow (add recipes, select existing ones, build the list, summarise) is the `plan-recipes` skill in `.claude/skills/plan-recipes/SKILL.md`.
+
 ## Adding photos
 
 Ranked by how well each one works in practice:

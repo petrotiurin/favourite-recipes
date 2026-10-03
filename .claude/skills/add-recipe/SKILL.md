@@ -5,6 +5,8 @@ description: Add a new recipe to the favourite-recipes static site — collects 
 
 # Add a recipe
 
+> Handing over recipes to cook this week, or want a shopping list too? Use the `plan-recipes` skill instead (it works through the recipes MCP server and builds the shopping list). This skill is for editing the repo's files directly.
+
 This site is 100% static (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/`, save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
 
 ## 1. Collect the recipe
