@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { COURSES, config } from "./config.js";
 import { createUploadToken } from "./auth.js";
+import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import {
   listRecipes,
@@ -18,6 +19,13 @@ import { getShoppingList, updateShoppingList, shoppingPageUrl, ShoppingListError
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
+
+One commit = one site deploy, and deploys queue behind each other, so a burst of single-change calls makes the site lag behind for
+minutes. Whenever you make MORE THAN ONE change in a go (several recipes, recipes + set_current_recipes, anything + the shopping
+list), do the reads first (list_recipes, get_recipe, get_shopping_list), then send all the writes in ONE batch_changes call: it
+applies them in order and commits them together. Use batch_changes with dry_run: true first if you want to see warnings before
+anything is committed. The single-change tools are fine for one-off edits. Photos uploaded for recipes that don't exist yet don't
+trigger a deploy on their own; the create_recipe that follows does.
 
 Drafts first: a recipe the family hasn't cooked and liked yet should be created as a DRAFT (create_recipe's draft defaults to
 true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
@@ -105,6 +113,106 @@ const instructionsSchema = z
 const scalableSchema = z
   .boolean()
   .describe("Set false only if the ingredient list can't be rescaled (e.g. it lists amounts per number of people). Hides the servings selector.");
+
+const createShape = {
+  title: z.string().min(1).describe("Title Case recipe title"),
+  course: courseSchema,
+  tags: tagsSchema.optional(),
+  total_mins: z.number().int().positive().describe("Total time in minutes (prep + cook)"),
+  serves: z.number().int().positive().describe("How many people it serves"),
+  calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
+  scalable: scalableSchema.optional(),
+  ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
+  instructions: instructionsSchema,
+  notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
+  image: imageSchema,
+  draft: z
+    .boolean()
+    .optional()
+    .describe(
+      "Default true (recommended): the recipe is added as a highlighted draft until promoted with promote_recipe. " +
+        "Pass false only if the user says it's already a tried-and-tested favourite."
+    ),
+};
+
+const updateShape = {
+  slug: z.string().describe("Slug of the recipe to edit"),
+  title: z.string().min(1).optional(),
+  course: courseSchema.optional(),
+  tags: tagsSchema.optional(),
+  total_mins: z.number().int().positive().optional(),
+  serves: z.number().int().positive().optional(),
+  calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
+  scalable: scalableSchema.optional().describe("false hides the servings selector; true turns it back on."),
+  ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
+  instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
+  notes: z.string().optional(),
+  image: imageSchema.optional(),
+};
+
+const sectionsSchema = z
+  .array(
+    z.object({
+      name: z.string().min(1).describe('Section heading, e.g. "Fresh produce"'),
+      items: z
+        .array(
+          z.object({
+            name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
+            quantity: z.string().optional().describe('Combined amount with units, e.g. "3", "450g", "2 tbsp". Omit for "to taste" items.'),
+            note: z.string().optional().describe('Short extra, e.g. "for the fish tacos and the salsa", "finely diced".'),
+          })
+        )
+        .min(1)
+    })
+  )
+  .min(1)
+  .describe("The whole list, grouped into shop sections. Replaces whatever list is there.");
+
+const operationSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("create_recipe"), ...createShape }).describe("Same fields as the create_recipe tool"),
+  z.object({ action: z.literal("update_recipe"), ...updateShape }).describe("Same fields as the update_recipe tool"),
+  z.object({ action: z.literal("promote_recipe"), slug: z.string() }).describe("Same as the promote_recipe tool"),
+  z
+    .object({ action: z.literal("set_current_recipes"), slugs: z.array(z.string()).min(1), current: z.boolean() })
+    .describe("Same as the set_current_recipes tool"),
+  z
+    .object({ action: z.literal("update_shopping_list"), sections: sectionsSchema })
+    .describe("Same as the update_shopping_list tool. Covers the recipes that are current after the operations before it."),
+]);
+
+/** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
+async function runOperation(op, cs) {
+  const { action, ...args } = op;
+  const warn = (warnings) => (warnings?.length ? warnings.map((w) => `  warning: ${w}`) : []);
+  switch (action) {
+    case "create_recipe": {
+      const r = await createRecipe(args, cs);
+      return { ...r, currentChanged: true, lines: [`Created "${r.slug}"${r.draft ? " (draft)" : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
+    }
+    case "update_recipe": {
+      const r = await updateRecipe(args, cs);
+      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.subject ? warn(r.warnings) : [])] };
+    }
+    case "promote_recipe": {
+      const r = await promoteRecipe(args.slug, cs);
+      return { ...r, lines: [`Promoted "${r.slug}" (draft -> regular, stays current)`] };
+    }
+    case "set_current_recipes": {
+      const r = await setCurrentRecipes(args.slugs, args.current, cs);
+      const lines = [r.changed.length ? `${args.current ? "Marked current" : "Removed from current"}: ${r.changed.join(", ")}` : "set_current_recipes: nothing changed"];
+      if (r.unchanged.length) lines.push(`  already ${args.current ? "current" : "not current"}: ${r.unchanged.join(", ")}`);
+      if (r.clearedShoppingList) lines.push("  no recipe is current any more, so the shopping list is cleared too");
+      return { ...r, currentChanged: r.changed.length > 0, lines };
+    }
+    case "update_shopping_list": {
+      const r = await updateShoppingList(args.sections, cs);
+      const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
+      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${r.current.map((c) => c.slug).join(", ")}`] };
+    }
+    default:
+      throw new UserError(`Unknown action "${action}"`);
+  }
+}
 
 function ok(text, extra = []) {
   return { content: [{ type: "text", text }, ...extra] };
@@ -243,26 +351,7 @@ export function buildServer({ origin }) {
         "Add a new recipe to the site. Writes recipes/<slug>.md (+ the photo) in one commit to main. The slug is derived from the title. " +
         "Fails if a recipe with that slug already exists. New recipes are drafts by default (recommended): promote them with " +
         "promote_recipe once the user has tried and liked them.",
-      inputSchema: {
-        title: z.string().min(1).describe("Title Case recipe title"),
-        course: courseSchema,
-        tags: tagsSchema.optional(),
-        total_mins: z.number().int().positive().describe("Total time in minutes (prep + cook)"),
-        serves: z.number().int().positive().describe("How many people it serves"),
-        calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
-        scalable: scalableSchema.optional(),
-        ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
-        instructions: instructionsSchema,
-        notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
-        image: imageSchema,
-        draft: z
-          .boolean()
-          .optional()
-          .describe(
-            "Default true (recommended): the recipe is added as a highlighted draft until promoted with promote_recipe. " +
-              "Pass false only if the user says it's already a tried-and-tested favourite."
-          ),
-      },
+      inputSchema: createShape,
     },
     safe(async (args) => ok(resultText("Created", await createRecipe(args))))
   );
@@ -290,20 +379,7 @@ export function buildServer({ origin }) {
         "Edit an existing recipe. Only the fields you pass are changed; ingredients and instructions replace the whole list. " +
         "Pass notes: \"\" to remove the Notes section. The slug (and so the URL) never changes, even if the title does. " +
         "Call get_recipe first so you edit the current version.",
-      inputSchema: {
-        slug: z.string().describe("Slug of the recipe to edit"),
-        title: z.string().min(1).optional(),
-        course: courseSchema.optional(),
-        tags: tagsSchema.optional(),
-        total_mins: z.number().int().positive().optional(),
-        serves: z.number().int().positive().optional(),
-        calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
-        scalable: scalableSchema.optional().describe("false hides the servings selector; true turns it back on."),
-        ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
-        instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
-        notes: z.string().optional(),
-        image: imageSchema.optional(),
-      },
+      inputSchema: updateShape,
     },
     safe(async (args) => ok(resultText("Updated", await updateRecipe(args))))
   );
@@ -373,27 +449,65 @@ export function buildServer({ origin }) {
         "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which recipes the list covers " +
         "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
         "so call it after adding a draft or marking/unmarking recipes current. It goes blank only when no recipe is current. Fails if there are no current recipes.",
-      inputSchema: {
-        sections: z
-          .array(
-            z.object({
-              name: z.string().min(1).describe('Section heading, e.g. "Fresh produce"'),
-              items: z
-                .array(
-                  z.object({
-                    name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
-                    quantity: z.string().optional().describe('Combined amount with units, e.g. "3", "450g", "2 tbsp". Omit for "to taste" items.'),
-                    note: z.string().optional().describe('Short extra, e.g. "for the fish tacos and the salsa", "finely diced".'),
-                  })
-                )
-                .min(1)
-            })
-          )
-          .min(1)
-          .describe("The whole list, grouped into shop sections. Replaces whatever list is there."),
-      },
+      inputSchema: { sections: sectionsSchema },
     },
     safe(async ({ sections }) => ok(shoppingResult(await updateShoppingList(sections))))
+  );
+
+  server.registerTool(
+    "batch_changes",
+    {
+      title: "Batch changes",
+      description:
+        "Apply several changes in ONE commit to main, so the site deploys once instead of once per change. Operations run in order, " +
+        "each seeing the result of the ones before it (e.g. create drafts, mark existing recipes current, then update_shopping_list " +
+        "covering all of them). Each operation takes the same fields as the tool it is named after. All or nothing: if any operation " +
+        "is rejected, nothing is committed and the error names the operation. dry_run: true validates everything and reports warnings " +
+        "without committing.",
+      inputSchema: {
+        operations: z.array(operationSchema).min(1).describe("Changes to apply, in order"),
+        dry_run: z.boolean().optional().describe("Validate and report only; commit nothing. Default false."),
+      },
+    },
+    safe(async ({ operations, dry_run }) => {
+      const cs = new ChangeSet();
+      const results = [];
+      for (const [i, op] of operations.entries()) {
+        try {
+          results.push(await runOperation(op, cs));
+        } catch (err) {
+          const prefix = `operations[${i}] (${op.action}) failed, so nothing was committed`;
+          if (err instanceof UserError || err instanceof ShoppingListError) throw new err.constructor(`${prefix}:\n${err.message}`);
+          throw new Error(`${prefix}: ${err.message}`, { cause: err });
+        }
+      }
+
+      const report = results.flatMap((r, i) => r.lines.map((l, j) => (j === 0 ? `${i + 1}. ${l}` : `   ${l}`)));
+      const lastShopping = results.findLastIndex((r) => r.shoppingList);
+      const staleList = results.some((r, i) => r.currentChanged && i > lastShopping) && !results.at(-1).clearedShoppingList;
+      const footer = staleList ? ["", "The current recipes changed after the last shopping list update: refresh it with update_shopping_list."] : [];
+
+      if (!cs.size) return ok(["Nothing to commit: every operation was a no-op.", "", ...report].join("\n"));
+      if (dry_run) {
+        return ok([`Dry run: nothing committed. These ${cs.size} file change(s) would go in one commit:`, ...cs.paths().map((p) => `- ${p}`), "", ...report, ...footer].join("\n"));
+      }
+
+      const subjects = results.map((r) => r.subject).filter(Boolean);
+      const message =
+        subjects.length === 1
+          ? `${subjects[0]}\n\nUpdated via the recipes MCP server.`
+          : `Batch update: ${subjects.length} changes\n\n${subjects.map((s) => `- ${s}`).join("\n")}\n\nUpdated via the recipes MCP server.`;
+      const commit = await cs.commit(message);
+      return ok(
+        [
+          `Committed ${subjects.length} change(s) to main in one commit: ${commit.url}`,
+          `The site deploys once and will be live in about a minute at ${config.siteUrl}/`,
+          "",
+          ...report,
+          ...footer,
+        ].join("\n")
+      );
+    })
   );
 
   return server;

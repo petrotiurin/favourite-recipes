@@ -13,9 +13,12 @@ permissions:
   pages: write
   id-token: write
 
+# One deploy at a time. A deploy that has started always finishes (cancelling actions/deploy-pages
+# mid-flight can leave Pages stuck); pushes that arrive meanwhile collapse into a single queued run
+# for the newest commit. The recipes MCP server batches its changes (batch_changes) to keep pushes rare.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

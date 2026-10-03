@@ -1,5 +1,5 @@
 import { config, COURSES, SHOPPING_LIST_PATH } from "./config.js";
-import { readFile, listDir, commitChanges } from "./github.js";
+import { ChangeSet } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import {
   slugify,
@@ -29,11 +29,16 @@ function assertSlug(slug) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new UserError(`"${slug}" is not a valid recipe slug`);
 }
 
-export async function listRecipes() {
-  const files = (await listDir("recipes")).filter((f) => f.endsWith(".md"));
+// Every function that reads or writes takes an optional ChangeSet: reads see what it has staged,
+// writes are staged into it. Without one, the function commits its own changes straight away;
+// with one (batch_changes), the caller commits everything together.
+const via = (verb) => `\n\n${verb} via the recipes MCP server.`;
+
+export async function listRecipes(cs = new ChangeSet()) {
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const recipes = await Promise.all(
     files.map(async (f) => {
-      const { data } = parseRecipe((await readFile(`recipes/${f}`)).toString("utf8"));
+      const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
       return {
         slug: data.slug,
         title: data.title,
@@ -52,9 +57,9 @@ export async function listRecipes() {
   return recipes.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
-export async function getRecipe(slug) {
+export async function getRecipe(slug, cs = new ChangeSet()) {
   assertSlug(slug);
-  const raw = await readFile(recipePath(slug));
+  const raw = await cs.read(recipePath(slug));
   if (!raw) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
   const markdown = raw.toString("utf8");
   const { data } = parseRecipe(markdown);
@@ -63,17 +68,17 @@ export async function getRecipe(slug) {
 
 export async function readRecipeImage(imageFrontmatter) {
   const path = String(imageFrontmatter || "").replace(/^\//, "");
-  return path ? readFile(path) : null;
+  return path ? new ChangeSet().read(path) : null;
 }
 
 /** Turns the tool's image input into a normalised JPEG buffer (or null for "already uploaded"). */
-async function resolveImageInput(image, slug) {
+async function resolveImageInput(image, slug, cs) {
   const provided = ["url", "base64", "uploaded"].filter((k) => image?.[k]);
   if (provided.length !== 1) {
     throw new UserError("image must have exactly one of: url, base64, uploaded: true");
   }
   if (image.uploaded) {
-    const existing = await readFile(imagePathFor(slug));
+    const existing = await cs.read(imagePathFor(slug));
     if (!existing) {
       throw new UserError(
         `No uploaded image found at ${imagePathFor(slug)} yet. Ask the user to finish uploading via the link from create_image_upload_link, then try again.`
@@ -117,17 +122,18 @@ function tidyTags(tags) {
   return [...new Set((tags || []).map((t) => t.trim()).filter(Boolean))];
 }
 
-export async function createRecipe(input) {
+export async function createRecipe(input, batch) {
+  const cs = batch || new ChangeSet();
   const title = input.title.trim();
   const slug = slugify(title);
   if (!slug) throw new UserError("Title must contain letters or numbers");
   validateCommon(input);
 
-  if (await readFile(recipePath(slug))) {
+  if (await cs.read(recipePath(slug))) {
     throw new UserError(`A recipe with slug "${slug}" already exists. Use update_recipe to change it, or pick a different title.`);
   }
 
-  const imageBuffer = await resolveImageInput(input.image, slug);
+  const imageBuffer = await resolveImageInput(input.image, slug, cs);
   const data = {
     title,
     slug,
@@ -147,40 +153,42 @@ export async function createRecipe(input) {
   if (input.notes?.trim()) sections.push({ heading: "Notes", content: input.notes.trim() });
 
   const markdown = serializeRecipe(data, sections);
-  const changes = [{ path: recipePath(slug), content: Buffer.from(markdown) }];
-  if (imageBuffer) changes.push({ path: imagePathFor(slug), content: imageBuffer });
+  cs.write(recipePath(slug), Buffer.from(markdown));
+  if (imageBuffer) cs.write(imagePathFor(slug), imageBuffer);
 
-  const verb = data.draft ? "Add draft recipe" : "Add recipe";
-  const commit = await commitChanges(changes, `${verb}: ${title}\n\nAdded via the recipes MCP server.`);
-  return { slug, markdown, commit, draft: !!data.draft, warnings: instructionWarnings(input.ingredients, input.instructions) };
+  const subject = `${data.draft ? "Add draft recipe" : "Add recipe"}: ${title}`;
+  const commit = batch ? null : await cs.commit(subject + via("Added"));
+  return { slug, markdown, commit, subject, draft: !!data.draft, warnings: instructionWarnings(input.ingredients, input.instructions) };
 }
 
 /** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. */
-export async function promoteRecipe(slug) {
-  const { markdown: before } = await getRecipe(slug);
+export async function promoteRecipe(slug, batch) {
+  const cs = batch || new ChangeSet();
+  const { markdown: before } = await getRecipe(slug, cs);
   const { data, sections } = parseRecipe(before);
   if (data.draft !== true) throw new UserError(`"${slug}" is not a draft, it's already a regular recipe.`);
   delete data.draft;
   data.current = true; // drafts are implicitly current, so promoting keeps the recipe in the rotation
   const markdown = serializeRecipe(data, sections);
-  const commit = await commitChanges(
-    [{ path: recipePath(slug), content: Buffer.from(markdown) }],
-    `Promote recipe: ${data.title} (draft -> regular)\n\nPromoted via the recipes MCP server.`
-  );
-  return { slug, markdown, commit };
+  cs.write(recipePath(slug), Buffer.from(markdown));
+  const subject = `Promote recipe: ${data.title} (draft -> regular)`;
+  const commit = batch ? null : await cs.commit(subject + via("Promoted"));
+  return { slug, markdown, commit, subject };
 }
 
 /**
  * Adds regular recipes to / removes them from the current rotation (`current: true`),
  * all in one commit. Drafts are always current, so they can't be added or removed here.
  */
-export async function setCurrentRecipes(slugs, current) {
+export async function setCurrentRecipes(slugs, current, batch) {
+  const cs = batch || new ChangeSet();
   const unique = [...new Set(slugs)];
-  const changes = [];
+  const updates = [];
+  const changed = [];
   const unchanged = [];
   const titles = [];
   for (const slug of unique) {
-    const { markdown: before } = await getRecipe(slug);
+    const { markdown: before } = await getRecipe(slug, cs);
     const { data, sections } = parseRecipe(before);
     if (data.draft === true) {
       throw new UserError(
@@ -195,33 +203,34 @@ export async function setCurrentRecipes(slugs, current) {
     }
     if (current) data.current = true;
     else delete data.current;
-    changes.push({ path: recipePath(slug), content: Buffer.from(serializeRecipe(data, sections)) });
+    updates.push([recipePath(slug), Buffer.from(serializeRecipe(data, sections))]);
+    changed.push(slug);
     titles.push(data.title);
   }
-  const changed = changes.map((c) => c.path.slice("recipes/".length, -".md".length));
-  if (!changes.length) return { changed, unchanged, commit: null, clearedShoppingList: false };
+  // Stage only once every slug checked out, so a refused call leaves a batch untouched.
+  for (const [path, content] of updates) cs.write(path, content);
+  if (!changed.length) return { changed, unchanged, commit: null, subject: null, clearedShoppingList: false };
 
   // Nothing current any more -> the shopping list goes too (in the same commit), so an old list
   // can't reappear when something else becomes current later.
   let clearedShoppingList = false;
   if (!current) {
-    const stillCurrent = (await listRecipes()).filter((r) => isCurrent(r) && !changed.includes(r.slug));
-    if (!stillCurrent.length && (await readFile(SHOPPING_LIST_PATH))) {
-      changes.push({ path: SHOPPING_LIST_PATH, delete: true });
+    const stillCurrent = (await listRecipes(cs)).filter(isCurrent);
+    if (!stillCurrent.length && (await cs.read(SHOPPING_LIST_PATH))) {
+      cs.remove(SHOPPING_LIST_PATH);
       clearedShoppingList = true;
     }
   }
   const verb = current ? "Make current" : "Remove from current";
-  const commit = await commitChanges(
-    changes,
-    `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}\n\nUpdated via the recipes MCP server.`
-  );
-  return { changed, unchanged, commit, clearedShoppingList };
+  const subject = `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}`;
+  const commit = batch ? null : await cs.commit(subject + via("Updated"));
+  return { changed, unchanged, commit, subject, clearedShoppingList };
 }
 
-export async function updateRecipe(input) {
+export async function updateRecipe(input, batch) {
+  const cs = batch || new ChangeSet();
   const { slug } = input;
-  const { markdown: before } = await getRecipe(slug);
+  const { markdown: before } = await getRecipe(slug, cs);
   validateCommon(input);
 
   const { data, sections } = parseRecipe(before);
@@ -257,7 +266,7 @@ export async function updateRecipe(input) {
   }
 
   if (input.image !== undefined) {
-    const imageBuffer = await resolveImageInput(input.image, slug);
+    const imageBuffer = await resolveImageInput(input.image, slug, cs);
     const newPath = imagePathFor(slug);
     if (imageBuffer) changes.push({ path: newPath, content: imageBuffer });
     const oldPath = String(data.image || "").replace(/^\//, "");
@@ -270,14 +279,16 @@ export async function updateRecipe(input) {
 
   const markdown = serializeRecipe(data, sections);
   if (markdown !== before) changes.unshift({ path: recipePath(slug), content: Buffer.from(markdown) });
-  if (!changes.length) return { slug, markdown, commit: null, warnings: ["No changes: the recipe already matches"] };
+  if (!changes.length) return { slug, markdown, commit: null, subject: null, warnings: ["No changes: the recipe already matches"] };
 
-  const commit = await commitChanges(changes, `Update recipe: ${data.title} (${summary.join(", ")})\n\nUpdated via the recipes MCP server.`);
+  for (const c of changes) (c.delete ? cs.remove(c.path) : cs.write(c.path, c.content));
+  const subject = `Update recipe: ${data.title} (${summary.join(", ")})`;
+  const commit = batch ? null : await cs.commit(subject + via("Updated"));
 
   const ingredientsForCheck =
     input.ingredients || ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
   const warnings = input.instructions ? instructionWarnings(ingredientsForCheck, input.instructions) : [];
-  return { slug, markdown, commit, warnings };
+  return { slug, markdown, commit, subject, warnings };
 }
 
 /**
@@ -289,9 +300,10 @@ export async function saveUploadedImage(slug, rawBuffer) {
   assertSlug(slug);
   const { buffer } = await normalizeImage(rawBuffer);
   const newPath = imagePathFor(slug);
-  const changes = [{ path: newPath, content: buffer }];
+  const cs = new ChangeSet();
+  cs.write(newPath, buffer);
 
-  const existing = await readFile(recipePath(slug));
+  const existing = await cs.read(recipePath(slug));
   let title = slug;
   if (existing) {
     const { data, sections } = parseRecipe(existing.toString("utf8"));
@@ -299,10 +311,12 @@ export async function saveUploadedImage(slug, rawBuffer) {
     const oldPath = String(data.image || "").replace(/^\//, "");
     if (oldPath !== newPath) {
       data.image = `/${newPath}`;
-      changes.push({ path: recipePath(slug), content: Buffer.from(serializeRecipe(data, sections)) });
-      if (oldPath.startsWith("images/recipes/")) changes.push({ path: oldPath, delete: true });
+      cs.write(recipePath(slug), Buffer.from(serializeRecipe(data, sections)));
+      if (oldPath.startsWith("images/recipes/")) cs.remove(oldPath);
     }
   }
-  const verb = existing ? "Update" : "Add";
-  return commitChanges(changes, `${verb} photo: ${title}\n\nUploaded via the recipes MCP server.`);
+  // A photo for a recipe that doesn't exist yet isn't on any page, so don't spend a site deploy on it:
+  // [skip ci] stops the Pages workflow, and the create_recipe commit that follows deploys it.
+  const subject = existing ? `Update photo: ${title}` : `Add photo: ${title} [skip ci]`;
+  return cs.commit(subject + via("Uploaded"));
 }

@@ -17,6 +17,17 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
 | `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
 | `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`) |
+| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `set_current_recipes`, `update_shopping_list`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
+
+## One commit per deploy
+
+Every commit to `main` triggers the Pages workflow, and only one deploy runs at a time, so a burst of single-change calls (as in "add five recipes, mark two current, update the shopping list") used to queue up a dozen deploys and leave the site minutes behind. To avoid that:
+
+- **`batch_changes`.** Agents do their reads first, then send all the writes in one call. Each operation sees the ones before it (e.g. the shopping list covers recipes created earlier in the same batch), and a rejected operation commits nothing. The server's instructions tell agents to use it whenever they make more than one change.
+- **Photos for recipes that don't exist yet** are committed with `[skip ci]`, because no page shows them until `create_recipe` (or `batch_changes`) commits the recipe, and that commit deploys. Replacing an existing recipe's photo deploys as usual.
+- **The workflow** (`.github/workflows/deploy.yml`) never cancels a deploy that has started; pushes that arrive meanwhile collapse into one queued run for the newest commit.
+
+Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see what it has staged, and nothing reaches GitHub until it commits. The single-change tools commit their own `ChangeSet`; `batch_changes` shares one across all its operations.
 
 ## What's enforced
 
