@@ -1,5 +1,6 @@
 const { layout } = require("./layout");
 const { markScalableQuantities } = require("./quantities");
+const { isDraft } = require("./status");
 
 function escapeHtml(str) {
   return String(str)
@@ -11,7 +12,7 @@ function escapeHtml(str) {
 
 function renderRecipe(recipe, bodyHtml) {
   const metaChips = [
-    ...(recipe.draft === true ? [`<span class="draft-chip">Draft</span>`] : []),
+    ...(isDraft(recipe) ? [`<span class="draft-chip">Draft</span>`] : recipe.current === true ? [`<span class="current-chip">Current</span>`] : []),
     ...(recipe.course || []).map((c) => `<span>${escapeHtml(c)}</span>`),
     ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
     `<span>🕒 ${recipe.total_mins} mins</span>`,

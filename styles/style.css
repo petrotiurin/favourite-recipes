@@ -10,6 +10,7 @@
   --shadow-hover: 0 6px 16px rgba(30, 25, 20, 0.12);
   --draft: #7a5bc4;
   --draft-soft: #f3effc;
+  --current-soft: #fbefe7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,7 @@
     --shadow-hover: 0 6px 18px rgba(0, 0, 0, 0.5);
     --draft: #b39ae8;
     --draft-soft: #2a2336;
+    --current-soft: #33261c;
   }
 }
 
@@ -155,6 +157,7 @@ main:has(#filter-breakfast:checked) .tile-grid .tile:not(.course-breakfast),
 main:has(#filter-lunch:checked) .tile-grid .tile:not(.course-lunch),
 main:has(#filter-dinner:checked) .tile-grid .tile:not(.course-dinner),
 main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack),
+main:has(#filter-current:checked) .tile-grid .tile:not(.is-current),
 main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
   display: none;
 }
@@ -206,6 +209,40 @@ main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
   display: flex;
   align-items: center;
   gap: 0.3rem;
+}
+
+/* Current: recipes picked for the current rotation (`current: true`; drafts are always current) */
+.filter-label-current {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.tile.is-current {
+  position: relative;
+  background: var(--current-soft);
+  border: 2px solid var(--accent);
+}
+
+.current-badge {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: 1;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+}
+
+.recipe-meta span.current-chip {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
 }
 
 /* Drafts: recipes still being tried out (`draft: true`) */
@@ -384,11 +421,17 @@ main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
 
 .shopping-recipes a {
   font-size: 0.85rem;
+  color: var(--accent);
+  background: var(--current-soft);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+}
+
+.shopping-recipes a.is-draft {
   color: var(--draft);
   background: var(--draft-soft);
   border: 1px dashed var(--draft);
-  border-radius: 999px;
-  padding: 0.25rem 0.7rem;
 }
 
 .shopping-recipes a:hover {

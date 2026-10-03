@@ -5,6 +5,7 @@ const { marked } = require("marked");
 const { renderIndex } = require("./templates/index");
 const { renderRecipe } = require("./templates/recipe");
 const { renderShoppingList } = require("./templates/shopping-list");
+const { isCurrent, byStatusThenTitle } = require("./templates/status");
 
 const ROOT = __dirname;
 const RECIPES_DIR = path.join(ROOT, "recipes");
@@ -46,12 +47,12 @@ function loadRecipes() {
 
 /**
  * The shopping list is written by the agent (via the MCP server's
- * update_shopping_list tool) and records which draft recipes it was built from.
- * It is only shown while that set still matches the current drafts: promoting,
- * removing or adding a draft makes it stale, so the page goes blank until the
- * agent refreshes it.
+ * update_shopping_list tool) and records which current recipes it was built
+ * from. It is only shown while that set still matches the recipes that are
+ * current now: promoting a draft, or adding/removing a current recipe, makes it
+ * stale, so the page goes blank until the agent refreshes it.
  */
-function loadShoppingList(drafts) {
+function loadShoppingList(currentRecipes) {
   if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
   let list;
   try {
@@ -61,7 +62,7 @@ function loadShoppingList(drafts) {
     return null;
   }
   const covered = Array.isArray(list.recipes) ? [...list.recipes].sort() : [];
-  const current = drafts.map((r) => r.slug).sort();
+  const current = currentRecipes.map((r) => r.slug).sort();
   const sections = (Array.isArray(list.sections) ? list.sections : []).filter(
     (s) => s && s.name && Array.isArray(s.items) && s.items.length
   );
@@ -81,8 +82,8 @@ function build() {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
 
-  // Drafts (`draft: true`) always come first, then alphabetical within each group.
-  const recipes = loadRecipes().sort((a, b) => (b.draft === true) - (a.draft === true) || a.title.localeCompare(b.title));
+  // Drafts first, then current recipes, then the rest; alphabetical within each group.
+  const recipes = loadRecipes().sort(byStatusThenTitle);
 
   fs.writeFileSync(path.join(DIST_DIR, "index.html"), renderIndex(recipes));
 
@@ -92,9 +93,9 @@ function build() {
     fs.writeFileSync(path.join(DIST_DIR, "recipes", `${recipe.slug}.html`), html);
   }
 
-  const drafts = recipes.filter((r) => r.draft === true);
-  const shoppingList = loadShoppingList(drafts);
-  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shoppingList, drafts));
+  const currentRecipes = recipes.filter(isCurrent);
+  const shoppingList = loadShoppingList(currentRecipes);
+  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shoppingList, currentRecipes));
 
   console.log(`Built ${recipes.length} recipe(s) into dist/`);
 }

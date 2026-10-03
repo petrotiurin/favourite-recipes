@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { COURSES } from "./config.js";
+import { COURSES, config } from "./config.js";
 import { createUploadToken } from "./auth.js";
 import { slugify } from "./recipe-format.js";
 import {
@@ -9,6 +9,7 @@ import {
   createRecipe,
   updateRecipe,
   promoteRecipe,
+  setCurrentRecipes,
   readRecipeImage,
   pageUrl,
   UserError,
@@ -23,12 +24,19 @@ true). Drafts are highlighted on the site, listed first and tagged "Draft". Once
 promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
 
-Shopping list: the site has a separate shopping page that covers the ingredients of ALL current draft recipes. You write it:
-after adding drafts (or when get_shopping_list says it is stale), read every draft (get_recipe), combine the ingredients into one
-deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the recipes' own units; keep
-different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if clearly pantry basics, else
-list them without a quantity), group it into shop-aisle sections, and call update_shopping_list. The server links the drafts
-itself. The page is blank whenever the drafts change (a draft is promoted, removed or added), so refresh it after every such change.
+Current recipes: the recipes the family is cooking right now. Three tiers, always listed in this order on the site and in
+list_recipes: (1) drafts, which are always current, (2) regular recipes marked current, (3) all the others. Mark existing recipes
+current (or take them out again) with set_current_recipes; list_recipes shows current: true on every current recipe. A recipe can
+be current without being a draft, so the rotation may hold only existing recipes, only drafts, or a mix. Promoting a draft takes
+it out of the current rotation (it's tried now); call set_current_recipes afterwards if it should stay current.
+
+Shopping list: the site has a separate shopping page that covers the ingredients of ALL current recipes (drafts and current ones).
+You write it: whenever the current set changes (get_shopping_list says "stale"), read every current recipe (get_recipe), combine
+the ingredients into one deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the
+recipes' own units; keep different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if
+clearly pantry basics, else list them without a quantity), group it into shop-aisle sections, and call update_shopping_list.
+The server links the current recipes itself. The page is blank whenever the current set changes (a draft is added or promoted,
+a recipe is marked or unmarked current, a recipe is removed), so refresh it after every such change.
 
 Rules the server enforces or expects:
 - Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
@@ -116,16 +124,16 @@ const safe = (fn) => async (args) => {
   }
 };
 
-function shoppingResult({ list, drafts, commit }) {
+function shoppingResult({ list, current, commit }) {
   const items = list.sections.reduce((n, s) => n + s.items.length, 0);
   return [
-    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${drafts.length} draft recipe${drafts.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
+    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${current.length} current recipe${current.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
     `It will be live in about a minute at ${shoppingPageUrl()}`,
     "",
-    "The page blanks itself as soon as a draft is promoted, removed or added, so call update_shopping_list again after any such change.",
+    "The page blanks itself as soon as the current recipes change (a draft added or promoted, a recipe marked/unmarked current or removed), so call update_shopping_list again after any such change.",
     "",
     "Covers:",
-    ...drafts.map((r) => `- ${r.title} (${r.slug})`),
+    ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
   ].join("\n");
 }
 
@@ -154,7 +162,7 @@ export function buildServer({ origin }) {
       title: "List recipes",
       description:
         "List every recipe on the site with its slug, title, course, tags, time, servings and calories. " +
-        "Drafts (not yet promoted) have draft: true and are listed first.",
+        "Order: drafts (draft: true), then other current recipes, then the rest. Every current recipe, drafts included, has current: true.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -264,7 +272,8 @@ export function buildServer({ origin }) {
       title: "Promote draft recipe",
       description:
         "Turn a draft into a regular recipe (the user cooked it and wants to keep it). Removes draft: true from its frontmatter " +
-        "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft.",
+        "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft. " +
+        "The recipe is no longer current afterwards (so the shopping list goes stale); use set_current_recipes to keep it current.",
       inputSchema: {
         slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
       },
@@ -299,24 +308,53 @@ export function buildServer({ origin }) {
   );
 
   server.registerTool(
+    "set_current_recipes",
+    {
+      title: "Set recipes current",
+      description:
+        "Add regular recipes to the current rotation (current: true) or take them out of it, in one commit to main. Current recipes are " +
+        "highlighted on the site, listed after the drafts and before all other recipes, and their ingredients go on the shopping list. " +
+        "Drafts are always current and can't be changed here (promote_recipe takes a draft out). Slugs already in the requested state are " +
+        "skipped. Afterwards the shopping list is stale: call update_shopping_list.",
+      inputSchema: {
+        slugs: z.array(z.string()).min(1).describe("Slugs from list_recipes"),
+        current: z.boolean().describe("true = make current, false = no longer current"),
+      },
+    },
+    safe(async ({ slugs, current }) => {
+      const { changed, unchanged, commit } = await setCurrentRecipes(slugs, current);
+      const lines = [];
+      if (commit) {
+        lines.push(`${current ? "Marked current" : "Removed from current"}: ${changed.join(", ")}`, `Committed to main: ${commit.url}`);
+        lines.push(`The site updates in about a minute at ${config.siteUrl}/`);
+      } else {
+        lines.push("Nothing changed.");
+      }
+      if (unchanged.length) lines.push(`Already ${current ? "current" : "not current"}: ${unchanged.join(", ")}`);
+      lines.push("", "The shopping list now needs refreshing: call update_shopping_list.");
+      return ok(lines.join("\n"));
+    })
+  );
+
+  server.registerTool(
     "get_shopping_list",
     {
       title: "Get shopping list",
       description:
         "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
-        "'stale' (drafts were promoted/removed/added since it was written, so the site shows a blank page) or 'none'. " +
-        "Also lists the current drafts so you know which recipes to combine.",
+        "'stale' (the current recipes changed since it was written, so the site shows a blank page) or 'none'. " +
+        "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
     safe(async () => {
-      const { list, drafts, status } = await getShoppingList();
+      const { list, current, status } = await getShoppingList();
       const lines = [
         `Status: ${status}${status === "stale" ? " (the site shows a blank page until you call update_shopping_list)" : ""}`,
         `Page: ${shoppingPageUrl()}`,
         "",
-        drafts.length ? "Current draft recipes:" : "There are no draft recipes right now.",
-        ...drafts.map((r) => `- ${r.title} (${r.slug})`),
+        current.length ? "Current recipes (the ones to combine):" : "There are no current recipes right now.",
+        ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
       ];
       if (list) lines.push("", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
       return ok(lines.join("\n"));
@@ -328,11 +366,11 @@ export function buildServer({ origin }) {
     {
       title: "Update shopping list",
       description:
-        "Replace the site's shopping page with a combined ingredient list for ALL current draft recipes. " +
-        "You do the combining: read each draft with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
-        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which drafts the list covers " +
-        "and links them on the page. Commits shopping-list.json to main. The page goes blank automatically when the drafts change, " +
-        "so call this again after adding a draft or promoting/removing one. Fails if there are no drafts.",
+        "Replace the site's shopping page with a combined ingredient list for ALL current recipes (drafts and recipes marked current). " +
+        "You do the combining: read each current recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
+        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which recipes the list covers " +
+        "and links them on the page. Commits shopping-list.json to main. The page goes blank automatically when the current recipes change, " +
+        "so call this again after adding a draft, promoting one, or marking/unmarking recipes current. Fails if there are no current recipes.",
       inputSchema: {
         sections: z
           .array(

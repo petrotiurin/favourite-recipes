@@ -1,12 +1,13 @@
 import { readFile, commitChanges } from "./github.js";
-import { listRecipes } from "./recipes.js";
+import { listRecipes, isCurrent } from "./recipes.js";
 import { config } from "./config.js";
 
-// The agent combines the draft recipes' ingredients itself; this module only
+// The agent combines the current recipes' ingredients itself; this module only
 // validates and stores the result as shopping-list.json at the repo root, which
-// build.js turns into shopping-list.html. The file records which drafts it was
-// built from, and the site shows it only while that still matches the current
-// drafts (keep in sync with loadShoppingList in build.js).
+// build.js turns into shopping-list.html. The file records which current recipes
+// (drafts + recipes marked current) it was built from, and the site shows it only
+// while that still matches the recipes that are current now (keep in sync with
+// loadShoppingList in build.js).
 
 export const SHOPPING_LIST_PATH = "shopping-list.json";
 export const shoppingPageUrl = () => `${config.siteUrl}/shopping-list.html`;
@@ -34,10 +35,10 @@ export function validateSections(sections) {
   if (errors.length) throw new ShoppingListError(`Shopping list rejected:\n- ${errors.join("\n- ")}`);
 }
 
-export function buildShoppingList(sections, draftSlugs, now = new Date()) {
+export function buildShoppingList(sections, currentSlugs, now = new Date()) {
   return {
     updated: now.toISOString().slice(0, 10),
-    recipes: [...draftSlugs].sort(),
+    recipes: [...currentSlugs].sort(),
     sections: sections.map((s) => ({
       name: s.name.trim(),
       items: s.items.map((item) => ({
@@ -51,11 +52,11 @@ export function buildShoppingList(sections, draftSlugs, now = new Date()) {
 
 export const serializeShoppingList = (list) => `${JSON.stringify(list, null, 2)}\n`;
 
-/** "current" when the stored list covers exactly the present drafts, "stale" when it doesn't, "none" when there's no list. */
-export function shoppingListStatus(list, draftSlugs) {
+/** "current" when the stored list covers exactly the recipes that are current now, "stale" when it doesn't, "none" when there's no list. */
+export function shoppingListStatus(list, currentSlugs) {
   if (!list || !Array.isArray(list.sections) || !list.sections.length) return "none";
   const covered = [...(list.recipes || [])].sort().join("\n");
-  return covered === [...draftSlugs].sort().join("\n") ? "current" : "stale";
+  return covered === [...currentSlugs].sort().join("\n") ? "current" : "stale";
 }
 
 async function readStoredList() {
@@ -70,20 +71,22 @@ async function readStoredList() {
 
 export async function getShoppingList() {
   const [list, recipes] = await Promise.all([readStoredList(), listRecipes()]);
-  const drafts = recipes.filter((r) => r.draft === true);
-  return { list, drafts, status: shoppingListStatus(list, drafts.map((r) => r.slug)) };
+  const current = recipes.filter(isCurrent);
+  return { list, current, status: shoppingListStatus(list, current.map((r) => r.slug)) };
 }
 
 export async function updateShoppingList(sections) {
   validateSections(sections);
-  const drafts = (await listRecipes()).filter((r) => r.draft === true);
-  if (!drafts.length) {
-    throw new ShoppingListError("There are no draft recipes, so there is nothing to shop for. The shopping page stays blank until drafts exist.");
+  const current = (await listRecipes()).filter(isCurrent);
+  if (!current.length) {
+    throw new ShoppingListError(
+      "There are no current recipes, so there is nothing to shop for. Add a draft, or mark recipes current with set_current_recipes. The shopping page stays blank until then."
+    );
   }
-  const list = buildShoppingList(sections, drafts.map((r) => r.slug));
+  const list = buildShoppingList(sections, current.map((r) => r.slug));
   const commit = await commitChanges(
     [{ path: SHOPPING_LIST_PATH, content: Buffer.from(serializeShoppingList(list)) }],
-    `Update shopping list (${drafts.length} draft recipe${drafts.length === 1 ? "" : "s"})\n\nUpdated via the recipes MCP server.`
+    `Update shopping list (${current.length} current recipe${current.length === 1 ? "" : "s"})\n\nUpdated via the recipes MCP server.`
   );
-  return { list, drafts, commit };
+  return { list, current, commit };
 }
