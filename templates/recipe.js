@@ -45,7 +45,8 @@ ${recipe.draft === true ? `    <p class="draft-note">This is a draft: we haven't
       ${metaChips}
     </div>
 ${body}
-  </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}`;
+  </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}
+  <script src="../wakelock.js" defer></script>`;
 
   return layout({
     title: `${recipe.title} — Our Favourite Recipes`,

@@ -6,7 +6,7 @@ Static GitHub Pages site for the family's favourite recipes. Originally migrated
 
 This site has **no framework, no bundler, and no client-side data fetching** by design — no framework runtime, no build-time CMS calls at request time. Everything is plain HTML/CSS generated at build time from Markdown files checked into this repo. Do not add React/Vue/etc., a bundler, or any JS *dependency* to `dist/` output.
 
-One exception: small, dependency-free vanilla JS is allowed for progressive-enhancement UI (e.g. `templates/search.js`, which does client-side title filtering over the already-rendered recipe list, and `templates/servings.js`, the 1/2/4-servings selector on recipe pages that rescales ingredient quantities tagged at build time by `templates/quantities.js`). Rules for that JS:
+One exception: small, dependency-free vanilla JS is allowed for progressive-enhancement UI (e.g. `templates/search.js`, which does client-side title filtering over the already-rendered recipe list, and `templates/servings.js`, the 1/2/4-servings selector on recipe pages that rescales ingredient quantities tagged at build time by `templates/quantities.js`, and `templates/wakelock.js`, the "Keep screen on" toggle on recipe pages that uses the Screen Wake Lock API while cooking). Rules for that JS:
 - No frameworks, no bundler, no npm packages shipped to `dist/` — hand-written vanilla JS only.
 - No fetching/loading data at runtime — it must only operate on data already baked into the rendered HTML at build time (DOM already in the page, or a JSON literal the build script embedded).
 - It must be optional enhancement: the page's core content (recipe list, recipe pages) must already be fully present and readable with JS disabled: JS only adds interactivity (filtering, search) on top.
@@ -31,6 +31,7 @@ templates/search.js client-side search script, copied verbatim into dist/ (see "
 templates/servings.js client-side servings selector, copied verbatim into dist/; quantities.js tags scalable numbers at build time
 styles/style.css    the one stylesheet, copied verbatim into dist/
 shopping-list.json  combined shopping list for the current recipes, written by the agent via the MCP server (see "Shopping list")
+templates/wakelock.js client-side "Keep screen on" toggle (Screen Wake Lock API), copied verbatim into dist/
 templates/shopping-list.js  renders shopping-list.html (the list, or a blank page)
 build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build

@@ -13,6 +13,7 @@ const IMAGES_DIR = path.join(ROOT, "images");
 const STYLES_FILE = path.join(ROOT, "styles", "style.css");
 const SEARCH_SCRIPT_FILE = path.join(ROOT, "templates", "search.js");
 const SERVINGS_SCRIPT_FILE = path.join(ROOT, "templates", "servings.js");
+const WAKELOCK_SCRIPT_FILE = path.join(ROOT, "templates", "wakelock.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
 const DIST_DIR = path.join(ROOT, "dist");
 
@@ -76,6 +77,7 @@ function build() {
   fs.copyFileSync(STYLES_FILE, path.join(DIST_DIR, "style.css"));
   fs.copyFileSync(SEARCH_SCRIPT_FILE, path.join(DIST_DIR, "search.js"));
   fs.copyFileSync(SERVINGS_SCRIPT_FILE, path.join(DIST_DIR, "servings.js"));
+  fs.copyFileSync(WAKELOCK_SCRIPT_FILE, path.join(DIST_DIR, "wakelock.js"));
   if (fs.existsSync(IMAGES_DIR)) {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
