@@ -1,71 +1,96 @@
 {
   "updated": "2026-10-03",
   "recipes": [
-    "honey-salmon-with-sesame-avocado-crush",
-    "sticky-spiced-chicken-with-bombay-potato-hash"
+    "blackened-salmon-and-mango-chickpea-salsa-bowls",
+    "broccoli-carbonara",
+    "chicken-and-date-koftas-with-garlic-yogurt-and-butter-bean-tomato-salad",
+    "harissa-tuna-pitta",
+    "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
+    "the-club-sandwich-salad"
   ],
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Potatoes",
-          "quantity": "300g",
-          "note": "small dice, skins on"
-        },
-        {
-          "name": "Red bell pepper",
-          "quantity": "1"
-        },
-        {
-          "name": "Red onion",
-          "quantity": "½"
-        },
-        {
-          "name": "Cucumber",
-          "quantity": "½",
-          "note": "deseeded and diced, for the raita and the avocado crush"
+          "name": "Mango",
+          "quantity": "2",
+          "note": "ripe, for the salmon bowls"
         },
         {
           "name": "Avocado",
-          "quantity": "1",
-          "note": "medium"
+          "quantity": "5",
+          "note": "2 salmon bowls, 2 club salad, 1 pitta"
         },
         {
-          "name": "Spring onions",
-          "quantity": "2"
+          "name": "Red onion",
+          "quantity": "7 small",
+          "note": "salmon bowls, club salad, pitta, koftas, 2x sea bass, salsa"
+        },
+        {
+          "name": "Red chilli",
+          "quantity": "1",
+          "note": "salmon bowls"
+        },
+        {
+          "name": "Little gem lettuce",
+          "quantity": "4 heads",
+          "note": "club salad"
+        },
+        {
+          "name": "Cherry tomatoes",
+          "quantity": "4 handfuls + 200g",
+          "note": "club salad + koftas salad"
+        },
+        {
+          "name": "Cucumber",
+          "quantity": "160g",
+          "note": "pitta"
+        },
+        {
+          "name": "Fresh parsley",
+          "quantity": "1 large bunch",
+          "note": "needed across most recipes"
+        },
+        {
+          "name": "Fresh coriander",
+          "quantity": "1 small handful",
+          "note": "koftas"
+        },
+        {
+          "name": "Broccoli florets",
+          "quantity": "400g",
+          "note": "carbonara"
+        },
+        {
+          "name": "Red bell pepper",
+          "quantity": "2",
+          "note": "sea bass rice"
+        },
+        {
+          "name": "Yellow bell pepper",
+          "quantity": "2",
+          "note": "sea bass rice"
+        },
+        {
+          "name": "Lemon",
+          "quantity": "7",
+          "note": "club salad 2, pitta 2, koftas 1/2, sea bass 2"
+        },
+        {
+          "name": "Lime",
+          "quantity": "1",
+          "note": "salmon bowls"
+        },
+        {
+          "name": "Pomegranate seeds",
+          "quantity": "4 tbsp",
+          "note": "sea bass rice, to serve"
         },
         {
           "name": "Garlic",
           "quantity": "2 cloves",
-          "note": "1 for the chicken marinade, 1 for the salmon"
-        },
-        {
-          "name": "Red chilli",
-          "quantity": "½"
-        },
-        {
-          "name": "Lemon",
-          "quantity": "1",
-          "note": "juice of ½ for the marinade, ½ for the raita"
-        },
-        {
-          "name": "Limes",
-          "quantity": "2",
-          "note": "1 for juice, plus wedges to serve"
-        },
-        {
-          "name": "Fresh coriander",
-          "note": "a handful for the hash, plus extra to serve with both dishes"
-        },
-        {
-          "name": "Mint leaves",
-          "quantity": "1 tbsp",
-          "note": "chopped"
-        },
-        {
-          "name": "Pomegranate seeds",
-          "quantity": "2 tbsp"
+          "note": "carbonara"
         }
       ]
     },
@@ -73,14 +98,34 @@
       "name": "Meat & fish",
       "items": [
         {
-          "name": "Boneless, skinless chicken breasts",
-          "quantity": "2",
-          "note": "about 120g each"
+          "name": "Salmon fillets",
+          "quantity": "4",
+          "note": "blackened salmon bowls"
         },
         {
-          "name": "Skinless salmon fillets",
-          "quantity": "2",
-          "note": "about 260g in total"
+          "name": "Grilled chicken breast",
+          "quantity": "320g",
+          "note": "club sandwich salad"
+        },
+        {
+          "name": "Parma ham",
+          "quantity": "16 slices",
+          "note": "8 club salad, 8 carbonara"
+        },
+        {
+          "name": "Minced chicken (5% fat)",
+          "quantity": "500g",
+          "note": "koftas"
+        },
+        {
+          "name": "Tuna, canned",
+          "quantity": "4 x 160g",
+          "note": "pitta"
+        },
+        {
+          "name": "Sea bass fillets",
+          "quantity": "4",
+          "note": "~140g each"
         }
       ]
     },
@@ -88,9 +133,39 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Thick Greek yogurt",
-          "quantity": "150g + 1 heaped tbsp",
-          "note": "150g for the raita, 1 heaped tbsp for the marinade"
+          "name": "Eggs",
+          "quantity": "8",
+          "note": "4 club salad, 4 carbonara"
+        },
+        {
+          "name": "Greek yogurt",
+          "quantity": "~1kg",
+          "note": "club salad, pitta, koftas (x2), sea bass dressing"
+        },
+        {
+          "name": "Parmesan cheese",
+          "quantity": "100g",
+          "note": "carbonara"
+        },
+        {
+          "name": "Feta cheese",
+          "quantity": "80g",
+          "note": "sea bass rice, crumbled"
+        }
+      ]
+    },
+    {
+      "name": "Bakery",
+      "items": [
+        {
+          "name": "Sourdough",
+          "quantity": "4 slices",
+          "note": "club salad croutons"
+        },
+        {
+          "name": "Wholemeal pitta",
+          "quantity": "4",
+          "note": "harissa tuna pitta"
         }
       ]
     },
@@ -98,17 +173,29 @@
       "name": "Tins & jars",
       "items": [
         {
-          "name": "Mango chutney",
-          "quantity": "1 tbsp"
+          "name": "Chickpeas",
+          "quantity": "2 tins",
+          "note": "salmon bowls salsa"
         },
         {
-          "name": "Cooked rice pouch",
-          "quantity": "1 x 250g",
-          "note": "brown or jasmine"
+          "name": "Butter beans",
+          "quantity": "400g can",
+          "note": "koftas salad"
         },
         {
-          "name": "Nori sheets",
-          "note": "optional, to serve"
+          "name": "Cooked brown rice pouch",
+          "quantity": "500g",
+          "note": "sea bass rice"
+        },
+        {
+          "name": "Harissa paste",
+          "quantity": "4 tsp",
+          "note": "pitta"
+        },
+        {
+          "name": "Tahini",
+          "quantity": "2 tbsp",
+          "note": "sea bass dressing"
         }
       ]
     },
@@ -116,43 +203,56 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Mild curry powder",
-          "quantity": "2 tsp",
-          "note": "1 tsp for the marinade, 1 tsp for the hash"
+          "name": "Medjool dates",
+          "quantity": "6",
+          "note": "koftas"
+        },
+        {
+          "name": "Dried pasta",
+          "quantity": "300g",
+          "note": "spaghetti or short pasta, carbonara"
+        },
+        {
+          "name": "Dried apricots",
+          "quantity": "60g",
+          "note": "sea bass rice"
+        },
+        {
+          "name": "BBQ smokehouse spice blend",
+          "quantity": "4 tsp",
+          "note": "or smoked paprika, cayenne, black pepper, garlic, chilli + sugar/honey, salmon bowls"
+        },
+        {
+          "name": "Middle Eastern/Moroccan spice blend",
+          "quantity": "3.5 tbsp",
+          "note": "ras el hanout or baharat, koftas 1.5 tbsp + sea bass rice 2 tbsp"
         },
         {
           "name": "Garlic granules",
-          "quantity": "1 tsp",
-          "note": "for the raita"
+          "quantity": "~5 tsp",
+          "note": "salmon bowls, club salad, koftas (x2), sea bass dressing"
         },
         {
-          "name": "Ground turmeric",
-          "quantity": "½ tsp"
+          "name": "American mustard",
+          "quantity": "4 tsp",
+          "note": "club salad"
         },
         {
-          "name": "Black sesame seeds",
-          "quantity": "1 tsp"
-        },
-        {
-          "name": "White sesame seeds",
-          "quantity": "1 tsp",
-          "note": "plus a pinch extra to serve"
-        },
-        {
-          "name": "Toasted sesame oil",
-          "quantity": "1 tsp"
+          "name": "Honey",
+          "quantity": "4 tsp + 2 tsp",
+          "note": "club salad + sea bass dressing (or maple syrup)"
         },
         {
           "name": "Olive oil",
-          "quantity": "2 tsp"
-        },
-        {
-          "name": "Runny honey",
-          "quantity": "1 tsp"
+          "note": "for brushing, croutons, frying — to taste"
         },
         {
           "name": "Salt and black pepper",
           "note": "to taste"
+        },
+        {
+          "name": "Chives",
+          "note": "club salad, to serve"
         }
       ]
     }
