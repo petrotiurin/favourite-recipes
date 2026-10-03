@@ -1,0 +1,160 @@
+{
+  "updated": "2026-10-03",
+  "recipes": [
+    "honey-salmon-with-sesame-avocado-crush",
+    "sticky-spiced-chicken-with-bombay-potato-hash"
+  ],
+  "sections": [
+    {
+      "name": "Fresh produce",
+      "items": [
+        {
+          "name": "Potatoes",
+          "quantity": "300g",
+          "note": "small dice, skins on"
+        },
+        {
+          "name": "Red bell pepper",
+          "quantity": "1"
+        },
+        {
+          "name": "Red onion",
+          "quantity": "½"
+        },
+        {
+          "name": "Cucumber",
+          "quantity": "½",
+          "note": "deseeded and diced, for the raita and the avocado crush"
+        },
+        {
+          "name": "Avocado",
+          "quantity": "1",
+          "note": "medium"
+        },
+        {
+          "name": "Spring onions",
+          "quantity": "2"
+        },
+        {
+          "name": "Garlic",
+          "quantity": "2 cloves",
+          "note": "1 for the chicken marinade, 1 for the salmon"
+        },
+        {
+          "name": "Red chilli",
+          "quantity": "½"
+        },
+        {
+          "name": "Lemon",
+          "quantity": "1",
+          "note": "juice of ½ for the marinade, ½ for the raita"
+        },
+        {
+          "name": "Limes",
+          "quantity": "2",
+          "note": "1 for juice, plus wedges to serve"
+        },
+        {
+          "name": "Fresh coriander",
+          "note": "a handful for the hash, plus extra to serve with both dishes"
+        },
+        {
+          "name": "Mint leaves",
+          "quantity": "1 tbsp",
+          "note": "chopped"
+        },
+        {
+          "name": "Pomegranate seeds",
+          "quantity": "2 tbsp"
+        }
+      ]
+    },
+    {
+      "name": "Meat & fish",
+      "items": [
+        {
+          "name": "Boneless, skinless chicken breasts",
+          "quantity": "2",
+          "note": "about 120g each"
+        },
+        {
+          "name": "Skinless salmon fillets",
+          "quantity": "2",
+          "note": "about 260g in total"
+        }
+      ]
+    },
+    {
+      "name": "Dairy & eggs",
+      "items": [
+        {
+          "name": "Thick Greek yogurt",
+          "quantity": "150g + 1 heaped tbsp",
+          "note": "150g for the raita, 1 heaped tbsp for the marinade"
+        }
+      ]
+    },
+    {
+      "name": "Tins & jars",
+      "items": [
+        {
+          "name": "Mango chutney",
+          "quantity": "1 tbsp"
+        },
+        {
+          "name": "Cooked rice pouch",
+          "quantity": "1 x 250g",
+          "note": "brown or jasmine"
+        },
+        {
+          "name": "Nori sheets",
+          "note": "optional, to serve"
+        }
+      ]
+    },
+    {
+      "name": "Pantry",
+      "items": [
+        {
+          "name": "Mild curry powder",
+          "quantity": "2 tsp",
+          "note": "1 tsp for the marinade, 1 tsp for the hash"
+        },
+        {
+          "name": "Garlic granules",
+          "quantity": "1 tsp",
+          "note": "for the raita"
+        },
+        {
+          "name": "Ground turmeric",
+          "quantity": "½ tsp"
+        },
+        {
+          "name": "Black sesame seeds",
+          "quantity": "1 tsp"
+        },
+        {
+          "name": "White sesame seeds",
+          "quantity": "1 tsp",
+          "note": "plus a pinch extra to serve"
+        },
+        {
+          "name": "Toasted sesame oil",
+          "quantity": "1 tsp"
+        },
+        {
+          "name": "Olive oil",
+          "quantity": "2 tsp"
+        },
+        {
+          "name": "Runny honey",
+          "quantity": "1 tsp"
+        },
+        {
+          "name": "Salt and black pepper",
+          "note": "to taste"
+        }
+      ]
+    }
+  ]
+}
