@@ -32,11 +32,11 @@ draft: true
 ## Instructions
 
 1. Preheat the oven to 220°C/Fan 200°C (425°F) Gas 7, or set the grill (broiler) to high. (For an air fryer, preheat to 200°C/400°F.)
-2. Add the **Medjool dates**, **red onion**, 1 tsp of the **garlic granules**, the **parsley** and **coriander** to a mini chopper or food processor. Pulse until finely chopped, then transfer to a mixing bowl.
+2. Add the **Medjool dates**, **red onion**, the **garlic granules**, the **parsley** and **coriander** to a mini chopper or food processor. Pulse until finely chopped, then transfer to a mixing bowl.
 3. Add the **minced chicken** and **spice blend** to the bowl with a generous pinch of **salt and black pepper**. Mix well, then shape into 12 small koftas.
-4. Place the koftas on a lined baking tray and brush lightly with **olive oil**. Bake for 10–12 minutes, or grill (broil) or air fry for 8–10 minutes, turning halfway, until cooked through.
+4. Place the koftas on a lined baking tray and brush lightly with the **olive oil**. Bake for 10–12 minutes, or grill (broil) or air fry for 8–10 minutes, turning halfway, until cooked through.
 5. Add the **Greek yogurt** and the remaining **garlic granules** to a bowl with a pinch of salt, and stir to combine.
-6. For the salad, combine the **butter beans**, **cherry tomatoes**, the olive oil, the **lemon** juice and the remaining **parsley** in a bowl with a pinch each of salt and black pepper.
+6. For the salad, combine the **butter beans**, **cherry tomatoes**, the remaining **olive oil**, the **lemon** juice and the remaining **parsley** in a bowl with a pinch each of **salt and black pepper**.
 7. Serve the koftas with the garlic yogurt, butter bean tomato salad and lemon wedges on the side.
 
 ## Notes
