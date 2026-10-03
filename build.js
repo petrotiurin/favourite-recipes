@@ -4,6 +4,7 @@ const matter = require("gray-matter");
 const { marked } = require("marked");
 const { renderIndex } = require("./templates/index");
 const { renderRecipe } = require("./templates/recipe");
+const { renderShoppingList } = require("./templates/shopping-list");
 
 const ROOT = __dirname;
 const RECIPES_DIR = path.join(ROOT, "recipes");
@@ -11,6 +12,7 @@ const IMAGES_DIR = path.join(ROOT, "images");
 const STYLES_FILE = path.join(ROOT, "styles", "style.css");
 const SEARCH_SCRIPT_FILE = path.join(ROOT, "templates", "search.js");
 const SERVINGS_SCRIPT_FILE = path.join(ROOT, "templates", "servings.js");
+const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
 const DIST_DIR = path.join(ROOT, "dist");
 
 function rimraf(dir) {
@@ -42,6 +44,31 @@ function loadRecipes() {
   });
 }
 
+/**
+ * The shopping list is written by the agent (via the MCP server's
+ * update_shopping_list tool) and records which draft recipes it was built from.
+ * It is only shown while that set still matches the current drafts: promoting,
+ * removing or adding a draft makes it stale, so the page goes blank until the
+ * agent refreshes it.
+ */
+function loadShoppingList(drafts) {
+  if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"));
+  } catch (err) {
+    console.warn(`Ignoring shopping-list.json: ${err.message}`);
+    return null;
+  }
+  const covered = Array.isArray(list.recipes) ? [...list.recipes].sort() : [];
+  const current = drafts.map((r) => r.slug).sort();
+  const sections = (Array.isArray(list.sections) ? list.sections : []).filter(
+    (s) => s && s.name && Array.isArray(s.items) && s.items.length
+  );
+  if (!sections.length || !current.length || covered.join("\n") !== current.join("\n")) return null;
+  return { ...list, sections };
+}
+
 function build() {
   rimraf(DIST_DIR);
   fs.mkdirSync(DIST_DIR, { recursive: true });
@@ -64,6 +91,10 @@ function build() {
     const html = renderRecipe(recipe, bodyHtml);
     fs.writeFileSync(path.join(DIST_DIR, "recipes", `${recipe.slug}.html`), html);
   }
+
+  const drafts = recipes.filter((r) => r.draft === true);
+  const shoppingList = loadShoppingList(drafts);
+  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shoppingList, drafts));
 
   console.log(`Built ${recipes.length} recipe(s) into dist/`);
 }

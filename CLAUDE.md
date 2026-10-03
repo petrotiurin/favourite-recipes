@@ -28,7 +28,9 @@ templates/          JS functions that render HTML strings (layout.js, index.js, 
 templates/search.js client-side search script, copied verbatim into dist/ (see "Hard constraint" above)
 templates/servings.js client-side servings selector, copied verbatim into dist/; quantities.js tags scalable numbers at build time
 styles/style.css    the one stylesheet, copied verbatim into dist/
-build.js            reads recipes/*.md -> writes dist/ (index.html + recipes/<slug>.html)
+shopping-list.json  combined shopping list for the draft recipes, written by the agent via the MCP server (see "Shopping list")
+templates/shopping-list.js  renders shopping-list.html (the list, or a blank page)
+build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
 mcp-server/         separate MCP server on Vercel for adding/editing recipes (not part of the site)
@@ -64,6 +66,17 @@ draft: true                        # optional: not tried yet. Highlighted, sorte
 New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe by deleting that line (the MCP server's `promote_recipe` tool does exactly this).
 
 Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) and `## Instructions` (numbered). See the `add-recipe` skill for the exact rules.
+
+## Shopping list
+
+`shopping-list.html` is a separate page (a "🛒 Shopping list" button in the index header links to it; the list itself is not on the main page). It is **not computed by the site**: the agent combines the ingredients of all draft recipes and saves the result with the MCP server's `update_shopping_list` tool, which commits `shopping-list.json`:
+
+```json
+{ "updated": "2026-10-03", "recipes": ["slug-a", "slug-b"],
+  "sections": [{ "name": "Fresh produce", "items": [{ "name": "Red onions", "quantity": "3", "note": "optional" }] }] }
+```
+
+`recipes` is filled in by the server with the current draft slugs. At build time `build.js` shows the list only if `recipes` matches the current set of drafts exactly; if a draft is promoted, removed or added, the page renders blank until the agent refreshes it. Never hand-edit `shopping-list.json`; go through the tool. Keep `loadShoppingList` in `build.js` and `mcp-server/lib/shopping-list.js` in sync if the format changes.
 
 ## Deployment
 

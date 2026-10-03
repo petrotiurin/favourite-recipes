@@ -14,10 +14,12 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
 | `promote_recipe` | Turns a draft into a regular recipe (removes `draft: true`, one commit) |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
+| `get_shopping_list` | The stored shopping list, the current drafts, and whether the list is `current`, `stale` or `none` |
+| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all draft recipes (one commit of `shopping-list.json`) |
 
 ## What's enforced
 
-- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md` and `images/recipes/<slug>.{jpg,jpeg,png,webp}`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
+- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
   - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
@@ -30,6 +32,14 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
   - Creating a recipe whose slug already exists is refused.
 - **Photos are required and normalised.** The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.
 - **Edits are minimal.** Existing recipes round-trip byte-for-byte (see the tests), so editing one field doesn't reformat the rest of the file.
+
+## Shopping list
+
+The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all draft recipes. The server doesn't merge ingredients: the agent reads each draft, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?}]}]`.
+
+- The server fills in `recipes` (the current draft slugs) itself and the page links to them. It refuses an empty draft set and an ingredient listed twice.
+- **The page stays current by itself.** `build.js` shows the list only while the stored `recipes` match the current drafts exactly. Promote, remove or add a draft and the page goes blank on the next deploy, until the agent calls `update_shopping_list` again. `get_shopping_list` reports `current` / `stale` / `none`.
+- Editing a draft's ingredients with `update_recipe` does not blank the page, so refresh the list after doing that.
 
 ## Adding photos
 

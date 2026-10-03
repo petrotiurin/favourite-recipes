@@ -13,6 +13,7 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
+import { getShoppingList, updateShoppingList, shoppingPageUrl, ShoppingListError } from "./shopping-list.js";
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
@@ -21,6 +22,13 @@ Drafts first: a recipe the family hasn't cooked and liked yet should be created 
 true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
 promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
+
+Shopping list: the site has a separate shopping page that covers the ingredients of ALL current draft recipes. You write it:
+after adding drafts (or when get_shopping_list says it is stale), read every draft (get_recipe), combine the ingredients into one
+deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the recipes' own units; keep
+different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if clearly pantry basics, else
+list them without a quantity), group it into shop-aisle sections, and call update_shopping_list. The server links the drafts
+itself. The page is blank whenever the drafts change (a draft is promoted, removed or added), so refresh it after every such change.
 
 Rules the server enforces or expects:
 - Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
@@ -94,8 +102,9 @@ function ok(text, extra = []) {
 }
 
 function fail(err) {
-  const msg = err instanceof UserError ? err.message : `Server error: ${err.message}`;
-  if (!(err instanceof UserError)) console.error(err);
+  const expected = err instanceof UserError || err instanceof ShoppingListError;
+  const msg = expected ? err.message : `Server error: ${err.message}`;
+  if (!expected) console.error(err);
   return { content: [{ type: "text", text: msg }], isError: true };
 }
 
@@ -106,6 +115,19 @@ const safe = (fn) => async (args) => {
     return fail(err);
   }
 };
+
+function shoppingResult({ list, drafts, commit }) {
+  const items = list.sections.reduce((n, s) => n + s.items.length, 0);
+  return [
+    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${drafts.length} draft recipe${drafts.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
+    `It will be live in about a minute at ${shoppingPageUrl()}`,
+    "",
+    "The page blanks itself as soon as a draft is promoted, removed or added, so call update_shopping_list again after any such change.",
+    "",
+    "Covers:",
+    ...drafts.map((r) => `- ${r.title} (${r.slug})`),
+  ].join("\n");
+}
 
 function resultText(verb, { slug, markdown, commit, draft, warnings }) {
   const lines = [];
@@ -274,6 +296,64 @@ export function buildServer({ origin }) {
       },
     },
     safe(async (args) => ok(resultText("Updated", await updateRecipe(args))))
+  );
+
+  server.registerTool(
+    "get_shopping_list",
+    {
+      title: "Get shopping list",
+      description:
+        "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
+        "'stale' (drafts were promoted/removed/added since it was written, so the site shows a blank page) or 'none'. " +
+        "Also lists the current drafts so you know which recipes to combine.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    safe(async () => {
+      const { list, drafts, status } = await getShoppingList();
+      const lines = [
+        `Status: ${status}${status === "stale" ? " (the site shows a blank page until you call update_shopping_list)" : ""}`,
+        `Page: ${shoppingPageUrl()}`,
+        "",
+        drafts.length ? "Current draft recipes:" : "There are no draft recipes right now.",
+        ...drafts.map((r) => `- ${r.title} (${r.slug})`),
+      ];
+      if (list) lines.push("", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
+      return ok(lines.join("\n"));
+    })
+  );
+
+  server.registerTool(
+    "update_shopping_list",
+    {
+      title: "Update shopping list",
+      description:
+        "Replace the site's shopping page with a combined ingredient list for ALL current draft recipes. " +
+        "You do the combining: read each draft with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
+        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which drafts the list covers " +
+        "and links them on the page. Commits shopping-list.json to main. The page goes blank automatically when the drafts change, " +
+        "so call this again after adding a draft or promoting/removing one. Fails if there are no drafts.",
+      inputSchema: {
+        sections: z
+          .array(
+            z.object({
+              name: z.string().min(1).describe('Section heading, e.g. "Fresh produce"'),
+              items: z
+                .array(
+                  z.object({
+                    name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
+                    quantity: z.string().optional().describe('Combined amount with units, e.g. "3", "450g", "2 tbsp". Omit for "to taste" items.'),
+                    note: z.string().optional().describe('Short extra, e.g. "for the fish tacos and the salsa", "finely diced".'),
+                  })
+                )
+                .min(1)
+            })
+          )
+          .min(1)
+          .describe("The whole list, grouped into shop sections. Replaces whatever list is there."),
+      },
+    },
+    safe(async ({ sections }) => ok(shoppingResult(await updateShoppingList(sections))))
   );
 
   return server;

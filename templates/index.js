@@ -49,6 +49,7 @@ ${r.draft === true ? '        <span class="draft-badge">Draft</span>\n' : ""}   
   const content = `  <header class="site-header">
     <h1>Our Favourite Recipes</h1>
     <p>A collection of the recipes we keep coming back to.</p>
+    <a class="shopping-link" href="shopping-list.html">🛒 Shopping list</a>
   </header>
   <main>
     <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes by name&hellip;" autocomplete="off">

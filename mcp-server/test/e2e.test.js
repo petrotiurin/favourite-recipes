@@ -78,7 +78,7 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["create_image_upload_link", "create_recipe", "get_recipe", "list_recipes", "promote_recipe", "update_recipe"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
@@ -167,6 +167,48 @@ test("draft: false creates a regular recipe straight away", async () => {
   assert.doesNotMatch(files.get("recipes/test-regular-soup.md").toString(), /draft/);
 });
 
+test("shopping list: refused without drafts, covers the current drafts, goes stale when one is promoted", async () => {
+  const sections = [
+    { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both" }, { name: "Parsley" }] },
+    { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils" }] },
+  ];
+  const none = await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  assert.ok(none.isError);
+  assert.match(text(none), /no draft recipes/);
+  assert.equal(files.has("shopping-list.json"), false);
+
+  for (const title of ["Test Draft Salad", "Test Draft Stew"]) {
+    const r = await client.callTool({ name: "create_recipe", arguments: { ...base, title, image: { url: "https://img.example/dish.png" } } });
+    assert.ok(!r.isError, text(r));
+  }
+
+  const dup = await client.callTool({
+    name: "update_shopping_list",
+    arguments: { sections: [{ name: "A", items: [{ name: "Onions" }] }, { name: "B", items: [{ name: "onions" }] }] },
+  });
+  assert.ok(dup.isError);
+  assert.match(text(dup), /listed twice/);
+
+  const r = await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  assert.ok(!r.isError, text(r));
+  assert.deepEqual(commitLog.at(-1).paths, ["shopping-list.json"]);
+  const stored = JSON.parse(files.get("shopping-list.json").toString());
+  assert.deepEqual(stored.recipes, ["test-draft-salad", "test-draft-stew"]);
+  assert.match(stored.updated, /^\d{4}-\d{2}-\d{2}$/);
+  assert.deepEqual(stored.sections[0].items[1], { name: "Parsley" });
+  assert.deepEqual(stored.sections[0].items[0], { name: "Red onions", quantity: "3", note: "for both" });
+  assert.match(text(await client.callTool({ name: "get_shopping_list", arguments: {} })), /Status: current/);
+
+  await client.callTool({ name: "promote_recipe", arguments: { slug: "test-draft-stew" } });
+  const stale = text(await client.callTool({ name: "get_shopping_list", arguments: {} }));
+  assert.match(stale, /Status: stale/);
+  assert.match(stale, /test-draft-salad/);
+  assert.doesNotMatch(stale, /Current draft recipes:\n- .*test-draft-stew/);
+
+  await client.callTool({ name: "promote_recipe", arguments: { slug: "test-draft-salad" } });
+  assert.match(text(await client.callTool({ name: "get_shopping_list", arguments: {} })), /Status: stale/);
+});
+
 test("refuses duplicate slug", async () => {
   const r = await client.callTool({ name: "create_recipe", arguments: { ...base, image: { url: "https://img.example/dish.png" } } });
   assert.ok(r.isError);
@@ -216,7 +258,7 @@ test("tampered upload token is rejected", async () => {
   assert.equal(res.status, 403);
 });
 
-test("no commit ever touches a path outside recipes/ and images/recipes/", () => {
-  for (const c of commitLog) for (const p of c.paths) assert.match(p, /^(recipes\/[a-z0-9-]+\.md|images\/recipes\/[a-z0-9-]+\.(jpg|webp))$/);
+test("no commit ever touches a path outside recipes/, images/recipes/ and shopping-list.json", () => {
+  for (const c of commitLog) for (const p of c.paths) assert.match(p, /^(recipes\/[a-z0-9-]+\.md|images\/recipes\/[a-z0-9-]+\.(jpg|webp)|shopping-list\.json)$/);
   assert.equal(files.get("build.js").toString(), "// build");
 });
