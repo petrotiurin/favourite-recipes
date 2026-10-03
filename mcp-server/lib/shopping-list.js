@@ -1,4 +1,4 @@
-import { readFile, commitChanges } from "./github.js";
+import { ChangeSet } from "./github.js";
 import { listRecipes, isCurrent } from "./recipes.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
 
@@ -61,8 +61,8 @@ export function shoppingListStatus(list, currentSlugs) {
   return covered === [...currentSlugs].sort().join("\n") ? "current" : "outdated";
 }
 
-async function readStoredList() {
-  const raw = await readFile(SHOPPING_LIST_PATH);
+async function readStoredList(cs) {
+  const raw = await cs.read(SHOPPING_LIST_PATH);
   if (!raw) return null;
   try {
     return JSON.parse(raw.toString("utf8"));
@@ -71,24 +71,25 @@ async function readStoredList() {
   }
 }
 
-export async function getShoppingList() {
-  const [list, recipes] = await Promise.all([readStoredList(), listRecipes()]);
+export async function getShoppingList(cs = new ChangeSet()) {
+  const [list, recipes] = await Promise.all([readStoredList(cs), listRecipes(cs)]);
   const current = recipes.filter(isCurrent);
   return { list, current, status: shoppingListStatus(list, current.map((r) => r.slug)) };
 }
 
-export async function updateShoppingList(sections) {
+/** Without a ChangeSet it commits straight away; with one (batch_changes) it only stages the file. */
+export async function updateShoppingList(sections, batch) {
+  const cs = batch || new ChangeSet();
   validateSections(sections);
-  const current = (await listRecipes()).filter(isCurrent);
+  const current = (await listRecipes(cs)).filter(isCurrent);
   if (!current.length) {
     throw new ShoppingListError(
       "There are no current recipes, so there is nothing to shop for. Add a draft, or mark recipes current with set_current_recipes. The shopping page stays blank until then."
     );
   }
   const list = buildShoppingList(sections, current.map((r) => r.slug));
-  const commit = await commitChanges(
-    [{ path: SHOPPING_LIST_PATH, content: Buffer.from(serializeShoppingList(list)) }],
-    `Update shopping list (${current.length} current recipe${current.length === 1 ? "" : "s"})\n\nUpdated via the recipes MCP server.`
-  );
-  return { list, current, commit };
+  cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
+  const subject = `Update shopping list (${current.length} current recipe${current.length === 1 ? "" : "s"})`;
+  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
+  return { list, current, commit, subject };
 }

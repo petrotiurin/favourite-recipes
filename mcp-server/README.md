@@ -10,13 +10,24 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | --- | --- |
 | `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts and `current: true` for every current recipe. Order: drafts, other current recipes, the rest |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
-| `create_image_upload_link` | Returns a one-hour link where a person can upload the dish photo from their phone |
+| `create_image_upload_link` | Returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
 | `promote_recipe` | Turns a draft into a regular recipe (replaces `draft: true` with `current: true`, one commit). Its currency is unchanged: it stays current |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
 | `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
 | `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
 | `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`) |
+| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `set_current_recipes`, `update_shopping_list`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
+
+## One commit per deploy
+
+Every commit to `main` triggers the Pages workflow, and only one deploy runs at a time, so a burst of single-change calls (as in "add five recipes, mark two current, update the shopping list") used to queue up a dozen deploys and leave the site minutes behind. To avoid that:
+
+- **`batch_changes`.** Agents do their reads first, then send all the writes in one call. Each operation sees the ones before it (e.g. the shopping list covers recipes created earlier in the same batch), and a rejected operation commits nothing. The server's instructions tell agents to use it whenever they make more than one change.
+- **Photos for recipes that don't exist yet** are committed with `[skip ci]`, because no page shows them until `create_recipe` (or `batch_changes`) commits the recipe, and that commit deploys. Replacing an existing recipe's photo deploys as usual.
+- **The workflow** (`.github/workflows/deploy.yml`) never cancels a deploy that has started; pushes that arrive meanwhile collapse into one queued run for the newest commit.
+
+Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see what it has staged, and nothing reaches GitHub until it commits. The single-change tools commit their own `ChangeSet`; `batch_changes` shares one across all its operations.
 
 ## What's enforced
 
@@ -52,7 +63,7 @@ The end-to-end agent flow (add recipes, select existing ones, build the list, su
 
 Ranked by how well each one works in practice:
 
-1. **Upload link (best for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. The user opens it, picks or takes a photo, and the page shrinks it in the browser (which avoids Vercel's 4.5MB request limit), then commits it. For new recipes the agent then calls `create_recipe` with `image: {uploaded: true}`. For existing recipes the photo is swapped immediately.
+1. **Upload link (best for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. One link covers every recipe passed in `recipes`: the page lists them all, the user picks or takes a photo for each, and each one uploads as soon as it's picked. The page shrinks every photo in the browser and sends it in its own request, which keeps each request under Vercel's 4.5MB limit and means a failed photo can be retried on its own. The link can only write photos for the recipes it lists. For new recipes the agent then creates them with `image: {uploaded: true}` (in one `batch_changes` call when there are several). For existing recipes the photo is swapped immediately. Links made before multi-recipe pages (a single `slug`) still work.
 2. **`image: {url}`** works when the recipe comes from a website: pass the dish photo or `og:image` URL and the server downloads it.
 3. **`image: {base64}`** is for agents that have the file bytes, such as Claude Code with a local file. Keep it under about 3MB because of the request size limit.
 

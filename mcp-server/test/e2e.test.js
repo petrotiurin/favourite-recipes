@@ -15,6 +15,8 @@ const files = new Map();
 for (const dir of ["recipes", "images/recipes"]) {
   for (const f of readdirSync(new URL(dir + "/", ROOT))) files.set(`${dir}/${f}`, readFileSync(new URL(`${dir}/${f}`, ROOT)));
 }
+// Start from a repo where nothing is a draft or current, whatever the real recipes are marked as right now.
+for (const [p, buf] of files) if (p.endsWith(".md")) files.set(p, Buffer.from(buf.toString().replace(/^(draft|current): true\n/gm, "")));
 files.set("build.js", Buffer.from("// build"));
 const blobs = new Map();
 const trees = new Map();
@@ -78,7 +80,7 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "set_current_recipes", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "set_current_recipes", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
@@ -279,6 +281,80 @@ test("shopping list covers current recipes; it stays until rewritten and goes bl
   assert.match(text(none), /no current recipes/);
 });
 
+test("batch_changes lands everything in one commit, each operation seeing the ones before it", async () => {
+  const commits = commitLog.length;
+  const ops = [
+    { action: "create_recipe", ...base, title: "Batch Bean Stew", image: { url: "https://img.example/dish.png" } },
+    { action: "create_recipe", ...base, title: "Batch Pea Soup", instructions: ["Add 200g **red lentils**", "Season with **Salt**"], image: { url: "https://img.example/dish.png" } },
+    { action: "set_current_recipes", slugs: ["steamed-rice"], current: true },
+    { action: "update_recipe", slug: "batch-pea-soup", serves: 2 },
+    { action: "update_shopping_list", sections },
+  ];
+
+  const dry = await client.callTool({ name: "batch_changes", arguments: { operations: ops, dry_run: true } });
+  assert.ok(!dry.isError, text(dry));
+  assert.match(text(dry), /Dry run: nothing committed/);
+  assert.match(text(dry), /2\. Created "batch-pea-soup" \(draft\).*\n\s+warning: /);
+  assert.equal(commitLog.length, commits);
+  assert.equal(files.has("recipes/batch-bean-stew.md"), false);
+
+  const r = await client.callTool({ name: "batch_changes", arguments: { operations: ops } });
+  assert.ok(!r.isError, text(r));
+  assert.equal(commitLog.length, commits + 1);
+  const c = commitLog.at(-1);
+  assert.deepEqual(c.paths.sort(), [
+    "images/recipes/batch-bean-stew.jpg",
+    "images/recipes/batch-pea-soup.jpg",
+    "recipes/batch-bean-stew.md",
+    "recipes/batch-pea-soup.md",
+    "recipes/steamed-rice.md",
+    "shopping-list.json",
+  ]);
+  assert.match(c.message, /^Batch update: 5 changes\n\n- Add draft recipe: Batch Bean Stew\n/);
+  assert.match(files.get("recipes/batch-pea-soup.md").toString(), /^serves: 2$/m);
+  assert.match(files.get("recipes/batch-pea-soup.md").toString(), /^draft: true$/m);
+  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).recipes, ["batch-bean-stew", "batch-pea-soup", "steamed-rice"]);
+  assert.match(await shopping(), /Status: current/);
+  assert.doesNotMatch(text(r), /refresh it/);
+
+  // All or nothing: a rejected operation commits nothing, not even the valid ones before it.
+  const bad = await client.callTool({
+    name: "batch_changes",
+    arguments: {
+      operations: [
+        { action: "update_recipe", slug: "batch-bean-stew", serves: 6 },
+        { action: "promote_recipe", slug: "steamed-rice" },
+      ],
+    },
+  });
+  assert.ok(bad.isError);
+  assert.match(text(bad), /operations\[1\] \(promote_recipe\) failed, so nothing was committed/);
+  assert.equal(commitLog.length, commits + 1);
+  assert.doesNotMatch(files.get("recipes/batch-bean-stew.md").toString(), /^serves: 6$/m);
+
+  // Changing the current set without a shopping list afterwards gets a reminder; then clear everything for later tests.
+  const off = await client.callTool({
+    name: "batch_changes",
+    arguments: { operations: [{ action: "promote_recipe", slug: "batch-bean-stew" }, { action: "set_current_recipes", slugs: ["steamed-rice"], current: false }] },
+  });
+  assert.ok(!off.isError, text(off));
+  assert.match(text(off), /refresh it with update_shopping_list/);
+  assert.equal(commitLog.length, commits + 2);
+  const clear = await client.callTool({
+    name: "batch_changes",
+    arguments: {
+      operations: [
+        { action: "promote_recipe", slug: "batch-pea-soup" },
+        { action: "set_current_recipes", slugs: ["batch-bean-stew", "batch-pea-soup"], current: false },
+      ],
+    },
+  });
+  assert.ok(!clear.isError, text(clear));
+  assert.equal(files.has("shopping-list.json"), false);
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/batch-bean-stew.md", "recipes/batch-pea-soup.md", "shopping-list.json"]);
+  assert.equal((await listed()).filter((x) => x.current).length, 0);
+});
+
 test("refuses duplicate slug", async () => {
   const r = await client.callTool({ name: "create_recipe", arguments: { ...base, image: { url: "https://img.example/dish.png" } } });
   assert.ok(r.isError);
@@ -311,6 +387,8 @@ test("upload link flow for a new recipe, and webp -> jpg swap for an existing on
   form.append("photo", new Blob([photo]), "p.png");
   const up = await fetch(link, { method: "POST", body: form, headers: { Accept: "application/json" } });
   assert.equal(up.status, 200, await up.clone().text());
+  // Not on any page yet, so it must not trigger a site deploy on its own.
+  assert.match(commitLog.at(-1).message, /^Add photo: upload-test-curry \[skip ci\]/);
   const done = await client.callTool({ name: "create_recipe", arguments: { ...base, title: "Upload Test Curry", image: { uploaded: true } } });
   assert.ok(!done.isError, text(done));
 
@@ -318,9 +396,73 @@ test("upload link flow for a new recipe, and webp -> jpg swap for an existing on
   const link2 = text(r2).match(/https:\/\/mcp\.test\/upload\?t=\S+/)[0];
   const up2 = await fetch(link2, { method: "POST", body: form, headers: { Accept: "application/json" } });
   assert.equal(up2.status, 200);
+  assert.doesNotMatch(commitLog.at(-1).message, /skip ci/);
   assert.ok(files.has("images/recipes/steamed-rice.jpg"));
   assert.ok(!files.has("images/recipes/steamed-rice.webp"));
   assert.match(files.get("recipes/steamed-rice.md").toString(), /image: \/images\/recipes\/steamed-rice\.jpg/);
+});
+
+test("one upload link covers several recipes; each photo is its own upload, only for the recipes on the link", async () => {
+  const bad = await client.callTool({ name: "create_image_upload_link", arguments: { recipes: [{ title: "Multi Photo Pie" }, { title: "Multi Photo Pie" }] } });
+  assert.ok(bad.isError);
+  assert.match(text(bad), /listed twice/);
+  const both = await client.callTool({ name: "create_image_upload_link", arguments: { recipes: [{ title: "Multi" }], slug: "steamed-rice" } });
+  assert.ok(both.isError);
+
+  const r = await client.callTool({
+    name: "create_image_upload_link",
+    arguments: { recipes: [{ title: "Multi Photo Pie" }, { title: "Multi Photo Tart" }, { slug: "harissa-tuna-pitta" }] },
+  });
+  assert.ok(!r.isError, text(r));
+  assert.match(text(r), /3 recipes/);
+  assert.match(text(r), /1\. Multi Photo Pie \(multi-photo-pie\) \[new recipe\]/);
+  assert.match(text(r), /3\. Harissa Tuna Pitta.*\(harissa-tuna-pitta\) \[replaces the current photo\]/);
+  const links = text(r).match(/https:\/\/mcp\.test\/upload\?t=\S+/g);
+  assert.equal(links.length, 1);
+  const link = links[0];
+
+  const page = await (await fetch(link)).text();
+  assert.match(page, /Upload 3 recipe photos/);
+  assert.equal(page.match(/<form class="item"/g).length, 3);
+  assert.match(page, /value="multi-photo-tart"/);
+
+  const post = (slug) => {
+    const form = new FormData();
+    if (slug) form.append("slug", slug);
+    form.append("photo", new Blob([photo]), "p.png");
+    return fetch(link, { method: "POST", body: form, headers: { Accept: "application/json" } });
+  };
+  const commits = commitLog.length;
+  assert.equal((await post("steamed-rice")).status, 403); // a real recipe, but not on this link
+  assert.equal((await post(null)).status, 403); // several recipes: the page must say which
+  assert.equal(commitLog.length, commits);
+
+  for (const slug of ["multi-photo-tart", "multi-photo-pie"]) {
+    const res = await post(slug);
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.equal((await res.json()).slug, slug);
+    assert.ok(files.has(`images/recipes/${slug}.jpg`));
+  }
+  assert.equal(commitLog.length, commits + 2);
+  assert.ok(commitLog.slice(-2).every((c) => /\[skip ci\]/.test(c.message)));
+
+  const created = await client.callTool({
+    name: "batch_changes",
+    arguments: {
+      operations: ["Multi Photo Pie", "Multi Photo Tart"].map((title) => ({ action: "create_recipe", ...base, title, image: { uploaded: true } })),
+    },
+  });
+  assert.ok(!created.isError, text(created));
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/multi-photo-pie.md", "recipes/multi-photo-tart.md"]);
+});
+
+test("links made before multi-recipe uploads still work", async () => {
+  const { createHmac } = await import("node:crypto");
+  const payload = Buffer.from(JSON.stringify({ slug: "steamed-rice", exp: Date.now() + 60_000 })).toString("base64url");
+  const sig = createHmac("sha256", "upload-link:secret").update(payload).digest("base64url");
+  const page = await (await fetch(`https://mcp.test/upload?t=${payload}.${sig}`)).text();
+  assert.match(page, /Upload the recipe photo/);
+  assert.match(page, /value="steamed-rice"/);
 });
 
 test("tampered upload token is rejected", async () => {

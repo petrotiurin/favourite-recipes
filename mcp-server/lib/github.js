@@ -102,3 +102,56 @@ export async function commitChanges(changes, message) {
     }
   }
 }
+
+/**
+ * Staged edits on top of the branch: reads see the staged version first, and nothing reaches
+ * GitHub until commit(). Lets several tool operations land in one commit (= one site deploy).
+ */
+export class ChangeSet {
+  constructor() {
+    this.staged = new Map(); // path -> Buffer, or null for a deletion
+  }
+
+  get size() {
+    return this.staged.size;
+  }
+
+  async read(path) {
+    return this.staged.has(path) ? this.staged.get(path) : readFile(path);
+  }
+
+  async list(dir) {
+    const names = new Set(await listDir(dir));
+    for (const [path, content] of this.staged) {
+      if (!path.startsWith(`${dir}/`) || path.slice(dir.length + 1).includes("/")) continue;
+      const name = path.slice(dir.length + 1);
+      if (content === null) names.delete(name);
+      else names.add(name);
+    }
+    return [...names];
+  }
+
+  write(path, content) {
+    assertAllowedPath(path);
+    this.staged.set(path, content);
+  }
+
+  remove(path) {
+    assertAllowedPath(path);
+    this.staged.set(path, null);
+  }
+
+  paths() {
+    return [...this.staged.keys()];
+  }
+
+  async commit(message) {
+    const changes = [];
+    for (const [path, content] of this.staged) {
+      if (content !== null) changes.push({ path, content });
+      // A file staged and then deleted again within one batch never existed on the branch: nothing to delete.
+      else if (await readFile(path)) changes.push({ path, delete: true });
+    }
+    return commitChanges(changes, message);
+  }
+}
