@@ -402,6 +402,69 @@ test("upload link flow for a new recipe, and webp -> jpg swap for an existing on
   assert.match(files.get("recipes/steamed-rice.md").toString(), /image: \/images\/recipes\/steamed-rice\.jpg/);
 });
 
+test("one upload link covers several recipes; each photo is its own upload, only for the recipes on the link", async () => {
+  const bad = await client.callTool({ name: "create_image_upload_link", arguments: { recipes: [{ title: "Multi Photo Pie" }, { title: "Multi Photo Pie" }] } });
+  assert.ok(bad.isError);
+  assert.match(text(bad), /listed twice/);
+  const both = await client.callTool({ name: "create_image_upload_link", arguments: { recipes: [{ title: "Multi" }], slug: "steamed-rice" } });
+  assert.ok(both.isError);
+
+  const r = await client.callTool({
+    name: "create_image_upload_link",
+    arguments: { recipes: [{ title: "Multi Photo Pie" }, { title: "Multi Photo Tart" }, { slug: "harissa-tuna-pitta" }] },
+  });
+  assert.ok(!r.isError, text(r));
+  assert.match(text(r), /3 recipes/);
+  assert.match(text(r), /1\. Multi Photo Pie \(multi-photo-pie\) \[new recipe\]/);
+  assert.match(text(r), /3\. Harissa Tuna Pitta.*\(harissa-tuna-pitta\) \[replaces the current photo\]/);
+  const links = text(r).match(/https:\/\/mcp\.test\/upload\?t=\S+/g);
+  assert.equal(links.length, 1);
+  const link = links[0];
+
+  const page = await (await fetch(link)).text();
+  assert.match(page, /Upload 3 recipe photos/);
+  assert.equal(page.match(/<form class="item"/g).length, 3);
+  assert.match(page, /value="multi-photo-tart"/);
+
+  const post = (slug) => {
+    const form = new FormData();
+    if (slug) form.append("slug", slug);
+    form.append("photo", new Blob([photo]), "p.png");
+    return fetch(link, { method: "POST", body: form, headers: { Accept: "application/json" } });
+  };
+  const commits = commitLog.length;
+  assert.equal((await post("steamed-rice")).status, 403); // a real recipe, but not on this link
+  assert.equal((await post(null)).status, 403); // several recipes: the page must say which
+  assert.equal(commitLog.length, commits);
+
+  for (const slug of ["multi-photo-tart", "multi-photo-pie"]) {
+    const res = await post(slug);
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.equal((await res.json()).slug, slug);
+    assert.ok(files.has(`images/recipes/${slug}.jpg`));
+  }
+  assert.equal(commitLog.length, commits + 2);
+  assert.ok(commitLog.slice(-2).every((c) => /\[skip ci\]/.test(c.message)));
+
+  const created = await client.callTool({
+    name: "batch_changes",
+    arguments: {
+      operations: ["Multi Photo Pie", "Multi Photo Tart"].map((title) => ({ action: "create_recipe", ...base, title, image: { uploaded: true } })),
+    },
+  });
+  assert.ok(!created.isError, text(created));
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/multi-photo-pie.md", "recipes/multi-photo-tart.md"]);
+});
+
+test("links made before multi-recipe uploads still work", async () => {
+  const { createHmac } = await import("node:crypto");
+  const payload = Buffer.from(JSON.stringify({ slug: "steamed-rice", exp: Date.now() + 60_000 })).toString("base64url");
+  const sig = createHmac("sha256", "upload-link:secret").update(payload).digest("base64url");
+  const page = await (await fetch(`https://mcp.test/upload?t=${payload}.${sig}`)).text();
+  assert.match(page, /Upload the recipe photo/);
+  assert.match(page, /value="steamed-rice"/);
+});
+
 test("tampered upload token is rejected", async () => {
   const res = await fetch("https://mcp.test/upload?t=eyJzbHVnIjoiYnVpbGQifQ.forged");
   assert.equal(res.status, 403);

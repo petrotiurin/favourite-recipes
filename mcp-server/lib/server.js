@@ -78,8 +78,9 @@ Rules the server enforces or expects:
 - Every recipe needs a real hero photo. Never invent a placeholder.
 
 Adding the photo, best option first:
-1. The user has a photo on their phone/computer (or pasted one into chat): call create_image_upload_link, give the user the link,
-   wait for them to say it's uploaded, then call create_recipe with image: { uploaded: true }.
+1. The user has a photo on their phone/computer (or pasted one into chat): call create_image_upload_link (ONE call listing every
+   recipe that needs a photo gives ONE page for all of them), give the user the link, wait for them to say it's all uploaded, then
+   create the recipes with image: { uploaded: true }.
 2. The recipe came from a web page: pass image: { url } with a direct link to the dish photo (often the page's og:image).
 3. You have the file bytes yourself (e.g. a local file): image: { base64 } — keep it under ~3MB.
 The server resizes to <=1600px, fixes rotation, strips metadata and stores it as images/recipes/<slug>.jpg.`;
@@ -312,34 +313,67 @@ export function buildServer({ origin }) {
     {
       title: "Create photo upload link",
       description:
-        "Get a one-time web link (valid 1 hour) the user can open on their phone or computer to upload the recipe's hero photo. " +
-        "The photo is resized and committed as images/recipes/<slug>.jpg. For an existing recipe, the recipe is updated to use it automatically. " +
-        "For a new recipe, call create_recipe with image: { uploaded: true } after the user confirms the upload. " +
+        "Get ONE web link (valid 1 hour) the user can open on their phone or computer to upload hero photos for one or more recipes: " +
+        "the page lists every recipe and each photo uploads as soon as it's picked. Each photo is resized and committed as " +
+        "images/recipes/<slug>.jpg. An existing recipe is switched to its new photo automatically. For a new recipe, create it " +
+        "with image: { uploaded: true } (create_recipe or batch_changes) after the user confirms the uploads. " +
+        "When several recipes need photos, put them all in one call's recipes list rather than making a link per recipe. " +
         "Use this whenever the user has the photo (e.g. attached it in chat) but you can't pass it as a URL.",
       inputSchema: {
-        title: z.string().optional().describe("Title of the NEW recipe you are about to create (the slug is derived from it)."),
-        slug: z.string().optional().describe("Slug of an EXISTING recipe whose photo should be replaced."),
+        recipes: z
+          .array(
+            z.object({
+              title: z.string().optional().describe("Title of a NEW recipe you are about to create (the slug is derived from it)."),
+              slug: z.string().optional().describe("Slug of an EXISTING recipe whose photo should be replaced."),
+            })
+          )
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("Every recipe that needs a photo, in the order to list them; each item has exactly one of title / slug."),
+        title: z.string().optional().describe("Shortcut for a single NEW recipe: same as recipes: [{ title }]."),
+        slug: z.string().optional().describe("Shortcut for a single EXISTING recipe: same as recipes: [{ slug }]."),
       },
     },
-    safe(async ({ title, slug }) => {
-      if (!!title === !!slug) throw new UserError("Pass exactly one of: title (new recipe) or slug (existing recipe)");
-      let target = slug;
-      if (title) {
-        target = slugify(title);
-        if (!target) throw new UserError("Title must contain letters or numbers");
-        const exists = await getRecipe(target).then(() => true, () => false);
-        if (exists) throw new UserError(`A recipe with slug "${target}" already exists. Pass slug: "${target}" to replace its photo instead.`);
-      } else {
-        await getRecipe(target); // throws if it doesn't exist
+    safe(async ({ recipes, title, slug }) => {
+      if ([recipes, title, slug].filter(Boolean).length !== 1) throw new UserError("Pass exactly one of: recipes, title or slug");
+      const requested = recipes || [{ title, slug }];
+      const items = [];
+      for (const [i, r] of requested.entries()) {
+        const where = requested.length > 1 ? `recipes[${i}]: ` : "";
+        if (!!r.title === !!r.slug) throw new UserError(`${where}pass exactly one of: title (new recipe) or slug (existing recipe)`);
+        if (r.title) {
+          const target = slugify(r.title);
+          if (!target) throw new UserError(`${where}title must contain letters or numbers`);
+          const exists = await getRecipe(target).then(() => true, () => false);
+          if (exists) throw new UserError(`${where}a recipe with slug "${target}" already exists. Pass slug: "${target}" to replace its photo instead.`);
+          items.push({ slug: target, label: r.title.trim(), isNew: true });
+        } else {
+          const { data } = await getRecipe(r.slug); // throws if it doesn't exist
+          items.push({ slug: r.slug, label: data.title || r.slug, isNew: false });
+        }
       }
-      const url = `${origin}/upload?t=${createUploadToken(target)}`;
-      return ok(
-        `Upload link for "${target}" (valid for 1 hour):\n${url}\n\n` +
-          `Send this link to the user and ask them to pick the photo there. ` +
-          (title
-            ? `Once they say it's done, call create_recipe with image: { uploaded: true } and the same title.`
-            : `Once they say it's done the recipe already uses the new photo; nothing else to do.`)
-      );
+      const dupe = items.find((it, i) => items.findIndex((o) => o.slug === it.slug) !== i);
+      if (dupe) throw new UserError(`"${dupe.slug}" is listed twice`);
+
+      const url = `${origin}/upload?t=${createUploadToken(items.map(({ slug, label }) => ({ slug, label })))}`;
+      const newOnes = items.filter((it) => it.isNew);
+      const lines = [
+        `Upload link for ${items.length === 1 ? `"${items[0].slug}"` : `${items.length} recipes`} (valid for 1 hour, one page for all of them):`,
+        url,
+        "",
+        ...items.map((it, i) => `${i + 1}. ${it.label} (${it.slug})${it.isNew ? " [new recipe]" : " [replaces the current photo]"}`),
+        "",
+        "Send the user this one link with the numbered list of which photo goes with which recipe, and ask them to tell you when they're all uploaded.",
+      ];
+      if (newOnes.length) {
+        lines.push(
+          `Then create the new recipe${newOnes.length === 1 ? "" : "s"} with image: { uploaded: true } and the same title${newOnes.length === 1 ? "" : "s"} ` +
+            "(all in one batch_changes call if there are several changes)."
+        );
+      }
+      if (items.length > newOnes.length) lines.push("Existing recipes switch to their new photo as soon as it's uploaded; nothing else to do for them.");
+      return ok(lines.join("\n"));
     })
   );
 

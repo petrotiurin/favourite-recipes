@@ -10,7 +10,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | --- | --- |
 | `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts and `current: true` for every current recipe. Order: drafts, other current recipes, the rest |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
-| `create_image_upload_link` | Returns a one-hour link where a person can upload the dish photo from their phone |
+| `create_image_upload_link` | Returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
 | `promote_recipe` | Turns a draft into a regular recipe (replaces `draft: true` with `current: true`, one commit). Its currency is unchanged: it stays current |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
@@ -63,7 +63,7 @@ The end-to-end agent flow (add recipes, select existing ones, build the list, su
 
 Ranked by how well each one works in practice:
 
-1. **Upload link (best for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. The user opens it, picks or takes a photo, and the page shrinks it in the browser (which avoids Vercel's 4.5MB request limit), then commits it. For new recipes the agent then calls `create_recipe` with `image: {uploaded: true}`. For existing recipes the photo is swapped immediately.
+1. **Upload link (best for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. One link covers every recipe passed in `recipes`: the page lists them all, the user picks or takes a photo for each, and each one uploads as soon as it's picked. The page shrinks every photo in the browser and sends it in its own request, which keeps each request under Vercel's 4.5MB limit and means a failed photo can be retried on its own. The link can only write photos for the recipes it lists. For new recipes the agent then creates them with `image: {uploaded: true}` (in one `batch_changes` call when there are several). For existing recipes the photo is swapped immediately. Links made before multi-recipe pages (a single `slug`) still work.
 2. **`image: {url}`** works when the recipe comes from a website: pass the dish photo or `og:image` URL and the server downloads it.
 3. **`image: {base64}`** is for agents that have the file bytes, such as Claude Code with a local file. Keep it under about 3MB because of the request size limit.
 

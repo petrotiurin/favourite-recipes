@@ -41,13 +41,13 @@ Skip to 2 if there are no new recipes.
 
 **Photos.** Every recipe needs a real photo of the dish; never invent a placeholder.
 - A recipe from a **link**: try the page's dish photo (usually `og:image`) with `create_recipe`'s `image: { url }`. If that fails, fall back to an upload link.
-- A recipe from a **screenshot, pasted text or from memory**: the user has to upload the photo. Call `create_image_upload_link({ title })` for each of these recipes.
+- A recipe from a **screenshot, pasted text or from memory**: the user has to upload the photo. Call `create_image_upload_link` **once** with all of these recipes, `create_image_upload_link({ recipes: [{ title: "A" }, { title: "B" }] })`: it returns **one** link to a page that lists every recipe, where each photo uploads as soon as it's picked.
 
-**Ask for all uploads in one message** (put the leftovers question in the same message, if there is one), as a numbered list where each item names the recipe and says what photo is wanted, e.g.:
+**Ask for all uploads in one message** (put the leftovers question in the same message, if there is one): the single link, then a numbered list in the same order as the page, where each item names the recipe and says what photo is wanted, e.g.:
 
-> Please upload a photo of each finished dish (the links work for one hour):
-> 1. **Harissa Tuna Pitta** (from your screenshot of the pitta recipe): <link>
-> 2. **Lemon Chicken Traybake** (from the BBC Good Food link): <link>
+> Please upload a photo of each finished dish on this page (the link works for one hour): <link>
+> 1. **Harissa Tuna Pitta** (from your screenshot of the pitta recipe)
+> 2. **Lemon Chicken Traybake** (from the BBC Good Food link)
 >
 > Tell me when they're all uploaded.
 
@@ -104,4 +104,4 @@ Keep it factual and short; don't repeat the recipe steps.
 
 - The shopping page shows the saved list until you save a new one, so re-run steps 3-4 whenever the current set changes (recipes added, marked or unmarked, a recipe's ingredients edited).
 - Promoting a draft (`promote_recipe`) does not change whether it's current. Only promote when the user says they've tried it and want to keep it.
-- Upload links expire after an hour; if the user comes back later, create fresh links.
+- Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.
