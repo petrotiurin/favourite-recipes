@@ -48,7 +48,25 @@ Name the recipe in each question ("Did you like Harissa Tuna Pitta?") and put wh
 
 If `AskUserQuestion` isn't available or fails, ask the same thing in plain chat (one numbered list covering every draft) and wait for the answer. Never guess an answer, and never remove a draft unless the user clearly said they didn't like it: removal is permanent on the site (it only survives in git history). An unclear or skipped answer means "haven't tried it yet": leave the draft alone.
 
-**Plan.** Before changing anything, write a short plan back to the user: "New: A, B. Existing (will be marked current): C, D. Taken out of current: E. Liked, now regular: F. Removed: G." Then carry on; only stop to ask if something is ambiguous or missing.
+**Plan.** Before changing anything, write a short plan back to the user, with the recipes as **bullet points** (one recipe per bullet, never a comma-separated run-on line):
+
+> **New**
+> - A
+> - B
+>
+> **Existing (will be marked current)**
+> - C
+>
+> **Taken out of current**
+> - D
+>
+> **Liked, now regular**
+> - E
+>
+> **Removed**
+> - F
+
+Leave out the groups that are empty. Then carry on; only stop to ask if something is ambiguous or missing.
 
 ## 1. Prepare the new recipes (draft)
 
@@ -148,11 +166,11 @@ That's one commit and one site deploy for the whole plan. If you have to change 
 
 ## 5. Summary
 
-Finish with one message to the user containing:
+Finish with one message to the user containing the items below. **Whenever you list recipes (new, made current, promoted, removed, taken out of current), use bullet points: one recipe per bullet,** not a sentence or comma-separated line.
 
-1. **Recipes added** (new drafts): names, each linked to its page. Mention any estimated serves/calories, and any photo that came from a link.
-2. **Existing recipes made current**: names (and "already current" ones, if any).
-3. **Last round's recipes**: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
+1. **Recipes added** (new drafts): a bullet per recipe, each linked to its page. Mention any estimated serves/calories, and any photo that came from a link.
+2. **Existing recipes made current**: a bullet per recipe (and "already current" ones, if any).
+3. **Last round's recipes**, as bullets grouped by outcome: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
 4. **Anything left out or needing a decision** (unmatched names, skipped recipes).
 5. **The shopping list**, written out in full, grouped by section, as a checklist the user can read without opening the site, e.g.
 
