@@ -50,6 +50,12 @@ clearly pantry basics, else list them without a quantity), group it into shop-ai
 The server links the recipes itself. The page keeps showing the last list you saved, even if the current set has since changed,
 so refresh it after every such change. It goes blank only when no recipe is current (unmarking the last one also deletes the
 saved list) or when you replace the list.
+Shopping list accuracy rules: build it ONLY from the current recipes' own ingredient lists, read fresh with get_recipe (never from
+memory or the previous list). Use each recipe's amounts exactly as written for its own `serves`: never halve, double or rescale
+them to guess how many portions will be cooked. Every ingredient of every current recipe must appear, and nothing else. Add up only
+the same ingredient in the same unit (3 tbsp + 2 tbsp -> 5 tbsp); mixed units stay as "100ml + 3 tbsp"; different forms stay separate
+(medium vs mild curry powder). Put the per-recipe split in `note` (short, e.g. "1 gyoza soup, 3 satay salmon") so it can be
+checked. Before saving, re-add each line against the recipes and make sure the sections cover the same recipes get_shopping_list lists.
 
 Rules the server enforces or expects:
 - Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),

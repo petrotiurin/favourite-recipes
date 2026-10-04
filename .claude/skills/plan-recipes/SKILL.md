@@ -153,6 +153,7 @@ This step always happens, even if nothing was added and the user only picked exi
    - Put useful context in `note` ("for the tacos and the salsa", "finely diced"); keep it short.
    - "To taste" / "to serve" items: list them without a quantity (merge duplicates). Plain pantry basics (salt, pepper, oil) can go in a "Pantry" section so they can be checked off.
    - Drop the prep note unless it matters for buying.
+   - **Accuracy checklist (a wrong list is worse than none).** Build it only from the recipes' ingredient lists as read with `get_recipe` in this run, never from memory or the previous list. Every ingredient of every current recipe appears exactly once, and nothing that isn't in a recipe does. Never halve, double or otherwise rescale amounts (that guesses at portions nobody asked for); only add up the same ingredient in the same unit, and keep mixed units as "100ml + 3 tbsp". Keep different forms separate (medium vs mild curry powder). Put the per-recipe split in `note` ("1 gyoza soup, 3 satay salmon") so it can be checked. Before saving, re-add every line against the recipes, and confirm the recipes covered are exactly the current set.
 4. Group into shop-aisle sections, e.g. **Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen**. Only include sections that have items.
 5. This becomes the **last** operation: `{ action: "update_shopping_list", sections }`. It covers whatever is current after the operations before it, and the server records which recipes those are and links them on the page.
 
