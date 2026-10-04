@@ -19,7 +19,7 @@ The `mcp-server/` folder is **not part of the site**: it's a separate MCP server
 
 New recipes are added by asking Claude Code, in chat, to add one. **Always use the `add-recipe` skill** (`.claude/skills/add-recipe/SKILL.md`) for this — it has the exact Markdown formatting rules, the ingredient-bolding rule, and the image rules. Don't freehand a recipe file without it.
 
-The other flow is the agent working through the recipes MCP server: **use the `plan-recipes` skill** (`.claude/skills/plan-recipes/SKILL.md`) when the user hands over screenshots, links and/or names of recipes we already have. It adds the new ones as drafts (asking the user to upload photos via numbered upload links), marks existing ones current, then always builds the shopping list and finishes with a summary. It uses the MCP tools only, never local files, and sends all its writes in one `batch_changes` call: every commit to `main` is a site deploy, so a call per change floods the Pages workflow.
+The other flow is the agent working through the recipes MCP server: **use the `plan-recipes` skill** (`.claude/skills/plan-recipes/SKILL.md`) when the user hands over screenshots, links and/or names of recipes we already have. It first closes out last round (regular current recipes are unmarked; for each leftover draft it asks via `AskUserQuestion` whether it was liked: liked → promoted and unmarked, not liked → removed), then adds the new ones as drafts (asking the user to upload photos via numbered upload links), marks existing ones current, then always builds the shopping list and finishes with a summary. It uses the MCP tools only, never local files, and sends all its writes in one `batch_changes` call: every commit to `main` is a site deploy, so a call per change floods the Pages workflow.
 
 ## Directory layout
 
@@ -67,7 +67,7 @@ draft: true                        # optional: not tried yet. Highlighted, sorte
 ---
 ```
 
-New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe (the MCP server's `promote_recipe` tool replaces `draft: true` with `current: true`, so promoting does not change whether the recipe is current).
+New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe (the MCP server's `promote_recipe` tool replaces `draft: true` with `current: true`, so promoting does not change whether the recipe is current). A draft the family didn't like is deleted with the MCP server's `remove_draft` tool (recipe file + photo); it refuses anything that isn't a draft, so regular recipes can't be removed through the server.
 
 **Current recipes** are the ones the family is cooking right now: every draft, plus any regular recipe marked `current: true`. The index (and the MCP's `list_recipes`) orders recipes in three tiers: 1. drafts, 2. other current recipes, 3. everything else (alphabetical within each tier). Promoting a draft keeps it current until it's explicitly unmarked. The MCP server's `set_current_recipes` tool adds/removes `current: true` for existing recipes (agent-driven; drafts can't be toggled, promote first).
 
