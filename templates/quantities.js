@@ -79,4 +79,10 @@ function markScalableQuantities(bodyHtml) {
   return { html: bodyHtml.slice(0, start) + section + bodyHtml.slice(end), scalable };
 }
 
-module.exports = { markScalableQuantities };
+// Tags the scalable numbers in a plain-text quantity ("100ml + 3 tbsp", "1–2 tsp") for servings.js.
+// The text must already be HTML-escaped; numbers are never part of the escapes.
+function markQuantityText(text) {
+  return scaleText(text, { inEachParen: () => false });
+}
+
+module.exports = { markScalableQuantities, markQuantityText };

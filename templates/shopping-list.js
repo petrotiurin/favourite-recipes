@@ -1,4 +1,5 @@
 const { layout } = require("./layout");
+const { markQuantityText } = require("./quantities");
 
 function escapeHtml(str) {
   return String(str)
@@ -14,8 +15,12 @@ function formatDate(iso) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+// The saved list is written for this many servings of every recipe; the picker rescales from it.
+const BASE_SERVINGS = 2;
+const SERVING_OPTIONS = [1, 2, 4];
+
 function renderItem({ quantity, name, note }) {
-  const qty = quantity ? `<strong>${escapeHtml(quantity)}</strong> ` : "";
+  const qty = quantity ? `<strong>${markQuantityText(escapeHtml(quantity))}</strong> ` : "";
   const extra = note ? `<span class="shopping-note">, ${escapeHtml(note)}</span>` : "";
   return `        <li><label class="shopping-item"><input type="checkbox"><span>${qty}${escapeHtml(name)}${extra}</span></label></li>`;
 }
@@ -43,7 +48,13 @@ ${s.items.map(renderItem).join("\n")}
     </section>`
       )
       .join("\n");
-    body = `    <p class="shopping-intro">Everything for the recipes below${updated ? ` &middot; updated ${updated}` : ""}</p>
+    // Hidden until servings.js runs, so the page reads normally (at 2 servings) with JS disabled.
+    const picker = `    <div class="servings-picker" data-base="${BASE_SERVINGS}" role="group" aria-label="Servings per recipe" hidden>
+      <span class="servings-label">Servings per recipe</span>
+      ${SERVING_OPTIONS.map((n) => `<button type="button" data-serves="${n}" aria-pressed="${n === BASE_SERVINGS}">${n}</button>`).join("\n      ")}
+    </div>`;
+    body = `    <p class="shopping-intro">Everything for the recipes below, ${BASE_SERVINGS} servings of each${updated ? ` &middot; updated ${updated}` : ""}</p>
+${picker}
     <div class="shopping-recipes">
       ${links}
     </div>
@@ -54,7 +65,7 @@ ${sections}`;
     <a class="back-link" href="index.html">&larr; All recipes</a>
     <h1 class="shopping-title">Shopping list</h1>
 ${body}
-  </main>`;
+  </main>${list ? '\n  <script src="servings.js" defer></script>' : ""}`;
 
   return layout({ title: "Shopping list — Our Favourite Recipes", bodyClass: "shopping-page", content, rootPrefix: "" });
 }

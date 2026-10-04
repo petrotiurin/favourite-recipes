@@ -51,11 +51,13 @@ The server links the recipes itself. The page keeps showing the last list you sa
 so refresh it after every such change. It goes blank only when no recipe is current (unmarking the last one also deletes the
 saved list) or when you replace the list.
 Shopping list accuracy rules: build it ONLY from the current recipes' own ingredient lists, read fresh with get_recipe (never from
-memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own `serves`: scale each recipe's
-amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written) unless the user asks for another number.
+memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own serves: scale each recipe's
+amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
+The site's 1/2/4 servings selector on the shopping page rescales quantity from this 2-serving base.
 Every ingredient of every current recipe must appear, and nothing else. Add up only the same ingredient in the same unit
 (3 tbsp + 2 tbsp -> 5 tbsp); mixed units stay as "100ml + 3 tbsp"; different forms stay separate (medium vs mild curry powder).
-Put the per-recipe split in `note` (short, e.g. "2 gyoza soup (x2), 3 satay salmon") so it can be checked. Before saving, re-add each
+Notes name the recipes an item is for ("gyoza soup, satay salmon") but NEVER contain amounts or scaling remarks ("halved", "x2"):
+only quantity rescales, so such notes would go stale. Before saving, re-add each
 line against the recipes and make sure the sections cover the same recipes get_shopping_list lists.
 
 Rules the server enforces or expects:
