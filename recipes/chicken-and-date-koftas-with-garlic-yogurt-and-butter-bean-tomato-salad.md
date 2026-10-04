@@ -7,7 +7,6 @@ tags: [High Protein]
 total_mins: 22
 serves: 4
 calories: 464
-draft: true
 ---
 
 ## Ingredients

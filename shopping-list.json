@@ -1,96 +1,64 @@
 {
-  "updated": "2026-10-03",
+  "updated": "2026-10-04",
   "recipes": [
-    "blackened-salmon-and-mango-chickpea-salsa-bowls",
-    "broccoli-carbonara",
-    "chicken-and-date-koftas-with-garlic-yogurt-and-butter-bean-tomato-salad",
-    "harissa-tuna-pitta",
-    "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-    "the-club-sandwich-salad"
+    "banana-bread-protein-pancakes",
+    "big-batch-raspberry-ripple-bircher",
+    "chicken-katsu-curry",
+    "detox-gyoza-soup",
+    "satay-salmon-with-smacked-cucumber-salad",
+    "smoked-salmon-cream-cheese-flatbreads"
   ],
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Mango",
-          "quantity": "2",
-          "note": "ripe, for the salmon bowls"
-        },
-        {
-          "name": "Avocado",
-          "quantity": "5",
-          "note": "2 salmon bowls, 2 club salad, 1 pitta"
-        },
-        {
-          "name": "Red onion",
-          "quantity": "7 small",
-          "note": "salmon bowls, club salad, pitta, koftas, 2x sea bass, salsa"
-        },
-        {
-          "name": "Red chilli",
+          "name": "Banana",
           "quantity": "1",
-          "note": "salmon bowls"
+          "note": "pancakes"
         },
         {
-          "name": "Little gem lettuce",
-          "quantity": "4 heads",
-          "note": "club salad"
+          "name": "Carrots",
+          "quantity": "2",
+          "note": "gyoza soup (x2)"
         },
         {
-          "name": "Cherry tomatoes",
-          "quantity": "4 handfuls + 200g",
-          "note": "club salad + koftas salad"
+          "name": "Bok choy",
+          "quantity": "2 heads",
+          "note": "gyoza soup (x2)"
         },
         {
           "name": "Cucumber",
-          "quantity": "160g",
-          "note": "pitta"
-        },
-        {
-          "name": "Fresh parsley",
-          "quantity": "1 large bunch",
-          "note": "needed across most recipes"
-        },
-        {
-          "name": "Fresh coriander",
-          "quantity": "1 small handful",
-          "note": "koftas"
-        },
-        {
-          "name": "Broccoli florets",
-          "quantity": "400g",
-          "note": "carbonara"
-        },
-        {
-          "name": "Red bell pepper",
           "quantity": "2",
-          "note": "sea bass rice"
+          "note": "1 for satay salad, ½ for katsu pickle"
         },
         {
-          "name": "Yellow bell pepper",
+          "name": "Spring onions",
           "quantity": "2",
-          "note": "sea bass rice"
+          "note": "gyoza soup (x2)"
+        },
+        {
+          "name": "Onion",
+          "quantity": "1",
+          "note": "katsu sauce, finely chopped"
+        },
+        {
+          "name": "Red onion",
+          "quantity": "1 small",
+          "note": "¼ needed for flatbreads"
         },
         {
           "name": "Lemon",
-          "quantity": "7",
-          "note": "club salad 2, pitta 2, koftas 1/2, sea bass 2"
-        },
-        {
-          "name": "Lime",
           "quantity": "1",
-          "note": "salmon bowls"
+          "note": "wedges for the flatbreads"
         },
         {
-          "name": "Pomegranate seeds",
-          "quantity": "4 tbsp",
-          "note": "sea bass rice, to serve"
+          "name": "Dill",
+          "note": "flatbreads, optional garnish"
         },
         {
-          "name": "Garlic",
-          "quantity": "2 cloves",
-          "note": "carbonara"
+          "name": "Fresh berries",
+          "note": "pancakes, to serve"
         }
       ]
     },
@@ -99,33 +67,18 @@
       "items": [
         {
           "name": "Salmon fillets",
-          "quantity": "4",
-          "note": "blackened salmon bowls"
+          "quantity": "2",
+          "note": "skinless, satay salmon"
         },
         {
-          "name": "Grilled chicken breast",
-          "quantity": "320g",
-          "note": "club sandwich salad"
+          "name": "Smoked salmon",
+          "quantity": "100g",
+          "note": "flatbreads"
         },
         {
-          "name": "Parma ham",
-          "quantity": "16 slices",
-          "note": "8 club salad, 8 carbonara"
-        },
-        {
-          "name": "Minced chicken (5% fat)",
-          "quantity": "500g",
-          "note": "koftas"
-        },
-        {
-          "name": "Tuna, canned",
-          "quantity": "4 x 160g",
-          "note": "pitta"
-        },
-        {
-          "name": "Sea bass fillets",
-          "quantity": "4",
-          "note": "~140g each"
+          "name": "Chicken breasts",
+          "quantity": "2",
+          "note": "boneless, skinless, katsu"
         }
       ]
     },
@@ -134,38 +87,43 @@
       "items": [
         {
           "name": "Eggs",
-          "quantity": "8",
-          "note": "4 club salad, 4 carbonara"
+          "quantity": "4",
+          "note": "1 pancakes, 2 gyoza soup, 1 katsu"
         },
         {
           "name": "Greek yogurt",
-          "quantity": "~1kg",
-          "note": "club salad, pitta, koftas (x2), sea bass dressing"
+          "quantity": "370g",
+          "note": "250g bircher (halved), 120g flatbreads; plus extra yogurt to serve with pancakes"
         },
         {
-          "name": "Parmesan cheese",
-          "quantity": "100g",
-          "note": "carbonara"
+          "name": "Milk",
+          "quantity": "60ml",
+          "note": "bircher (halved)"
         },
         {
-          "name": "Feta cheese",
-          "quantity": "80g",
-          "note": "sea bass rice, crumbled"
+          "name": "Cream cheese",
+          "quantity": "2 tbsp",
+          "note": "flatbreads"
+        },
+        {
+          "name": "Cottage cheese",
+          "quantity": "1 heaped tbsp",
+          "note": "pancakes"
         }
       ]
     },
     {
-      "name": "Bakery",
+      "name": "Frozen",
       "items": [
         {
-          "name": "Sourdough",
-          "quantity": "4 slices",
-          "note": "club salad croutons"
+          "name": "Frozen gyoza",
+          "quantity": "12",
+          "note": "gyoza soup (x2); I use chicken"
         },
         {
-          "name": "Wholemeal pitta",
-          "quantity": "4",
-          "note": "harissa tuna pitta"
+          "name": "Frozen raspberries",
+          "quantity": "75g",
+          "note": "bircher (halved)"
         }
       ]
     },
@@ -173,29 +131,68 @@
       "name": "Tins & jars",
       "items": [
         {
-          "name": "Chickpeas",
-          "quantity": "2 tins",
-          "note": "salmon bowls salsa"
+          "name": "Light soy sauce",
+          "quantity": "5 tbsp",
+          "note": "2 gyoza soup (x2), 3 satay salmon"
         },
         {
-          "name": "Butter beans",
-          "quantity": "400g can",
-          "note": "koftas salad"
+          "name": "Rice vinegar",
+          "quantity": "150ml",
+          "note": "3 tbsp satay salmon, 100ml katsu pickle"
         },
         {
-          "name": "Cooked brown rice pouch",
-          "quantity": "500g",
-          "note": "sea bass rice"
+          "name": "Crispy chilli oil",
+          "quantity": "3 tsp",
+          "note": "2 gyoza soup (x2), 1 satay salad"
         },
         {
-          "name": "Harissa paste",
-          "quantity": "4 tsp",
-          "note": "pitta"
+          "name": "Miso soup sachets",
+          "quantity": "2",
+          "note": "20g each, gyoza soup (x2)"
         },
         {
-          "name": "Tahini",
-          "quantity": "2 tbsp",
-          "note": "sea bass dressing"
+          "name": "Smooth peanut butter",
+          "quantity": "1 heaped tbsp",
+          "note": "satay marinade"
+        },
+        {
+          "name": "Nut butter",
+          "note": "pancakes, to serve"
+        },
+        {
+          "name": "Ginger paste",
+          "quantity": "1 tsp",
+          "note": "satay marinade"
+        },
+        {
+          "name": "Ginger and garlic paste",
+          "quantity": "3 tsp",
+          "note": "1 katsu coating, 2 katsu sauce"
+        },
+        {
+          "name": "Capers",
+          "quantity": "1 tbsp",
+          "note": "flatbreads"
+        },
+        {
+          "name": "Toasted sesame oil",
+          "quantity": "1 tsp",
+          "note": "katsu pickle"
+        },
+        {
+          "name": "Tomato ketchup",
+          "quantity": "1 tbsp",
+          "note": "katsu sauce"
+        },
+        {
+          "name": "Honey",
+          "quantity": "2 tsp",
+          "note": "1 bircher (halved), 1 satay marinade; also optional pancake sweetener"
+        },
+        {
+          "name": "Chicken stock cube",
+          "quantity": "1",
+          "note": "makes 275ml for the katsu sauce"
         }
       ]
     },
@@ -203,56 +200,101 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Medjool dates",
-          "quantity": "6",
-          "note": "koftas"
+          "name": "Rolled oats",
+          "quantity": "80g",
+          "note": "bircher (halved)"
         },
         {
-          "name": "Dried pasta",
-          "quantity": "300g",
-          "note": "spaghetti or short pasta, carbonara"
+          "name": "Chia seeds",
+          "quantity": "1½ tsp",
+          "note": "bircher (halved)"
         },
         {
-          "name": "Dried apricots",
-          "quantity": "60g",
-          "note": "sea bass rice"
+          "name": "Vanilla protein powder",
+          "quantity": "15g",
+          "note": "bircher (halved), optional"
         },
         {
-          "name": "BBQ smokehouse spice blend",
-          "quantity": "4 tsp",
-          "note": "or smoked paprika, cayenne, black pepper, garlic, chilli + sugar/honey, salmon bowls"
+          "name": "Plain flour",
+          "quantity": "165g",
+          "note": "120g flatbreads, 2 heaped tbsp pancakes, 15g katsu sauce"
         },
         {
-          "name": "Middle Eastern/Moroccan spice blend",
-          "quantity": "3.5 tbsp",
-          "note": "ras el hanout or baharat, koftas 1.5 tbsp + sea bass rice 2 tbsp"
+          "name": "Baking powder",
+          "quantity": "1 tsp",
+          "note": "½ tsp flatbreads, ½ tsp pancakes"
+        },
+        {
+          "name": "Sesame seeds",
+          "quantity": "1 tbsp",
+          "note": "flatbreads"
+        },
+        {
+          "name": "Dark chocolate",
+          "quantity": "20g",
+          "note": "70% or higher, pancakes"
+        },
+        {
+          "name": "Brown rice",
+          "quantity": "100g",
+          "note": "katsu"
+        },
+        {
+          "name": "Panko breadcrumbs",
+          "quantity": "100g",
+          "note": "katsu"
+        },
+        {
+          "name": "Cornflour",
+          "quantity": "4 heaped tbsp",
+          "note": "katsu"
+        },
+        {
+          "name": "Curry powder",
+          "quantity": "1¼ tsp",
+          "note": "1 tsp medium for katsu, ¼ tsp mild for satay"
+        },
+        {
+          "name": "Ground turmeric",
+          "quantity": "½ tsp",
+          "note": "katsu sauce"
+        },
+        {
+          "name": "Ground star anise",
+          "quantity": "½ tsp",
+          "note": "katsu sauce"
         },
         {
           "name": "Garlic granules",
-          "quantity": "~5 tsp",
-          "note": "salmon bowls, club salad, koftas (x2), sea bass dressing"
+          "quantity": "¼ tsp",
+          "note": "satay salad"
         },
         {
-          "name": "American mustard",
-          "quantity": "4 tsp",
-          "note": "club salad"
+          "name": "Caster sugar",
+          "quantity": "2 tsp",
+          "note": "1 satay salad, 1 katsu pickle"
         },
         {
-          "name": "Honey",
-          "quantity": "4 tsp + 2 tsp",
-          "note": "club salad + sea bass dressing (or maple syrup)"
+          "name": "Soft light brown sugar",
+          "quantity": "1–2 tsp",
+          "note": "katsu sauce"
+        },
+        {
+          "name": "Neutral spray oil",
+          "note": "katsu, to taste"
         },
         {
           "name": "Olive oil",
-          "note": "for brushing, croutons, frying — to taste"
+          "quantity": "2 tsp",
+          "note": "katsu sauce"
         },
         {
-          "name": "Salt and black pepper",
+          "name": "Salt",
+          "note": "to taste (satay salad needs about 1 tsp)"
+        },
+        {
+          "name": "Black pepper",
           "note": "to taste"
-        },
-        {
-          "name": "Chives",
-          "note": "club salad, to serve"
         }
       ]
     }
