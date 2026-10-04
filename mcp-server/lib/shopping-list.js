@@ -13,6 +13,9 @@ export const shoppingPageUrl = () => `${config.siteUrl}/shopping-list.html`;
 
 export class ShoppingListError extends Error {}
 
+// Kitchen measures the shopping list must not use: the agent converts them to g / ml / counts (recipes keep theirs).
+const KITCHEN_MEASURE = /\b(tbsps?|tsps?|tablespoons?|teaspoons?|cups?|oz|ounces?|lbs?|pounds?|heaped|pinch(es)?|handfuls?)\b/i;
+
 export function validateSections(sections) {
   const errors = [];
   if (!sections?.length) errors.push("sections: at least one section is required");
@@ -21,6 +24,11 @@ export function validateSections(sections) {
     if (!s.name?.trim()) errors.push(`sections[${i}]: name is required (e.g. "Fresh produce")`);
     if (!s.items?.length) errors.push(`sections[${i}] "${s.name}": at least one item is required`);
     (s.items || []).forEach((item, j) => {
+      if (item.quantity && KITCHEN_MEASURE.test(item.quantity)) {
+        errors.push(`"${item.name}": quantity "${item.quantity}" uses a kitchen measure: convert it to g or ml (or a count) and add the amounts into ONE number`);
+      } else if (item.quantity && item.quantity.includes("+")) {
+        errors.push(`"${item.name}": quantity "${item.quantity}" mixes amounts: add them up into one number in one unit`);
+      }
       const key = item.name?.trim().toLowerCase();
       if (!key) {
         errors.push(`sections[${i}].items[${j}]: name is required`);

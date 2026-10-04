@@ -55,9 +55,11 @@ memory or the previous list). The list is always for 2 servings of EVERY recipe,
 amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
 The site's 1/2/4 servings selector on the shopping page rescales quantity from this 2-serving base.
 Every ingredient of every current recipe must appear, and nothing else. Add up only the same ingredient in the same unit
-(3 tbsp + 2 tbsp -> 5 tbsp); mixed units stay as "100ml + 3 tbsp"; different forms stay separate (medium vs mild curry powder).
-Notes name the recipes an item is for ("gyoza soup, satay salmon") but NEVER contain amounts or scaling remarks ("halved", "x2"):
-only quantity rescales, so such notes would go stale. Before saving, re-add each
+(2 + 1 onions -> 3); different forms stay separate (medium vs mild curry powder).
+The list is one homogenised list: no per-recipe notes, and notes never contain amounts (only quantity rescales). Quantities are ONE
+number in ONE metric unit per line: convert tbsp/tsp/cups/oz to g or ml (1 tbsp = 15ml, 1 tsp = 5ml; use the ingredient's usual
+weight for dry things, e.g. 1 tbsp flour ~ 10g) and add everything up, so "100ml + 3 tbsp" becomes "145ml". Recipes keep their own units;
+only the shopping list is converted. The server rejects kitchen measures and sums. Before saving, re-add each
 line against the recipes and make sure the sections cover the same recipes get_shopping_list lists.
 
 Rules the server enforces or expects:
@@ -172,8 +174,8 @@ const sectionsSchema = z
         .array(
           z.object({
             name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
-            quantity: z.string().optional().describe('Combined amount with units, e.g. "3", "450g", "2 tbsp". Omit for "to taste" items.'),
-            note: z.string().optional().describe('Short extra, e.g. "for the fish tacos and the salsa", "finely diced".'),
+            quantity: z.string().optional().describe('ONE combined amount in ONE metric unit: a count ("3"), grams ("450g") or millilitres ("145ml"). No tbsp/tsp/cups/oz and no sums like "100ml + 3 tbsp": convert (1 tbsp = 15ml, 1 tsp = 5ml) and add. Omit for "to taste" items.'),
+            note: z.string().optional().describe('Optional buying info only, e.g. "skinless", "70% or higher", "to serve". Never which recipe it is for, and never amounts.'),
           })
         )
         .min(1)

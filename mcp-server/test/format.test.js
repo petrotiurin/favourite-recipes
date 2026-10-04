@@ -74,3 +74,13 @@ test("shopping-list.json is writable; other root files still aren't", () => {
   assert.equal(isAllowedPath("build.js"), false);
   assert.equal(isAllowedPath("data/shopping-list.json"), false);
 });
+
+test("shopping list rejects kitchen measures and mixed sums", async () => {
+  const { validateSections, ShoppingListError } = await import("../lib/shopping-list.js");
+  const list = (quantity) => [{ name: "Section", items: [{ name: "Rice vinegar", quantity }] }];
+  assert.doesNotThrow(() => validateSections(list("145ml")));
+  assert.doesNotThrow(() => validateSections(list("2 heads")));
+  assert.throws(() => validateSections(list("3 tbsp")), ShoppingListError);
+  assert.throws(() => validateSections(list("100ml + 3 tbsp")), ShoppingListError);
+  assert.throws(() => validateSections(list("2 heaped tbsp")), ShoppingListError);
+});
