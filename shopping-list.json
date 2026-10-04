@@ -18,24 +18,24 @@
           "note": "pancakes"
         },
         {
-          "name": "Carrots",
-          "quantity": "2",
-          "note": "gyoza soup (x2)"
+          "name": "Carrot",
+          "quantity": "1",
+          "note": "gyoza soup"
         },
         {
           "name": "Bok choy",
-          "quantity": "2 heads",
-          "note": "gyoza soup (x2)"
+          "quantity": "1 head",
+          "note": "gyoza soup"
         },
         {
           "name": "Cucumber",
-          "quantity": "2",
-          "note": "1 for satay salad, ½ for katsu pickle"
+          "quantity": "1½",
+          "note": "1 for the satay salad, ½ for the katsu pickle"
         },
         {
-          "name": "Spring onions",
-          "quantity": "2",
-          "note": "gyoza soup (x2)"
+          "name": "Spring onion",
+          "quantity": "1",
+          "note": "gyoza soup"
         },
         {
           "name": "Onion",
@@ -44,17 +44,16 @@
         },
         {
           "name": "Red onion",
-          "quantity": "1 small",
-          "note": "¼ needed for flatbreads"
+          "quantity": "¼",
+          "note": "flatbreads, finely sliced"
         },
         {
           "name": "Lemon",
-          "quantity": "1",
-          "note": "wedges for the flatbreads"
+          "note": "wedges, to serve with the flatbreads"
         },
         {
           "name": "Dill",
-          "note": "flatbreads, optional garnish"
+          "note": "flatbreads, to serve"
         },
         {
           "name": "Fresh berries",
@@ -87,18 +86,18 @@
       "items": [
         {
           "name": "Eggs",
-          "quantity": "4",
-          "note": "1 pancakes, 2 gyoza soup, 1 katsu"
+          "quantity": "3",
+          "note": "1 each for pancakes, katsu and gyoza soup"
         },
         {
           "name": "Greek yogurt",
-          "quantity": "370g",
-          "note": "250g bircher (halved), 120g flatbreads; plus extra yogurt to serve with pancakes"
+          "quantity": "620g",
+          "note": "500g bircher, 120g flatbreads; plus extra to serve with the pancakes"
         },
         {
           "name": "Milk",
-          "quantity": "60ml",
-          "note": "bircher (halved)"
+          "quantity": "115ml",
+          "note": "bircher"
         },
         {
           "name": "Cream cheese",
@@ -117,13 +116,13 @@
       "items": [
         {
           "name": "Frozen gyoza",
-          "quantity": "12",
-          "note": "gyoza soup (x2); I use chicken"
+          "quantity": "6",
+          "note": "gyoza soup; I use chicken"
         },
         {
           "name": "Frozen raspberries",
-          "quantity": "75g",
-          "note": "bircher (halved)"
+          "quantity": "150g",
+          "note": "bircher"
         }
       ]
     },
@@ -132,23 +131,23 @@
       "items": [
         {
           "name": "Light soy sauce",
-          "quantity": "5 tbsp",
-          "note": "2 gyoza soup (x2), 3 satay salmon"
+          "quantity": "4 tbsp",
+          "note": "1 gyoza soup, 3 satay salmon"
         },
         {
           "name": "Rice vinegar",
-          "quantity": "150ml",
-          "note": "3 tbsp satay salmon, 100ml katsu pickle"
+          "quantity": "100ml + 3 tbsp",
+          "note": "100ml katsu pickle, 3 tbsp satay salmon"
         },
         {
           "name": "Crispy chilli oil",
-          "quantity": "3 tsp",
-          "note": "2 gyoza soup (x2), 1 satay salad"
+          "quantity": "2 tsp",
+          "note": "1 gyoza soup, 1 satay salad"
         },
         {
-          "name": "Miso soup sachets",
-          "quantity": "2",
-          "note": "20g each, gyoza soup (x2)"
+          "name": "Miso soup sachet",
+          "quantity": "1",
+          "note": "20g, gyoza soup"
         },
         {
           "name": "Smooth peanut butter",
@@ -172,7 +171,7 @@
         {
           "name": "Capers",
           "quantity": "1 tbsp",
-          "note": "flatbreads"
+          "note": "flatbreads, drained"
         },
         {
           "name": "Toasted sesame oil",
@@ -186,8 +185,8 @@
         },
         {
           "name": "Honey",
-          "quantity": "2 tsp",
-          "note": "1 bircher (halved), 1 satay marinade; also optional pancake sweetener"
+          "quantity": "3 tsp",
+          "note": "2 bircher, 1 satay marinade; also for the pancakes (honey, maple syrup or sweetener, to taste, optional)"
         },
         {
           "name": "Chicken stock cube",
@@ -201,23 +200,23 @@
       "items": [
         {
           "name": "Rolled oats",
-          "quantity": "80g",
-          "note": "bircher (halved)"
+          "quantity": "160g",
+          "note": "bircher"
         },
         {
           "name": "Chia seeds",
-          "quantity": "1½ tsp",
-          "note": "bircher (halved)"
+          "quantity": "1 tbsp",
+          "note": "bircher"
         },
         {
           "name": "Vanilla protein powder",
-          "quantity": "15g",
-          "note": "bircher (halved), optional"
+          "quantity": "30g",
+          "note": "bircher, optional"
         },
         {
           "name": "Plain flour",
-          "quantity": "165g",
-          "note": "120g flatbreads, 2 heaped tbsp pancakes, 15g katsu sauce"
+          "quantity": "135g + 2 heaped tbsp",
+          "note": "120g flatbreads, 15g katsu sauce, 2 heaped tbsp pancakes"
         },
         {
           "name": "Baking powder",
@@ -250,9 +249,14 @@
           "note": "katsu"
         },
         {
-          "name": "Curry powder",
-          "quantity": "1¼ tsp",
-          "note": "1 tsp medium for katsu, ¼ tsp mild for satay"
+          "name": "Medium curry powder",
+          "quantity": "1 tsp",
+          "note": "katsu sauce"
+        },
+        {
+          "name": "Mild curry powder",
+          "quantity": "¼ tsp",
+          "note": "satay marinade"
         },
         {
           "name": "Ground turmeric",
@@ -290,11 +294,12 @@
         },
         {
           "name": "Salt",
-          "note": "to taste (satay salad needs about 1 tsp)"
+          "quantity": "1½ tsp",
+          "note": "1 tsp satay salad, ¼ tsp flatbreads, plus a pinch each for bircher and pancakes; katsu to taste"
         },
         {
           "name": "Black pepper",
-          "note": "to taste"
+          "note": "katsu, to taste"
         }
       ]
     }
