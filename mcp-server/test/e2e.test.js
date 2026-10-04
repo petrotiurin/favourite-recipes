@@ -80,7 +80,7 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "set_current_recipes", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "remove_draft", "set_current_recipes", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
@@ -353,6 +353,63 @@ test("batch_changes lands everything in one commit, each operation seeing the on
   assert.equal(files.has("shopping-list.json"), false);
   assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/batch-bean-stew.md", "recipes/batch-pea-soup.md", "shopping-list.json"]);
   assert.equal((await listed()).filter((x) => x.current).length, 0);
+});
+
+test("remove_draft deletes a disliked draft and its photo, refuses regular recipes, and clears the list when nothing is current", async () => {
+  const draftOps = (title) => ({ action: "create_recipe", ...base, title, image: { url: "https://img.example/dish.png" } });
+  const created = await client.callTool({ name: "batch_changes", arguments: { operations: [draftOps("Remove Me Stew"), draftOps("Keep Me Stew"), { action: "update_shopping_list", sections }] } });
+  assert.ok(!created.isError, text(created));
+
+  // Regular recipes (and unknown slugs) can't be removed; nothing is committed.
+  const commits = commitLog.length;
+  const regular = await client.callTool({ name: "remove_draft", arguments: { slug: "steamed-rice" } });
+  assert.ok(regular.isError);
+  assert.match(text(regular), /not a draft/);
+  const missing = await client.callTool({ name: "remove_draft", arguments: { slug: "no-such-recipe" } });
+  assert.ok(missing.isError);
+  assert.equal(commitLog.length, commits);
+  assert.ok(files.has("recipes/steamed-rice.md"));
+
+  // A draft that was promoted is a regular recipe and is protected too.
+  await client.callTool({ name: "promote_recipe", arguments: { slug: "keep-me-stew" } });
+  const promoted = await client.callTool({ name: "remove_draft", arguments: { slug: "keep-me-stew" } });
+  assert.ok(promoted.isError);
+  assert.ok(files.has("recipes/keep-me-stew.md"));
+
+  // Removing a draft deletes its recipe + photo in one commit; other current recipes keep the list alive (but outdated).
+  const r = await client.callTool({ name: "remove_draft", arguments: { slug: "remove-me-stew" } });
+  assert.ok(!r.isError, text(r));
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/remove-me-stew.jpg", "recipes/remove-me-stew.md"]);
+  assert.match(commitLog.at(-1).message, /^Remove draft recipe: Remove Me Stew/);
+  assert.equal(files.has("recipes/remove-me-stew.md"), false);
+  assert.equal(files.has("images/recipes/remove-me-stew.jpg"), false);
+  assert.match(text(r), /update_shopping_list/);
+  assert.ok(files.has("shopping-list.json"));
+  assert.match(await shopping(), /Status: outdated/);
+  assert.equal((await listed()).some((x) => x.slug === "remove-me-stew"), false);
+
+  // In a batch: promote + unmark a liked draft and remove a disliked one in a single commit; the last current recipe going clears the list.
+  await client.callTool({ name: "batch_changes", arguments: { operations: [draftOps("Remove Me Too Stew")] } });
+  const batchCommits = commitLog.length;
+  const batch = await client.callTool({
+    name: "batch_changes",
+    arguments: {
+      operations: [
+        { action: "remove_draft", slug: "remove-me-too-stew" },
+        { action: "set_current_recipes", slugs: ["keep-me-stew"], current: false },
+      ],
+    },
+  });
+  assert.ok(!batch.isError, text(batch));
+  assert.equal(commitLog.length, batchCommits + 1);
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/remove-me-too-stew.jpg", "recipes/keep-me-stew.md", "recipes/remove-me-too-stew.md", "shopping-list.json"]);
+  assert.equal(files.has("shopping-list.json"), false);
+  assert.match(text(batch), /shopping list is cleared/);
+  assert.doesNotMatch(files.get("recipes/keep-me-stew.md").toString(), /^(draft|current):/m);
+
+  // Clean up the regular recipe this test created so later tests see the original recipe set.
+  files.delete("recipes/keep-me-stew.md");
+  files.delete("images/recipes/keep-me-stew.jpg");
 });
 
 test("refuses duplicate slug", async () => {

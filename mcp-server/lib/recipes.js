@@ -1,5 +1,5 @@
 import { config, COURSES, SHOPPING_LIST_PATH } from "./config.js";
-import { ChangeSet } from "./github.js";
+import { ChangeSet, isAllowedPath } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import {
   slugify,
@@ -177,6 +177,17 @@ export async function promoteRecipe(slug, batch) {
 }
 
 /**
+ * Nothing current any more -> the shopping list goes too (staged in the same commit), so an old list
+ * can't reappear when something else becomes current later. Returns whether it was removed.
+ */
+async function clearShoppingListIfNoneCurrent(cs) {
+  const stillCurrent = (await listRecipes(cs)).filter(isCurrent);
+  if (stillCurrent.length || !(await cs.read(SHOPPING_LIST_PATH))) return false;
+  cs.remove(SHOPPING_LIST_PATH);
+  return true;
+}
+
+/**
  * Adds regular recipes to / removes them from the current rotation (`current: true`),
  * all in one commit. Drafts are always current, so they can't be added or removed here.
  */
@@ -211,20 +222,39 @@ export async function setCurrentRecipes(slugs, current, batch) {
   for (const [path, content] of updates) cs.write(path, content);
   if (!changed.length) return { changed, unchanged, commit: null, subject: null, clearedShoppingList: false };
 
-  // Nothing current any more -> the shopping list goes too (in the same commit), so an old list
-  // can't reappear when something else becomes current later.
-  let clearedShoppingList = false;
-  if (!current) {
-    const stillCurrent = (await listRecipes(cs)).filter(isCurrent);
-    if (!stillCurrent.length && (await cs.read(SHOPPING_LIST_PATH))) {
-      cs.remove(SHOPPING_LIST_PATH);
-      clearedShoppingList = true;
-    }
-  }
+  const clearedShoppingList = current ? false : await clearShoppingListIfNoneCurrent(cs);
   const verb = current ? "Make current" : "Remove from current";
   const subject = `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}`;
   const commit = batch ? null : await cs.commit(subject + via("Updated"));
   return { changed, unchanged, commit, subject, clearedShoppingList };
+}
+
+/**
+ * Deletes a draft the family didn't like: recipes/<slug>.md and its photo, in one commit. Only drafts can be
+ * removed (a safety net: regular recipes are the family's keepers and can't be deleted through the server).
+ */
+export async function removeDraft(slug, batch) {
+  const cs = batch || new ChangeSet();
+  const { markdown } = await getRecipe(slug, cs);
+  const { data } = parseRecipe(markdown);
+  if (data.draft !== true) {
+    throw new UserError(`"${slug}" is not a draft, so it can't be removed. Only drafts (recipes nobody has tried yet) can be removed through the server.`);
+  }
+
+  cs.remove(recipePath(slug));
+  const removedImages = [];
+  for (const path of new Set([String(data.image || "").replace(/^\//, ""), imagePathFor(slug)])) {
+    if (path && isAllowedPath(path) && path.startsWith("images/recipes/") && (await cs.read(path))) {
+      cs.remove(path);
+      removedImages.push(path);
+    }
+  }
+
+  // Drafts are always current, so removing the last current recipe leaves nothing to shop for.
+  const clearedShoppingList = await clearShoppingListIfNoneCurrent(cs);
+  const subject = `Remove draft recipe: ${data.title}`;
+  const commit = batch ? null : await cs.commit(subject + via("Removed"));
+  return { slug, title: data.title, removedImages, commit, subject, clearedShoppingList };
 }
 
 export async function updateRecipe(input, batch) {

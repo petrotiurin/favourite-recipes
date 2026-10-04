@@ -10,6 +10,7 @@ import {
   createRecipe,
   updateRecipe,
   promoteRecipe,
+  removeDraft,
   setCurrentRecipes,
   readRecipeImage,
   pageUrl,
@@ -31,6 +32,9 @@ Drafts first: a recipe the family hasn't cooked and liked yet should be created 
 true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
 promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
+
+A draft the family tried and did NOT like is deleted with remove_draft (the recipe file and its photo). Only drafts can be
+removed: a regular recipe can't be deleted through this server. A removed draft was current, so refresh the shopping list afterwards.
 
 Current recipes: the recipes the family is cooking right now. Three tiers, always listed in this order on the site and in
 list_recipes: (1) drafts, which are always current, (2) regular recipes marked current, (3) all the others. Mark existing recipes
@@ -173,6 +177,7 @@ const operationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create_recipe"), ...createShape }).describe("Same fields as the create_recipe tool"),
   z.object({ action: z.literal("update_recipe"), ...updateShape }).describe("Same fields as the update_recipe tool"),
   z.object({ action: z.literal("promote_recipe"), slug: z.string() }).describe("Same as the promote_recipe tool"),
+  z.object({ action: z.literal("remove_draft"), slug: z.string() }).describe("Same as the remove_draft tool"),
   z
     .object({ action: z.literal("set_current_recipes"), slugs: z.array(z.string()).min(1), current: z.boolean() })
     .describe("Same as the set_current_recipes tool"),
@@ -197,6 +202,12 @@ async function runOperation(op, cs) {
     case "promote_recipe": {
       const r = await promoteRecipe(args.slug, cs);
       return { ...r, lines: [`Promoted "${r.slug}" (draft -> regular, stays current)`] };
+    }
+    case "remove_draft": {
+      const r = await removeDraft(args.slug, cs);
+      const lines = [`Removed draft "${r.slug}" (recipe${r.removedImages.length ? " and photo" : ""} deleted)`];
+      if (r.clearedShoppingList) lines.push("  no recipe is current any more, so the shopping list is cleared too");
+      return { ...r, currentChanged: true, lines };
     }
     case "set_current_recipes": {
       const r = await setCurrentRecipes(args.slugs, args.current, cs);
@@ -403,6 +414,34 @@ export function buildServer({ origin }) {
       },
     },
     safe(async ({ slug }) => ok(resultText("Promoted", await promoteRecipe(slug))))
+  );
+
+  server.registerTool(
+    "remove_draft",
+    {
+      title: "Remove draft recipe",
+      description:
+        "Delete a draft the family tried and did not like: removes recipes/<slug>.md and its photo in one commit to main. " +
+        "ONLY drafts can be removed; it fails for a regular recipe (promote_recipe keeps a liked one). This is permanent on the site " +
+        "(it can only be recovered from git history), so only call it when the user said they didn't like it. " +
+        "A draft is always current, so the current set changes: refresh the shopping list with update_shopping_list " +
+        "(if no recipe is current afterwards, the saved list is deleted too).",
+      inputSchema: {
+        slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
+      },
+    },
+    safe(async ({ slug }) => {
+      const { title, removedImages, commit, clearedShoppingList } = await removeDraft(slug);
+      const lines = [
+        `Removed draft "${title}" (${slug}): deleted recipes/${slug}.md${removedImages.map((p) => ` and ${p}`).join("")}.`,
+        `Committed to main: ${commit.url}`,
+        `The site updates in about a minute at ${config.siteUrl}/`,
+        "",
+      ];
+      if (clearedShoppingList) lines.push("No recipe is current any more, so the shopping list was cleared too.");
+      else lines.push("The current set changed: call update_shopping_list to refresh the shopping list.");
+      return ok(lines.join("\n"));
+    })
   );
 
   server.registerTool(

@@ -5,14 +5,14 @@ description: Full flow for "what are we cooking": takes screenshots, links, past
 
 # Plan recipes: add / pick recipes, then build the shopping list
 
-This is the whole flow from "here are the recipes" to "here is the shopping list". It works **only through the recipes MCP server** (`list_recipes`, `get_recipe`, `create_image_upload_link`, `get_shopping_list`, and `batch_changes` for the writes; the single-change tools `create_recipe`, `update_recipe`, `set_current_recipes`, `update_shopping_list`, `promote_recipe` take the same fields). Never edit `recipes/*.md` or `shopping-list.json` by hand: if those tools aren't available, tell the user the recipes MCP server isn't connected (see `mcp-server/README.md` → "Connecting a client") and stop.
+This is the whole flow from "here are the recipes" to "here is the shopping list". It works **only through the recipes MCP server** (`list_recipes`, `get_recipe`, `create_image_upload_link`, `get_shopping_list`, and `batch_changes` for the writes; the single-change tools `create_recipe`, `update_recipe`, `set_current_recipes`, `update_shopping_list`, `promote_recipe`, `remove_draft` take the same fields). Never edit `recipes/*.md` or `shopping-list.json` by hand: if those tools aren't available, tell the user the recipes MCP server isn't connected (see `mcp-server/README.md` → "Connecting a client") and stop.
 
 Vocabulary (see the server's instructions for details):
-- **Draft**: a new recipe nobody has tried yet. Always current.
+- **Draft**: a new recipe nobody has tried yet. Always current. A draft ends one of two ways: liked → `promote_recipe` (regular recipe), not liked → `remove_draft` (deleted; only drafts can be removed).
 - **Current**: the recipes being cooked now: all drafts, plus regular recipes marked current. Listed first on the site and on the shopping list.
 - **Shopping list**: one combined, deduplicated list for all current recipes, written by you with `update_shopping_list`.
 
-**Write once.** Every commit redeploys the site and deploys queue behind each other, so one call per change (add each recipe, fix each, mark current, save the list) leaves the site minutes behind. Do all the reading and asking first, then send **every write in a single `batch_changes` call** (step 4). Don't call `create_recipe`, `update_recipe`, `set_current_recipes` or `update_shopping_list` one by one in this flow.
+**Write once.** Every commit redeploys the site and deploys queue behind each other, so one call per change (add each recipe, fix each, mark current, save the list) leaves the site minutes behind. Do all the reading and asking first, then send **every write in a single `batch_changes` call** (step 4). Don't call `create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_current_recipes` or `update_shopping_list` one by one in this flow.
 
 ## 0. Work out what the user gave you
 
@@ -29,9 +29,26 @@ Call `list_recipes` once up front. Then sort every item the user mentioned:
 1. **A screenshot/link/text of a recipe** → new. But first check it isn't already logged (same or very similar title in `list_recipes`). If it is, treat it as existing and say so.
 2. **A name or description** → search the list: match on title first, then tags, course, and what you can infer from the description. If a recipe clearly matches, use it. If several plausibly match, or none does, **ask** the user instead of picking: show the candidates (title + course + time). If nothing matches and they want it added, ask for a screenshot, link or the recipe text.
 
-**Leftovers.** From the same `list_recipes` result, note the recipes that are current now (`current: true`) but aren't part of this request (e.g. last week's). Their ingredients would go on the shopping list, so the user has to decide: keep them, or take them out of current. Drafts can't simply be unmarked: a draft the user wants out has to be promoted first (it stays current), then unmarked.
+**Last round's recipes (close them out).** From the same `list_recipes` result, take the recipes that are current now (`current: true`) but **aren't named in this request** (e.g. last week's). They get closed out so the rotation and the shopping list only hold this round's recipes:
 
-Before changing anything, write a short plan back to the user: "New: A, B. Existing (will be marked current): C, D." Then carry on; only stop to ask if something is ambiguous or missing.
+- **Regular current recipes** (`current: true`, no `draft: true`): take them out of current with `set_current_recipes` (`current: false`). No question needed. If the user wants one kept, they'll have named it in the request, and then it isn't a leftover.
+- **Drafts** (`draft: true`, not in this request): ask the user whether they liked each one (step 0b). Liked → promote it to a regular recipe and take it out of current. Didn't like → remove it. Not tried yet → leave it as a draft (it stays current and goes on the shopping list).
+
+A draft the user names in this request is one they're cooking (again): treat it as existing, leave it as it is, and don't ask about it.
+
+### 0b. Ask about each leftover draft
+
+Skip if there are no leftover drafts. Otherwise, **before** any plan or write, call the `AskUserQuestion` tool: one question per draft (the tool takes up to 4 questions per call; use further calls for more), each with these options:
+
+- "Liked it" → keep it as a regular recipe (promoted, no longer current)
+- "Didn't like it" → remove it from the site
+- "Haven't tried it yet" → leave it as a draft
+
+Name the recipe in each question ("Did you like Harissa Tuna Pitta?") and put what the options do in their descriptions. Say in the question that "Didn't like it" deletes the recipe and its photo.
+
+If `AskUserQuestion` isn't available or fails, ask the same thing in plain chat (one numbered list covering every draft) and wait for the answer. Never guess an answer, and never remove a draft unless the user clearly said they didn't like it: removal is permanent on the site (it only survives in git history). An unclear or skipped answer means "haven't tried it yet": leave the draft alone.
+
+**Plan.** Before changing anything, write a short plan back to the user: "New: A, B. Existing (will be marked current): C, D. Taken out of current: E. Liked, now regular: F. Removed: G." Then carry on; only stop to ask if something is ambiguous or missing.
 
 ## 1. Prepare the new recipes (draft)
 
@@ -97,13 +114,19 @@ Then wait for the user to confirm. Uploaded photos for new recipes don't redeplo
 
 ## 2. Select the existing recipes
 
-All the existing recipes found in step 0 go in **one** `{ action: "set_current_recipes", slugs: [...], current: true }` operation. Recipes that are already current (and drafts) are skipped; note them as "already current" in the summary. Leftovers the user wants out go in a `{ action: "set_current_recipes", slugs: [...], current: false }` operation (a draft needs a `promote_recipe` operation before it).
+All the existing recipes found in step 0 go in **one** `{ action: "set_current_recipes", slugs: [...], current: true }` operation. Recipes that are already current (and drafts) are skipped; note them as "already current" in the summary.
+
+Close out last round's recipes (step 0):
+- Each leftover draft the user **didn't like**: a `{ action: "remove_draft", slug }` operation.
+- Each leftover draft the user **liked**: a `{ action: "promote_recipe", slug }` operation (the recipe stays current when promoted), and its slug goes in the `current: false` operation below so it leaves the rotation.
+- Leftover regular current recipes, plus the liked drafts just promoted, go in **one** `{ action: "set_current_recipes", slugs: [...], current: false }` operation.
+- Drafts the user hasn't tried yet: no operation.
 
 ## 3. Build the shopping list (always)
 
 This step always happens, even if nothing was added and the user only picked existing recipes.
 
-1. Work out the set the list must cover: the new drafts, the existing recipes being marked current, and the leftovers the user is keeping. Don't silently drop or include leftovers: if the user hasn't answered about them, ask.
+1. Work out the set the list must cover: the new drafts, the existing recipes being marked current, and any leftover drafts the user hasn't tried yet. Recipes taken out of current, promoted-and-unmarked and removed ones are not on it. If that set is empty, skip the `update_shopping_list` operation (the server clears the saved list when nothing is current any more).
 2. Read every one of those that already exists with `get_recipe` (you wrote the new ones yourself, so you already have their ingredients).
 3. Combine the ingredients into one list:
    - **One line per ingredient across the whole list.** Add up amounts of the same ingredient (2 + 1 onions → 3; 100g + 150g feta → 250g). Convert compatible units when it's obvious (2 tbsp + 1 tbsp → 3 tbsp). If units can't be added (1 lemon and juice of ½ a lemon → 2 lemons, round up), pick the sensible shopping unit.
@@ -117,8 +140,8 @@ This step always happens, even if nothing was added and the user only picked exi
 
 ## 4. Commit everything in one go
 
-1. Put the operations in this order: `create_recipe` for each new recipe, `promote_recipe` for drafts leaving the rotation, the `set_current_recipes` operations, then `update_shopping_list`.
-2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed, so fixing things here is free. Fix any rejected operation (missing quantity / "to taste" note, duplicate shopping item, missing photo, bad field) and **every** warning (unbolded ingredient, repeated amount) in your operations. Warnings don't block the commit, but don't leave any as "minor": an unbolded or loosely referenced ingredient is still an inconsistency on the site, and fixing it after the commit costs another commit and deploy. Repeat the dry run until it reports no warnings.
+1. Put the operations in this order: `create_recipe` for each new recipe, `remove_draft` for the disliked drafts, `promote_recipe` for the liked drafts, the `set_current_recipes` operations (`current: false` first, then `current: true`), then `update_shopping_list`.
+2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed, so fixing things here is free. Fix any rejected operation (missing quantity / "to taste" note, duplicate shopping item, missing photo, bad field, `remove_draft` on a recipe that isn't a draft) and **every** warning (unbolded ingredient, repeated amount) in your operations. Warnings don't block the commit, but don't leave any as "minor": an unbolded or loosely referenced ingredient is still an inconsistency on the site, and fixing it after the commit costs another commit and deploy. Repeat the dry run until it reports no warnings.
 3. Call `batch_changes({ operations })` once. It's all or nothing: if an operation is rejected, nothing was committed, so fix it and send the whole batch again. Never fix things afterwards with separate `update_recipe` calls.
 
 That's one commit and one site deploy for the whole plan. If you have to change something afterwards (the user corrects a recipe), gather the fixes and send them as one more batch, ending with `update_shopping_list` if ingredients or the current set changed.
@@ -129,19 +152,21 @@ Finish with one message to the user containing:
 
 1. **Recipes added** (new drafts): names, each linked to its page. Mention any estimated serves/calories, and any photo that came from a link.
 2. **Existing recipes made current**: names (and "already current" ones, if any).
-3. **Anything left out or needing a decision** (leftover current recipes, unmatched names, skipped recipes).
-4. **The shopping list**, written out in full, grouped by section, as a checklist the user can read without opening the site, e.g.
+3. **Last round's recipes**: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
+4. **Anything left out or needing a decision** (unmatched names, skipped recipes).
+5. **The shopping list**, written out in full, grouped by section, as a checklist the user can read without opening the site, e.g.
 
    **Fresh produce**
    - 3 red onions (for the tacos and the salsa)
    - Parsley
 
-5. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute.
+6. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute.
 
 Keep it factual and short; don't repeat the recipe steps.
 
 ## Notes
 
 - The shopping page shows the saved list until you save a new one, so re-run steps 3-4 whenever the current set changes (recipes added, marked or unmarked, a recipe's ingredients edited).
-- Promoting a draft (`promote_recipe`) does not change whether it's current. Only promote when the user says they've tried it and want to keep it.
+- Promoting a draft (`promote_recipe`) does not change whether it's current: in this flow a liked draft is promoted **and** unmarked in the same batch. Only promote when the user says they've tried it and liked it.
+- `remove_draft` is permanent on the site and only works on drafts. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
 - Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.
