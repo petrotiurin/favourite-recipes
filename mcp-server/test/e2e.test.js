@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
+process.env.OPENROUTER_API_KEY = "or-test";
 
 // --- fake GitHub: repo files live in a Map, commits update it -------------
 const ROOT = new URL("../../", import.meta.url);
@@ -55,11 +56,27 @@ async function fakeGitHub(url, init = {}) {
 
 const photo = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: "#c84" } }).png().toBuffer();
 
+// --- fake OpenRouter: square images after a short delay, failing for prompts that mention FAIL ---
+const generated = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#4a8" } }).png().toBuffer();
+const imageRequests = [];
+let inFlight = 0;
+let maxInFlight = 0;
+async function fakeOpenRouter(init) {
+  const body = JSON.parse(init.body);
+  imageRequests.push({ ...body, auth: init.headers.Authorization });
+  maxInFlight = Math.max(maxInFlight, ++inFlight);
+  await new Promise((r) => setTimeout(r, 50));
+  inFlight--;
+  if (body.prompt.includes("FAIL")) return new Response(JSON.stringify({ error: { message: "moderated" } }), { status: 400 });
+  return new Response(JSON.stringify({ data: [{ b64_json: generated.toString("base64") }] }));
+}
+
 let mcp, upload, client;
 before(async () => {
   globalThis.fetch = async (url, init) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return fakeGitHub(s, init);
+    if (s === "https://openrouter.ai/api/v1/images") return fakeOpenRouter(init);
     if (s === "https://img.example/dish.png") return new Response(photo, { headers: { "content-type": "image/png" } });
     if (s.startsWith("https://mcp.test/upload")) return upload[init?.method || "GET"](new Request(s, init));
     if (s.startsWith("https://mcp.test/")) return mcp[init?.method || "GET"](new Request(s, init));
@@ -511,6 +528,60 @@ test("one upload link covers several recipes; each photo is its own upload, only
   });
   assert.ok(!created.isError, text(created));
   assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/multi-photo-pie.md", "recipes/multi-photo-tart.md"]);
+});
+
+test("generates a 4:3 photo from the recipe", async () => {
+  const before = imageRequests.length;
+  const r = await client.callTool({
+    name: "create_recipe",
+    arguments: { ...base, title: "Generated Lentil Stew", image: { generate: true, description: "thick orange stew in a blue bowl" } },
+  });
+  assert.ok(!r.isError, text(r));
+  const [req] = imageRequests.slice(before);
+  assert.equal(req.model, "meta/muse-image");
+  assert.equal(req.auth, "Bearer or-test");
+  assert.match(req.prompt, /"Generated Lentil Stew"/);
+  assert.match(req.prompt, /thick orange stew in a blue bowl/);
+  assert.match(req.prompt, /red lentils, Salt/);
+  const meta = await sharp(files.get("images/recipes/generated-lentil-stew.jpg")).metadata();
+  assert.equal(meta.format, "jpeg");
+  assert.deepEqual([meta.width, meta.height], [1024, 768]);
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/generated-lentil-stew.jpg", "recipes/generated-lentil-stew.md"]);
+});
+
+test("update_recipe regenerates from the stored recipe", async () => {
+  const before = imageRequests.length;
+  const r = await client.callTool({ name: "update_recipe", arguments: { slug: "generated-lentil-stew", image: { generate: true } } });
+  assert.ok(!r.isError, text(r));
+  assert.match(imageRequests[before].prompt, /red lentils, Salt/);
+  assert.deepEqual(commitLog.at(-1).paths, ["images/recipes/generated-lentil-stew.jpg"]);
+});
+
+test("batch_changes generates photos in parallel; dry runs and failures commit nothing", async () => {
+  const ops = ["Parallel Pie", "Parallel Tart", "Parallel Flan"].map((title) => ({ action: "create_recipe", ...base, title, image: { generate: true } }));
+  const commits = commitLog.length;
+  let before = imageRequests.length;
+
+  const dry = await client.callTool({ name: "batch_changes", arguments: { operations: ops, dry_run: true } });
+  assert.ok(!dry.isError, text(dry));
+  assert.equal(imageRequests.length, before);
+
+  const failed = await client.callTool({
+    name: "batch_changes",
+    arguments: { operations: [...ops, { action: "create_recipe", ...base, title: "FAIL Soup", image: { generate: true } }] },
+  });
+  assert.ok(failed.isError);
+  assert.match(text(failed), /operations\[3\].*nothing was committed[\s\S]*moderated[\s\S]*create_image_upload_link/);
+  assert.equal(commitLog.length, commits);
+
+  before = imageRequests.length;
+  maxInFlight = 0;
+  const r = await client.callTool({ name: "batch_changes", arguments: { operations: ops } });
+  assert.ok(!r.isError, text(r));
+  assert.equal(imageRequests.length - before, 3);
+  assert.equal(maxInFlight, 3);
+  assert.equal(commitLog.length, commits + 1);
+  assert.equal(commitLog.at(-1).paths.filter((p) => p.startsWith("images/")).length, 3);
 });
 
 test("links made before multi-recipe uploads still work", async () => {

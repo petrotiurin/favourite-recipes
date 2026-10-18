@@ -10,7 +10,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | --- | --- |
 | `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts and `current: true` for every current recipe. Order: drafts, other current recipes, the rest |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
-| `create_image_upload_link` | Returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
+| `create_image_upload_link` | Fallback to generated photos: returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
 | `promote_recipe` | Turns a draft into a regular recipe (replaces `draft: true` with `current: true`, one commit). Its currency is unchanged: it stays current |
 | `remove_draft` | Deletes a draft the family didn't like (`recipes/<slug>.md` and its photo, one commit). **Only drafts** can be removed: a regular recipe is refused. If nothing is current afterwards, the shopping list is deleted too |
@@ -44,7 +44,7 @@ Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see w
   - New recipes are drafts (`draft: true`) by default, and the server's instructions tell the agent to keep it that way until the family has tried the dish, then call `promote_recipe`, or `remove_draft` if they didn't like it. Drafts are highlighted on the site, sorted first and get a "Draft" filter tab.
   - The slug is derived from the title.
   - Creating a recipe whose slug already exists is refused.
-- **Photos are required and normalised.** The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.
+- **Photos are required and normalised.** Generated photos are centre-cropped to 4:3 (the index tile ratio) first. The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.
 - **Edits are minimal.** Existing recipes round-trip byte-for-byte (see the tests), so editing one field doesn't reformat the rest of the file.
 
 ## Current recipes and the shopping list
@@ -65,9 +65,10 @@ The end-to-end agent flow (add recipes, select existing ones, build the list, su
 
 Ranked by how well each one works in practice:
 
-1. **Upload link (best for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. One link covers every recipe passed in `recipes`: the page lists them all, the user picks or takes a photo for each, and each one uploads as soon as it's picked. The page shrinks every photo in the browser and sends it in its own request, which keeps each request under Vercel's 4.5MB limit and means a failed photo can be retried on its own. The link can only write photos for the recipes it lists. For new recipes the agent then creates them with `image: {uploaded: true}` (in one `batch_changes` call when there are several). For existing recipes the photo is swapped immediately. Links made before multi-recipe pages (a single `slug`) still work.
-2. **`image: {url}`** works when the recipe comes from a website: pass the dish photo or `og:image` URL and the server downloads it.
-3. **`image: {base64}`** is for agents that have the file bytes, such as Claude Code with a local file. Keep it under about 3MB because of the request size limit.
+1. **`image: {url}`** when the recipe comes from a website with a photo of the dish: pass the dish photo or `og:image` URL and the server downloads it. A real photo always wins over a generated one.
+2. **`image: {generate: true, description?}`** for everything else (screenshots, pasted text, recipes from memory). The server builds a prompt from the title, the ingredient names and the agent's optional one-sentence `description` of the finished dish, inside one fixed style (natural light, 45°, plain table, no text or people) so generated photos look alike. It calls OpenRouter's `/api/v1/images` with `meta/muse-image` (`OPENROUTER_IMAGE_MODEL` to change it) and centre-crops the result to 4:3, because the model takes no aspect-ratio parameter. Generation takes 10-20s, so `batch_changes` starts every `create_recipe` generation before running the operations and they run in parallel (`update_recipe` generates when it runs, from the stored recipe). The function timeout is 300s (`vercel.json`) and each generation gives up after 120s. A failed generation rejects the batch like any other error, and the error tells the agent to retry or fall back to an upload link. `dry_run` doesn't generate anything. There's no review step: the agent carries on, and a photo can be replaced later.
+3. **Upload link (fallback, for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. One link covers every recipe passed in `recipes`: the page lists them all, the user picks or takes a photo for each, and each one uploads as soon as it's picked. The page shrinks every photo in the browser and sends it in its own request, which keeps each request under Vercel's 4.5MB limit and means a failed photo can be retried on its own. The link can only write photos for the recipes it lists. For new recipes the agent then creates them with `image: {uploaded: true}` (in one `batch_changes` call when there are several). For existing recipes the photo is swapped immediately. Passing an existing slug is also how a generated photo is swapped for a real one. Links made before multi-recipe pages (a single `slug`) still work.
+4. **`image: {base64}`** is for agents that have the file bytes, such as Claude Code with a local file. Keep it under about 3MB because of the request size limit.
 
 ## Setup
 
@@ -77,6 +78,8 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | --- | --- |
 | `GITHUB_TOKEN` | Fine-grained PAT, **only** for `petrotiurin/favourite-recipes`, permission **Contents: Read and write** |
 | `MCP_AUTH_TOKEN` | A long random string (`openssl rand -hex 32`). Clients must send it. It also signs upload links. |
+| `OPENROUTER_API_KEY` | OpenRouter key for generated photos. Set a credit limit on it. Without it, `image: {generate: true}` is refused and agents fall back to upload links |
+| `OPENROUTER_IMAGE_MODEL` | Optional; defaults to `meta/muse-image` |
 | `PUBLIC_SITE_URL` | Optional; defaults to `https://petrotiurin.github.io/favourite-recipes` |
 
 Deploys are configured as follows:
