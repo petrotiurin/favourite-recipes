@@ -21,8 +21,8 @@ draft: true
 - 80g **cooked chicken breast**, shredded
 - 15g **feta**, crumbled
 - **salt**, to taste
-- 3 **red onions**, sliced into strips, for the pickled onions
-- 250ml **white wine vinegar**, enough to submerge the onions
+- 1 **red onions**, sliced into strips, for the pickled onions
+- 100ml **white wine vinegar**, enough to submerge the onions
 - 1 tbsp **caster sugar**, superfine
 - 1 **lime**, cut into wedges, to serve (optional)
 
