@@ -15,11 +15,13 @@
         {
           "name": "Spring onions",
           "quantity": "11",
-          "note": "extra to serve"
+          "note": "extra to serve",
+          "have": true
         },
         {
           "name": "Garlic cloves",
-          "quantity": "4"
+          "quantity": "4",
+          "have": 1
         },
         {
           "name": "Carrots",
@@ -44,7 +46,8 @@
         },
         {
           "name": "Tenderstem broccoli",
-          "quantity": "150g"
+          "quantity": "150g",
+          "have": 50
         },
         {
           "name": "Avocado",
@@ -88,7 +91,8 @@
         {
           "name": "Chicken breasts",
           "quantity": "320g",
-          "note": "raw, boneless, skinless"
+          "note": "raw, boneless, skinless",
+          "have": 200
         },
         {
           "name": "Cooked chicken breast",
@@ -300,5 +304,6 @@
         }
       ]
     }
-  ]
+  ],
+  "stocktake": "2026-10-18T18:04:53.072Z"
 }
