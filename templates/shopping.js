@@ -556,9 +556,9 @@
       if (state.draft[hid] === true) delete state.draft[hid];
       else state.draft[hid] = true;
       render();
-    } else if (el.hasAttribute("data-amount")) {
-      render();
     }
+    // Typed amounts are applied in place on "input" (setAmount). Re-rendering on "change" would
+    // replace the button being tapped when the field loses focus, swallowing e.g. the Save tap.
   });
 
   app.addEventListener("input", function (e) {
