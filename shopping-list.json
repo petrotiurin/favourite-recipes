@@ -83,11 +83,11 @@
       ]
     },
     {
-      "name": "Meat & fish",
+      "name": "Meat, fish & tofu",
       "items": [
         {
           "name": "Chicken breasts",
-          "quantity": "620g",
+          "quantity": "320g",
           "note": "raw, boneless, skinless"
         },
         {
@@ -98,6 +98,10 @@
           "name": "Canned tuna in brine",
           "quantity": "120g",
           "note": "drained weight"
+        },
+        {
+          "name": "Firm tofu",
+          "quantity": "300g"
         }
       ]
     },
