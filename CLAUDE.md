@@ -2,7 +2,7 @@
 
 Static GitHub Pages site for the family's favourite recipes. Originally migrated from a Notion database.
 
-## Hard constraint: static only
+## Hard constraint: static first
 
 This site has **no framework, no bundler, and no client-side data fetching** by design — no framework runtime, no build-time CMS calls at request time. Everything is plain HTML/CSS generated at build time from Markdown files checked into this repo. Do not add React/Vue/etc., a bundler, or any JS *dependency* to `dist/` output.
 
@@ -10,6 +10,8 @@ One exception: small, dependency-free vanilla JS is allowed for progressive-enha
 - No frameworks, no bundler, no npm packages shipped to `dist/` — hand-written vanilla JS only.
 - No fetching/loading data at runtime — it must only operate on data already baked into the rendered HTML at build time (DOM already in the page, or a JSON literal the build script embedded).
 - It must be optional enhancement: the page's core content (recipe list, recipe pages) must already be fully present and readable with JS disabled: JS only adds interactivity (filtering, search) on top.
+
+One deliberate exception to "no network at runtime": `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It signs in with Supabase Auth's magic link (plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still never *loads* the list at runtime: it re-renders from the JSON literal the build embedded. Small, pinned CDN libraries are acceptable if a future feature really needs one, but still no bundler or npm packages in `dist/`.
 
 The only allowed "moving part" beyond that is the Node build script that runs before deploy.
 
@@ -32,7 +34,8 @@ templates/servings.js client-side servings selector, copied verbatim into dist/;
 styles/style.css    the one stylesheet, copied verbatim into dist/
 shopping-list.json  combined shopping list for the current recipes, written by the agent via the MCP server (see "Shopping list")
 templates/wakelock.js client-side "Keep screen on" toggle (Screen Wake Lock API), copied verbatim into dist/
-templates/shopping-list.js  renders shopping-list.html (the list, or a blank page)
+templates/shopping-list.js  renders shopping-list.html (the list, or a blank page) + the JSON shopping.js works from
+templates/shopping.js       shopping page: servings, "Take off what's at home" switch, local ticks, editor sign-in + stocktake
 build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
@@ -82,7 +85,22 @@ Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) 
   "sections": [{ "name": "Fresh produce", "items": [{ "name": "Red onions", "quantity": "3", "note": "optional" }] }] }
 ```
 
-The list is always written for **2 servings of every recipe** (each scaled by 2 / `serves`), and the page has a 1/2/4 servings selector (`templates/servings.js`, reused from the recipe pages) that rescales every `quantity` from that base, so `note` must never contain amounts. The list is one homogenised list: no per-recipe notes, and each `quantity` is a single number in one metric unit (g, ml or a count; tbsp/tsp are converted and added up, and the server rejects kitchen measures). Recipes keep their own units. `recipes` is filled in by the server with the slugs the list was built from; the page links to those that still exist. The page keeps showing the saved list as-is until the agent saves a new one (changing which recipes are current does not alter it), and is blank only when no recipe is current. `set_current_recipes` deletes `shopping-list.json` in the same commit when it unmarks the last current recipe, so an old list can't resurface. Never hand-edit `shopping-list.json`; go through the tool. Keep `loadShoppingList` in `build.js` and `mcp-server/lib/shopping-list.js` in sync if the format changes.
+The list is always written for **2 servings of every recipe** (each scaled by 2 / `serves`), and the page has a 1/2/4 servings selector (in `templates/shopping.js`, same scaling as `templates/servings.js` on recipe pages) that rescales every `quantity` from that base, so `note` must never contain amounts. The list is one homogenised list: no per-recipe notes, and each `quantity` is a single number in one metric unit (g, ml or a count; tbsp/tsp are converted and added up, and the server rejects kitchen measures). Recipes keep their own units. `recipes` is filled in by the server with the slugs the list was built from; the page links to those that still exist. The page keeps showing the saved list as-is until the agent saves a new one (changing which recipes are current does not alter it), and is blank only when no recipe is current. `set_current_recipes` deletes `shopping-list.json` in the same commit when it unmarks the last current recipe, so an old list can't resurface. Never hand-edit `shopping-list.json`; go through the tool. Keep `loadShoppingList` in `build.js` and `mcp-server/lib/shopping-list.js` in sync if the format changes (and `parseQuantity`, duplicated in `templates/shopping-list.js`).
+
+### Stocktake (what's already at home)
+
+On the shopping page the editor signs in (Supabase Auth magic link) and taps **What's at home?** to tick items they already have, or **Some** to enter a partial amount ("have 2 of 4 lemons"). Saving POSTs to the MCP server's `/stocktake` endpoint (`mcp-server/api/stocktake.js`), which checks the Supabase token and that the email is in `SHOPPING_EDITORS`, then commits `shopping-list.json` (one commit, one deploy) with:
+
+```json
+{ "stocktake": "2026-10-18T10:00:00.000Z",
+  "sections": [{ "name": "Fresh produce", "items": [{ "name": "Lemons", "quantity": "4", "have": 2 }, { "name": "Parsley", "have": true }] }] }
+```
+
+`have: true` means enough at home; a number is the amount at home in the item's own unit. It is an absolute amount, so it isn't rescaled by the servings picker. The endpoint refuses a stocktake whose items (name + quantity) don't match the stored list (409), so a page loaded before the agent replaced the list can't write onto the new one. A new list from `update_shopping_list` starts without a stocktake. `get_shopping_list` reports what's left to buy and what to skip, which is what the `ocado-shop` skill shops from.
+
+On the page, the **Take off what's at home** switch (on by default) shows only what's left to buy, with fully stocked items folded into "Already at home". Turning it off shows the full list. Anyone can tick items while shopping; those ticks stay in their own browser (`localStorage`, per list). Until the site redeploys, the saving browser shows its own saved stocktake.
+
+Setup: Supabase project with email sign-in, sign-ups off, the editor invited as a user, and the shopping page URL in Auth → URL Configuration → Redirect URLs. The Pages build gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `STOCKTAKE_API_URL` from the repo's Actions **variables**; without them the page has no sign-in and is read-only. The Vercel project needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SHOPPING_EDITORS` (see `mcp-server/README.md`).
 
 ## Deployment
 

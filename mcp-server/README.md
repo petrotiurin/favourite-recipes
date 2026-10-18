@@ -70,6 +70,10 @@ Ranked by how well each one works in practice:
 3. **Upload link (fallback, for photos the user has).** Neither claude.ai nor phone apps can pass a chat attachment to an MCP tool, so `create_image_upload_link` returns a signed link that expires after an hour. One link covers every recipe passed in `recipes`: the page lists them all, the user picks or takes a photo for each, and each one uploads as soon as it's picked. The page shrinks every photo in the browser and sends it in its own request, which keeps each request under Vercel's 4.5MB limit and means a failed photo can be retried on its own. The link can only write photos for the recipes it lists. For new recipes the agent then creates them with `image: {uploaded: true}` (in one `batch_changes` call when there are several). For existing recipes the photo is swapped immediately. Passing an existing slug is also how a generated photo is swapped for a real one. Links made before multi-recipe pages (a single `slug`) still work.
 4. **`image: {base64}`** is for agents that have the file bytes, such as Claude Code with a local file. Keep it under about 3MB because of the request size limit.
 
+## Stocktake endpoint
+
+`POST /stocktake` is called by the shopping page, not by agents. The signed-in editor sends `Authorization: Bearer <Supabase access token>` and `{ items: [{ name, quantity?, have? }] }`, covering every item on the stored list. The server checks the token with Supabase (`/auth/v1/user`, so any JWT signing setup works) and the email against `SHOPPING_EDITORS`. It refuses a list that doesn't match the stored one with 409, then commits `shopping-list.json` with each item's `have` (`true` or an amount in the item's unit) and a `stocktake` timestamp. Without the three Supabase variables it answers 503. See CLAUDE.md → "Stocktake" for the page side.
+
 ## Setup
 
 Environment variables, set in Vercel → Project → Settings → Environment Variables:
@@ -80,7 +84,10 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `MCP_AUTH_TOKEN` | A long random string (`openssl rand -hex 32`). Clients must send it. It also signs upload links. |
 | `OPENROUTER_API_KEY` | OpenRouter key for generated photos. Set a credit limit on it. Without it, `image: {generate: true}` is refused and agents fall back to upload links |
 | `OPENROUTER_IMAGE_MODEL` | Optional; defaults to `meta/muse-image` |
-| `PUBLIC_SITE_URL` | Optional; defaults to `https://petrotiurin.github.io/favourite-recipes` |
+| `PUBLIC_SITE_URL` | Optional; defaults to `https://petrotiurin.github.io/favourite-recipes`. Its origin is the only one allowed to call `/stocktake` (CORS) |
+| `SUPABASE_URL` | For `/stocktake`: the Supabase project URL (`https://<ref>.supabase.co`) |
+| `SUPABASE_ANON_KEY` | For `/stocktake`: the project's anon / publishable key (public; used to ask Supabase who a token belongs to) |
+| `SHOPPING_EDITORS` | For `/stocktake`: comma-separated emails allowed to save the stocktake |
 
 Deploys are configured as follows:
 

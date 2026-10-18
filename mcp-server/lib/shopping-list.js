@@ -59,6 +59,113 @@ export function buildShoppingList(sections, currentSlugs, now = new Date()) {
 
 export const serializeShoppingList = (list) => `${JSON.stringify(list, null, 2)}\n`;
 
+// --- Stocktake: what's already at home -------------------------------------------------------------
+// Saved from the shopping page by a signed-in editor (api/stocktake.js). Each item may carry
+// `have`: true (got enough of it) or a number (that much at home, in the item's own unit, e.g. 2 of
+// "4" lemons or 150 of "400g" rice). `have` is an absolute amount, so it isn't rescaled with the
+// servings selector. A new list from update_shopping_list starts without a stocktake.
+// Keep parseQuantity in sync with templates/shopping-list.js.
+
+export class StocktakeError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }, "2 heads" -> { amount: 2, unit: "heads" }; else null. */
+export function parseQuantity(quantity) {
+  const m = String(quantity ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*([^\d\s].*)?$/);
+  return m ? { amount: parseFloat(m[1]), unit: (m[2] || "").trim() } : null;
+}
+
+const itemKey = (item) => `${String(item?.name ?? "").trim().toLowerCase()}\n${String(item?.quantity ?? "").trim()}`;
+
+/** What's left to buy for one item at the list's base servings: { status: "buy" | "partial" | "home", remaining }. */
+export function remainingFor(item) {
+  const q = parseQuantity(item.quantity);
+  if (item.have === true) return { status: "home", remaining: 0 };
+  if (typeof item.have !== "number" || !q) return { status: "buy", remaining: q?.amount ?? null };
+  const remaining = Math.round((q.amount - item.have) * 100) / 100;
+  return remaining > 0 ? { status: "partial", remaining } : { status: "home", remaining: 0 };
+}
+
+/**
+ * Applies a stocktake sent by the page. `items` must be exactly the stored list's items (name +
+ * quantity), so a page loaded before the agent replaced the list can't write onto the new one.
+ */
+export function applyStocktake(list, items, now = new Date()) {
+  if (!list?.sections?.length) throw new StocktakeError("There is no shopping list to save a stocktake for.", 409);
+  if (!Array.isArray(items)) throw new StocktakeError("items must be an array.");
+  const sent = new Map(items.map((i) => [itemKey(i), i]));
+  const stored = list.sections.flatMap((s) => s.items);
+  if (sent.size !== items.length || sent.size !== stored.length || stored.some((i) => !sent.has(itemKey(i)))) {
+    throw new StocktakeError("The shopping list has changed since this page was loaded. Reload the page and do the stocktake again.", 409);
+  }
+  const errors = [];
+  const sections = list.sections.map((s) => ({
+    ...s,
+    items: s.items.map(({ have: _old, ...item }) => {
+      const have = sent.get(itemKey(item)).have;
+      if (have === undefined || have === false || have === 0) return item;
+      if (have === true) return { ...item, have };
+      if (typeof have !== "number" || !Number.isFinite(have) || have < 0) {
+        errors.push(`"${item.name}": have must be true or a positive number`);
+      } else if (!parseQuantity(item.quantity)) {
+        errors.push(`"${item.name}" has no amount, so it can only be marked as at home (have: true)`);
+      }
+      return { ...item, have: Math.round(have * 100) / 100 };
+    }),
+  }));
+  if (errors.length) throw new StocktakeError(`Stocktake rejected:\n- ${errors.join("\n- ")}`);
+  return { ...list, stocktake: now.toISOString(), sections };
+}
+
+/** Commits the stocktake to shopping-list.json (one commit = one site deploy). */
+export async function saveStocktake(items, now = new Date()) {
+  const cs = new ChangeSet();
+  const list = applyStocktake(await readStoredList(cs), items, now);
+  cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
+  const all = list.sections.flatMap((s) => s.items);
+  const counts = { home: 0, partial: 0 };
+  for (const item of all) {
+    const { status } = remainingFor(item);
+    if (status in counts) counts[status]++;
+  }
+  const commit = await cs.commit(
+    `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`
+  );
+  return { list, commit, counts };
+}
+
+const fmtAmount = (amount, unit) => `${amount}${!unit ? "" : /^(g|kg|ml|l)$/i.test(unit) ? unit : ` ${unit}`}`;
+
+/** The stocktake as text for get_shopping_list: what to buy (at the 2-serving base) and what to skip. */
+export function stocktakeLines(list) {
+  if (!list?.sections?.length) return [];
+  if (!list.stocktake) return ["Stocktake: none saved, so everything on the list is to buy."];
+  const buy = [];
+  const home = [];
+  for (const s of list.sections) {
+    for (const item of s.items) {
+      const { status, remaining } = remainingFor(item);
+      const q = parseQuantity(item.quantity);
+      const note = item.note ? ` (${item.note})` : "";
+      if (status === "home") home.push(`- ${item.name}${item.quantity ? `: ${item.quantity}` : ""}`);
+      else if (status === "partial") buy.push(`- ${s.name} / ${item.name}: ${fmtAmount(remaining, q.unit)}${note} [have ${fmtAmount(item.have, q.unit)} of ${item.quantity}]`);
+      else buy.push(`- ${s.name} / ${item.name}${item.quantity ? `: ${item.quantity}` : ""}${note}`);
+    }
+  }
+  return [
+    `Stocktake saved ${list.stocktake}: the user has marked what's already at home.`,
+    "To buy (2 servings of each recipe; buy only these amounts):",
+    ...(buy.length ? buy : ["- nothing: everything is at home"]),
+    "",
+    "Already at home (skip):",
+    ...(home.length ? home : ["- nothing"]),
+  ];
+}
+
 /**
  * "current" when the stored list covers exactly the recipes that are current now, "outdated" when the set has
  * changed since (the site keeps showing the old list until it is rewritten), "none" when there's no list.

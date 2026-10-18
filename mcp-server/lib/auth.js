@@ -49,3 +49,23 @@ export function verifyUploadToken(token) {
     return null;
   }
 }
+
+/**
+ * The shopping page's editor: a Supabase Auth access token (magic-link sign-in on the page) whose
+ * email is listed in SHOPPING_EDITORS. Supabase checks the token itself (/auth/v1/user), so this works
+ * whatever JWT signing keys the project uses. Returns { email }, or { status, error } when refused.
+ */
+export async function verifyEditor(request) {
+  const token = (request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!token) return { status: 401, error: "Sign in to save the stocktake." };
+  const res = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: config.supabaseAnonKey, Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return { status: 401, error: "Your sign-in has expired. Sign in again." };
+  const user = await res.json();
+  const email = String(user?.email || "").toLowerCase();
+  if (!email || !config.shoppingEditors.includes(email)) {
+    return { status: 403, error: `${email || "This account"} isn't allowed to edit the shopping list.` };
+  }
+  return { email };
+}

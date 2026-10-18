@@ -9,6 +9,9 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
 process.env.OPENROUTER_API_KEY = "or-test";
+process.env.SUPABASE_URL = "https://sb.test/";
+process.env.SUPABASE_ANON_KEY = "anon-test";
+process.env.SHOPPING_EDITORS = "Owner@Example.com, partner@example.com";
 
 // --- fake GitHub: repo files live in a Map, commits update it -------------
 const ROOT = new URL("../../", import.meta.url);
@@ -71,12 +74,21 @@ async function fakeOpenRouter(init) {
   return new Response(JSON.stringify({ data: [{ b64_json: generated.toString("base64") }] }));
 }
 
-let mcp, upload, client;
+// --- fake Supabase Auth: /auth/v1/user answers for two known access tokens ---
+function fakeSupabase(url, init) {
+  assert.equal(init.headers.apikey, "anon-test");
+  const users = { "Bearer owner-token": "owner@example.com", "Bearer stranger-token": "stranger@example.com" };
+  const email = users[init.headers.Authorization];
+  return email ? Response.json({ id: "u1", email }) : Response.json({ msg: "invalid JWT" }, { status: 401 });
+}
+
+let mcp, upload, stocktake, client;
 before(async () => {
   globalThis.fetch = async (url, init) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return fakeGitHub(s, init);
     if (s === "https://openrouter.ai/api/v1/images") return fakeOpenRouter(init);
+    if (s === "https://sb.test/auth/v1/user") return fakeSupabase(s, init);
     if (s === "https://img.example/dish.png") return new Response(photo, { headers: { "content-type": "image/png" } });
     if (s.startsWith("https://mcp.test/upload")) return upload[init?.method || "GET"](new Request(s, init));
     if (s.startsWith("https://mcp.test/")) return mcp[init?.method || "GET"](new Request(s, init));
@@ -84,6 +96,7 @@ before(async () => {
   };
   mcp = await import("../api/mcp.js");
   upload = await import("../api/upload.js");
+  stocktake = await import("../api/stocktake.js");
   client = new Client({ name: "test", version: "1" });
   await client.connect(new StreamableHTTPClientTransport(new URL("https://mcp.test/mcp?key=secret")));
 });
@@ -596,6 +609,73 @@ test("links made before multi-recipe uploads still work", async () => {
 test("tampered upload token is rejected", async () => {
   const res = await fetch("https://mcp.test/upload?t=eyJzbHVnIjoiYnVpbGQifQ.forged");
   assert.equal(res.status, 403);
+});
+
+test("stocktake: only a signed-in editor saves what's at home, for the list the page was loaded with", async () => {
+  await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice"], current: true } });
+  await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  const site = "https://petrotiurin.github.io";
+  const post = (body, token = "owner-token") =>
+    stocktake.POST(
+      new Request("https://mcp.test/stocktake", {
+        method: "POST",
+        headers: { Origin: site, "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(body),
+      })
+    );
+  const items = [
+    { name: "Red onions", quantity: "3", have: 1 },
+    { name: "Parsley", have: true },
+    { name: "Red lentils", quantity: "400g" },
+  ];
+
+  const preflight = stocktake.OPTIONS(new Request("https://mcp.test/stocktake", { method: "OPTIONS", headers: { Origin: site } }));
+  assert.equal(preflight.headers.get("access-control-allow-origin"), site);
+  const elsewhere = stocktake.OPTIONS(new Request("https://mcp.test/stocktake", { method: "OPTIONS", headers: { Origin: "https://evil.example" } }));
+  assert.equal(elsewhere.headers.get("access-control-allow-origin"), null);
+
+  const commits = commitLog.length;
+  assert.equal((await post({ items }, null)).status, 401);
+  assert.equal((await post({ items }, "expired-token")).status, 401);
+  const stranger = await post({ items }, "stranger-token");
+  assert.equal(stranger.status, 403);
+  assert.match((await stranger.json()).error, /stranger@example\.com isn't allowed/);
+  // A page loaded before the agent replaced the list can't write onto the new one.
+  const stale = await post({ items: items.map((i) => (i.name === "Red lentils" ? { ...i, quantity: "300g" } : i)) });
+  assert.equal(stale.status, 409);
+  assert.equal((await post({ items: items.slice(1) })).status, 409);
+  const noAmount = await post({ items: items.map((i) => (i.name === "Parsley" ? { ...i, have: 2 } : i)) });
+  assert.equal(noAmount.status, 400);
+  assert.match((await noAmount.json()).error, /Parsley.*have: true/);
+  assert.equal(commitLog.length, commits, "nothing is committed for a refused stocktake");
+
+  const saved = await post({ items });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(saved.headers.get("access-control-allow-origin"), site);
+  assert.deepEqual(commitLog.at(-1).paths, ["shopping-list.json"]);
+  assert.match(commitLog.at(-1).message, /^Update shopping list stocktake \(1 of 3 items at home, 1 partly\)/);
+  const stored = JSON.parse(files.get("shopping-list.json").toString());
+  assert.match(stored.stocktake, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(stored.sections[0].items, [
+    { name: "Red onions", quantity: "3", note: "for both", have: 1 },
+    { name: "Parsley", have: true },
+  ]);
+  assert.deepEqual(stored.sections[1].items, [{ name: "Red lentils", quantity: "400g" }]);
+
+  const listText = await shopping();
+  assert.match(listText, /Fresh produce \/ Red onions: 2 \(for both\) \[have 1 of 3\]/);
+  assert.match(listText, /Pantry \/ Red lentils: 400g/);
+  assert.match(listText, /Already at home \(skip\):\n- Parsley/);
+
+  // Re-saving replaces the whole stocktake; a new list from the agent starts without one.
+  await post({ items: items.map(({ have: _, ...i }) => (i.name === "Red lentils" ? { ...i, have: 150 } : i)) });
+  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).sections[1].items[0], { name: "Red lentils", quantity: "400g", have: 150 });
+  assert.match(await shopping(), /Red lentils: 250g \[have 150g of 400g\]/);
+  await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  const fresh = JSON.parse(files.get("shopping-list.json").toString());
+  assert.equal(fresh.stocktake, undefined);
+  assert.ok(fresh.sections.flatMap((s) => s.items).every((i) => !("have" in i)));
+  assert.match(await shopping(), /Stocktake: none saved/);
 });
 
 test("no commit ever touches a path outside recipes/, images/recipes/ and shopping-list.json", () => {

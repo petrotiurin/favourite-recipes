@@ -14,6 +14,7 @@ const STYLES_FILE = path.join(ROOT, "styles", "style.css");
 const SEARCH_SCRIPT_FILE = path.join(ROOT, "templates", "search.js");
 const SERVINGS_SCRIPT_FILE = path.join(ROOT, "templates", "servings.js");
 const WAKELOCK_SCRIPT_FILE = path.join(ROOT, "templates", "wakelock.js");
+const SHOPPING_SCRIPT_FILE = path.join(ROOT, "templates", "shopping.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
 const DIST_DIR = path.join(ROOT, "dist");
 
@@ -69,6 +70,17 @@ function loadShoppingList(currentRecipes, allRecipes) {
   return { list: { ...list, sections }, recipes: allRecipes.filter((r) => covered.has(r.slug)) };
 }
 
+/**
+ * The shopping page's stocktake editor: Supabase Auth (magic-link sign-in) plus the MCP server's
+ * /stocktake endpoint. All three are public values, passed in by the deploy workflow from the
+ * repo's Actions variables; without them the page is read-only (ticks stay local to the browser).
+ */
+function stocktakeAuth() {
+  const { SUPABASE_URL, SUPABASE_ANON_KEY, STOCKTAKE_API_URL } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !STOCKTAKE_API_URL) return null;
+  return { supabaseUrl: SUPABASE_URL.replace(/\/$/, ""), supabaseKey: SUPABASE_ANON_KEY, api: STOCKTAKE_API_URL };
+}
+
 function build() {
   rimraf(DIST_DIR);
   fs.mkdirSync(DIST_DIR, { recursive: true });
@@ -78,6 +90,7 @@ function build() {
   fs.copyFileSync(SEARCH_SCRIPT_FILE, path.join(DIST_DIR, "search.js"));
   fs.copyFileSync(SERVINGS_SCRIPT_FILE, path.join(DIST_DIR, "servings.js"));
   fs.copyFileSync(WAKELOCK_SCRIPT_FILE, path.join(DIST_DIR, "wakelock.js"));
+  fs.copyFileSync(SHOPPING_SCRIPT_FILE, path.join(DIST_DIR, "shopping.js"));
   if (fs.existsSync(IMAGES_DIR)) {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
@@ -95,7 +108,7 @@ function build() {
 
   const currentRecipes = recipes.filter(isCurrent);
   const shopping = loadShoppingList(currentRecipes, recipes);
-  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shopping?.list ?? null, shopping?.recipes ?? []));
+  fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shopping?.list ?? null, shopping?.recipes ?? [], stocktakeAuth()));
 
   console.log(`Built ${recipes.length} recipe(s) into dist/`);
 }
