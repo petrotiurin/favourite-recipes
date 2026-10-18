@@ -7,8 +7,9 @@ const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
  * Normalises any incoming photo into the site's image format:
  * EXIF-rotated, long edge <= 1600px, metadata stripped, progressive JPEG.
  * Always producing .jpg keeps paths predictable: images/recipes/<slug>.jpg
+ * With `aspect` (width / height) the image is centre-cropped to that ratio first.
  */
-export async function normalizeImage(buffer) {
+export async function normalizeImage(buffer, { aspect } = {}) {
   let meta;
   try {
     meta = await sharp(buffer).metadata();
@@ -19,8 +20,14 @@ export async function normalizeImage(buffer) {
   if (Math.min(meta.width, meta.height) < 300) {
     throw new Error(`Image is too small (${meta.width}x${meta.height}); use a photo at least 300px on the short edge`);
   }
-  const out = await sharp(buffer)
-    .rotate()
+  let img = sharp(buffer).rotate();
+  if (aspect) {
+    const [w, h] = (meta.orientation || 1) >= 5 ? [meta.height, meta.width] : [meta.width, meta.height];
+    const width = Math.round(Math.min(w, h * aspect));
+    const height = Math.round(width / aspect);
+    img = sharp(await img.toBuffer()).extract({ left: Math.floor((w - width) / 2), top: Math.floor((h - height) / 2), width, height });
+  }
+  const out = await img
     .resize({ width: MAX_IMAGE_EDGE, height: MAX_IMAGE_EDGE, fit: "inside", withoutEnlargement: true })
     .flatten({ background: "#ffffff" })
     .jpeg({ quality: 82, progressive: true, mozjpeg: true })

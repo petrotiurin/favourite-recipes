@@ -8,6 +8,7 @@ import {
   listRecipes,
   getRecipe,
   createRecipe,
+  startImageGenerations,
   updateRecipe,
   promoteRecipe,
   removeDraft,
@@ -90,14 +91,20 @@ Rules the server enforces or expects:
   already lists separate amounts per number of people ("One person: 60g rice; Two people: 120g rice").
 - course: one or more of ${COURSES.join(", ")}. total_mins = prep + cook. serves is required: if the source doesn't say, estimate and confirm with the user.
 - calories is required: kcal per serving. Use the source's figure when it gives one; otherwise estimate from the ingredients and tell the user it's an estimate.
-- Every recipe needs a real hero photo. Never invent a placeholder.
+- Every recipe needs a hero photo: a real one, or one the server generates. Never invent a placeholder.
 
 Adding the photo, best option first:
-1. The user has a photo on their phone/computer (or pasted one into chat): call create_image_upload_link (ONE call listing every
-   recipe that needs a photo gives ONE page for all of them), give the user the link, wait for them to say it's all uploaded, then
-   create the recipes with image: { uploaded: true }.
-2. The recipe came from a web page: pass image: { url } with a direct link to the dish photo (often the page's og:image).
-3. You have the file bytes yourself (e.g. a local file): image: { base64 } — keep it under ~3MB.
+1. The recipe came from a web page with a photo of the dish: pass image: { url } with a direct link to it (often the page's og:image).
+   A real photo always wins over a generated one.
+2. Otherwise (screenshot, pasted text, dictated from memory, or the page has no usable photo): image: { generate: true, description }.
+   The server generates a photo from the title and ingredients (10-20s), so don't ask the user for one and don't wait for approval:
+   carry on, a photo can always be replaced later. description is optional but helps: one sentence on how the finished dish looks
+   as served (e.g. "golden traybake of chicken thighs and potatoes, scattered with parsley"). In batch_changes all generations run
+   in parallel. If generation fails, retry once, then fall back to option 3.
+3. The user wants to use their own photo, or generation failed: call create_image_upload_link (ONE call listing every recipe that
+   needs a photo gives ONE page for all of them), give the user the link, wait for them to say it's all uploaded, then create the
+   recipes with image: { uploaded: true }. To swap an existing recipe's photo (e.g. a real one for a generated one), pass its slug.
+4. You have the file bytes yourself (e.g. a local file): image: { base64 } — keep it under ~3MB.
 The server resizes to <=1600px, fixes rotation, strips metadata and stores it as images/recipes/<slug>.jpg.`;
 
 const ingredientSchema = z.object({
@@ -111,11 +118,20 @@ const ingredientSchema = z.object({
 
 const imageSchema = z
   .object({
+    generate: z
+      .literal(true)
+      .optional()
+      .describe("Generate the photo from the recipe (title + ingredients), 10-20s. Use for recipes without a real photo (screenshot, text, memory)."),
+    description: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('Only with generate: one sentence on how the finished dish looks as served, e.g. "creamy orange soup in a white bowl, swirl of yogurt on top".'),
     uploaded: z.literal(true).optional().describe("The user already uploaded the photo via create_image_upload_link."),
     url: z.string().url().optional().describe("Direct http(s) link to the photo file."),
     base64: z.string().optional().describe("Base64-encoded image bytes (data: URL prefix allowed). Max ~3MB."),
   })
-  .describe("Hero photo. Exactly one of uploaded / url / base64.");
+  .describe("Hero photo. Exactly one of generate / url / uploaded / base64.");
 
 const courseSchema = z.array(z.enum(COURSES)).min(1).describe(`One or more of: ${COURSES.join(", ")}`);
 const tagsSchema = z.array(z.string().min(1)).describe('Free-text tags, e.g. ["High Protein", "Low Carb"]. Empty array for none.');
@@ -340,7 +356,8 @@ export function buildServer({ origin }) {
         "images/recipes/<slug>.jpg. An existing recipe is switched to its new photo automatically. For a new recipe, create it " +
         "with image: { uploaded: true } (create_recipe or batch_changes) after the user confirms the uploads. " +
         "When several recipes need photos, put them all in one call's recipes list rather than making a link per recipe. " +
-        "Use this whenever the user has the photo (e.g. attached it in chat) but you can't pass it as a URL.",
+        "This is the fallback to image: { generate: true }: use it when the user wants their own photo (e.g. attached it in chat, or to replace " +
+        "a generated one) or when generating failed.",
       inputSchema: {
         recipes: z
           .array(
@@ -547,7 +564,7 @@ export function buildServer({ origin }) {
         "each seeing the result of the ones before it (e.g. create drafts, mark existing recipes current, then update_shopping_list " +
         "covering all of them). Each operation takes the same fields as the tool it is named after. All or nothing: if any operation " +
         "is rejected, nothing is committed and the error names the operation. dry_run: true validates everything and reports warnings " +
-        "without committing.",
+        "without committing (it doesn't generate photos, so image: { generate: true } is only checked).",
       inputSchema: {
         operations: z.array(operationSchema).min(1).describe("Changes to apply, in order"),
         dry_run: z.boolean().optional().describe("Validate and report only; commit nothing. Default false."),
@@ -556,7 +573,7 @@ export function buildServer({ origin }) {
     safe(async ({ operations, dry_run }) => {
       const cs = new ChangeSet();
       const results = [];
-      for (const [i, op] of operations.entries()) {
+      for (const [i, op] of startImageGenerations(operations, { dryRun: dry_run }).entries()) {
         try {
           results.push(await runOperation(op, cs));
         } catch (err) {

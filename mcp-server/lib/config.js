@@ -4,6 +4,8 @@ export const config = {
   repo: process.env.GITHUB_REPO || "petrotiurin/favourite-recipes",
   branch: process.env.GITHUB_BRANCH || "main",
   authToken: process.env.MCP_AUTH_TOKEN,
+  openrouterKey: process.env.OPENROUTER_API_KEY, // only needed for image: { generate: true }
+  imageModel: process.env.OPENROUTER_IMAGE_MODEL || "meta/muse-image",
   siteUrl: (process.env.PUBLIC_SITE_URL || "https://petrotiurin.github.io/favourite-recipes").replace(/\/$/, ""),
 };
 
@@ -19,3 +21,4 @@ export function assertConfigured() {
 export const SHOPPING_LIST_PATH = "shopping-list.json";
 export const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack", "Drink"];
 export const MAX_IMAGE_EDGE = 1600;
+export const CARD_ASPECT = 4 / 3; // the index tiles crop to 4:3 (styles/style.css)

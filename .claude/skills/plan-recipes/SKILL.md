@@ -114,21 +114,12 @@ Fractions of a listed amount ("half the **sugar**", "the remaining **sugar**") a
 
 **5. Other format rules.** One action per step, no numbering (the server numbers them). Quantities are numerals ("2", "½", "150g"), never words ("two"). `serves` and `calories` (kcal per serving) are required: estimate them if the source doesn't give them.
 
-**Photos.** Every recipe needs a real photo of the dish; never invent a placeholder.
-- A recipe from a **link**: try the page's dish photo (usually `og:image`) with `create_recipe`'s `image: { url }`. If that fails, fall back to an upload link.
-- A recipe from a **screenshot, pasted text or from memory**: the user has to upload the photo. Call `create_image_upload_link` **once** with all of these recipes, `create_image_upload_link({ recipes: [{ title: "A" }, { title: "B" }] })`: it returns **one** link to a page that lists every recipe, where each photo uploads as soon as it's picked.
+**Photos.** Every recipe needs a hero photo, a real one or a generated one; never invent a placeholder. Don't ask the user for photos by default.
+- A recipe from a **link** with a photo of the dish: use it, `create_recipe`'s `image: { url }` (usually the page's `og:image`). A real photo always wins.
+- A recipe from a **screenshot, pasted text or from memory** (or a link without a usable photo): `image: { generate: true, description }`. The server generates the photo from the title and ingredients in 10-20s; in `batch_changes` all of them run in parallel. `description` is one sentence on how the finished dish looks as served (e.g. "golden traybake of chicken thighs and potatoes, scattered with parsley"); take it from the screenshot when it shows the dish. Don't wait for approval: a photo can always be replaced later.
+- **Fallback: upload link.** Only when the user wants their own photo, or generation still fails after one retry (the batch error says which recipe). Call `create_image_upload_link` **once** with all of those recipes, `create_image_upload_link({ recipes: [{ title: "A" }, { title: "B" }] })`: it returns **one** link to a page that lists every recipe. Send the link with a numbered list in the same order as the page, naming each recipe, ask them to say when they're all uploaded, wait, then use `image: { uploaded: true }` for those recipes. To swap a generated photo for a real one later, pass the existing recipe's `slug`: it's replaced as soon as it's uploaded.
 
-**Ask for all uploads in one message** (put the leftovers question in the same message, if there is one): the single link, then a numbered list in the same order as the page, where each item names the recipe and says what photo is wanted, e.g.:
-
-> Please upload a photo of each finished dish on this page (the link works for one hour): <link>
-> 1. **Harissa Tuna Pitta** (from your screenshot of the pitta recipe)
-> 2. **Lemon Chicken Traybake** (from the BBC Good Food link)
->
-> Tell me when they're all uploaded.
-
-Then wait for the user to confirm. Uploaded photos for new recipes don't redeploy the site on their own, so there's no rush on their side.
-
-**Write each recipe** as a `create_recipe` operation: `{ action: "create_recipe", title, course, ..., image }`, with the same title as its upload link and `image: { uploaded: true }` (or `{ url }`). Leave `draft` at its default (true): new recipes are drafts and therefore current. If a recipe's slug already exists (`list_recipes`), it was already logged: treat it as existing.
+**Write each recipe** as a `create_recipe` operation: `{ action: "create_recipe", title, course, ..., image }`, with `image: { generate: true, description }`, `{ url }`, or (fallback) `{ uploaded: true }` and the same title as its upload link. Leave `draft` at its default (true): new recipes are drafts and therefore current. If a recipe's slug already exists (`list_recipes`), it was already logged: treat it as existing.
 
 ## 2. Select the existing recipes
 
@@ -171,7 +162,7 @@ That's one commit and one site deploy for the whole plan. If you have to change 
 
 Finish with one message to the user containing the items below. **Whenever you list recipes (new, made current, promoted, removed, taken out of current), use bullet points: one recipe per bullet,** not a sentence or comma-separated line.
 
-1. **Recipes added** (new drafts): a bullet per recipe, each linked to its page. Mention any estimated serves/calories, and any photo that came from a link.
+1. **Recipes added** (new drafts): a bullet per recipe, each linked to its page. Mention any estimated serves/calories, and which photos were generated (the user can swap in their own via an upload link).
 2. **Existing recipes made current**: a bullet per recipe (and "already current" ones, if any).
 3. **Last round's recipes**, as bullets grouped by outcome: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
 4. **Anything left out or needing a decision** (unmatched names, skipped recipes).
@@ -191,3 +182,4 @@ Keep it factual and short; don't repeat the recipe steps.
 - Promoting a draft (`promote_recipe`) does not change whether it's current: in this flow a liked draft is promoted **and** unmarked in the same batch. Only promote when the user says they've tried it and liked it.
 - `remove_draft` is permanent on the site and only works on drafts. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
 - Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.
+- `batch_changes` with `dry_run: true` doesn't generate photos (it only checks the operations), so dry runs cost nothing.

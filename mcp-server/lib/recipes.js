@@ -1,6 +1,7 @@
-import { config, COURSES, SHOPPING_LIST_PATH } from "./config.js";
+import { config, COURSES, SHOPPING_LIST_PATH, CARD_ASPECT } from "./config.js";
 import { ChangeSet, isAllowedPath } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
+import { generateDishImage } from "./image-generation.js";
 import {
   slugify,
   parseRecipe,
@@ -71,11 +72,35 @@ export async function readRecipeImage(imageFrontmatter) {
   return path ? new ChangeSet().read(path) : null;
 }
 
-/** Turns the tool's image input into a normalised JPEG buffer (or null for "already uploaded"). */
-async function resolveImageInput(image, slug, cs) {
-  const provided = ["url", "base64", "uploaded"].filter((k) => image?.[k]);
+/** Starts generating a dish photo; the error is left for whoever awaits it, so an unused failure isn't an unhandled rejection. */
+function startGeneration(recipe) {
+  const pending = generateDishImage(recipe);
+  pending.catch(() => {});
+  return pending;
+}
+
+/**
+ * Generation takes 10-20s, so batch_changes starts every create_recipe's generation up front and they run in parallel.
+ * Each operation then awaits its own in resolveImageInput. (update_recipe generates when it runs: it needs the stored recipe.)
+ * A dry run generates nothing: those operations are checked without writing a photo.
+ */
+export function startImageGenerations(operations, { dryRun = false } = {}) {
+  return operations.map((op) => {
+    if (!op.image?.generate) return op;
+    if (dryRun) return { ...op, image: { ...op.image, skip: true } };
+    if (op.action !== "create_recipe") return op;
+    return { ...op, image: { ...op.image, pending: startGeneration({ title: op.title, ingredients: op.ingredients, description: op.image.description }) } };
+  });
+}
+
+/**
+ * Turns the tool's image input into a normalised JPEG buffer (or null for "already uploaded").
+ * `recipe` ({ title, ingredients }) is what a generated photo is drawn from.
+ */
+async function resolveImageInput(image, slug, cs, recipe) {
+  const provided = ["url", "base64", "uploaded", "generate"].filter((k) => image?.[k]);
   if (provided.length !== 1) {
-    throw new UserError("image must have exactly one of: url, base64, uploaded: true");
+    throw new UserError("image must have exactly one of: generate: true, url, base64, uploaded: true");
   }
   if (image.uploaded) {
     const existing = await cs.read(imagePathFor(slug));
@@ -85,6 +110,17 @@ async function resolveImageInput(image, slug, cs) {
       );
     }
     return null;
+  }
+  if (image.generate) {
+    if (image.skip) return null;
+    try {
+      const generated = await (image.pending || startGeneration({ ...recipe, description: image.description }));
+      return (await normalizeImage(generated, { aspect: CARD_ASPECT })).buffer;
+    } catch (err) {
+      throw new UserError(
+        `Generating the photo for "${slug}" failed (${err.message}). Try again, or fall back to create_image_upload_link and image: { uploaded: true }.`
+      );
+    }
   }
   const source = image.url ? await downloadImage(image.url) : decodeBase64Image(image.base64);
   try {
@@ -133,7 +169,7 @@ export async function createRecipe(input, batch) {
     throw new UserError(`A recipe with slug "${slug}" already exists. Use update_recipe to change it, or pick a different title.`);
   }
 
-  const imageBuffer = await resolveImageInput(input.image, slug, cs);
+  const imageBuffer = await resolveImageInput(input.image, slug, cs, { title, ingredients: input.ingredients });
   const data = {
     title,
     slug,
@@ -296,7 +332,9 @@ export async function updateRecipe(input, batch) {
   }
 
   if (input.image !== undefined) {
-    const imageBuffer = await resolveImageInput(input.image, slug, cs);
+    const ingredients =
+      input.ingredients || ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
+    const imageBuffer = await resolveImageInput(input.image, slug, cs, { title: data.title, ingredients });
     const newPath = imagePathFor(slug);
     if (imageBuffer) changes.push({ path: newPath, content: imageBuffer });
     const oldPath = String(data.image || "").replace(/^\//, "");
