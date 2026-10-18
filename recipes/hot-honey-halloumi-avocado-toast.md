@@ -6,7 +6,6 @@ course: [Breakfast]
 total_mins: 15
 serves: 2
 calories: 450
-draft: true
 ---
 
 ## Ingredients

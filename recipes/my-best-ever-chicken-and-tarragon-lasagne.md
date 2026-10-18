@@ -6,7 +6,6 @@ course: [Dinner]
 total_mins: 105
 serves: 6
 calories: 390
-draft: true
 ---
 
 ## Ingredients
