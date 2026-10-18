@@ -9,8 +9,9 @@ Browser flow with **Claude in Chrome** (`mcp__claude-in-chrome__*`; load the too
 
 ## 1. Work out what to buy
 
-- Source: the user's list (screenshot/paste of `shopping-list.html`) or `get_shopping_list` from the recipes MCP server.
-- **Skip anything crossed out / ticked** in the user's list: those are already at home.
+- Source: **`get_shopping_list` from the recipes MCP server, by default.** When a stocktake is saved, its "To buy" section is the list: items marked at home are already taken off, and partly stocked items show only the amount left to buy (e.g. "Lemons: 2 [have 2 of 4]" means buy 2). Skip everything under "Already at home". If it says no stocktake is saved, everything on the list is to buy; mention that in the summary in case the user forgot to do one.
+- Use a screenshot/paste of `shopping-list.html` only if the user gives one instead. Then **skip anything crossed out / ticked** in it: those are already at home.
+- `get_shopping_list` amounts are for 2 servings of each recipe; use them as they are unless the user asks for more.
 - Quantities on the user's screenshot may be at 4 servings (the page's selector); use the amounts they show, not the stored 2-serving base.
 - If a line is cut off in a screenshot, look it up in `get_shopping_list` (the quantities there are the 2-serving base, so double it if the screenshot is at 4).
 - Add the user's extra items on top (e.g. "also 2 more avocados"). Extras go through the same rules.

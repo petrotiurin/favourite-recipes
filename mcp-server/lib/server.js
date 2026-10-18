@@ -17,7 +17,7 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
-import { getShoppingList, updateShoppingList, shoppingPageUrl, ShoppingListError } from "./shopping-list.js";
+import { getShoppingList, updateShoppingList, shoppingPageUrl, stocktakeLines, ShoppingListError } from "./shopping-list.js";
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
@@ -279,6 +279,7 @@ function shoppingResult({ list, current, commit }) {
     `It will be live in about a minute at ${shoppingPageUrl()}`,
     "",
     "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever the current recipes change. It only goes blank when no recipe is current.",
+    "A new list starts without a stocktake: the user marks what's already at home on the page (signed in), and get_shopping_list then shows what's left to buy.",
     "",
     "Covers:",
     ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
@@ -522,7 +523,8 @@ export function buildServer({ origin }) {
       description:
         "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
         "'outdated' (the current recipes changed since it was written; the site still shows it, so rewrite it) or 'none'. " +
-        "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine.",
+        "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine, and the user's " +
+        "stocktake: items already at home (have: true) or partly at home (have: <amount in the item's unit>), with what is left to buy.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -535,7 +537,7 @@ export function buildServer({ origin }) {
         current.length ? "Current recipes (the ones to combine):" : "There are no current recipes right now.",
         ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
       ];
-      if (list) lines.push("", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
+      if (list) lines.push("", ...stocktakeLines(list), "", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
       return ok(lines.join("\n"));
     })
   );
