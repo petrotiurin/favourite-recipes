@@ -635,6 +635,10 @@ footer.site-footer {
   overflow-wrap: anywhere;
 }
 
+.account-menu .text-button {
+  display: block;
+}
+
 .text-button {
   min-height: 2.75rem;
   padding: 0 0.25rem;
@@ -1181,7 +1185,7 @@ footer.site-footer {
   }
 }
 
-/* Sign-in sheet: email, then the 6-digit code from the email */
+/* Sign-in sheet: email + password, or the 6-digit code from the email; also "Set a password" */
 body.sheet-open {
   overflow: hidden;
 }
