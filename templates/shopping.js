@@ -37,6 +37,7 @@
   var DRAFT_KEY = "shopping-draft:" + data.version;
   var SESSION_KEY = "shopping-editor-session";
   var EMAIL_KEY = "shopping-editor-email";
+  var HAS_PASSWORD_KEY = "shopping-editor-has-password"; // set once this browser has seen a password work
   try {
     // Ticks, unsaved edits and saved-but-not-yet-deployed stocktakes belong to one list: drop other lists' ones.
     Object.keys(localStorage).forEach(function (k) {
@@ -84,8 +85,9 @@
     collapsed: load("shopping-collapsed", []), // names of the aisle sections folded away (both tabs)
     session: load(SESSION_KEY, null),
     accountOpen: false,
-    sheet: null, // null | email | code
+    sheet: null, // null | email | code | password
     email: load(EMAIL_KEY, ""),
+    password: "",
     code: "",
     sheetMessage: null,
     message: null, // { text, error }
@@ -234,6 +236,7 @@
     if (state.accountOpen) {
       html +=
         '<div class="account-menu"><p>Signed in as ' + esc(email || "editor") + "</p>" +
+        '<button type="button" class="text-button" data-act="set-password">Set a password</button>' +
         '<button type="button" class="text-button" data-act="signout">Sign out</button></div>';
     }
     return html;
@@ -393,31 +396,53 @@
 
   function sheetHtml() {
     if (!state.sheet) return "";
-    var code = state.sheet === "code";
+    var sheet = state.sheet;
+    var lede = {
+      email: "Sign in once and you can mark what you already have.",
+      code: "We sent a code to " + esc(state.email) + ". It works on any device.",
+      password: "Next time, sign in with your email and this password: no email to wait for.",
+    }[sheet];
     var html =
       '<div class="sheet-backdrop"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">' +
       '<span class="sheet-grip" aria-hidden="true"></span>' +
-      '<div class="sheet-head"><div><h2 id="sheet-title">Update what\'s at home</h2><p>' +
-      (code ? "We sent a code to " + esc(state.email) + ". It works on any device." : "Sign in once and you can mark what you already have.") +
-      '</p></div><button type="button" class="icon-button" data-act="sheet-close" aria-label="Close">' + ICON.close + "</button></div>";
+      '<div class="sheet-head"><div><h2 id="sheet-title">' + (sheet === "password" ? "Set a password" : "Update what\'s at home") + "</h2><p>" +
+      lede + '</p></div><button type="button" class="icon-button" data-act="sheet-close" aria-label="Close">' + ICON.close + "</button></div>";
     if (state.sheetMessage) {
       html += '<p class="shopping-status' + (state.sheetMessage.error ? " is-error" : "") + '" role="status">' + esc(state.sheetMessage.text) + "</p>";
     }
-    if (!code) {
+    var submit = function (idle, working) {
+      return '<button type="submit" class="save-button"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? working : idle) + "</button></form>";
+    };
+    if (sheet === "email") {
       html +=
         '<form data-form="email"><label for="signin-email">Email</label>' +
-        '<input id="signin-email" type="email" autocomplete="email" required value="' + esc(state.email) + '" data-focus="signin-email">' +
-        '<button type="submit" class="save-button"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Sending…" : "Email me a code") + "</button></form>" +
+        '<input id="signin-email" type="email" autocomplete="username" required value="' + esc(state.email) + '" data-focus="signin-email">' +
+        '<label for="signin-password">Password</label>' +
+        '<input id="signin-password" type="password" autocomplete="current-password" required value="' + esc(state.password) +
+        '" data-focus="signin-password">' +
+        submit("Sign in", "Signing in…") +
+        '<div class="sheet-links"><button type="button" class="text-button" data-act="send-code"' + (state.busy ? " disabled" : "") +
+        ">No password? Email me a code</button></div>" +
         '<p class="sheet-note">Only family editors can sign in. You\'ll stay signed in on this device.</p>';
-    } else {
+    } else if (sheet === "code") {
       html +=
         '<form data-form="code"><label for="signin-code">Code from the email</label>' +
         '<input id="signin-code" class="code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required value="' +
         esc(state.code) + '" data-focus="signin-code">' +
-        '<button type="submit" class="save-button"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Signing in…" : "Sign in") + "</button></form>" +
+        submit("Sign in", "Signing in…") +
         '<div class="sheet-links"><button type="button" class="text-button is-quiet" data-act="sheet-email">Change email</button>' +
         '<button type="button" class="text-button" data-act="resend"' + (state.busy ? " disabled" : "") + ">Send a new code</button></div>" +
         '<p class="sheet-note">The email also has a sign-in link, if you\'d rather tap that on this device.</p>';
+    } else {
+      // The hidden username lets password managers file the new password under the right email.
+      html +=
+        '<form data-form="password"><input type="email" autocomplete="username" value="' + esc((state.session && state.session.email) || state.email) +
+        '" hidden><label for="new-password">New password</label>' +
+        '<input id="new-password" type="password" autocomplete="new-password" minlength="6" required value="' + esc(state.password) +
+        '" data-focus="new-password">' +
+        submit("Save password", "Saving…") +
+        '<div class="sheet-links"><button type="button" class="text-button is-quiet" data-act="sheet-close">Not now</button></div>' +
+        '<p class="sheet-note">Let your browser save it. The email code still works if you forget it.</p>';
     }
     return html + "</div></div>";
   }
@@ -432,9 +457,15 @@
       var el = document.querySelector('[data-focus="' + focused + '"]');
       if (el) el.focus();
     }
-    // An open sheet keeps focus inside it: on its field, unless something in it already has focus.
+    // An open sheet keeps focus inside it: on its first empty field, unless something in it already has focus.
     var sheet = app.querySelector(".sheet");
-    if (sheet && !sheet.contains(document.activeElement)) sheet.querySelector("input").focus();
+    if (sheet && !sheet.contains(document.activeElement)) {
+      var fields = sheet.querySelectorAll("input:not([hidden])");
+      var empty = Array.prototype.filter.call(fields, function (f) {
+        return !f.value;
+      })[0];
+      (empty || fields[0]).focus();
+    }
   }
 
   // Dragging updates the row in place (re-rendering would drop the pointer capture), plus the tab counts and the save bar.
@@ -508,6 +539,7 @@
     state.sheet = null;
     state.sheetMessage = null;
     state.code = "";
+    state.password = "";
     state.tab = "home";
   }
   // Coming back from the magic link: Supabase puts the tokens (or an error) in the URL fragment.
@@ -516,6 +548,7 @@
     var params = new URLSearchParams(location.hash.slice(1));
     if (params.get("access_token")) {
       signedIn(sessionFrom(Object.fromEntries(params)));
+      if (!load(HAS_PASSWORD_KEY, false)) state.sheet = "password";
     } else if (params.get("error_description")) {
       state.message = { text: "Sign-in failed: " + params.get("error_description").replace(/\+/g, " ") + ". Try again.", error: true };
     } else {
@@ -523,10 +556,10 @@
     }
     history.replaceState(null, "", location.pathname + location.search);
   }
-  function authFetch(path, body, token) {
+  function authFetch(path, body, token, method) {
     var headers = { apikey: auth.supabaseKey, "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
-    return fetch(auth.supabaseUrl + "/auth/v1/" + path, { method: "POST", headers: headers, body: JSON.stringify(body || {}) });
+    return fetch(auth.supabaseUrl + "/auth/v1/" + path, { method: method || "POST", headers: headers, body: JSON.stringify(body || {}) });
   }
   function errorReason(res) {
     return res.json().then(
@@ -554,6 +587,7 @@
   }
   function openSheet(message) {
     state.sheet = "email";
+    state.password = "";
     state.sheetMessage = message || null;
     state.accountOpen = false;
   }
@@ -606,6 +640,53 @@
         }
         return res.json().then(function (tokens) {
           signedIn(sessionFrom(tokens));
+          // Offer a password so the next sign-in needs no email, unless this browser already used one.
+          if (!load(HAS_PASSWORD_KEY, false)) state.sheet = "password";
+        });
+      }),
+      function (m) {
+        state.sheetMessage = m;
+      }
+    );
+  }
+  function signInWithPassword() {
+    state.sheetMessage = null;
+    save(EMAIL_KEY, state.email);
+    busyThen(
+      authFetch("token?grant_type=password", { email: state.email, password: state.password }).then(function (res) {
+        if (!res.ok) {
+          return errorReason(res).then(function (reason) {
+            state.sheetMessage = /invalid login credentials/i.test(reason)
+              ? { text: "Wrong email or password. No password yet? Email yourself a code.", error: true }
+              : { text: "Couldn't sign in" + (reason ? ": " + reason : "") + ".", error: true };
+          });
+        }
+        return res.json().then(function (tokens) {
+          save(HAS_PASSWORD_KEY, true);
+          signedIn(sessionFrom(tokens));
+        });
+      }),
+      function (m) {
+        state.sheetMessage = m;
+      }
+    );
+  }
+  function setPassword() {
+    state.sheetMessage = null;
+    busyThen(
+      accessToken().then(function (token) {
+        if (!token) return signedOut("Your sign-in has expired. Sign in with a code, then set a password.");
+        return authFetch("user", { password: state.password }, token, "PUT").then(function (res) {
+          if (res.ok) {
+            save(HAS_PASSWORD_KEY, true);
+            state.sheet = null;
+            state.password = "";
+            state.message = { text: "Password saved. Next time, sign in with it." };
+            return;
+          }
+          return errorReason(res).then(function (reason) {
+            state.sheetMessage = { text: "Couldn't save the password" + (reason ? ": " + reason : "") + ".", error: true };
+          });
         });
       }),
       function (m) {
@@ -695,6 +776,16 @@
       else openSheet();
     } else if (act === "account") {
       state.accountOpen = !state.accountOpen;
+    } else if (act === "set-password") {
+      state.sheet = "password";
+      state.sheetMessage = null;
+      state.password = "";
+      state.accountOpen = false;
+    } else if (act === "send-code") {
+      var emailInput = document.getElementById("signin-email");
+      if (!emailInput.reportValidity()) return;
+      state.email = emailInput.value.trim();
+      return sendCode();
     } else if (act === "signout") {
       var token = state.session && state.session.access_token;
       if (token) authFetch("logout", {}, token).catch(function () {});
@@ -765,6 +856,8 @@
       updateRow(id);
     } else if (el.id === "signin-email") {
       state.email = el.value.trim();
+    } else if (el.id === "signin-password" || el.id === "new-password") {
+      state.password = el.value;
     } else if (el.id === "signin-code") {
       state.code = el.value.replace(/\D/g, "");
     }
@@ -793,7 +886,11 @@
     var form = e.target.getAttribute("data-form");
     if (form === "email") {
       state.email = document.getElementById("signin-email").value.trim();
-      if (state.email) sendCode();
+      state.password = document.getElementById("signin-password").value;
+      if (state.email && state.password) signInWithPassword();
+    } else if (form === "password") {
+      state.password = document.getElementById("new-password").value;
+      if (state.password) setPassword();
     } else if (form === "code") {
       state.code = document.getElementById("signin-code").value.replace(/\D/g, "");
       if (state.code) verifyCode();

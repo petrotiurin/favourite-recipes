@@ -83,7 +83,7 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
   A small accent dot on a tab means unsaved changes there.
 - **Pill button** (`.pill`): rounded outline button, for secondary actions such as "Sign in".
 - **Avatar** (`.avatar`): the signed-in editor's initial on `--accent-strong`; opens a small
-  menu with the email and "Sign out".
+  menu with the email, "Set a password" and "Sign out".
 - **Primary button** (`.save-button`): full width, 52px tall, `--accent-strong` with
   `--on-accent` text. A count badge can sit inside it.
 - **Text button** (`.text-button`): accent-ink text, no border; `.is-quiet` is muted and
@@ -111,9 +111,13 @@ muted note) and the quantity on the right. Partly stocked items show only what's
 with the half-filled house; fully stocked items fold into "Already at home (N)". "Start again
 (untick all)" appears once something is ticked.
 
-**Sign-in** is the bottom sheet: email → "Email me a code" → a 6-digit code field
-(`autocomplete="one-time-code"`) → "Sign in". The email also has a magic link for the same
-device. After signing in the page opens the At home tab.
+**Sign-in** is the bottom sheet: email + password (`autocomplete="username"` /
+`"current-password"`, so the browser fills them) → "Sign in". The fallback, "No password? Email me
+a code", leads to a 6-digit code field (`autocomplete="one-time-code"`) → "Sign in"; the email
+also has a magic link for the same device. After a code or link sign-in the same sheet offers
+**Set a password** (`autocomplete="new-password"`, "Not now" to skip; not offered again once this
+browser has used a password); it's also in the avatar menu. After signing in the page opens the
+At home tab.
 
 **The signed-in editor** also gets the tabs: cart + count left to buy, house + count at home.
 On the **At home** tab every row is a fill bar:
