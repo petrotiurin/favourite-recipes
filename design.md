@@ -12,7 +12,7 @@ Every page must read fine with JS off; JS only adds interaction on top.
   wide screen with a 16px gutter, then let wider screens breathe (the shopping page caps at
   560px, recipe pages use a two-column layout from 720px).
 - **Icons over words, but never a puzzle.** Prefer an icon plus a number to a sentence. Keep
-  one short hint where a gesture isn't obvious (for example "slide = some", "tap = all"), and
+  one short hint where a gesture isn't obvious (for example "slide or tap sides = some", "tap = all"), and
   give every icon-only control an `aria-label`.
 - **One accent.** Orange is the only accent colour. Purple is reserved for drafts. No green,
   red or blue for state; error messages are the one exception (a muted red box).
@@ -121,8 +121,10 @@ On the **At home** tab every row is a fill bar:
 - the row's background fills from the left in proportion to the amount at home
   (`--fill-some`, or `--fill-all` when there's enough), with a thin `--fill-edge` marker at the
   end of a partial fill;
-- **sliding** horizontally across the row sets the amount (snapped to a sensible step; a plain
-  tap does nothing, and vertical movement scrolls the page). Sliding all the way means "enough";
+- **sliding** horizontally across the row sets the amount (snapped to a sensible step; vertical
+  movement scrolls the page). Sliding all the way means "enough";
+- **tapping** the row's right half adds one step, the left half takes one away (same steps as
+  sliding; reaching the full amount means "enough");
 - the **house** button on the right toggles enough / none;
 - the amount reads "1 / 4" while partial, otherwise the full quantity;
 - a changed row gets a 3px accent stripe on its left edge;

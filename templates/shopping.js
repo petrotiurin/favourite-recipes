@@ -381,7 +381,7 @@
   function homeViewHtml() {
     var html =
       messageHtml() +
-      '<p class="home-hint" aria-hidden="true"><span>' + ICON.slide + "slide = some</span><span>" + ICON.houseAll + "tap = all</span></p>";
+      '<p class="home-hint" aria-hidden="true"><span>' + ICON.slide + "slide or tap sides = some</span><span>" + ICON.houseAll + "tap = all</span></p>";
     data.sections.forEach(function (section) {
       html += sectionHtml(section.name, section.items.length, section.items.map(fillRowHtml).join(""));
     });
@@ -800,9 +800,20 @@
     }
   });
 
-  // Sliding across a fill row sets how much is at home. A tap does nothing (so scrolling past
-  // can't change anything), a mostly vertical move is left to the page scroll.
+  // Sliding across a fill row sets how much is at home. A tap on its right half adds one step, on its
+  // left half takes one away (a scroll doesn't count as a tap: the browser cancels the pointer), a
+  // mostly vertical move is left to the page scroll.
   var drag = null;
+  function tapAt(x) {
+    var rect = drag.row.getBoundingClientRect();
+    var item = byId[drag.id];
+    var step = stepFor(item);
+    var n = need(item);
+    var current = rowState(item).value;
+    var value = x - rect.left >= rect.width / 2 ? Math.min(n, current + step) : Math.max(0, current - step);
+    setDraft(drag.id, value <= 0 ? 0 : fromSlider(item, value));
+    updateRow(drag.id);
+  }
   function slideTo(x) {
     var rect = drag.row.getBoundingClientRect();
     var frac = Math.min(1, Math.max(0, (x - rect.left) / rect.width));
@@ -839,6 +850,7 @@
   function endDrag(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     var row = drag.row;
+    if (!drag.active && e.type === "pointerup") tapAt(e.clientX);
     drag = null;
     try {
       row.releasePointerCapture(e.pointerId);
