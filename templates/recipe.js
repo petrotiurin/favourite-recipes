@@ -36,6 +36,21 @@ function renderRecipe(recipe, bodyHtml) {
 `
     : "";
   const body = scaledBodyHtml.replace(/(<h2[^>]*>\s*Ingredients\b[^<]*<\/h2>\n?)/i, `$1${servingsPicker}`);
+  // Wrap the Ingredients section (up to the next h2) and what follows it, so wide
+  // screens can keep the ingredients in a sticky column beside the instructions
+  // (see `.recipe-body` in style.css). Narrow screens stack them as before.
+  const ingStart = body.search(/<h2[^>]*>\s*Ingredients\b/i);
+  const ingLength = ingStart === -1 ? -1 : body.slice(ingStart + 1).search(/<h2[\s>]/i) + 1;
+  const bodyHtmlOut =
+    ingLength > 0
+      ? `${body.slice(0, ingStart)}<div class="recipe-body">
+<section class="recipe-ingredients">
+${body.slice(ingStart, ingStart + ingLength)}</section>
+<div class="recipe-steps">
+${body.slice(ingStart + ingLength)}</div>
+</div>
+`
+      : body;
 
   const content = `  <main>
     <a class="back-link" href="../index.html">&larr; All recipes</a>
@@ -44,7 +59,7 @@ ${recipe.draft === true ? `    <p class="draft-note">This is a draft: we haven't
     <div class="recipe-meta">
       ${metaChips}
     </div>
-${body}
+${bodyHtmlOut}
   </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}
   <script src="../wakelock.js" defer></script>`;
 
