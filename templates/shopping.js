@@ -81,6 +81,7 @@
     draft: load(DRAFT_KEY, null), // unsaved "at home" edits: { id: true | number }
     tab: "list", // list | home (editor only)
     homeOpen: false, // the "Already at home" fold
+    collapsed: load("shopping-collapsed", []), // names of the aisle sections folded away (both tabs)
     session: load(SESSION_KEY, null),
     accountOpen: false,
     sheet: null, // null | email | code
@@ -196,6 +197,7 @@
     undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
     person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
     close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+    chevron: svg('<path d="M6 9l6 6 6-6"/>', "icon chevron"),
   };
 
   // --- rendering ---
@@ -206,6 +208,14 @@
   }
   function noteHtml(item) {
     return item.note ? '<span class="shop-note">' + esc(item.note) + "</span>" : "";
+  }
+  /** An aisle section; tapping its heading folds it away (a <details>, so it also works without JS). */
+  function sectionHtml(name, count, rows) {
+    var open = state.collapsed.indexOf(name) === -1;
+    return (
+      '<details class="shop-section" data-section="' + esc(name) + '"' + (open ? " open" : "") + "><summary><h2>" + esc(name) + "</h2>" +
+      '<span class="section-count">' + count + "</span>" + ICON.chevron + '</summary><ul class="shop-list">' + rows + "</ul></details>"
+    );
   }
   function messageHtml() {
     if (!state.message) return "";
@@ -298,7 +308,7 @@
           shown++;
         }
       });
-      if (rows.length) html += '<section class="shop-section"><h2>' + esc(section.name) + '</h2><ul class="shop-list">' + rows.join("") + "</ul></section>";
+      if (rows.length) html += sectionHtml(section.name, rows.length, rows.join(""));
     });
     if (!shown) html += '<p class="shopping-empty">Everything on the list is already at home.</p>';
     if (home.length) {
@@ -373,7 +383,7 @@
       messageHtml() +
       '<p class="home-hint" aria-hidden="true"><span>' + ICON.slide + "slide = some</span><span>" + ICON.houseAll + "tap = all</span></p>";
     data.sections.forEach(function (section) {
-      html += '<section class="shop-section"><h2>' + esc(section.name) + '</h2><ul class="shop-list">' + section.items.map(fillRowHtml).join("") + "</ul></section>";
+      html += sectionHtml(section.name, section.items.length, section.items.map(fillRowHtml).join(""));
     });
     html +=
       '<div class="home-tools"><button type="button" class="icon-button" data-act="reset-home" data-focus="reset-home" aria-label="Nothing at home: clear every row">' +
@@ -760,11 +770,20 @@
     }
   });
 
-  // The open/closed state of "Already at home" survives re-renders ("toggle" doesn't bubble).
+  // Folded sections and "Already at home" stay as they were across re-renders ("toggle" doesn't bubble).
   app.addEventListener(
     "toggle",
     function (e) {
-      if (e.target.getAttribute && e.target.getAttribute("data-details") === "home") state.homeOpen = e.target.open;
+      var el = e.target;
+      if (!el.getAttribute) return;
+      if (el.getAttribute("data-details") === "home") state.homeOpen = el.open;
+      var name = el.getAttribute("data-section");
+      if (name === null) return;
+      state.collapsed = state.collapsed.filter(function (n) {
+        return n !== name;
+      });
+      if (!el.open) state.collapsed.push(name);
+      save("shopping-collapsed", state.collapsed.length ? state.collapsed : undefined);
     },
     true
   );

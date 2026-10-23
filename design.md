@@ -92,6 +92,10 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 - **Bottom sheet** (`.sheet`): slides up over a dimmed backdrop for short tasks (sign-in).
   Grip, title + one line of explanation, a close button, then the form. Escape or a tap on the
   backdrop closes it; focus moves into it.
+- **Collapsible section** (`.shop-section`): a `<details open>` whose summary is the section
+  label, a muted item count and a chevron (pointing right when folded). The whole heading row is
+  the tap target, it works without JS, and which sections are folded is remembered in the
+  browser (`localStorage`) and shared by both tabs of the shopping page.
 - **Status line** (`.shopping-status`): a soft accent box for messages, muted red for errors.
 
 ## Shopping page
@@ -102,7 +106,7 @@ interactive part from the embedded JSON.
 **Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
 recipes · list made <date>", which expands to the recipe links; the servings card; the "Home
 checked <date>" card (when a stocktake exists or sign-in is configured) with **Update**; the
-list, sectioned by aisle, where each row is a round tick (kept in this browser), the name (+ a
+list, sectioned by aisle (tap a section's heading to fold it away), where each row is a round tick (kept in this browser), the name (+ a
 muted note) and the quantity on the right. Partly stocked items show only what's left to buy
 with the half-filled house; fully stocked items fold into "Already at home (N)". "Start again
 (untick all)" appears once something is ticked.

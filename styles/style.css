@@ -783,7 +783,49 @@ footer.site-footer {
 
 /* The list */
 .shop-section {
-  margin-top: 1.4rem;
+  margin-top: 1rem;
+}
+
+/* Aisle sections fold away: the whole heading row is the tap target (a <details> summary). */
+.shop-section summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  margin-bottom: 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.shop-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.shop-section summary h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.section-count {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-section .chevron {
+  width: 1.1rem;
+  height: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.shop-section:not([open]) .chevron {
+  transform: rotate(-90deg);
+}
+
+.shop-section:not([open]) summary {
+  border-bottom: 1px solid var(--border);
 }
 
 .shop-section h2,
@@ -988,6 +1030,13 @@ footer.site-footer {
 
 .fill-row.has-range {
   cursor: ew-resize;
+}
+
+/* Text and the house sit above the fill and its end marker. */
+.fill-name,
+.fill-amt,
+.fill-house {
+  z-index: 1;
 }
 
 .fill-name {

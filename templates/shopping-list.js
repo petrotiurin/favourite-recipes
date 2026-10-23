@@ -40,6 +40,9 @@ const HOUSE_PATH = '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>';
 const iconSome = (cls = "icon") =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${HOUSE_PATH}<rect x="5" y="14" width="14" height="6" fill="currentColor"/></svg>`;
 
+const CHEVRON =
+  '<svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
 function noteHtml(item) {
   return item.note ? `<span class="shop-note">${escapeHtml(item.note)}</span>` : "";
 }
@@ -80,12 +83,12 @@ function renderStatic(list) {
         .map((item) => ({ item, r: remaining(item) }))
         .filter(({ item, r }) => (r.status === "home" ? (home.push(item), false) : true));
       if (!items.length) return "";
-      return `    <section class="shop-section">
-      <h2>${escapeHtml(s.name)}</h2>
+      return `    <details class="shop-section" data-section="${escapeHtml(s.name)}" open>
+      <summary><h2>${escapeHtml(s.name)}</h2><span class="section-count">${items.length}</span>${CHEVRON}</summary>
       <ul class="shop-list">
 ${items.map(({ item, r }) => renderItem(item, r)).join("\n")}
       </ul>
-    </section>`;
+    </details>`;
     })
     .filter(Boolean);
   if (!sections.length) sections.push(`    <p class="shopping-empty">Everything on the list is already at home.</p>`);
