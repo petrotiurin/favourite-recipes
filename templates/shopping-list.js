@@ -35,17 +35,42 @@ function remaining(item) {
   return left > 0 ? { status: "partial", left: fmtAmount(left, q.unit) } : { status: "home", left: "" };
 }
 
+// House icons, the page's one icon language (design.md). Duplicated in templates/shopping.js.
+const HOUSE_PATH = '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>';
+const iconSome = (cls = "icon") =>
+  `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${HOUSE_PATH}<rect x="5" y="14" width="14" height="6" fill="currentColor"/></svg>`;
+
+function noteHtml(item) {
+  return item.note ? `<span class="shop-note">${escapeHtml(item.note)}</span>` : "";
+}
+
 function renderItem(item, { status, left }) {
-  const qty = left ? `<strong>${escapeHtml(left)}</strong> ` : "";
-  const extra = item.note ? `<span class="shopping-note">, ${escapeHtml(item.note)}</span>` : "";
-  const have = status === "partial" ? ` <span class="shopping-have">have ${escapeHtml(fmtAmount(item.have, parseQuantity(item.quantity).unit))} of ${escapeHtml(item.quantity)}</span>` : "";
-  return `        <li><label class="shopping-item"><input type="checkbox"><span>${qty}${escapeHtml(item.name)}${extra}${have}</span></label></li>`;
+  const partial =
+    status === "partial"
+      ? `${iconSome("icon icon-some")}<span class="sr-only">(have ${escapeHtml(fmtAmount(item.have, parseQuantity(item.quantity).unit))} of ${escapeHtml(item.quantity)} at home)</span>`
+      : "";
+  return `        <li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">${escapeHtml(item.name)}${noteHtml(item)}</span>${partial}<span class="shop-qty">${escapeHtml(left)}</span></label></li>`;
+}
+
+/** "Home checked 18 Oct: 3 at home, 2 partly", when the editor has saved a stocktake. */
+function homeCard(list) {
+  if (!list.stocktake) return "";
+  let home = 0;
+  let partly = 0;
+  list.sections.forEach((s) =>
+    s.items.forEach((item) => {
+      const { status } = remaining(item);
+      if (status === "home") home++;
+      else if (status === "partial") partly++;
+    })
+  );
+  return `    <div class="home-card">${iconSome()}<span class="home-card-text"><strong>Home checked ${escapeHtml(formatDate(list.stocktake))}</strong><span>${home} at home, ${partly} partly. Already taken off.</span></span></div>`;
 }
 
 /**
  * The page without JS: what's left to buy at 2 servings, then what's already at home.
- * templates/shopping.js re-renders #shopping-app from the embedded JSON (servings, the
- * "To buy" / "Full list" switch, ticks while shopping, and the signed-in stocktake).
+ * templates/shopping.js re-renders #shopping-app from the embedded JSON (servings, ticks
+ * while shopping, and for the signed-in editor the "At home" tab and sign-in).
  */
 function renderStatic(list) {
   const home = [];
@@ -55,9 +80,9 @@ function renderStatic(list) {
         .map((item) => ({ item, r: remaining(item) }))
         .filter(({ item, r }) => (r.status === "home" ? (home.push(item), false) : true));
       if (!items.length) return "";
-      return `    <section class="shopping-section">
+      return `    <section class="shop-section">
       <h2>${escapeHtml(s.name)}</h2>
-      <ul class="shopping-items">
+      <ul class="shop-list">
 ${items.map(({ item, r }) => renderItem(item, r)).join("\n")}
       </ul>
     </section>`;
@@ -65,14 +90,14 @@ ${items.map(({ item, r }) => renderItem(item, r)).join("\n")}
     .filter(Boolean);
   if (!sections.length) sections.push(`    <p class="shopping-empty">Everything on the list is already at home.</p>`);
   if (home.length) {
-    sections.push(`    <section class="shopping-section shopping-home">
-      <h2>Already at home</h2>
-      <ul class="shopping-items">
-${home.map((item) => `        <li>${item.quantity ? `<strong>${escapeHtml(item.quantity)}</strong> ` : ""}${escapeHtml(item.name)}</li>`).join("\n")}
+    sections.push(`    <details class="shop-home">
+      <summary>Already at home (${home.length})</summary>
+      <ul>
+${home.map((item) => `        <li><span>${escapeHtml(item.name)}</span><span>${escapeHtml(item.quantity || "")}</span></li>`).join("\n")}
       </ul>
-    </section>`);
+    </details>`);
   }
-  return sections.join("\n");
+  return [homeCard(list), ...sections].filter(Boolean).join("\n");
 }
 
 /** Embedded for shopping.js: the list (with parsed amounts) and, when configured, how the editor signs in and saves. */
@@ -107,13 +132,15 @@ function renderShoppingList(list, recipes, auth = null) {
   } else {
     const links = recipes
       .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${escapeHtml(r.title)}</a>`)
-      .join("\n      ");
+      .join("\n        ");
     const updated = formatDate(list.updated);
-    const stocktake = list.stocktake ? formatDate(list.stocktake) : "";
-    body = `    <p class="shopping-intro">Everything for the recipes below, ${BASE_SERVINGS} servings of each${updated ? ` &middot; updated ${updated}` : ""}${stocktake ? ` &middot; checked what's at home ${stocktake}` : ""}</p>
-    <div class="shopping-recipes">
-      ${links}
-    </div>
+    const count = `${recipes.length} recipe${recipes.length === 1 ? "" : "s"}`;
+    body = `    <details class="shop-for">
+      <summary>For ${count}${updated ? ` &middot; list made ${updated}` : ""}</summary>
+      <div class="shopping-recipes">
+        ${links}
+      </div>
+    </details>
     <div id="shopping-app">
 ${renderStatic(list)}
     </div>
@@ -121,7 +148,10 @@ ${renderStatic(list)}
   }
 
   const content = `  <main>
-    <a class="back-link" href="index.html">&larr; All recipes</a>
+    <div class="shop-top">
+      <a class="back-link" href="index.html">&larr; All recipes</a>
+      <div class="shop-account" id="shopping-account"></div>
+    </div>
     <h1 class="shopping-title">Shopping list</h1>
 ${body}
   </main>${list ? '\n  <script src="shopping.js" defer></script>' : ""}`;

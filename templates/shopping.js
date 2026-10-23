@@ -1,16 +1,18 @@
-// Shopping page enhancement. Re-renders #shopping-app from the JSON the build embedded
-// (#shopping-data); it never loads the list at runtime. Adds:
+// Shopping page enhancement. Re-renders #shopping-app (and the account button in
+// #shopping-account) from the JSON the build embedded (#shopping-data); it never loads the
+// list at runtime. Adds:
 // - the servings picker (1/2/4 per recipe, from the list's 2-serving base),
-// - the "Take off what's at home" switch: on (default) shows only what's left to buy,
-//   off shows the full list,
 // - ticks while shopping, kept in this browser only (anyone can use them),
-// - for the signed-in editor: the stocktake (what's already at home, fully or partly),
-//   saved through the MCP server's /stocktake endpoint, which commits shopping-list.json.
-// Sign-in is Supabase Auth's magic link, called over its REST API (no client library).
+// - for the signed-in editor: the "At home" tab, where each row is a fill bar (slide across
+//   it for some, tap the house for all). Edits stay in this browser until Save, which sends
+//   them in one go to the MCP server's /stocktake endpoint (one commit, one deploy).
+// Sign-in is Supabase Auth's email code (the same email also has a magic link), called over
+// its REST API (no client library). The UI patterns are described in design.md.
 (function () {
   "use strict";
   var dataEl = document.getElementById("shopping-data");
   var app = document.getElementById("shopping-app");
+  var accountEl = document.getElementById("shopping-account");
   if (!dataEl || !app) return;
   var data = JSON.parse(dataEl.textContent);
   var auth = data.auth;
@@ -32,11 +34,15 @@
   }
   var TICKS_KEY = "shopping-ticks:" + data.version;
   var PENDING_KEY = "shopping-stocktake:" + data.version;
+  var DRAFT_KEY = "shopping-draft:" + data.version;
   var SESSION_KEY = "shopping-editor-session";
+  var EMAIL_KEY = "shopping-editor-email";
   try {
-    // Ticks and saved-but-not-yet-deployed stocktakes belong to one list: drop other lists' ones.
+    // Ticks, unsaved edits and saved-but-not-yet-deployed stocktakes belong to one list: drop other lists' ones.
     Object.keys(localStorage).forEach(function (k) {
-      if (/^shopping-(ticks|stocktake):/.test(k) && k !== TICKS_KEY && k !== PENDING_KEY) localStorage.removeItem(k);
+      if (/^shopping-(ticks|stocktake|draft):/.test(k) && [TICKS_KEY, PENDING_KEY, DRAFT_KEY].indexOf(k) === -1) {
+        localStorage.removeItem(k);
+      }
     });
   } catch (e) {}
 
@@ -58,22 +64,36 @@
   items.forEach(function (item) {
     if (item.have !== undefined) have[item.id] = item.have;
   });
+  var stocktakeAt = data.stocktake;
   var pending = load(PENDING_KEY, null);
-  if (pending && pending.saved && (!data.stocktake || pending.saved > data.stocktake)) have = pending.have;
-  else save(PENDING_KEY, undefined);
+  if (pending && pending.saved && (!data.stocktake || pending.saved > data.stocktake)) {
+    have = pending.have;
+    stocktakeAt = pending.saved;
+  } else save(PENDING_KEY, undefined);
 
+  var storedServings = load("shopping-servings", data.base);
   var state = {
-    servings: [1, 2, 4].indexOf(load("shopping-servings", data.base)) === -1 ? data.base : load("shopping-servings", data.base),
-    hideHome: load("shopping-hide-home", true) !== false,
+    servings: [1, 2, 4].indexOf(storedServings) === -1 ? data.base : storedServings,
     ticks: load(TICKS_KEY, []),
     have: have,
-    draft: null, // the stocktake being edited: { id: true | number }
+    stocktakeAt: stocktakeAt,
+    savedNow: false,
+    draft: load(DRAFT_KEY, null), // unsaved "at home" edits: { id: true | number }
+    tab: "list", // list | home (editor only)
+    homeOpen: false, // the "Already at home" fold
     session: load(SESSION_KEY, null),
-    signIn: "closed", // closed | open | sent
-    email: "",
+    accountOpen: false,
+    sheet: null, // null | email | code
+    email: load(EMAIL_KEY, ""),
+    code: "",
+    sheetMessage: null,
     message: null, // { text, error }
     busy: false,
   };
+
+  function isEditor() {
+    return !!(auth && state.session);
+  }
 
   // --- quantities ---
   var METRIC = /^(g|kg|ml|l)$/i;
@@ -108,11 +128,11 @@
   function amountText(item, value) {
     return withUnit(formatNumber(value, item.unit), item.unit);
   }
-  // A count goes up by 1; grams and millilitres by a round step that suits the amount.
+  // Slider steps: halves for a few of something, else 1; grams and millilitres by a round step that suits the amount.
   function stepFor(item) {
-    if (!METRIC.test(item.unit)) return 1;
-    var a = item.amount;
-    return a >= 1000 ? 100 : a >= 400 ? 50 : a >= 100 ? 25 : a >= 30 ? 10 : 5;
+    var n = need(item);
+    if (!METRIC.test(item.unit)) return n < 4 ? 0.5 : 1;
+    return n >= 1000 ? 100 : n >= 400 ? 50 : n >= 100 ? 25 : n >= 30 ? 10 : 5;
   }
 
   /** { status: "buy" | "partial" | "home", left } at the chosen servings, for a stocktake `h`. */
@@ -125,6 +145,58 @@
     }
     return { status: "buy", left: need(item) };
   }
+  // What the editor sees is their unsaved edits; everyone else sees the saved stocktake.
+  function effective() {
+    return isEditor() && state.draft ? state.draft : state.have;
+  }
+  function norm(v) {
+    return v === true ? true : typeof v === "number" && v > 0 ? v : 0;
+  }
+  function changedCount() {
+    if (!state.draft) return 0;
+    return items.filter(function (item) {
+      return norm(state.draft[item.id]) !== norm(state.have[item.id]);
+    }).length;
+  }
+  function counts(h) {
+    var c = { buy: 0, home: 0, partly: 0 };
+    items.forEach(function (item) {
+      var s = remaining(item, h).status;
+      if (s === "home") c.home++;
+      else {
+        c.buy++;
+        if (s === "partial") c.partly++;
+      }
+    });
+    return c;
+  }
+  function shortDate(iso) {
+    var d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+
+  // --- icons (the house family is the page's icon language, see design.md; duplicated in shopping-list.js) ---
+  function svg(body, cls, filled) {
+    return (
+      '<svg class="' + (cls || "icon") + '" viewBox="0 0 24 24" fill="' + (filled ? "currentColor" : "none") +
+      '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + body + "</svg>"
+    );
+  }
+  var HOUSE = '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>';
+  var ICON = {
+    house: svg(HOUSE),
+    houseSome: function (cls) {
+      return svg(HOUSE + '<rect x="5" y="14" width="14" height="6" fill="currentColor"/>', cls);
+    },
+    houseAll: svg('<path d="M3 11l9-7 9 7v9H3z"/>', "icon", true),
+    houseClear: svg(HOUSE + '<path d="M9 13l6 6M15 13l-6 6"/>'),
+    cart: svg('<path d="M3 4h2l2.4 11h10.2L20 7H6.2"/><circle cx="9" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>'),
+    slide: svg('<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>'),
+    check: svg('<path d="M5 12l5 5 9-10"/>'),
+    undo: svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+    person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+    close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
+  };
 
   // --- rendering ---
   function esc(s) {
@@ -133,189 +205,273 @@
     });
   }
   function noteHtml(item) {
-    return item.note ? '<span class="shopping-note">, ' + esc(item.note) + "</span>" : "";
+    return item.note ? '<span class="shop-note">' + esc(item.note) + "</span>" : "";
   }
-  function qtyHtml(text) {
-    return text ? "<strong>" + esc(text) + "</strong> " : "";
-  }
-
-  function shopRow(item, r) {
-    var ticked = state.ticks.indexOf(item.id) !== -1;
-    var qty = state.hideHome && r.status === "partial" ? amountText(item, r.left) : needText(item);
-    var chip = "";
-    if (r.status === "partial") {
-      chip = state.hideHome
-        ? '<span class="shopping-have">have ' + esc(amountText(item, state.have[item.id])) + " of " + esc(needText(item)) + "</span>"
-        : '<span class="shopping-have">have ' + esc(amountText(item, state.have[item.id])) + "</span>";
-    } else if (r.status === "home") {
-      chip = '<span class="shopping-have is-home">at home</span>';
-    }
-    return (
-      '<li><label class="shopping-item"><input type="checkbox" data-tick="' + item.id + '"' + (ticked ? " checked" : "") + "><span>" +
-      qtyHtml(qty) + esc(item.name) + noteHtml(item) + (chip ? " " + chip : "") + "</span></label></li>"
-    );
-  }
-
-  function stockRow(item) {
-    var v = state.draft[item.id];
-    var partial = typeof v === "number";
-    var r = remaining(item, state.draft);
-    var cls = r.status === "home" ? " is-home" : partial ? " is-partial" : "";
-    var html =
-      '<li class="stock-row' + cls + '"><div class="stock-main">' +
-      '<label class="shopping-item"><input type="checkbox" data-have-all="' + item.id + '"' + (v === true ? " checked" : "") + (partial ? " data-partial" : "") + ">" +
-      "<span>" + qtyHtml(needText(item)) + esc(item.name) + noteHtml(item) + "</span></label>";
-    if (item.amount !== undefined) {
-      html += '<button type="button" class="stock-some" data-some="' + item.id + '" aria-pressed="' + partial + '">Some</button>';
-    }
-    html += "</div>";
-    if (partial) {
-      var step = stepFor(item);
-      html +=
-        '<div class="stock-partial">' +
-        '<span class="stock-partial-label">Have</span>' +
-        '<button type="button" data-step="' + item.id + '" data-by="' + -step + '" aria-label="' + step + ' less">−</button>' +
-        '<input type="number" inputmode="decimal" min="0" step="any" value="' + v + '" data-amount="' + item.id + '" data-focus="amount-' + item.id + '" aria-label="Amount of ' + esc(item.name) + ' at home">' +
-        (item.unit ? '<span class="stock-unit">' + esc(item.unit) + "</span>" : "") +
-        '<button type="button" data-step="' + item.id + '" data-by="' + step + '" aria-label="' + step + ' more">+</button>' +
-        '<span class="stock-left" data-left="' + item.id + '">' + leftText(item) + "</span>" +
-        "</div>";
-    }
-    return html + "</li>";
-  }
-
-  function leftText(item) {
-    var r = remaining(item, state.draft);
-    return r.status === "home" ? "enough, nothing to buy" : "buy " + esc(amountText(item, r.left));
-  }
-
-  function sectionHtml(name, rows, extraClass) {
-    return (
-      '<section class="shopping-section' + (extraClass || "") + '"><h2>' + esc(name) + "</h2>" +
-      '<ul class="shopping-items">' + rows.join("") + "</ul></section>"
-    );
-  }
-
-  function toolbarHtml() {
-    var html = '<div class="shopping-toolbar">';
-    if (!state.draft) {
-      html +=
-        '<button type="button" class="switch" role="switch" data-act="toggle-home" aria-checked="' + state.hideHome + '">' +
-        '<span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>' +
-        "<span>Take off what's at home</span></button>";
-    }
-    html += '<div class="servings-picker" role="group" aria-label="Servings per recipe"><span class="servings-label">Servings per recipe</span>';
-    [1, 2, 4].forEach(function (n) {
-      html += '<button type="button" data-serves="' + n + '" aria-pressed="' + (n === state.servings) + '">' + n + "</button>";
-    });
-    html += "</div>";
-    if (!state.draft && state.session) {
-      html += '<button type="button" class="stock-start" data-act="edit">🏠 What\'s at home?</button>';
-    }
-    return html + "</div>";
-  }
-
-  function stocktakeBarHtml() {
-    return (
-      '<div class="stock-bar">' +
-      '<p class="stock-help"><strong>What\'s at home?</strong> Tick what you have enough of. For part of an amount, tap <em>Some</em>.</p>' +
-      '<div class="stock-actions">' +
-      '<button type="button" data-act="all-home">All at home</button>' +
-      '<button type="button" data-act="none-home">Clear all</button>' +
-      '<span class="stock-spacer"></span>' +
-      '<button type="button" data-act="cancel"' + (state.busy ? " disabled" : "") + ">Cancel</button>" +
-      '<button type="button" class="primary" data-act="save"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Saving…" : "Save") + "</button>" +
-      "</div></div>"
-    );
-  }
-
   function messageHtml() {
     if (!state.message) return "";
     return '<p class="shopping-status' + (state.message.error ? " is-error" : "") + '" role="status">' + esc(state.message.text) + "</p>";
   }
 
-  function listHtml() {
-    var html = "";
-    if (state.draft) {
-      data.sections.forEach(function (section) {
-        html += sectionHtml(section.name, section.items.map(stockRow));
-      });
-      return html;
+  function accountHtml() {
+    if (!auth) return "";
+    if (!state.session) {
+      return '<button type="button" class="pill" data-act="signin" data-focus="signin">' + ICON.person + "Sign in</button>";
     }
+    var email = state.session.email || "";
+    var html =
+      '<button type="button" class="avatar" data-act="account" data-focus="account" aria-expanded="' + state.accountOpen +
+      '" aria-label="Signed in as ' + esc(email || "editor") + '">' + esc((email || "E").charAt(0).toUpperCase()) + "</button>";
+    if (state.accountOpen) {
+      html +=
+        '<div class="account-menu"><p>Signed in as ' + esc(email || "editor") + "</p>" +
+        '<button type="button" class="text-button" data-act="signout">Sign out</button></div>';
+    }
+    return html;
+  }
+
+  function tabsHtml() {
+    var c = counts(effective());
+    var dirty = changedCount() > 0;
+    var tab = function (id, icon, count, label, extra) {
+      return (
+        '<button type="button" role="tab" data-tab="' + id + '" data-focus="tab-' + id + '" aria-selected="' + (state.tab === id) +
+        '" aria-label="' + label + '">' + icon + "<span>" + count + "</span>" + (extra || "") + "</button>"
+      );
+    };
+    return (
+      '<div class="tabs" role="tablist" id="shop-tabs">' +
+      tab("list", ICON.cart, c.buy, "Shopping list, " + c.buy + " to buy") +
+      tab("home", ICON.house, c.home, "At home, " + c.home + " items" + (dirty ? ", unsaved changes" : ""), dirty ? '<span class="unsaved-dot"></span>' : "") +
+      "</div>"
+    );
+  }
+
+  function servingsHtml() {
+    var html = '<div class="shop-card"><span>Servings of each recipe</span><div class="seg" role="group" aria-label="Servings of each recipe">';
+    [1, 2, 4].forEach(function (n) {
+      html += '<button type="button" data-serves="' + n + '" data-focus="serves-' + n + '" aria-pressed="' + (n === state.servings) + '">' + n + "</button>";
+    });
+    return html + "</div></div>";
+  }
+
+  function homeCardHtml() {
+    if (!state.stocktakeAt && !auth) return "";
+    var c = counts(effective());
+    var title = state.stocktakeAt ? "Home checked " + shortDate(state.stocktakeAt) : "Home not checked yet";
+    var sub = c.home || c.partly ? c.home + " at home, " + c.partly + " partly. Already taken off." : "Everything is on the list.";
+    if (changedCount()) sub += " Not saved yet.";
+    return (
+      '<div class="home-card">' + ICON.houseSome() +
+      '<span class="home-card-text"><strong>' + esc(title) + "</strong><span>" + esc(sub) + "</span></span>" +
+      (auth ? '<button type="button" class="text-button" data-act="update" data-focus="update">Update</button>' : "") +
+      "</div>"
+    );
+  }
+
+  function shopRow(item, r) {
+    var ticked = state.ticks.indexOf(item.id) !== -1;
+    var partial = r.status === "partial";
+    var qty = partial ? amountText(item, r.left) : needText(item);
+    var some = partial
+      ? ICON.houseSome("icon icon-some") +
+        '<span class="sr-only">(have ' + esc(amountText(item, effective()[item.id])) + " of " + esc(needText(item)) + " at home)</span>"
+      : "";
+    return (
+      '<li><label class="shop-item"><input type="checkbox" class="tick" data-tick="' + item.id + '" data-focus="tick-' + item.id + '"' +
+      (ticked ? " checked" : "") + '><span class="shop-name">' + esc(item.name) + noteHtml(item) + "</span>" + some +
+      '<span class="shop-qty">' + esc(qty) + "</span></label></li>"
+    );
+  }
+
+  function listViewHtml() {
+    var h = effective();
+    var html = messageHtml() + servingsHtml() + homeCardHtml();
     var home = [];
     var shown = 0;
     data.sections.forEach(function (section) {
       var rows = [];
       section.items.forEach(function (item) {
-        var r = remaining(item, state.have);
-        if (state.hideHome && r.status === "home") home.push(item);
+        var r = remaining(item, h);
+        if (r.status === "home") home.push(item);
         else {
           rows.push(shopRow(item, r));
           shown++;
         }
       });
-      if (rows.length) html += sectionHtml(section.name, rows);
+      if (rows.length) html += '<section class="shop-section"><h2>' + esc(section.name) + '</h2><ul class="shop-list">' + rows.join("") + "</ul></section>";
     });
     if (!shown) html += '<p class="shopping-empty">Everything on the list is already at home.</p>';
-    var ticked = items.filter(function (item) {
-      return state.ticks.indexOf(item.id) !== -1 && !(state.hideHome && remaining(item, state.have).status === "home");
-    }).length;
-    if (ticked) {
-      html =
-        '<div class="shopping-progress"><span>' + ticked + " of " + shown + ' ticked</span><button type="button" class="link-button" data-act="clear-ticks">Untick all</button></div>' +
-        html;
-    }
     if (home.length) {
       html +=
-        '<details class="shopping-section shopping-home"><summary>Already at home (' + home.length + ")</summary>" +
-        '<ul class="shopping-items">' +
+        '<details class="shop-home" data-details="home"' + (state.homeOpen ? " open" : "") + "><summary>Already at home (" + home.length + ")</summary><ul>" +
         home.map(function (item) {
-          return "<li>" + qtyHtml(needText(item)) + esc(item.name) + noteHtml(item) + "</li>";
+          return "<li><span>" + esc(item.name) + "</span><span>" + esc(needText(item)) + "</span></li>";
         }).join("") +
         "</ul></details>";
+    }
+    if (state.ticks.length) {
+      html += '<div class="shop-footer"><button type="button" class="text-button is-quiet" data-act="clear-ticks">Start again (untick all)</button></div>';
     }
     return html;
   }
 
-  function editorHtml() {
-    if (!auth || state.draft) return "";
-    if (state.session) {
-      return (
-        '<div class="shopping-editor">Signed in as ' + esc(state.session.email || "editor") +
-        ' · <button type="button" class="link-button" data-act="signout">Sign out</button></div>'
-      );
+  /** How a row on the "At home" tab looks for the unsaved edits. */
+  function rowState(item) {
+    var v = state.draft ? state.draft[item.id] : state.have[item.id];
+    var n = need(item);
+    var level = v === true || (typeof v === "number" && n !== null && v >= n - 1e-9) ? "all" : typeof v === "number" && v > 0 ? "some" : "none";
+    var amt =
+      level === "some" ? formatNumber(v, item.unit) + " / " + withUnit(formatNumber(n, item.unit), item.unit) : needText(item);
+    return {
+      level: level,
+      value: typeof v === "number" ? Math.min(v, n) : level === "all" ? n : 0,
+      pct: level === "all" ? 100 : level === "some" ? Math.round((v / n) * 100) : 0,
+      amt: amt,
+      changed: !!state.draft && norm(state.draft[item.id]) !== norm(state.have[item.id]),
+    };
+  }
+
+  function fillRowHtml(item) {
+    var s = rowState(item);
+    var hasRange = item.amount !== undefined;
+    var html =
+      '<li class="fill-row' + (hasRange ? " has-range" : "") + (s.changed ? " is-changed" : "") + '" data-row="' + item.id +
+      '" data-level="' + s.level + '" style="--fill: ' + s.pct + '%">' +
+      '<span class="fill-name">' + esc(item.name) + "</span>" +
+      '<span class="fill-amt">' + esc(s.amt) + "</span>";
+    if (hasRange) {
+      html +=
+        '<input type="range" class="fill-range" data-range="' + item.id + '" data-focus="range-' + item.id + '" min="0" max="' + need(item) +
+        '" step="' + stepFor(item) + '" value="' + s.value + '" aria-label="' + esc(item.name) + ', how much is at home" aria-valuetext="' + esc(s.amt) + '">';
     }
-    if (state.signIn === "sent") {
-      return (
-        '<div class="shopping-editor">Sign-in link sent to ' + esc(state.email) +
-        ". Open it on this device. <button type=\"button\" class=\"link-button\" data-act=\"signin-open\">Use another email</button></div>"
-      );
+    return (
+      html +
+      '<button type="button" class="fill-house" data-house="' + item.id + '" data-focus="house-' + item.id + '" aria-pressed="' + (s.level === "all") +
+      '" aria-label="' + esc(item.name) + ', have it all">' + (s.level === "all" ? ICON.houseAll : ICON.house) + "</button></li>"
+    );
+  }
+
+  function saveBarHtml() {
+    var n = changedCount();
+    var html = '<div class="save-bar" id="save-bar">';
+    if (state.busy) {
+      html += '<button type="button" class="save-button" disabled>Saving…</button>';
+    } else if (n) {
+      html +=
+        '<button type="button" class="icon-button" data-act="discard" data-focus="discard" aria-label="Undo unsaved changes">' + ICON.undo + "</button>" +
+        '<button type="button" class="save-button" data-act="save" data-focus="save" aria-label="Save ' + n + " change" + (n === 1 ? "" : "s") +
+        '">Save <span class="save-count">' + n + "</span></button>";
+    } else {
+      var text = state.savedNow ? "Saved just now" : state.stocktakeAt ? "Saved " + shortDate(state.stocktakeAt) : "Nothing saved yet";
+      html += '<div class="saved-state" role="status">' + ICON.check + esc(text) + "</div>";
     }
-    if (state.signIn === "open") {
-      return (
-        '<form class="shopping-editor signin-form" data-form="signin">' +
-        '<label for="signin-email">Editor email</label>' +
+    return html + "</div>";
+  }
+
+  function homeViewHtml() {
+    var html =
+      messageHtml() +
+      '<p class="home-hint" aria-hidden="true"><span>' + ICON.slide + "slide = some</span><span>" + ICON.houseAll + "tap = all</span></p>";
+    data.sections.forEach(function (section) {
+      html += '<section class="shop-section"><h2>' + esc(section.name) + '</h2><ul class="shop-list">' + section.items.map(fillRowHtml).join("") + "</ul></section>";
+    });
+    html +=
+      '<div class="home-tools"><button type="button" class="icon-button" data-act="reset-home" data-focus="reset-home" aria-label="Nothing at home: clear every row">' +
+      ICON.houseClear + "</button></div>";
+    return html + saveBarHtml();
+  }
+
+  function sheetHtml() {
+    if (!state.sheet) return "";
+    var code = state.sheet === "code";
+    var html =
+      '<div class="sheet-backdrop"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">' +
+      '<span class="sheet-grip" aria-hidden="true"></span>' +
+      '<div class="sheet-head"><div><h2 id="sheet-title">Update what\'s at home</h2><p>' +
+      (code ? "We sent a code to " + esc(state.email) + ". It works on any device." : "Sign in once and you can mark what you already have.") +
+      '</p></div><button type="button" class="icon-button" data-act="sheet-close" aria-label="Close">' + ICON.close + "</button></div>";
+    if (state.sheetMessage) {
+      html += '<p class="shopping-status' + (state.sheetMessage.error ? " is-error" : "") + '" role="status">' + esc(state.sheetMessage.text) + "</p>";
+    }
+    if (!code) {
+      html +=
+        '<form data-form="email"><label for="signin-email">Email</label>' +
         '<input id="signin-email" type="email" autocomplete="email" required value="' + esc(state.email) + '" data-focus="signin-email">' +
-        '<button type="submit"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Sending…" : "Email me a sign-in link") + "</button>" +
-        "</form>"
-      );
+        '<button type="submit" class="save-button"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Sending…" : "Email me a code") + "</button></form>" +
+        '<p class="sheet-note">Only family editors can sign in. You\'ll stay signed in on this device.</p>';
+    } else {
+      html +=
+        '<form data-form="code"><label for="signin-code">Code from the email</label>' +
+        '<input id="signin-code" class="code-input" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required value="' +
+        esc(state.code) + '" data-focus="signin-code">' +
+        '<button type="submit" class="save-button"' + (state.busy ? " disabled" : "") + ">" + (state.busy ? "Signing in…" : "Sign in") + "</button></form>" +
+        '<div class="sheet-links"><button type="button" class="text-button is-quiet" data-act="sheet-email">Change email</button>' +
+        '<button type="button" class="text-button" data-act="resend"' + (state.busy ? " disabled" : "") + ">Send a new code</button></div>" +
+        '<p class="sheet-note">The email also has a sign-in link, if you\'d rather tap that on this device.</p>';
     }
-    return '<div class="shopping-editor"><button type="button" class="link-button" data-act="signin-open">Editor sign-in</button></div>';
+    return html + "</div></div>";
   }
 
   function render() {
     var focused = document.activeElement && document.activeElement.getAttribute("data-focus");
-    app.innerHTML = toolbarHtml() + (state.draft ? stocktakeBarHtml() : "") + messageHtml() + listHtml() + editorHtml();
-    app.querySelectorAll("[data-partial]").forEach(function (el) {
-      el.indeterminate = true;
-    });
+    if (state.tab === "home" && !isEditor()) state.tab = "list";
+    app.innerHTML = (isEditor() ? tabsHtml() : "") + (state.tab === "home" ? homeViewHtml() : listViewHtml()) + sheetHtml();
+    if (accountEl) accountEl.innerHTML = accountHtml();
+    document.body.classList.toggle("sheet-open", !!state.sheet);
     if (focused) {
-      var el = app.querySelector('[data-focus="' + focused + '"]');
+      var el = document.querySelector('[data-focus="' + focused + '"]');
       if (el) el.focus();
     }
+    // An open sheet keeps focus inside it: on its field, unless something in it already has focus.
+    var sheet = app.querySelector(".sheet");
+    if (sheet && !sheet.contains(document.activeElement)) sheet.querySelector("input").focus();
   }
 
-  // --- Supabase Auth (magic link, REST) ---
+  // Dragging updates the row in place (re-rendering would drop the pointer capture), plus the tab counts and the save bar.
+  function updateRow(id) {
+    var row = app.querySelector('[data-row="' + id + '"]');
+    if (!row) return;
+    var item = byId[id];
+    var s = rowState(item);
+    row.style.setProperty("--fill", s.pct + "%");
+    row.setAttribute("data-level", s.level);
+    row.classList.toggle("is-changed", s.changed);
+    row.querySelector(".fill-amt").textContent = s.amt;
+    var range = row.querySelector(".fill-range");
+    if (range) {
+      range.value = s.value;
+      range.setAttribute("aria-valuetext", s.amt);
+    }
+    var house = row.querySelector(".fill-house");
+    house.setAttribute("aria-pressed", String(s.level === "all"));
+    house.innerHTML = s.level === "all" ? ICON.houseAll : ICON.house;
+    var tabs = document.getElementById("shop-tabs");
+    if (tabs) tabs.outerHTML = tabsHtml();
+    var bar = document.getElementById("save-bar");
+    if (bar) bar.outerHTML = saveBarHtml();
+  }
+
+  // --- unsaved edits ---
+  function ensureDraft() {
+    if (!state.draft) state.draft = Object.assign({}, state.have);
+  }
+  function persistDraft() {
+    save(DRAFT_KEY, changedCount() ? state.draft : undefined);
+  }
+  function setDraft(id, v) {
+    ensureDraft();
+    if (v === true || (typeof v === "number" && v > 0)) state.draft[id] = v;
+    else delete state.draft[id];
+    state.savedNow = false;
+    persistDraft();
+  }
+  /** A slider position (0..need) as a stocktake value: all of it is `true`, so it doesn't depend on servings. */
+  function fromSlider(item, value) {
+    var n = need(item);
+    return value >= n - 1e-9 ? true : value;
+  }
+
+  // --- Supabase Auth (email code or magic link, REST) ---
   function setSession(session) {
     state.session = session;
     save(SESSION_KEY, session || undefined);
@@ -337,13 +493,19 @@
       email: (tokens.user && tokens.user.email) || emailFromJwt(tokens.access_token),
     };
   }
+  function signedIn(session) {
+    setSession(session);
+    state.sheet = null;
+    state.sheetMessage = null;
+    state.code = "";
+    state.tab = "home";
+  }
   // Coming back from the magic link: Supabase puts the tokens (or an error) in the URL fragment.
   function readRedirect() {
     if (!auth || location.hash.length < 2) return;
     var params = new URLSearchParams(location.hash.slice(1));
     if (params.get("access_token")) {
-      setSession(sessionFrom(Object.fromEntries(params)));
-      state.message = { text: "Signed in. Tap “What's at home?” to mark what you already have." };
+      signedIn(sessionFrom(Object.fromEntries(params)));
     } else if (params.get("error_description")) {
       state.message = { text: "Sign-in failed: " + params.get("error_description").replace(/\+/g, " ") + ". Try again.", error: true };
     } else {
@@ -355,6 +517,16 @@
     var headers = { apikey: auth.supabaseKey, "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
     return fetch(auth.supabaseUrl + "/auth/v1/" + path, { method: "POST", headers: headers, body: JSON.stringify(body || {}) });
+  }
+  function errorReason(res) {
+    return res.json().then(
+      function (j) {
+        return j.msg || j.error_description || j.message || "";
+      },
+      function () {
+        return "";
+      }
+    );
   }
   function accessToken() {
     var s = state.session;
@@ -370,80 +542,84 @@
         return tokens.access_token;
       });
   }
+  function openSheet(message) {
+    state.sheet = "email";
+    state.sheetMessage = message || null;
+    state.accountOpen = false;
+  }
   function signedOut(text) {
     setSession(null);
-    state.signIn = "open";
-    state.message = { text: text, error: true };
+    openSheet({ text: text, error: true });
   }
-
-  function sendSignInLink() {
-    var redirect = location.origin + location.pathname;
+  function busyThen(promise, done) {
     state.busy = true;
-    state.message = null;
     render();
-    authFetch("otp?redirect_to=" + encodeURIComponent(redirect), { email: state.email, create_user: false })
-      .then(function (res) {
-        if (res.ok) {
-          state.signIn = "sent";
-          return;
-        }
-        return res.json().then(
-          function (j) {
-            var reason = j.msg || j.error_description || j.message || "";
-            state.message = /signup|not.*found|not allowed/i.test(reason)
-              ? { text: "That email can't sign in here.", error: true }
-              : { text: "Couldn't send the link" + (reason ? ": " + reason : "") + ".", error: true };
-          },
-          function () {
-            state.message = { text: "Couldn't send the link. Try again.", error: true };
-          }
-        );
-      })
+    return promise
       .catch(function () {
-        state.message = { text: "Couldn't reach the sign-in service. Check your connection.", error: true };
+        done({ text: "Couldn't reach the server. Check your connection and try again.", error: true });
       })
       .then(function () {
         state.busy = false;
         render();
       });
   }
+  function sendCode() {
+    state.sheetMessage = null;
+    save(EMAIL_KEY, state.email);
+    var redirect = location.origin + location.pathname;
+    busyThen(
+      // The email carries both the code ({{ .Token }}) and the magic link back to this page.
+      authFetch("otp?redirect_to=" + encodeURIComponent(redirect), { email: state.email, create_user: false }).then(function (res) {
+        if (res.ok) {
+          state.sheet = "code";
+          state.code = "";
+          return;
+        }
+        return errorReason(res).then(function (reason) {
+          state.sheetMessage = /signup|not.*found|not allowed/i.test(reason)
+            ? { text: "That email can't sign in here.", error: true }
+            : { text: "Couldn't send the code" + (reason ? ": " + reason : "") + ".", error: true };
+        });
+      }),
+      function (m) {
+        state.sheetMessage = m;
+      }
+    );
+  }
+  function verifyCode() {
+    state.sheetMessage = null;
+    busyThen(
+      authFetch("verify", { type: "email", email: state.email, token: state.code }).then(function (res) {
+        if (!res.ok) {
+          state.sheetMessage = { text: "That code didn't work. Check it, or send a new one.", error: true };
+          return;
+        }
+        return res.json().then(function (tokens) {
+          signedIn(sessionFrom(tokens));
+        });
+      }),
+      function (m) {
+        state.sheetMessage = m;
+      }
+    );
+  }
 
-  // --- stocktake ---
-  function startStocktake() {
-    state.draft = Object.assign({}, state.have);
-    state.message = null;
-    render();
-    app.scrollIntoView({ block: "start" });
-  }
-  function setAmount(id, value) {
-    var item = byId[id];
-    var v = Math.max(0, Math.round(value * 100) / 100);
-    state.draft[id] = v;
-    // Typing doesn't re-render (it would steal the cursor); update the row in place.
-    var left = app.querySelector('[data-left="' + id + '"]');
-    if (left) left.innerHTML = leftText(item);
-    var row = left && left.closest(".stock-row");
-    if (row) {
-      var home = remaining(item, state.draft).status === "home";
-      row.classList.toggle("is-home", home);
-      row.classList.toggle("is-partial", !home);
-    }
-  }
+  // --- saving the stocktake ---
   function saveStocktake() {
+    ensureDraft();
+    var draft = state.draft;
     var payload = items.map(function (item) {
-      var v = state.draft[item.id];
+      var v = draft[item.id];
       var entry = { name: item.name };
       if (item.quantity) entry.quantity = item.quantity;
       if (v === true || (typeof v === "number" && v > 0)) entry.have = v;
       return entry;
     });
-    state.busy = true;
     state.message = null;
-    render();
-    accessToken()
-      .then(function (token) {
+    busyThen(
+      accessToken().then(function (token) {
         if (!token) {
-          signedOut("Your sign-in has expired. Sign in again; your ticks are kept until you leave the page.");
+          signedOut("Your sign-in has expired. Sign in again to save; your changes are kept.");
           return;
         }
         return fetch(auth.api, {
@@ -467,116 +643,190 @@
             });
             state.have = saved;
             state.draft = null;
-            save(PENDING_KEY, { saved: out.body.stocktake, have: saved });
-            state.message = { text: "Saved. The shopping agent sees it now; the page updates for everyone in about a minute." };
+            state.savedNow = true;
+            state.stocktakeAt = out.body.stocktake || new Date().toISOString();
+            save(DRAFT_KEY, undefined);
+            save(PENDING_KEY, { saved: state.stocktakeAt, have: saved });
           } else if (out.res.status === 401) {
-            signedOut(out.body.error || "Sign in again to save.");
+            signedOut(out.body.error || "Sign in again to save; your changes are kept.");
           } else {
             state.message = { text: out.body.error || "Saving failed. Try again.", error: true };
           }
         });
-      })
-      .catch(function () {
-        state.message = { text: "Couldn't reach the server. Check your connection and try again.", error: true };
-      })
-      .then(function () {
-        state.busy = false;
-        render();
-      });
+      }),
+      function (m) {
+        state.message = m;
+      }
+    );
   }
 
   // --- events ---
-  app.addEventListener("click", function (e) {
+  function onClick(e) {
+    if (e.target.classList && e.target.classList.contains("sheet-backdrop")) {
+      state.sheet = null;
+      return render();
+    }
     var el = e.target.closest("button");
-    if (!el || !app.contains(el)) return;
+    if (!el || el.disabled) return;
     var act = el.getAttribute("data-act");
     if (el.hasAttribute("data-serves")) {
       state.servings = Number(el.getAttribute("data-serves"));
       save("shopping-servings", state.servings);
-    } else if (el.hasAttribute("data-some")) {
-      var item = byId[el.getAttribute("data-some")];
-      if (typeof state.draft[item.id] === "number") delete state.draft[item.id];
-      else {
-        // Start at about half of what's needed, on the item's step.
-        var step = stepFor(item);
-        state.draft[item.id] = Math.max(step, Math.floor(item.amount / 2 / step) * step);
-      }
-    } else if (el.hasAttribute("data-step")) {
-      var id = el.getAttribute("data-step");
-      state.draft[id] = Math.max(0, Math.round(((state.draft[id] || 0) + Number(el.getAttribute("data-by"))) * 100) / 100);
-    } else if (act === "toggle-home") {
-      state.hideHome = !state.hideHome;
-      save("shopping-hide-home", state.hideHome);
-    } else if (act === "clear-ticks") {
-      state.ticks = [];
-      save(TICKS_KEY, undefined);
-    } else if (act === "edit") {
-      return startStocktake();
-    } else if (act === "all-home") {
-      items.forEach(function (item) {
-        state.draft[item.id] = true;
-      });
-    } else if (act === "none-home") {
-      state.draft = {};
-    } else if (act === "cancel") {
-      state.draft = null;
-    } else if (act === "save") {
-      return saveStocktake();
-    } else if (act === "signin-open") {
-      state.signIn = "open";
+    } else if (el.hasAttribute("data-tab")) {
+      state.tab = el.getAttribute("data-tab");
       state.message = null;
-      render();
-      var input = document.getElementById("signin-email");
-      if (input) input.focus();
-      return;
+    } else if (el.hasAttribute("data-house")) {
+      var id = el.getAttribute("data-house");
+      setDraft(id, rowState(byId[id]).level === "all" ? 0 : true);
+    } else if (act === "signin") {
+      openSheet();
+    } else if (act === "update") {
+      if (isEditor()) state.tab = "home";
+      else openSheet();
+    } else if (act === "account") {
+      state.accountOpen = !state.accountOpen;
     } else if (act === "signout") {
       var token = state.session && state.session.access_token;
       if (token) authFetch("logout", {}, token).catch(function () {});
       setSession(null);
-      state.signIn = "closed";
-      state.message = { text: "Signed out." };
+      state.accountOpen = false;
+      state.tab = "list";
+    } else if (act === "sheet-close") {
+      state.sheet = null;
+    } else if (act === "sheet-email") {
+      state.sheet = "email";
+      state.sheetMessage = null;
+    } else if (act === "resend") {
+      return sendCode();
+    } else if (act === "clear-ticks") {
+      state.ticks = [];
+      save(TICKS_KEY, undefined);
+    } else if (act === "reset-home") {
+      ensureDraft();
+      state.draft = {};
+      state.savedNow = false;
+      persistDraft();
+    } else if (act === "discard") {
+      state.draft = null;
+      save(DRAFT_KEY, undefined);
+    } else if (act === "save") {
+      return saveStocktake();
     } else {
       return;
     }
     render();
+  }
+  app.addEventListener("click", onClick);
+  if (accountEl) accountEl.addEventListener("click", onClick);
+
+  document.addEventListener("click", function (e) {
+    // composedPath, not contains(): the clicked button may already have been re-rendered away.
+    if (state.accountOpen && accountEl && e.composedPath().indexOf(accountEl) === -1) {
+      state.accountOpen = false;
+      render();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && (state.sheet || state.accountOpen)) {
+      state.sheet = null;
+      state.accountOpen = false;
+      render();
+    }
   });
 
   app.addEventListener("change", function (e) {
     var el = e.target;
-    if (el.hasAttribute("data-tick")) {
-      var id = el.getAttribute("data-tick");
-      state.ticks = state.ticks.filter(function (t) {
-        return t !== id;
-      });
-      if (el.checked) state.ticks.push(id);
-      save(TICKS_KEY, state.ticks);
-      render();
-    } else if (el.hasAttribute("data-have-all")) {
-      var hid = el.getAttribute("data-have-all");
-      if (state.draft[hid] === true) delete state.draft[hid];
-      else state.draft[hid] = true;
-      render();
-    }
-    // Typed amounts are applied in place on "input" (setAmount). Re-rendering on "change" would
-    // replace the button being tapped when the field loses focus, swallowing e.g. the Save tap.
+    if (!el.hasAttribute("data-tick")) return;
+    var id = el.getAttribute("data-tick");
+    state.ticks = state.ticks.filter(function (t) {
+      return t !== id;
+    });
+    if (el.checked) state.ticks.push(id);
+    save(TICKS_KEY, state.ticks);
+    render();
   });
 
   app.addEventListener("input", function (e) {
     var el = e.target;
-    if (el.hasAttribute("data-amount")) {
-      var v = parseFloat(el.value);
-      setAmount(el.getAttribute("data-amount"), Number.isFinite(v) ? v : 0);
+    if (el.hasAttribute("data-range")) {
+      // Keyboard and screen readers drive the (visually hidden) range input.
+      var id = el.getAttribute("data-range");
+      setDraft(id, fromSlider(byId[id], Number(el.value)));
+      updateRow(id);
     } else if (el.id === "signin-email") {
       state.email = el.value.trim();
+    } else if (el.id === "signin-code") {
+      state.code = el.value.replace(/\D/g, "");
     }
   });
 
+  // The open/closed state of "Already at home" survives re-renders ("toggle" doesn't bubble).
+  app.addEventListener(
+    "toggle",
+    function (e) {
+      if (e.target.getAttribute && e.target.getAttribute("data-details") === "home") state.homeOpen = e.target.open;
+    },
+    true
+  );
+
   app.addEventListener("submit", function (e) {
-    if (e.target.getAttribute("data-form") !== "signin") return;
     e.preventDefault();
-    state.email = document.getElementById("signin-email").value.trim();
-    if (state.email) sendSignInLink();
+    var form = e.target.getAttribute("data-form");
+    if (form === "email") {
+      state.email = document.getElementById("signin-email").value.trim();
+      if (state.email) sendCode();
+    } else if (form === "code") {
+      state.code = document.getElementById("signin-code").value.replace(/\D/g, "");
+      if (state.code) verifyCode();
+    }
   });
+
+  // Sliding across a fill row sets how much is at home. A tap does nothing (so scrolling past
+  // can't change anything), a mostly vertical move is left to the page scroll.
+  var drag = null;
+  function slideTo(x) {
+    var rect = drag.row.getBoundingClientRect();
+    var frac = Math.min(1, Math.max(0, (x - rect.left) / rect.width));
+    var item = byId[drag.id];
+    var step = stepFor(item);
+    var n = need(item);
+    var value = frac > 0.97 ? n : Math.round((frac * n) / step) * step;
+    setDraft(drag.id, value <= 0 ? 0 : fromSlider(item, value));
+    updateRow(drag.id);
+  }
+  app.addEventListener("pointerdown", function (e) {
+    var row = e.target.closest(".fill-row.has-range");
+    if (!row || e.target.closest(".fill-house") || e.button > 0) return;
+    drag = { id: row.getAttribute("data-row"), row: row, x: e.clientX, y: e.clientY, active: false, pointerId: e.pointerId };
+  });
+  app.addEventListener("pointermove", function (e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    if (!drag.active) {
+      var dx = Math.abs(e.clientX - drag.x);
+      var dy = Math.abs(e.clientY - drag.y);
+      if (dy > 10 && dy > dx) {
+        drag = null;
+        return;
+      }
+      if (dx < 8) return;
+      drag.active = true;
+      try {
+        drag.row.setPointerCapture(e.pointerId);
+      } catch (err) {}
+    }
+    e.preventDefault();
+    slideTo(e.clientX);
+  });
+  function endDrag(e) {
+    if (!drag || e.pointerId !== drag.pointerId) return;
+    var row = drag.row;
+    drag = null;
+    try {
+      row.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+  }
+  app.addEventListener("pointerup", endDrag);
+  app.addEventListener("pointercancel", endDrag);
 
   readRedirect();
   render();
