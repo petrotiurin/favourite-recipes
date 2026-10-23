@@ -11,6 +11,18 @@
   --draft: #7a5bc4;
   --draft-soft: #f3effc;
   --current-soft: #fbefe7;
+  /* See design.md: accent-ink is the accent for small text, accent-strong a filled button with on-accent text. */
+  --accent-ink: #a84d1e;
+  --accent-strong: #b0501d;
+  --on-accent: #ffffff;
+  --track: #efe9e1;
+  --line: #f1ece5;
+  --icon-muted: #a39a90;
+  --fill-some: rgba(201, 98, 44, 0.05);
+  --fill-all: rgba(201, 98, 44, 0.1);
+  --fill-edge: rgba(201, 98, 44, 0.55);
+  --backdrop: rgba(30, 25, 20, 0.42);
+  --raised: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,6 +38,17 @@
     --draft: #b39ae8;
     --draft-soft: #2a2336;
     --current-soft: #33261c;
+    --accent-ink: #eba374;
+    --accent-strong: #e08a4f;
+    --on-accent: #1d140c;
+    --track: #2c261f;
+    --line: #2a251e;
+    --icon-muted: #7f766b;
+    --fill-some: rgba(224, 138, 79, 0.08);
+    --fill-all: rgba(224, 138, 79, 0.16);
+    --fill-edge: rgba(224, 138, 79, 0.7);
+    --backdrop: rgba(0, 0, 0, 0.55);
+    --raised: #3d352b;
   }
 }
 
@@ -449,32 +472,83 @@ main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
   }
 }
 
-/* Shopping list page (shopping-list.json, written by the MCP server's agent) */
+
+footer.site-footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 2rem 1rem 3rem;
+}
+
+/* Shopping list page (shopping-list.json, written by the MCP server's agent).
+   templates/shopping-list.js renders the static page, templates/shopping.js the interactive one.
+   Patterns and the icon language are described in design.md. */
 .shopping-page main {
-  max-width: 760px;
+  max-width: 560px;
+  padding: 0 1rem 2rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.icon {
+  flex: none;
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.shop-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 3.5rem;
+  padding-top: 0.5rem;
+}
+
+.shop-top .back-link {
+  margin: 0;
+  padding: 0.6rem 0;
 }
 
 .shopping-title {
-  font-size: 2rem;
-  margin: 0 0 0.5rem;
+  font-size: 1.9rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
-.shopping-intro,
-.shopping-empty {
+.shop-for {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
   color: var(--text-muted);
-  margin: 0 0 1rem;
+}
+
+.shop-for summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 0.2rem 0;
 }
 
 .shopping-recipes {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  margin: 0.5rem 0 0.25rem;
 }
 
 .shopping-recipes a {
   font-size: 0.85rem;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--current-soft);
   border: 1px solid var(--accent);
   border-radius: 999px;
@@ -491,310 +565,608 @@ main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft) {
   text-decoration: underline;
 }
 
-.shopping-section h2 {
-  font-size: 1.2rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.4rem;
-  margin-top: 2rem;
+.shopping-empty {
+  color: var(--text-muted);
+  margin: 1rem 0;
 }
 
-.shopping-items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.shopping-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  padding: 0.35rem 0;
+/* Buttons and controls shared by the page */
+.pill,
+.avatar,
+.icon-button,
+.seg button,
+.tabs button,
+.fill-house,
+.save-button,
+.text-button {
+  font: inherit;
+  color: inherit;
   cursor: pointer;
 }
 
-.shopping-item input {
-  margin-top: 0.3rem;
-  accent-color: var(--accent);
-}
-
-.shopping-item input:checked + span {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-
-footer.site-footer {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  padding: 2rem 1rem 3rem;
-}
-
-/* Shopping page: toolbar, "what's at home" stocktake (templates/shopping.js) */
-.shopping-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1.25rem;
-  margin: 1rem 0 0.5rem;
-}
-
-.shopping-toolbar .servings-picker {
-  margin: 0;
-}
-
-.switch {
+.pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  font: inherit;
+  gap: 0.4rem;
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
   font-size: 0.9rem;
-  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.pill .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.shop-account {
+  position: relative;
+}
+
+.account-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 5;
+  min-width: 13rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-hover);
+  font-size: 0.9rem;
+}
+
+.account-menu p {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.text-button {
+  min-height: 2.75rem;
+  padding: 0 0.25rem;
   background: none;
   border: 0;
-  padding: 0.25rem 0;
-  cursor: pointer;
+  color: var(--accent-ink);
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
-.switch-track {
-  position: relative;
+.text-button.is-quiet {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-decoration: underline;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
   flex: none;
-  width: 2.6rem;
-  height: 1.5rem;
-  border-radius: 999px;
-  background: var(--border);
-  transition: background 0.15s ease;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 
-.switch-thumb {
-  position: absolute;
-  top: 0.15rem;
-  left: 0.15rem;
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow);
-  transition: transform 0.15s ease;
-}
-
-.switch[aria-checked="true"] .switch-track {
-  background: var(--accent);
-}
-
-.switch[aria-checked="true"] .switch-thumb {
-  transform: translateX(1.1rem);
-}
-
-.switch:focus-visible,
-.stock-start:focus-visible,
-.stock-bar button:focus-visible,
-.stock-row button:focus-visible,
-.link-button:focus-visible {
+.shopping-page button:focus-visible,
+.shopping-page a:focus-visible,
+.shopping-page input:focus-visible,
+.shopping-page summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.stock-start,
-.stock-bar button,
-.signin-form button {
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.4rem 0.9rem;
+/* Tabs (signed-in editor): the list, and what's at home */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 1rem;
+  padding: 4px;
+  background: var(--track);
+  border-radius: 12px;
 }
 
-.stock-start {
-  margin-left: auto;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.stock-bar button.primary,
-.signin-form button {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  font-weight: 600;
-}
-
-.stock-bar button:disabled,
-.signin-form button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.stock-bar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  padding: 0.75rem 0;
-  margin-bottom: 0.5rem;
-}
-
-.stock-help {
-  margin: 0 0 0.6rem;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.stock-help strong {
-  color: var(--text);
-}
-
-.stock-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.stock-spacer {
-  flex: 1;
-}
-
-.stock-row {
-  border-bottom: 1px solid var(--border);
-  padding: 0.15rem 0;
-}
-
-.stock-main {
+.tabs button {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-}
-
-.stock-main .shopping-item {
-  flex: 1;
-  padding: 0.5rem 0;
-}
-
-.stock-row .shopping-item input {
-  width: 1.2rem;
-  height: 1.2rem;
-  margin-top: 0.1rem;
-}
-
-.stock-row.is-home .shopping-item span {
+  height: 2.65rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
   color: var(--text-muted);
-}
-
-.stock-some {
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 0.3rem 0.75rem;
-}
-
-.stock-some[aria-pressed="true"] {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--current-soft);
-}
-
-.stock-partial {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0 0 0.6rem 1.8rem;
   font-size: 0.9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.stock-partial-label,
-.stock-unit {
-  color: var(--text-muted);
-}
-
-.stock-partial button {
-  font: inherit;
-  width: 2.2rem;
-  height: 2.2rem;
-  cursor: pointer;
+.tabs button[aria-selected="true"] {
+  background: var(--raised);
   color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+.unsaved-dot {
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 50%;
+  background: var(--accent);
 }
 
-.stock-partial input {
-  font: inherit;
-  width: 4.5rem;
-  padding: 0.35rem 0.5rem;
-  color: var(--text);
+/* Cards: servings, and when the home was last checked */
+.shop-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.6rem 0.9rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  text-align: right;
-}
-
-.stock-left {
-  color: var(--accent);
-  margin-left: 0.25rem;
-}
-
-.stock-row.is-home .stock-left {
+  border-radius: 14px;
+  font-size: 0.9rem;
   color: var(--text-muted);
 }
 
-.shopping-have {
-  display: inline-block;
-  font-size: 0.75rem;
-  color: var(--accent);
-  background: var(--current-soft);
-  border-radius: 999px;
-  padding: 0.05rem 0.5rem;
-  margin-left: 0.25rem;
-  text-decoration: none;
-  vertical-align: 0.1em;
-}
-
-.shopping-have.is-home {
-  color: var(--text-muted);
-  background: var(--border);
-}
-
-.shopping-home summary {
-  cursor: pointer;
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.4rem;
-}
-
-.shopping-home li {
-  color: var(--text-muted);
-  padding: 0.35rem 0;
-}
-
-details.shopping-home {
-  margin-top: 2rem;
-}
-
-.shopping-progress {
+.seg {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
+  gap: 2px;
+  padding: 3px;
+  background: var(--track);
+  border-radius: 10px;
+}
+
+.seg button {
+  min-width: 2.75rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.seg button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+
+.home-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.6rem 0 0;
+  padding: 0.75rem 0.9rem;
+  background: var(--current-soft);
+  border-radius: 14px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.home-card .icon {
+  color: var(--accent);
+}
+
+.home-card-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-card-text strong {
+  color: var(--accent-ink);
+}
+
+.home-card-text span {
+  color: var(--text-muted);
+}
+
+/* The list */
+.shop-section {
   margin-top: 1rem;
 }
 
+/* Aisle sections fold away: the whole heading row is the tap target (a <details> summary). */
+.shop-section summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  margin-bottom: 0.15rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.shop-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.shop-section summary h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.section-count {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-section .chevron {
+  width: 1.1rem;
+  height: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.shop-section:not([open]) .chevron {
+  transform: rotate(-90deg);
+}
+
+.shop-section:not([open]) summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.shop-section h2,
+.home-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.shop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.shop-list > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 3.5rem;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+}
+
+.tick {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  border: 2px solid var(--icon-muted);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tick:checked {
+  border-color: var(--text);
+  background: var(--text);
+}
+
+.tick:checked::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.75rem;
+  margin-top: -0.15rem;
+  border: solid var(--bg);
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+
+.shop-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.shop-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.shop-qty {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.shop-item .icon-some {
+  width: 1rem;
+  height: 1rem;
+  color: var(--accent);
+}
+
+.tick:checked ~ .shop-name,
+.tick:checked ~ .shop-qty {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.shop-home {
+  margin-top: 1.4rem;
+}
+
+.shop-home summary {
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.shop-home ul {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0 0.9rem;
+  color: var(--text-muted);
+}
+
+.shop-home li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.shop-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+/* "At home" tab: each row is a fill bar. Slide across it for some, tap the house for all. */
+.home-hint {
+  display: flex;
+  justify-content: center;
+  gap: 1.1rem;
+  margin: 0.75rem 0 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.home-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.home-hint .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.fill-row {
+  --fill: 0%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+  padding-left: 0.9rem;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.fill-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--fill);
+  background: var(--fill-some);
+  pointer-events: none;
+}
+
+.fill-row[data-level="all"]::before {
+  background: var(--fill-all);
+}
+
+.fill-row[data-level="some"]::after {
+  content: "";
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  left: var(--fill);
+  width: 3px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--fill-edge);
+  pointer-events: none;
+}
+
+.fill-row.is-changed {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.fill-row:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.fill-row.has-range {
+  cursor: ew-resize;
+}
+
+/* Text and the house sit above the fill and its end marker. */
+.fill-name,
+.fill-amt,
+.fill-house {
+  z-index: 1;
+}
+
+.fill-name {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.fill-amt {
+  position: relative;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fill-row:not([data-level="none"]) .fill-amt {
+  color: var(--accent-ink);
+}
+
+.shopping-page .fill-range:focus-visible {
+  outline: none;
+}
+
+.fill-range {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fill-house {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0 0.35rem 0 0.4rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--icon-muted);
+}
+
+.fill-row[data-level="all"] .fill-house {
+  color: var(--accent);
+}
+
+.home-tools {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.1rem;
+}
+
+.home-tools .icon-button {
+  border-radius: 50%;
+}
+
+.save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.1rem -1rem 0;
+  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.save-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  height: 3.25rem;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.save-button:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.save-count {
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--on-accent);
+  color: var(--accent-strong);
+  font-size: 0.8rem;
+  line-height: 1.5rem;
+}
+
+.saved-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3.25rem;
+  border-radius: 14px;
+  background: var(--current-soft);
+  color: var(--accent-ink);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.saved-state .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
 .shopping-status {
-  font-size: 0.9rem;
-  margin: 0.75rem 0;
+  margin: 0.75rem 0 0;
   padding: 0.6rem 0.8rem;
   border-radius: 10px;
   background: var(--current-soft);
+  font-size: 0.9rem;
 }
 
 .shopping-status.is-error {
@@ -809,40 +1181,108 @@ details.shopping-home {
   }
 }
 
-.link-button {
-  font: inherit;
-  font-size: inherit;
-  color: var(--accent);
-  background: none;
-  border: 0;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline;
+/* Sign-in sheet: email, then the 6-digit code from the email */
+body.sheet-open {
+  overflow: hidden;
 }
 
-.shopping-editor {
-  margin-top: 2.5rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.signin-form {
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
   display: flex;
-  flex-wrap: wrap;
+  align-items: flex-end;
   justify-content: center;
-  align-items: center;
-  gap: 0.5rem;
+  background: var(--backdrop);
 }
 
-.signin-form input {
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem calc(1.75rem + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -8px 24px rgba(30, 25, 20, 0.18);
+}
+
+.sheet-grip {
+  align-self: center;
+  width: 2.5rem;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sheet h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.sheet p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.sheet .icon-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--track);
+}
+
+.sheet form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sheet label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.sheet input {
   font: inherit;
-  min-width: 0;
-  flex: 1 1 14rem;
-  max-width: 20rem;
-  padding: 0.45rem 0.7rem;
+  height: 3.1rem;
+  padding: 0 0.9rem;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+.sheet input.code-input {
+  height: 3.6rem;
+  font-size: 1.6rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet .save-button {
+  flex: none;
+  margin-top: 0.4rem;
+}
+
+.sheet-links {
+  display: flex;
+  justify-content: space-between;
+}
+
+.sheet-note {
+  text-align: center;
+  font-size: 0.8rem !important;
 }

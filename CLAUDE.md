@@ -11,11 +11,15 @@ One exception: small, dependency-free vanilla JS is allowed for progressive-enha
 - No fetching/loading data at runtime — it must only operate on data already baked into the rendered HTML at build time (DOM already in the page, or a JSON literal the build script embedded).
 - It must be optional enhancement: the page's core content (recipe list, recipe pages) must already be fully present and readable with JS disabled: JS only adds interactivity (filtering, search) on top.
 
-One deliberate exception to "no network at runtime": `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It signs in with Supabase Auth's magic link (plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still never *loads* the list at runtime: it re-renders from the JSON literal the build embedded. Small, pinned CDN libraries are acceptable if a future feature really needs one, but still no bundler or npm packages in `dist/`.
+One deliberate exception to "no network at runtime": `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It signs in with a Supabase Auth email code (the same email also carries a magic link; plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still never *loads* the list at runtime: it re-renders from the JSON literal the build embedded. Small, pinned CDN libraries are acceptable if a future feature really needs one, but still no bundler or npm packages in `dist/`.
 
 The only allowed "moving part" beyond that is the Node build script that runs before deploy.
 
 The `mcp-server/` folder is **not part of the site**: it's a separate MCP server deployed to Vercel (see `mcp-server/README.md`) that lets an agent add/edit recipes by committing `recipes/*.md` and `images/recipes/*` to `main`. It never ships anything into `dist/`, and its tools mirror the `add-recipe` skill rules (`mcp-server/lib/recipe-format.js` — keep the two in sync if the format changes).
+
+## UI design
+
+`design.md` is the UI reference: colour tokens (the orange accent, purple only for drafts, no other hues such as green), the house icon language, the shared components and the interaction rules. Read it before changing any page's look or behaviour, and update it in the same change when you add or alter a pattern.
 
 ## How new recipes get added
 
@@ -35,7 +39,8 @@ styles/style.css    the one stylesheet, copied verbatim into dist/
 shopping-list.json  combined shopping list for the current recipes, written by the agent via the MCP server (see "Shopping list")
 templates/wakelock.js client-side "Keep screen on" toggle (Screen Wake Lock API), copied verbatim into dist/
 templates/shopping-list.js  renders shopping-list.html (the list, or a blank page) + the JSON shopping.js works from
-templates/shopping.js       shopping page: servings, "Take off what's at home" switch, local ticks, editor sign-in + stocktake
+templates/shopping.js       shopping page: servings, local ticks, editor sign-in sheet + "At home" tab (stocktake)
+design.md           UI design notes: palette tokens, the house icon language, components and interaction rules
 build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
@@ -89,18 +94,18 @@ The list is always written for **2 servings of every recipe** (each scaled by 2 
 
 ### Stocktake (what's already at home)
 
-On the shopping page the editor signs in (Supabase Auth magic link) and taps **What's at home?** to tick items they already have, or **Some** to enter a partial amount ("have 2 of 4 lemons"). Saving POSTs to the MCP server's `/stocktake` endpoint (`mcp-server/api/stocktake.js`), which checks the Supabase token and that the email is in `SHOPPING_EDITORS`, then commits `shopping-list.json` (one commit, one deploy) with:
+The editor taps **Sign in** (top right) or **Update** on the "Home checked" card. A sheet slides up: they enter their email, get a 6-digit code, and type it in (the code works on any device; the same email's magic link still works on the device that opens it). Once signed in, the page shows two tabs: the list (cart icon, count left to buy) and **At home** (house icon, count at home). On the At home tab every row is a fill bar: sliding across it sets how much is at home, the house button toggles "have it all". Edits stay in the browser (`localStorage`, per list) until **Save**, which POSTs them in one go to the MCP server's `/stocktake` endpoint (`mcp-server/api/stocktake.js`); undo drops the unsaved edits. The endpoint checks the Supabase token and that the email is in `SHOPPING_EDITORS`, then commits `shopping-list.json` (one commit, one deploy) with:
 
 ```json
 { "stocktake": "2026-10-18T10:00:00.000Z",
   "sections": [{ "name": "Fresh produce", "items": [{ "name": "Lemons", "quantity": "4", "have": 2 }, { "name": "Parsley", "have": true }] }] }
 ```
 
-`have: true` means enough at home; a number is the amount at home in the item's own unit. It is an absolute amount, so it isn't rescaled by the servings picker. The endpoint refuses a stocktake whose items (name + quantity) don't match the stored list (409), so a page loaded before the agent replaced the list can't write onto the new one. A new list from `update_shopping_list` starts without a stocktake. `get_shopping_list` reports what's left to buy and what to skip, which is what the `ocado-shop` skill shops from.
+`have: true` means enough at home (sliding a row all the way saves `true`); a number is the amount at home in the item's own unit. It is an absolute amount, so it isn't rescaled by the servings picker. The endpoint refuses a stocktake whose items (name + quantity) don't match the stored list (409), so a page loaded before the agent replaced the list can't write onto the new one. A new list from `update_shopping_list` starts without a stocktake. `get_shopping_list` reports what's left to buy and what to skip, which is what the `ocado-shop` skill shops from.
 
-On the page, the **Take off what's at home** switch (on by default) shows only what's left to buy, with fully stocked items folded into "Already at home". Turning it off shows the full list. Anyone can tick items while shopping; those ticks stay in their own browser (`localStorage`, per list). Until the site redeploys, the saving browser shows its own saved stocktake.
+For everyone, the list shows only what's left to buy: partly stocked items show the remaining amount with a half-filled house, and fully stocked items fold into "Already at home". Anyone can tick items while shopping; those ticks stay in their own browser (`localStorage`, per list). Until the site redeploys, the saving browser shows its own saved stocktake. The look and the icon language are described in `design.md`.
 
-Setup: Supabase project with email sign-in, sign-ups off, the editor invited as a user, and the shopping page URL in Auth → URL Configuration → Redirect URLs. The Pages build gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `STOCKTAKE_API_URL` from the repo's Actions **variables**; without them the page has no sign-in and is read-only. The Vercel project needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SHOPPING_EDITORS` (see `mcp-server/README.md`).
+Setup: Supabase project with email sign-in, sign-ups off, the editor invited as a user, and the shopping page URL in Auth → URL Configuration → Redirect URLs. For the code, the Magic Link email template (Auth → Email Templates) must include `{{ .Token }}` (keep `{{ .ConfirmationURL }}` for the link). The Pages build gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `STOCKTAKE_API_URL` from the repo's Actions **variables**; without them the page has no sign-in and is read-only. The Vercel project needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SHOPPING_EDITORS` (see `mcp-server/README.md`).
 
 ## Deployment
 
