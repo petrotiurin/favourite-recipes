@@ -110,7 +110,8 @@ Back link (chevron + "All recipes"), kicker (status, course and tags), serif tit
 drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
 each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
-the segmented control (1/2/4, the same `.seg` as the shopping page) on the left, and the "Keep
+the segmented control (1/2/4, the same `.seg` as the shopping page; it opens on 4, whatever
+the recipe serves) on the left, and the "Keep
 screen on" pill (sun icon; filled `--accent-strong` with "Screen stays on" when on) on the right.
 On a phone the pill wraps under the servings, both flush left. The bar is hidden until its scripts
 run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
@@ -122,7 +123,7 @@ in an accent-ink kicker.
 - **Card** (`.shop-card`, `.shop-list`): `--surface`, 1px `--border`, 14px radius. Rows inside
   are divided by `--line`.
 - **Segmented control** (`.seg`): buttons on a `--track` pill; the selected one is `--raised`,
-  bold, with a light shadow. Used for servings (1/2/4).
+  bold, with a light shadow. Used for servings (1/2/4); 4 is the default everywhere.
 - **Tabs** (`.tabs`): the same look as the segmented control, full width, icon + count per tab.
   A small accent dot on a tab means unsaved changes there.
 - **Pill button** (`.pill`): rounded outline button, for secondary actions such as "Sign in".

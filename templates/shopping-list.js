@@ -17,6 +17,8 @@ function formatDate(iso) {
 
 // The saved list is written for this many servings of every recipe; the picker rescales from it.
 const BASE_SERVINGS = 2;
+// What the page's picker starts on (templates/shopping.js), unless this browser picked another.
+const DEFAULT_SERVINGS = 4;
 
 /** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }; else null. Keep in sync with mcp-server/lib/shopping-list.js. */
 function parseQuantity(quantity) {
@@ -118,7 +120,7 @@ function pageData(list, auth) {
     .update(JSON.stringify(list.sections.map((s) => s.items.map((i) => [i.name, i.quantity || ""]))))
     .digest("hex")
     .slice(0, 12);
-  const data = { base: BASE_SERVINGS, version, stocktake: list.stocktake || null, sections, auth };
+  const data = { base: BASE_SERVINGS, servings: DEFAULT_SERVINGS, version, stocktake: list.stocktake || null, sections, auth };
   // Safe inside <script>: no "</script>" or "<!--" can survive the escape.
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }

@@ -47,6 +47,9 @@
     });
   });
 
+  var pressed = picker.querySelector('button[aria-pressed="true"]');
+  if (pressed) setServings(parseFloat(pressed.getAttribute("data-serves")));
+
   // The picker says how many it serves, so the static "Serves n" fact steps aside.
   if (servesChip) servesChip.hidden = true;
   picker.hidden = false;
