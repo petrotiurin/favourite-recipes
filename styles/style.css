@@ -1013,11 +1013,11 @@ footer.site-footer {
   flex: 1;
   margin: 0;
   font-family: var(--serif);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 1.3rem;
+  font-weight: 500;
+  font-size: 1.2rem;
+  font-variant-caps: all-small-caps;
   text-transform: none;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   color: var(--text);
 }
 

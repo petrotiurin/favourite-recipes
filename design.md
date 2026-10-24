@@ -63,8 +63,8 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
 
 - **Newsreader** (`--serif`), weight 400 only, for names and headings: the top-bar brand
   (italic), the index headline (1.9–2.75rem), tile names (1.1rem, 1.25rem from 720px, clamped to
-  three lines), recipe titles (2.1–3rem), recipe h2s (1.55rem), the shopping title and its
-  section names (italic). Tight tracking (-0.01 to -0.025em).
+  three lines), recipe titles (2.1–3rem), recipe h2s (1.55rem), the shopping title, and its
+  aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
   `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week").
@@ -148,7 +148,7 @@ interactive part from the embedded JSON.
 Under the serif title, the list's recipes appear as **photo bubbles**: overlapping 36px circles
 (2px `--bg` ring) followed by "For N recipes · list made <date>". Opening that summary lists each
 recipe as a link with its round photo and serif name ("To try" kicker after drafts). Aisle
-section names are italic serif.
+section names are serif small caps, like a cookbook index.
 
 **Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
 recipes · list made <date>", which expands to the recipe links; the servings card; the "Home
