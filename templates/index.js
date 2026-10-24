@@ -19,15 +19,47 @@ function courseClasses(r) {
     .join(" ");
 }
 
+const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+const count = (n, one, many) => `${NUMBER_WORDS[n] || n} ${n === 1 ? one : many}`;
+const capitalise = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+
+/** The index's opening line: what's in this week's rotation, or the whole book when nothing is current. */
+function lede(recipes) {
+  const drafts = recipes.filter(isDraft).length;
+  const regulars = recipes.filter((r) => isCurrent(r) && !isDraft(r)).length;
+  const parts = [
+    ...(drafts ? [count(drafts, "new thing to try", "new things to try")] : []),
+    ...(regulars ? [count(regulars, "old friend", "old friends")] : []),
+  ];
+  return parts.length
+    ? { kicker: "This week", headline: `${capitalise(parts.join(", "))}.` }
+    : { kicker: "The family cookbook", headline: `${capitalise(count(recipes.length, "recipe", "recipes"))} we keep coming back to.` };
+}
+
+/** The small-caps line above a tile's name: its place in the rotation, else its course. */
+function kicker(r) {
+  if (isDraft(r)) return `<p class="kicker kicker-draft">To try</p>`;
+  if (isCurrent(r)) return `<p class="kicker kicker-current">This week</p>`;
+  return `<p class="kicker">${escapeHtml((r.course || []).join(" · "))}</p>`;
+}
+
+const ICON_SEARCH =
+  '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+const ICON_CART =
+  '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>';
+
 function renderIndex(recipes) {
+  // Recipes arrive drafts first, then other current ones, then the rest; a divider
+  // marks where the rest begins (hidden by the CSS while filtering or searching).
+  const restStart = recipes.findIndex((r) => !isCurrent(r));
   const tiles = recipes
-    .map((r) => {
-      return `      <a class="tile ${courseClasses(r)}" href="recipes/${r.slug}.html">
-${isDraft(r) ? '        <span class="draft-badge">Draft</span>\n' : r.current === true ? '        <span class="current-badge">Current</span>\n' : ""}        <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="${escapeHtml(r.title)}" loading="lazy">
-        <div class="tile-body">
-          <h2 class="tile-title">${escapeHtml(r.title)}</h2>
-          <p class="tile-meta">🕒 ${r.total_mins} mins &middot; 🍽️ Serves ${r.serves} &middot; 🔥 ${r.calories} kcal</p>
-        </div>
+    .map((r, i) => {
+      const divider = i === restStart && i > 0 ? `      <p class="tile-divider">The rest of the book</p>\n` : "";
+      return `${divider}      <a class="tile ${courseClasses(r)}" href="recipes/${r.slug}.html">
+        <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="" loading="lazy">
+        ${kicker(r)}
+        <h2 class="tile-title">${escapeHtml(r.title)}</h2>
+        <p class="tile-meta">${r.total_mins} min &middot; ${r.calories} kcal</p>
       </a>`;
     })
     .join("\n");
@@ -37,6 +69,7 @@ ${isDraft(r) ? '        <span class="draft-badge">Draft</span>\n' : r.current ==
   const filters = COURSES.concat(recipes.some((r) => r.current === true && !isDraft(r)) ? ["Current"] : []).concat(
     recipes.some(isDraft) ? ["Drafts"] : []
   );
+  const FILTER_NAMES = { Current: "This week", Drafts: "To try" };
 
   // Each input must sit directly before its label: the CSS highlights the
   // active filter with `.filter-input:checked + .filter-label`.
@@ -46,18 +79,22 @@ ${isDraft(r) ? '        <span class="draft-badge">Draft</span>\n' : r.current ==
       filters.map((c) => {
         const id = `filter-${c.toLowerCase()}`;
         return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">
-      <label for="${id}" class="filter-label${c === "Drafts" ? " filter-label-draft" : c === "Current" ? " filter-label-current" : ""}">${c}</label>`;
+      <label for="${id}" class="filter-label${c === "Drafts" ? " filter-label-draft" : c === "Current" ? " filter-label-current" : ""}">${FILTER_NAMES[c] || c}</label>`;
       })
     )
     .join("\n");
 
-  const content = `  <header class="site-header">
-    <h1>Our Favourite Recipes</h1>
-    <p>A collection of the recipes we keep coming back to.</p>
-    <a class="shopping-link" href="shopping-list.html">🛒 Shopping list</a>
+  const { kicker: ledeKicker, headline } = lede(recipes);
+  const content = `  <header class="site-bar">
+    <a class="brand" href="index.html">Our Favourite Recipes</a>
+    <a class="bar-link" href="shopping-list.html">${ICON_CART}<span>Shopping list</span></a>
   </header>
   <main>
-    <input type="search" id="recipe-search" class="search-input" placeholder="Search recipes by name&hellip;" autocomplete="off">
+    <div class="lede">
+      <p class="kicker">${ledeKicker}</p>
+      <h1>${headline}</h1>
+    </div>
+    <label class="search">${ICON_SEARCH}<span class="sr-only">Search recipes</span><input type="search" id="recipe-search" class="search-input" placeholder="Search recipes" autocomplete="off"></label>
     <div class="filter-bar">
 ${filterControls}
     </div>

@@ -133,13 +133,16 @@ function renderShoppingList(list, recipes, auth = null) {
   if (!list) {
     body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes and a shopping list has been made for them.</p>`;
   } else {
+    const photo = (r) => `<img src="${escapeHtml(r.image.replace(/^\//, ""))}" alt="" loading="lazy">`;
     const links = recipes
-      .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${escapeHtml(r.title)}</a>`)
+      .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span></a>`)
       .join("\n        ");
     const updated = formatDate(list.updated);
     const count = `${recipes.length} recipe${recipes.length === 1 ? "" : "s"}`;
+    // The recipes' photos as overlapping bubbles; opening the summary lists them by name.
+    const bubbles = recipes.length ? `<span class="bubbles">${recipes.map(photo).join("")}</span>` : "";
     body = `    <details class="shop-for">
-      <summary>For ${count}${updated ? ` &middot; list made ${updated}` : ""}</summary>
+      <summary>${bubbles}<span>For ${count}${updated ? ` &middot; list made ${updated}` : ""}</span></summary>
       <div class="shopping-recipes">
         ${links}
       </div>
@@ -152,7 +155,7 @@ ${renderStatic(list)}
 
   const content = `  <main>
     <div class="shop-top">
-      <a class="back-link" href="index.html">&larr; All recipes</a>
+      <a class="back-link" href="index.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All recipes</a>
       <div class="shop-account" id="shopping-account"></div>
     </div>
     <h1 class="shopping-title">Shopping list</h1>

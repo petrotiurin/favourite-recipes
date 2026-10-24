@@ -38,7 +38,7 @@
     buttons.forEach(function (btn) {
       btn.setAttribute("aria-pressed", String(parseFloat(btn.getAttribute("data-serves")) === serves));
     });
-    if (servesChip) servesChip.textContent = "🍽️ Serves " + serves;
+    if (servesChip) servesChip.innerHTML = "Serves <b>" + serves + "</b>";
   }
 
   buttons.forEach(function (btn) {
