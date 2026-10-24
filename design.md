@@ -94,11 +94,9 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 ## Recipe list (index)
 
 Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
-underneath. Then a kicker + serif headline built from the rotation ("This week / Four new things
-to try, two old friends."; "The family cookbook / 44 recipes we keep coming back to." when nothing
-is current), a search field drawn as an underline with a search icon, and the filters as plain
-words (active one bold and underlined; "This week" in accent ink, "To try" in plum). On a phone
-the filters are one row that scrolls sideways.
+underneath. No headline: straight into a search field drawn as an underline with a search icon,
+and the filters as plain words (active one bold and underlined; "This week" in accent ink, "To
+try" in plum). On a phone the filters are one row that scrolls sideways.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
 Every recipe is the same tile, with no feature slot: square photo (no radius), kicker ("To try",
@@ -111,9 +109,13 @@ is active.
 Back link (chevron + "All recipes"), kicker (status, course and tags), serif title, and for
 drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
-each") with the "Keep screen on" toggle (sun icon, accent ink when on) at its right. Servings are
-plain number buttons after "Serves", the chosen one underlined. Ingredients have no bullets and a
-dotted rule between rows; each instruction is headed "Step n" in an accent-ink kicker.
+each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
+the segmented control (1/2/4, the same `.seg` as the shopping page) on the left, and the "Keep
+screen on" pill (sun icon; filled `--accent-strong` with "Screen stays on" when on) on the right.
+On a phone the pill wraps under the servings, both flush left. The bar is hidden until its scripts
+run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
+Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
+in an accent-ink kicker.
 
 ## Components
 

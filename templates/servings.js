@@ -5,6 +5,7 @@
   var buttons = picker.querySelectorAll("button[data-serves]");
   var qtys = document.querySelectorAll(".qty");
   var servesChip = document.querySelector(".serves-chip");
+  var bar = document.querySelector(".cook-bar");
   if (!base || !buttons.length || !qtys.length) return;
 
   var FRACTIONS = [
@@ -38,7 +39,6 @@
     buttons.forEach(function (btn) {
       btn.setAttribute("aria-pressed", String(parseFloat(btn.getAttribute("data-serves")) === serves));
     });
-    if (servesChip) servesChip.innerHTML = "Serves <b>" + serves + "</b>";
   }
 
   buttons.forEach(function (btn) {
@@ -47,5 +47,8 @@
     });
   });
 
+  // The picker says how many it serves, so the static "Serves n" fact steps aside.
+  if (servesChip) servesChip.hidden = true;
   picker.hidden = false;
+  if (bar) bar.hidden = false;
 })();

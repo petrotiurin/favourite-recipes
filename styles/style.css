@@ -145,28 +145,12 @@ main {
   padding: 0 1.25rem 3rem;
 }
 
-.lede {
-  display: grid;
-  gap: 0.4rem;
-  padding: 1.75rem 0 0.5rem;
-}
-
-.lede h1 {
-  margin: 0;
-  max-width: 22ch;
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: clamp(1.9rem, 5vw, 2.75rem);
-  line-height: 1.08;
-  letter-spacing: -0.02em;
-}
-
 .search {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   max-width: 360px;
-  margin-top: 1rem;
+  margin-top: 1.25rem;
   color: var(--text-muted);
   border-bottom: 1px solid var(--border);
 }
@@ -441,14 +425,13 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   }
 }
 
-/* Facts under the photo: time, servings, calories, and the "Keep screen on" toggle */
+/* Facts under the photo: time, servings, calories */
 .recipe-meta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 1.25rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -461,33 +444,51 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   gap: 0.25rem;
 }
 
+.recipe-meta span[hidden] {
+  display: none;
+}
+
 .recipe-meta b {
   color: var(--text);
   font-weight: 600;
 }
 
-.wakelock-toggle {
-  display: inline-flex;
+/* Cooking controls under the facts: servings on the left, "Keep screen on" on the
+   right. Hidden until servings.js or wakelock.js fills it, so no-JS pages skip it. */
+.cook-bar {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.25rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cook-bar[hidden] {
+  display: none;
+}
+
+.recipe-meta:has(+ .cook-bar[hidden]) {
+  border-bottom: 1px solid var(--border);
+}
+
+.wakelock-toggle {
   min-height: 2.75rem;
-  margin-left: auto;
-  padding: 0;
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: none;
-  border: 0;
+  padding: 0 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
 }
 
 .wakelock-toggle .icon {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 .wakelock-toggle[aria-pressed="true"] {
-  color: var(--accent-ink);
+  color: var(--on-accent);
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   font-weight: 600;
 }
 
@@ -500,13 +501,11 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   letter-spacing: -0.01em;
 }
 
-/* Servings: "Serves 1 2 4" as plain words, the chosen one underlined */
+/* Servings: "Serves" + the segmented control shared with the shopping page */
 .servings-picker {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0 0.15rem;
-  margin: -0.25rem 0 0.25rem;
+  gap: 0.6rem;
 }
 
 .servings-picker[hidden] {
@@ -514,34 +513,15 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
 }
 
 .servings-label {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-right: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 500;
 }
 
-.servings-picker button {
-  font: inherit;
-  font-size: 0.9rem;
-  min-width: 2.25rem;
-  min-height: 2.75rem;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: none;
-  border: 0;
-  padding: 0 0.4rem;
+.servings-picker .seg button {
+  min-width: 3rem;
+  height: 2.375rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
-}
-
-.servings-picker button:hover {
-  color: var(--text);
-}
-
-.servings-picker button[aria-pressed="true"] {
-  color: var(--text);
-  font-weight: 600;
-  text-decoration: underline;
-  text-decoration-thickness: 1.5px;
-  text-underline-offset: 6px;
 }
 
 .recipe-page ul,
