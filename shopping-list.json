@@ -1,111 +1,169 @@
 {
-  "updated": "2026-10-18",
+  "updated": "2026-10-24",
   "recipes": [
-    "crispy-rosemary-chicken-with-apple-beetroot-and-horseradish-slaw",
-    "detox-gyoza-soup",
+    "best-ever-caesar-salad",
+    "blackened-fish-tacos-with-mango-salsa",
+    "crunchy-peanut-slaw",
+    "egg-not-mayo-sandwich",
+    "nutritionist-immunity-lemon-chicken-soup",
     "overnight-oats",
-    "speedy-chicken-and-spicy-guacamole-tacos",
-    "sticky-peanut-stir-fry",
-    "tuna-melt"
+    "roasted-strawberry-cheesecake-chia-puddings",
+    "smoked-salmon-dill-bagel-prep-mix",
+    "ultimate-healthy-toasties"
   ],
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Spring onions",
-          "quantity": "11",
-          "note": "extra to serve",
-          "have": true
-        },
-        {
-          "name": "Garlic cloves",
-          "quantity": "4",
-          "have": 1
-        },
-        {
-          "name": "Carrots",
-          "quantity": "3"
-        },
-        {
-          "name": "Bok choy",
-          "quantity": "2",
-          "note": "heads"
-        },
-        {
-          "name": "Red onions",
+          "name": "Avocados",
           "quantity": "2"
         },
         {
-          "name": "Red pepper",
-          "quantity": "1"
+          "name": "Red onions",
+          "quantity": "1⅛"
         },
         {
-          "name": "Red chilli",
-          "quantity": "1"
-        },
-        {
-          "name": "Tenderstem broccoli",
-          "quantity": "150g",
-          "have": 50
-        },
-        {
-          "name": "Avocado",
-          "quantity": "1",
-          "note": "ripe"
-        },
-        {
-          "name": "Red cabbage",
-          "quantity": "1",
-          "note": "small head"
-        },
-        {
-          "name": "White cabbage",
-          "quantity": "1",
-          "note": "small head"
-        },
-        {
-          "name": "Beetroot",
-          "quantity": "1",
-          "note": "raw"
-        },
-        {
-          "name": "Red apple",
-          "quantity": "1",
+          "name": "Onion",
+          "quantity": "½",
           "note": "large"
         },
         {
+          "name": "Carrots",
+          "quantity": "1"
+        },
+        {
+          "name": "Celery sticks",
+          "quantity": "1"
+        },
+        {
+          "name": "Garlic cloves",
+          "quantity": "1"
+        },
+        {
+          "name": "Fresh root ginger",
+          "quantity": "2g"
+        },
+        {
+          "name": "Red cabbage",
+          "quantity": "110g"
+        },
+        {
+          "name": "Sugar snap peas",
+          "quantity": "40g"
+        },
+        {
+          "name": "Spring onions",
+          "quantity": "3½"
+        },
+        {
+          "name": "Red peppers",
+          "quantity": "½"
+        },
+        {
+          "name": "Green pepper",
+          "quantity": "¼"
+        },
+        {
+          "name": "Red chilli",
+          "quantity": "½",
+          "note": "optional"
+        },
+        {
+          "name": "Tomatoes",
+          "quantity": "2"
+        },
+        {
+          "name": "Cherry tomatoes",
+          "quantity": "80g"
+        },
+        {
+          "name": "Romaine lettuce",
+          "quantity": "1"
+        },
+        {
+          "name": "Lemons",
+          "quantity": "2"
+        },
+        {
           "name": "Limes",
-          "quantity": "3"
+          "quantity": "2"
+        },
+        {
+          "name": "Mango",
+          "quantity": "150g",
+          "note": "ripe"
+        },
+        {
+          "name": "Strawberries",
+          "quantity": "300g"
+        },
+        {
+          "name": "Spinach",
+          "quantity": "50g",
+          "note": "baby"
+        },
+        {
+          "name": "Kale",
+          "quantity": "40g"
+        },
+        {
+          "name": "Basil",
+          "quantity": "30g"
+        },
+        {
+          "name": "Mint",
+          "quantity": "15g"
+        },
+        {
+          "name": "Coriander",
+          "quantity": "30g"
         },
         {
           "name": "Parsley",
+          "quantity": "6g"
+        },
+        {
+          "name": "Dill",
+          "quantity": "8g"
+        },
+        {
+          "name": "Thyme",
           "quantity": "1",
-          "note": "bunch, some to serve"
+          "note": "sprig"
+        },
+        {
+          "name": "Rosemary",
+          "quantity": "½",
+          "note": "sprig"
         }
       ]
     },
     {
-      "name": "Meat, fish & tofu",
+      "name": "Meat & fish",
       "items": [
         {
-          "name": "Chicken breasts",
-          "quantity": "320g",
-          "note": "raw, boneless, skinless",
-          "have": 200
-        },
-        {
           "name": "Cooked chicken breast",
-          "quantity": "160g"
+          "quantity": "340g"
         },
         {
-          "name": "Canned tuna in brine",
-          "quantity": "120g",
-          "note": "drained weight"
+          "name": "White fish fillets",
+          "quantity": "250g",
+          "note": "such as cod or haddock"
         },
         {
-          "name": "Firm tofu",
-          "quantity": "300g"
+          "name": "Hot smoked salmon",
+          "quantity": "50g"
+        },
+        {
+          "name": "Parma ham",
+          "quantity": "3",
+          "note": "slices"
+        },
+        {
+          "name": "Anchovies",
+          "quantity": "4",
+          "note": "in oil"
         }
       ]
     },
@@ -113,30 +171,49 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Eggs",
-          "quantity": "3",
-          "note": "medium"
+          "name": "Medium free-range eggs",
+          "quantity": "4"
+        },
+        {
+          "name": "Egg yolks",
+          "quantity": "1"
+        },
+        {
+          "name": "Cottage cheese",
+          "quantity": "250g",
+          "note": "low-fat"
+        },
+        {
+          "name": "Greek yoghurt",
+          "quantity": "235g",
+          "note": "0% or full-fat, plus extra to serve"
+        },
+        {
+          "name": "Natural yogurt",
+          "quantity": "50g"
+        },
+        {
+          "name": "Cream cheese",
+          "quantity": "50g",
+          "note": "light"
+        },
+        {
+          "name": "Thick kefir",
+          "quantity": "30ml",
+          "note": "or strained natural yogurt"
+        },
+        {
+          "name": "Parmesan cheese",
+          "quantity": "15g",
+          "note": "plus extra to serve"
+        },
+        {
+          "name": "Feta cheese",
+          "note": "optional, to serve"
         },
         {
           "name": "Semi-skimmed milk",
-          "quantity": "240ml"
-        },
-        {
-          "name": "Greek yogurt",
-          "quantity": "90g"
-        },
-        {
-          "name": "Thick natural yogurt",
-          "quantity": "40g"
-        },
-        {
-          "name": "Mature Cheddar cheese",
-          "quantity": "80g"
-        },
-        {
-          "name": "Feta",
-          "quantity": "90g",
-          "note": "some to serve"
+          "quantity": "390ml"
         }
       ]
     },
@@ -144,23 +221,18 @@
       "name": "Bakery",
       "items": [
         {
-          "name": "Bread of choice",
-          "quantity": "4",
-          "note": "slices"
+          "name": "Bread",
+          "quantity": "8",
+          "note": "slices, of choice"
         },
         {
-          "name": "Corn tacos",
-          "quantity": "6"
-        }
-      ]
-    },
-    {
-      "name": "Frozen",
-      "items": [
+          "name": "Sourdough",
+          "quantity": "80g",
+          "note": "thick slice"
+        },
         {
-          "name": "Gyoza",
-          "quantity": "12",
-          "note": "chicken"
+          "name": "Small corn tortillas",
+          "quantity": "6"
         }
       ]
     },
@@ -168,50 +240,24 @@
       "name": "Tins & jars",
       "items": [
         {
-          "name": "Capers",
-          "quantity": "30g"
+          "name": "Sundried tomatoes",
+          "quantity": "10",
+          "note": "jarred, in oil; use the oil from the jar too"
         },
         {
-          "name": "Jalapeños",
-          "quantity": "6",
-          "note": "jar, keep the brine"
+          "name": "Smooth peanut butter",
+          "quantity": "16g"
         },
-        {
-          "name": "Peanut butter",
-          "quantity": "15g"
-        },
-        {
-          "name": "Miso soup sachets",
-          "quantity": "2"
-        },
-        {
-          "name": "Horseradish",
-          "quantity": "10ml",
-          "note": "jar"
-        },
-        {
-          "name": "Roasted salted peanuts",
-          "quantity": "20g"
-        }
-      ]
-    },
-    {
-      "name": "Sauces & condiments",
-      "items": [
         {
           "name": "Light soy sauce",
-          "quantity": "75ml"
+          "quantity": "15ml"
         },
         {
-          "name": "Honey",
-          "quantity": "22ml"
+          "name": "Ginger paste",
+          "quantity": "5ml"
         },
         {
-          "name": "Maple syrup or honey",
-          "note": "to taste"
-        },
-        {
-          "name": "Dijon mustard",
+          "name": "Garlic paste",
           "quantity": "5ml"
         },
         {
@@ -219,30 +265,24 @@
           "quantity": "10ml"
         },
         {
-          "name": "White vinegar",
-          "quantity": "10ml"
+          "name": "Worcestershire sauce",
+          "quantity": "12ml"
         },
         {
-          "name": "White wine vinegar",
-          "quantity": "215ml",
-          "note": "or apple cider vinegar for the slaw"
-        },
-        {
-          "name": "Rice vinegar",
+          "name": "Balsamic vinegar",
           "quantity": "5ml"
         },
         {
-          "name": "Crispy chilli oil",
-          "quantity": "10ml"
-        },
-        {
-          "name": "Extra virgin olive oil",
+          "name": "Honey",
           "quantity": "20ml"
         },
         {
-          "name": "Neutral oil",
-          "quantity": "20ml",
-          "note": "vegetable or similar"
+          "name": "Maple syrup",
+          "note": "to taste"
+        },
+        {
+          "name": "Chicken stock cubes",
+          "quantity": "1"
         }
       ]
     },
@@ -250,60 +290,76 @@
       "name": "Pantry",
       "items": [
         {
+          "name": "Olive oil",
+          "quantity": "35ml",
+          "note": "including extra virgin"
+        },
+        {
           "name": "Rolled oats",
           "quantity": "90g"
         },
         {
           "name": "Chia seeds",
-          "quantity": "20g"
+          "quantity": "72g"
         },
         {
           "name": "Raisins",
           "note": "to taste"
         },
         {
-          "name": "Brown rice",
-          "quantity": "100g"
+          "name": "Roasted peanuts",
+          "quantity": "15g"
         },
         {
-          "name": "Panko breadcrumbs",
-          "quantity": "100g"
+          "name": "Pecans",
+          "note": "roasted, optional, to serve"
         },
         {
-          "name": "Plain flour",
-          "quantity": "40g"
-        },
-        {
-          "name": "Caster sugar",
+          "name": "Cooked quinoa or rice",
           "quantity": "25g"
         },
         {
-          "name": "Dried rosemary",
-          "quantity": "1g"
+          "name": "Medium egg noodle nests",
+          "quantity": "50g"
         },
         {
-          "name": "Garlic granules",
+          "name": "Sesame seeds",
           "quantity": "2g"
         },
         {
-          "name": "Smoked paprika",
-          "quantity": "3g"
+          "name": "Garlic granules",
+          "quantity": "5g"
         },
         {
-          "name": "Nutritional yeast",
-          "quantity": "5g",
+          "name": "Smoked paprika",
+          "quantity": "2g"
+        },
+        {
+          "name": "Ground cumin",
+          "quantity": "1g"
+        },
+        {
+          "name": "Cayenne pepper",
+          "quantity": "0.5g",
           "note": "optional"
+        },
+        {
+          "name": "Sugar",
+          "quantity": "2g"
+        },
+        {
+          "name": "Chilli flakes",
+          "quantity": "1g"
         },
         {
           "name": "Salt",
           "note": "to taste"
         },
         {
-          "name": "Pepper",
+          "name": "Black pepper",
           "note": "to taste"
         }
       ]
     }
-  ],
-  "stocktake": "2026-10-18T18:04:53.072Z"
+  ]
 }

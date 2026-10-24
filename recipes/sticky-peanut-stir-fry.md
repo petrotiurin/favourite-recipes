@@ -6,7 +6,6 @@ course: [Dinner]
 total_mins: 20
 serves: 2
 calories: 500
-draft: true
 ---
 
 ## Ingredients
