@@ -6,6 +6,10 @@ templates: when a change adds or alters a pattern, update the matching section h
 The site is static HTML + one stylesheet + small vanilla JS (see CLAUDE.md, "Hard constraint").
 Every page must read fine with JS off; JS only adds interaction on top.
 
+The look is **"Journal"**: a family cookbook you flick through. Recipe names and headings in a
+serif, everything you read while cooking in a plain sans, black ink on white, square-cornered
+photos. Photos lead every list, because that's how we pick what to cook next.
+
 ## Principles
 
 - **Phone first.** Most use is on a phone, in the kitchen or the shop. Lay out for a 390px
@@ -14,6 +18,11 @@ Every page must read fine with JS off; JS only adds interaction on top.
 - **Icons over words, but never a puzzle.** Prefer an icon plus a number to a sentence. Keep
   one short hint where a gesture isn't obvious (for example "slide or tap sides = some", "tap = all"), and
   give every icon-only control an `aria-label`.
+- **Photos first, chrome quiet.** No boxes, borders or shadows around recipes: a photo, a
+  small-caps kicker, the name, one short meta line. Status lives in words (kickers, filter
+  names), not tinted cards or dashed borders.
+- **No emoji in the UI.** Meta reads as plain words ("20 min · 566 kcal"); icons are the stroke
+  SVGs below.
 - **One accent.** Orange is the only accent colour. Purple is reserved for drafts. No green,
   red or blue for state; error messages are the one exception (a muted red box).
 - **Calm states.** Highlight with low-opacity tints of the accent, not solid fills. A screen
@@ -30,28 +39,37 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 
 | Token | Light | Use |
 | --- | --- | --- |
-| `--bg` | `#faf8f5` | Page background |
+| `--bg` | `#ffffff` | Page background |
 | `--surface` | `#ffffff` | Cards, lists, sheets |
 | `--raised` | `#ffffff` | The selected segment or tab sitting on a `--track` |
-| `--text` | `#2b2622` | Body text |
-| `--text-muted` | `#706a63` | Secondary text, section labels |
-| `--border` | `#ece7e0` | Card borders |
-| `--line` | `#f1ece5` | Dividers between rows inside a card |
-| `--track` | `#efe9e1` | Background of segmented controls and tabs |
-| `--accent` | `#c9622c` | Icons, borders, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a84d1e` | Accent-coloured text (passes 4.5:1 on white) |
-| `--accent-strong` | `#b0501d` | Filled primary buttons, with `--on-accent` text |
-| `--current-soft` | `#fbefe7` | Soft accent panels: the "Home checked" card, saved state |
+| `--text` | `#161514` | Body text |
+| `--text-muted` | `#6f6c68` | Secondary text, kickers, meta lines |
+| `--border` | `#e7e5e1` | Rules under the top bar and meta row, card borders, dotted ingredient lines |
+| `--line` | `#efedea` | Dividers between rows inside a card |
+| `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
+| `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
+| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers, "Step n", active wake lock |
+| `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
+| `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
-| `--draft` / `--draft-soft` | purple | Draft recipes only |
+| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker and filter |
 
 ## Type
 
-System font stack. Page titles 1.9–2rem bold; section labels 0.8rem uppercase with 0.06em
-letter-spacing in `--text-muted`; row text 1rem; numbers use `font-variant-numeric: tabular-nums`
-so quantities line up.
+Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks (`--serif`,
+`--sans` on `:root`), so the page still reads if they don't load:
+
+- **Newsreader** (`--serif`), weight 400 only, for names and headings: the top-bar brand
+  (italic), the index headline (1.9–2.75rem), tile names (1.1rem, 1.25rem from 720px, clamped to
+  three lines), recipe titles (2.1–3rem), recipe h2s (1.55rem), the shopping title and its
+  section names (italic). Tight tracking (-0.01 to -0.025em).
+- **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
+- **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
+  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week").
+
+Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
 ## Icon language
 
@@ -72,6 +90,30 @@ Others: **cart** (the list / left to buy), **↔ arrows** (slide), **check** (ti
 
 The definitions are duplicated in `templates/shopping-list.js` (static page) and
 `templates/shopping.js` (interactive page); keep them identical.
+
+## Recipe list (index)
+
+Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
+underneath. Then a kicker + serif headline built from the rotation ("This week / Four new things
+to try, two old friends."; "The family cookbook / 44 recipes we keep coming back to." when nothing
+is current), a search field drawn as an underline with a search icon, and the filters as plain
+words (active one bold and underlined; "This week" in accent ink, "To try" in plum). On a phone
+the filters are one row that scrolls sideways.
+
+The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
+Every recipe is the same tile, with no feature slot: square photo (no radius), kicker ("To try",
+"This week", else the course), serif name, then "20 min · 412 kcal". A "The rest of the book"
+divider spans the grid where the non-current recipes start; it hides while a filter or a search
+is active.
+
+## Recipe page
+
+Back link (chevron + "All recipes"), kicker (status, course and tags), serif title, and for
+drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
+3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
+each") with the "Keep screen on" toggle (sun icon, accent ink when on) at its right. Servings are
+plain number buttons after "Serves", the chosen one underlined. Ingredients have no bullets and a
+dotted rule between rows; each instruction is headed "Step n" in an accent-ink kicker.
 
 ## Components
 
@@ -102,6 +144,11 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 
 `templates/shopping-list.js` renders the static page; `templates/shopping.js` re-renders the
 interactive part from the embedded JSON.
+
+Under the serif title, the list's recipes appear as **photo bubbles**: overlapping 36px circles
+(2px `--bg` ring) followed by "For N recipes · list made <date>". Opening that summary lists each
+recipe as a link with its round photo and serif name ("To try" kicker after drafts). Aisle
+section names are italic serif.
 
 **Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
 recipes · list made <date>", which expands to the recipe links; the servings card; the "Home

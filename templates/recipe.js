@@ -11,13 +11,17 @@ function escapeHtml(str) {
 }
 
 function renderRecipe(recipe, bodyHtml) {
-  const metaChips = [
-    ...(isDraft(recipe) ? [`<span class="draft-chip">Draft</span>`] : recipe.current === true ? [`<span class="current-chip">Current</span>`] : []),
-    ...(recipe.course || []).map((c) => `<span>${escapeHtml(c)}</span>`),
-    ...(recipe.tags || []).map((t) => `<span>${escapeHtml(t)}</span>`),
-    `<span>🕒 ${recipe.total_mins} mins</span>`,
-    `<span class="serves-chip">🍽️ Serves ${recipe.serves}</span>`,
-    `<span>🔥 ${recipe.calories} kcal per serving</span>`,
+  // Small-caps line above the name: rotation status, then course and tags.
+  const status = isDraft(recipe)
+    ? [`<span class="kicker-draft">To try</span>`]
+    : recipe.current === true
+      ? [`<span class="kicker-current">This week</span>`]
+      : [];
+  const kicker = [...status, ...[...(recipe.course || []), ...(recipe.tags || [])].map(escapeHtml)].join(" &middot; ");
+  const meta = [
+    `<span><b>${recipe.total_mins}</b> min</span>`,
+    `<span class="serves-chip">Serves <b>${recipe.serves}</b></span>`,
+    `<span><b>${recipe.calories}</b> kcal each</span>`,
   ].join("\n      ");
 
   // `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list
@@ -28,7 +32,7 @@ function renderRecipe(recipe, bodyHtml) {
   const servingOptions = [...new Set([1, 2, 4, Number(recipe.serves)])].sort((a, b) => a - b);
   const servingsPicker = scalable
     ? `<div class="servings-picker" data-base="${recipe.serves}" role="group" aria-label="Servings" hidden>
-  <span class="servings-label">Servings</span>
+  <span class="servings-label">Serves</span>
   ${servingOptions
     .map((n) => `<button type="button" data-serves="${n}" aria-pressed="${n === Number(recipe.serves)}">${n}</button>`)
     .join("\n  ")}
@@ -53,11 +57,14 @@ ${body.slice(ingStart + ingLength)}</div>
       : body;
 
   const content = `  <main>
-    <a class="back-link" href="../index.html">&larr; All recipes</a>
+    <a class="back-link" href="../index.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All recipes</a>
+    <header class="recipe-head">
+      <p class="kicker">${kicker}</p>
+      <h1 class="recipe-title">${escapeHtml(recipe.title)}</h1>
+${recipe.draft === true ? `      <p class="recipe-lede">A draft: we haven't tried it enough yet to call it a favourite.</p>\n` : ""}    </header>
     <img class="recipe-hero" src="../${recipe.image.replace(/^\//, "")}" alt="${escapeHtml(recipe.title)}">
-${recipe.draft === true ? `    <p class="draft-note">This is a draft: we haven't tried it enough yet to call it a favourite.</p>\n` : ""}    <h1 class="recipe-title">${escapeHtml(recipe.title)}</h1>
     <div class="recipe-meta">
-      ${metaChips}
+      ${meta}
     </div>
 ${bodyHtmlOut}
   </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}

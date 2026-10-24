@@ -10,8 +10,7 @@
   btn.type = "button";
   btn.className = "wakelock-toggle";
   btn.setAttribute("aria-pressed", "false");
-  btn.textContent = "🔆 Keep screen on";
-  meta.insertAdjacentElement("afterend", btn);
+  meta.appendChild(btn);
 
   function acquire() {
     navigator.wakeLock.request("screen").then(function (l) {
@@ -25,10 +24,15 @@
     });
   }
 
+  var SUN =
+    '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+
   function render() {
     btn.setAttribute("aria-pressed", String(wanted));
-    btn.textContent = wanted ? "🔆 Screen stays on" : "🔆 Keep screen on";
+    btn.innerHTML = SUN + (wanted ? "Screen stays on" : "Keep screen on");
   }
+
+  render();
 
   btn.addEventListener("click", function () {
     wanted = !wanted;

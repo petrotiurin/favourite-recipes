@@ -1,7 +1,8 @@
 (function () {
   var input = document.getElementById("recipe-search");
+  var grid = document.querySelector(".tile-grid");
   var tiles = document.querySelectorAll(".tile-grid .tile");
-  if (!input || !tiles.length) return;
+  if (!input || !grid || !tiles.length) return;
 
   input.addEventListener("input", function () {
     var keywords = input.value.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -12,5 +13,6 @@
       });
       tile.style.display = matches ? "" : "none";
     });
+    grid.classList.toggle("is-searching", keywords.length > 0);
   });
 })();
