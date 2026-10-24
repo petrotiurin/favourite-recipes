@@ -11,11 +11,12 @@ Browser flow with **Claude in Chrome** (`mcp__claude-in-chrome__*`; load the too
 
 - Source: **`get_shopping_list` from the recipes MCP server, by default.** When a stocktake is saved, its "To buy" section is the list: items marked at home are already taken off, and partly stocked items show only the amount left to buy (e.g. "Lemons: 2 [have 2 of 4]" means buy 2). Skip everything under "Already at home". If it says no stocktake is saved, everything on the list is to buy; mention that in the summary in case the user forgot to do one.
 - Use a screenshot/paste of `shopping-list.html` only if the user gives one instead. Then **skip anything crossed out / ticked** in it: those are already at home.
-- `get_shopping_list` amounts are for 2 servings of each recipe; use them as they are unless the user asks for more.
+- `get_shopping_list` amounts are the 2-serving base, but the site and the user shop for **4 servings by default**: double every amount (to-buy and counts, e.g. 4 eggs + 1 yolk → 8 + 2) before converting to packs, unless the user asks for 2. Stocktake "have" amounts are absolute, not doubled.
 - Quantities on the user's screenshot may be at 4 servings (the page's selector); use the amounts they show, not the stored 2-serving base.
 - If a line is cut off in a screenshot, look it up in `get_shopping_list` (the quantities there are the 2-serving base, so double it if the screenshot is at 4).
 - Add the user's extra items on top (e.g. "also 2 more avocados"). Extras go through the same rules.
 - Convert amounts to packs: round **up** to whole packs, buy the exact count for counted items (e.g. 6 limes = 3 twin packs, 24 gyoza = 2 packs of 12).
+- **Cooked chicken: ask before buying.** If the to-buy list has cooked chicken (e.g. "Cooked chicken breast"), find which current recipes use it (`get_recipe` on each current recipe from `get_shopping_list`) and, with `AskUserQuestion`, list those recipes with the total amount (at the servings being shopped) and ask: buy it cooked (favourites: Ocado Flame-grilled Chicken Breast Pieces / M&S Plain Roasted Chicken Breast Slices), or buy raw chicken breast instead (M&S British Chicken Breast Fillets, favourites; cook it yourself, raw weight ≈ cooked weight ÷ 0.75, rounded up to whole packs)? Cooked is rarely economical in large quantities, so mention the price of both options when you ask. Do this before adding anything to the basket, and carry the answer into the summary.
 
 ## 2. Favourites first (always start here)
 
@@ -54,6 +55,7 @@ If a non-negotiable is out of stock, don't substitute: tell the user.
 
 Keep it short. **Do not list the items added**: the user checks the basket themselves. Only list what needs their attention:
 - Judgment calls and deviations from the list: unverified pack counts (e.g. taco count), tiny packs, whole-vs-sliced, substitutions, items assumed from a cut-off line, anything skipped or out of stock.
+- Small overages that forced an extra pack: items where the need was only slightly over a whole number of packs, so rounding up added a whole extra pack (e.g. Greek yoghurt: 470g needed vs a 450g pack, so 2 packs). Adding the extra pack is fine, but list item, need, pack size and count so the user can decide to drop it.
 - Favourites that were unavailable and what replaced them (flagged separately, so the user can decide whether they're happy with the replacement).
 - A "bulk was much cheaper" list: items where a bigger pack had a much better unit price than the small one you added (item, pack added + price, bigger pack + price).
 
