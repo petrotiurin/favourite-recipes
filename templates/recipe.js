@@ -10,6 +10,8 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
+const DEFAULT_SERVINGS = 4;
+
 function renderRecipe(recipe, bodyHtml) {
   // Small-caps line above the name: rotation status, then course and tags.
   const status = isDraft(recipe)
@@ -29,17 +31,20 @@ function renderRecipe(recipe, bodyHtml) {
   const { html: scaledBodyHtml, scalable } =
     recipe.scalable === false ? { html: bodyHtml, scalable: false } : markScalableQuantities(bodyHtml);
   // Hidden until servings.js runs, so the page reads normally with JS disabled.
+  // servings.js opens the page at the pressed option: 4 servings, like the shopping page.
   const servingOptions = [...new Set([1, 2, 4, Number(recipe.serves)])].sort((a, b) => a - b);
   const servingsPicker = scalable
-    ? `<div class="servings-picker" data-base="${recipe.serves}" role="group" aria-label="Servings" hidden>
-  <span class="servings-label">Serves</span>
-  ${servingOptions
-    .map((n) => `<button type="button" data-serves="${n}" aria-pressed="${n === Number(recipe.serves)}">${n}</button>`)
-    .join("\n  ")}
-</div>
-`
+    ? `
+      <div class="servings-picker" data-base="${recipe.serves}" hidden>
+        <span class="servings-label" id="servings-label">Serves</span>
+        <div class="seg" role="group" aria-labelledby="servings-label">
+          ${servingOptions
+            .map((n) => `<button type="button" data-serves="${n}" aria-pressed="${n === DEFAULT_SERVINGS}">${n}</button>`)
+            .join("\n          ")}
+        </div>
+      </div>`
     : "";
-  const body = scaledBodyHtml.replace(/(<h2[^>]*>\s*Ingredients\b[^<]*<\/h2>\n?)/i, `$1${servingsPicker}`);
+  const body = scaledBodyHtml;
   // Wrap the Ingredients section (up to the next h2) and what follows it, so wide
   // screens can keep the ingredients in a sticky column beside the instructions
   // (see `.recipe-body` in style.css). Narrow screens stack them as before.
@@ -65,6 +70,8 @@ ${recipe.draft === true ? `      <p class="recipe-lede">A draft: we haven't trie
     <img class="recipe-hero" src="../${recipe.image.replace(/^\//, "")}" alt="${escapeHtml(recipe.title)}">
     <div class="recipe-meta">
       ${meta}
+    </div>
+    <div class="cook-bar" hidden>${servingsPicker}
     </div>
 ${bodyHtmlOut}
   </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}

@@ -1,16 +1,17 @@
 (function () {
   if (!("wakeLock" in navigator)) return;
-  var meta = document.querySelector(".recipe-meta");
-  if (!meta) return;
+  var bar = document.querySelector(".cook-bar");
+  if (!bar) return;
 
   var lock = null;
   var wanted = false;
 
   var btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "wakelock-toggle";
+  btn.className = "pill wakelock-toggle";
   btn.setAttribute("aria-pressed", "false");
-  meta.appendChild(btn);
+  bar.appendChild(btn);
+  bar.hidden = false;
 
   function acquire() {
     navigator.wakeLock.request("screen").then(function (l) {

@@ -19,23 +19,6 @@ function courseClasses(r) {
     .join(" ");
 }
 
-const NUMBER_WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-const count = (n, one, many) => `${NUMBER_WORDS[n] || n} ${n === 1 ? one : many}`;
-const capitalise = (str) => str.charAt(0).toUpperCase() + str.slice(1);
-
-/** The index's opening line: what's in this week's rotation, or the whole book when nothing is current. */
-function lede(recipes) {
-  const drafts = recipes.filter(isDraft).length;
-  const regulars = recipes.filter((r) => isCurrent(r) && !isDraft(r)).length;
-  const parts = [
-    ...(drafts ? [count(drafts, "new thing to try", "new things to try")] : []),
-    ...(regulars ? [count(regulars, "old friend", "old friends")] : []),
-  ];
-  return parts.length
-    ? { kicker: "This week", headline: `${capitalise(parts.join(", "))}.` }
-    : { kicker: "The family cookbook", headline: `${capitalise(count(recipes.length, "recipe", "recipes"))} we keep coming back to.` };
-}
-
 /** The small-caps line above a tile's name: its place in the rotation, else its course. */
 function kicker(r) {
   if (isDraft(r)) return `<p class="kicker kicker-draft">To try</p>`;
@@ -84,16 +67,12 @@ function renderIndex(recipes) {
     )
     .join("\n");
 
-  const { kicker: ledeKicker, headline } = lede(recipes);
   const content = `  <header class="site-bar">
     <a class="brand" href="index.html">Our Favourite Recipes</a>
     <a class="bar-link" href="shopping-list.html">${ICON_CART}<span>Shopping list</span></a>
   </header>
   <main>
-    <div class="lede">
-      <p class="kicker">${ledeKicker}</p>
-      <h1>${headline}</h1>
-    </div>
+    <h1 class="sr-only">Our Favourite Recipes</h1>
     <label class="search">${ICON_SEARCH}<span class="sr-only">Search recipes</span><input type="search" id="recipe-search" class="search-input" placeholder="Search recipes" autocomplete="off"></label>
     <div class="filter-bar">
 ${filterControls}

@@ -1,7 +1,7 @@
 // Shopping page enhancement. Re-renders #shopping-app (and the account button in
 // #shopping-account) from the JSON the build embedded (#shopping-data); it never loads the
 // list at runtime. Adds:
-// - the servings picker (1/2/4 per recipe, from the list's 2-serving base),
+// - the servings picker (1/2/4 per recipe, from the list's 2-serving base; opens on 4),
 // - ticks while shopping, kept in this browser only (anyone can use them),
 // - for the signed-in editor: the "At home" tab, where each row is a fill bar (slide across
 //   it for some, tap the house for all). Edits stay in this browser until Save, which sends
@@ -72,9 +72,9 @@
     stocktakeAt = pending.saved;
   } else save(PENDING_KEY, undefined);
 
-  var storedServings = load("shopping-servings", data.base);
+  var storedServings = load("shopping-servings", data.servings);
   var state = {
-    servings: [1, 2, 4].indexOf(storedServings) === -1 ? data.base : storedServings,
+    servings: [1, 2, 4].indexOf(storedServings) === -1 ? data.servings : storedServings,
     ticks: load(TICKS_KEY, []),
     have: have,
     stocktakeAt: stocktakeAt,
