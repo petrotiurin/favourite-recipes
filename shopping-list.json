@@ -21,16 +21,19 @@
         },
         {
           "name": "Red onions",
-          "quantity": "1⅛"
+          "quantity": "1⅛",
+          "have": true
         },
         {
           "name": "Onion",
           "quantity": "½",
-          "note": "large"
+          "note": "large",
+          "have": true
         },
         {
           "name": "Carrots",
-          "quantity": "1"
+          "quantity": "1",
+          "have": true
         },
         {
           "name": "Celery sticks",
@@ -38,15 +41,18 @@
         },
         {
           "name": "Garlic cloves",
-          "quantity": "1"
+          "quantity": "1",
+          "have": true
         },
         {
           "name": "Fresh root ginger",
-          "quantity": "2g"
+          "quantity": "2g",
+          "have": true
         },
         {
           "name": "Red cabbage",
-          "quantity": "110g"
+          "quantity": "110g",
+          "have": true
         },
         {
           "name": "Sugar snap peas",
@@ -54,15 +60,18 @@
         },
         {
           "name": "Spring onions",
-          "quantity": "3½"
+          "quantity": "3½",
+          "have": true
         },
         {
           "name": "Red peppers",
-          "quantity": "½"
+          "quantity": "½",
+          "have": true
         },
         {
           "name": "Green pepper",
-          "quantity": "¼"
+          "quantity": "¼",
+          "have": true
         },
         {
           "name": "Red chilli",
@@ -87,7 +96,8 @@
         },
         {
           "name": "Limes",
-          "quantity": "2"
+          "quantity": "2",
+          "have": true
         },
         {
           "name": "Mango",
@@ -101,11 +111,13 @@
         {
           "name": "Spinach",
           "quantity": "50g",
-          "note": "baby"
+          "note": "baby",
+          "have": true
         },
         {
           "name": "Kale",
-          "quantity": "40g"
+          "quantity": "40g",
+          "have": true
         },
         {
           "name": "Basil",
@@ -125,7 +137,8 @@
         },
         {
           "name": "Dill",
-          "quantity": "8g"
+          "quantity": "8g",
+          "have": true
         },
         {
           "name": "Thyme",
@@ -190,7 +203,8 @@
         },
         {
           "name": "Natural yogurt",
-          "quantity": "50g"
+          "quantity": "50g",
+          "have": true
         },
         {
           "name": "Cream cheese",
@@ -213,7 +227,8 @@
         },
         {
           "name": "Semi-skimmed milk",
-          "quantity": "390ml"
+          "quantity": "390ml",
+          "have": true
         }
       ]
     },
@@ -223,16 +238,19 @@
         {
           "name": "Bread",
           "quantity": "8",
-          "note": "slices, of choice"
+          "note": "slices, of choice",
+          "have": true
         },
         {
           "name": "Sourdough",
           "quantity": "80g",
-          "note": "thick slice"
+          "note": "thick slice",
+          "have": true
         },
         {
           "name": "Small corn tortillas",
-          "quantity": "6"
+          "quantity": "6",
+          "have": true
         }
       ]
     },
@@ -246,23 +264,28 @@
         },
         {
           "name": "Smooth peanut butter",
-          "quantity": "16g"
+          "quantity": "16g",
+          "have": true
         },
         {
           "name": "Light soy sauce",
-          "quantity": "15ml"
+          "quantity": "15ml",
+          "have": true
         },
         {
           "name": "Ginger paste",
-          "quantity": "5ml"
+          "quantity": "5ml",
+          "have": true
         },
         {
           "name": "Garlic paste",
-          "quantity": "5ml"
+          "quantity": "5ml",
+          "have": true
         },
         {
           "name": "American mustard",
-          "quantity": "10ml"
+          "quantity": "10ml",
+          "have": true
         },
         {
           "name": "Worcestershire sauce",
@@ -270,19 +293,23 @@
         },
         {
           "name": "Balsamic vinegar",
-          "quantity": "5ml"
+          "quantity": "5ml",
+          "have": true
         },
         {
           "name": "Honey",
-          "quantity": "20ml"
+          "quantity": "20ml",
+          "have": true
         },
         {
           "name": "Maple syrup",
-          "note": "to taste"
+          "note": "to taste",
+          "have": true
         },
         {
           "name": "Chicken stock cubes",
-          "quantity": "1"
+          "quantity": "1",
+          "have": true
         }
       ]
     },
@@ -292,19 +319,23 @@
         {
           "name": "Olive oil",
           "quantity": "35ml",
-          "note": "including extra virgin"
+          "note": "including extra virgin",
+          "have": true
         },
         {
           "name": "Rolled oats",
-          "quantity": "90g"
+          "quantity": "90g",
+          "have": true
         },
         {
           "name": "Chia seeds",
-          "quantity": "72g"
+          "quantity": "72g",
+          "have": true
         },
         {
           "name": "Raisins",
-          "note": "to taste"
+          "note": "to taste",
+          "have": true
         },
         {
           "name": "Roasted peanuts",
@@ -316,7 +347,8 @@
         },
         {
           "name": "Cooked quinoa or rice",
-          "quantity": "25g"
+          "quantity": "25g",
+          "have": true
         },
         {
           "name": "Medium egg noodle nests",
@@ -328,38 +360,47 @@
         },
         {
           "name": "Garlic granules",
-          "quantity": "5g"
+          "quantity": "5g",
+          "have": true
         },
         {
           "name": "Smoked paprika",
-          "quantity": "2g"
+          "quantity": "2g",
+          "have": true
         },
         {
           "name": "Ground cumin",
-          "quantity": "1g"
+          "quantity": "1g",
+          "have": true
         },
         {
           "name": "Cayenne pepper",
           "quantity": "0.5g",
-          "note": "optional"
+          "note": "optional",
+          "have": true
         },
         {
           "name": "Sugar",
-          "quantity": "2g"
+          "quantity": "2g",
+          "have": true
         },
         {
           "name": "Chilli flakes",
-          "quantity": "1g"
+          "quantity": "1g",
+          "have": true
         },
         {
           "name": "Salt",
-          "note": "to taste"
+          "note": "to taste",
+          "have": true
         },
         {
           "name": "Black pepper",
-          "note": "to taste"
+          "note": "to taste",
+          "have": true
         }
       ]
     }
-  ]
+  ],
+  "stocktake": "2026-10-24T21:07:42.337Z"
 }
