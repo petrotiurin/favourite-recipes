@@ -1108,9 +1108,120 @@ footer.site-footer {
 }
 
 .tick:checked ~ .shop-name,
-.tick:checked ~ .shop-qty {
+.tick:checked ~ .shop-qty,
+.shop-row:has(.tick:checked) > .shop-qty {
   color: var(--text-muted);
   text-decoration: line-through;
+}
+
+/* With JS a row is: the tick + name label, the recipe photos button, the quantity (a second label
+   for the same checkbox, so tapping it still ticks), then the recipe names once the photos are tapped. */
+.shop-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.shop-row > .shop-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 0.25rem;
+}
+
+.shop-row > .shop-qty {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.9rem 0 0.5rem;
+  cursor: pointer;
+}
+
+/* The photos of the recipes an item is for, overlapping like the header's bubbles */
+.row-bubbles,
+.row-for {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding-left: 0.45rem;
+}
+
+.row-for {
+  min-width: 2.75rem;
+  justify-content: flex-end;
+  margin: 0;
+  padding-right: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.row-bubbles img,
+.row-for img {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.45rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--surface);
+  background: var(--track);
+}
+
+.row-more {
+  margin-left: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.shop-row:has(.tick:checked) .row-for img {
+  opacity: 0.5;
+}
+
+/* Tapping the photos names the recipes under the row, as links */
+.row-recipes {
+  flex-basis: 100%;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0 0.9rem 0.75rem 3.15rem;
+}
+
+.row-recipes a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.2rem 0.75rem 0.2rem 0.2rem;
+  border-radius: 999px;
+  background: var(--track);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.row-recipes a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-recipes a:hover span {
+  text-decoration: underline;
+}
+
+.row-recipes img {
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface);
 }
 
 .shop-home {

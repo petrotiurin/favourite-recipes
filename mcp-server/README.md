@@ -51,9 +51,10 @@ Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see w
 
 A recipe is *current* when the family is cooking it right now: every draft is, plus any regular recipe the agent marks with `set_current_recipes` (`current: true` in its frontmatter). The site and `list_recipes` order recipes as drafts, then other current recipes, then the rest. The rotation can hold only existing recipes, only drafts, or both.
 
-The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?}]}]`.
+The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?, recipes}]}]`.
 
-- The server fills in `recipes` (the current slugs) itself and the page links to them. It refuses when nothing is current and when an ingredient is listed twice.
+- Each item's `recipes` is the slugs of the current recipes it is for; the page shows their photos on the row and names them on a tap. The server refuses a slug that isn't current and a current recipe that no item is for.
+- The server fills in the list's top-level `recipes` (the current slugs) itself and the page links to them. It refuses when nothing is current and when an ingredient is listed twice.
 - **The page shows the saved list until it is rewritten.** Changing which recipes are current does not alter it. `build.js` blanks the page only when no recipe is current. Unmarking the last current recipe (`set_current_recipes`) deletes `shopping-list.json` in the same commit, so an old list can't resurface once something becomes current again.
 - `get_shopping_list` reports `current` (covers exactly the current recipes), `outdated` (the set changed since, so the agent should rewrite it) or `none`.
 - Promoting a draft doesn't change its currency, so it doesn't make the list outdated. Removing a draft does (it was current), so refresh the list afterwards.

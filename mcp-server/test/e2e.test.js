@@ -208,12 +208,14 @@ test("draft: false creates a regular recipe straight away", async () => {
   assert.doesNotMatch(files.get("recipes/test-regular-soup.md").toString(), /draft/);
 });
 
-const sections = [
-  { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both" }, { name: "Parsley" }] },
-  { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils" }] },
+// Every item is tagged with the recipes it is for; here each item is simply for all of the given recipes.
+const sectionsFor = (recipes) => [
+  { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both", recipes }, { name: "Parsley", recipes }] },
+  { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils", recipes }] },
 ];
 const shopping = async (name = "get_shopping_list", args = {}) => text(await client.callTool({ name, arguments: args }));
 const listed = async () => JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
+const currentSections = async () => sectionsFor((await listed()).filter((x) => x.current).map((x) => x.slug));
 
 test("current recipes: marking is one minimal commit, idempotent, and drafts can't be toggled", async () => {
   const before = files.get("recipes/steamed-rice.md").toString();
@@ -258,19 +260,27 @@ test("current recipes: marking is one minimal commit, idempotent, and drafts can
 test("shopping list covers current recipes; it stays until rewritten and goes blank only when nothing is current", async () => {
   const dup = await client.callTool({
     name: "update_shopping_list",
-    arguments: { sections: [{ name: "A", items: [{ name: "Onions" }] }, { name: "B", items: [{ name: "onions" }] }] },
+    arguments: { sections: [{ name: "A", items: [{ name: "Onions", recipes: ["steamed-rice"] }] }, { name: "B", items: [{ name: "onions", recipes: ["steamed-rice"] }] }] },
   });
   assert.ok(dup.isError);
   assert.match(text(dup), /listed twice/);
 
-  const r = await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  // Each item names current recipes, and every current recipe has at least one item.
+  const unknown = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(["steamed-rice", "test-draft-salad", "no-such-recipe"]) } });
+  assert.ok(unknown.isError);
+  assert.match(text(unknown), /"no-such-recipe" is not a current recipe/);
+  const uncovered = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(["steamed-rice"]) } });
+  assert.ok(uncovered.isError);
+  assert.match(text(uncovered), /no item is for test-draft-salad/);
+
+  const r = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(["test-draft-salad", "steamed-rice", "steamed-rice"]) } });
   assert.ok(!r.isError, text(r));
   assert.deepEqual(commitLog.at(-1).paths, ["shopping-list.json"]);
   const stored = JSON.parse(files.get("shopping-list.json").toString());
   assert.deepEqual(stored.recipes, ["steamed-rice", "test-draft-salad"]);
   assert.match(stored.updated, /^\d{4}-\d{2}-\d{2}$/);
-  assert.deepEqual(stored.sections[0].items[0], { name: "Red onions", quantity: "3", note: "for both" });
-  assert.deepEqual(stored.sections[0].items[1], { name: "Parsley" });
+  assert.deepEqual(stored.sections[0].items[0], { name: "Red onions", quantity: "3", note: "for both", recipes: ["test-draft-salad", "steamed-rice"] });
+  assert.deepEqual(stored.sections[0].items[1], { name: "Parsley", recipes: ["test-draft-salad", "steamed-rice"] });
   assert.match(await shopping(), /Status: current/);
 
   // Unmarking one recipe changes the set: the list is flagged outdated but kept (the draft is still current).
@@ -284,7 +294,7 @@ test("shopping list covers current recipes; it stays until rewritten and goes bl
 
   // Marking existing recipes is enough on its own: no drafts needed.
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice", "harissa-tuna-pitta"], current: true } });
-  await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  await client.callTool({ name: "update_shopping_list", arguments: { sections: await currentSections() } });
   assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).recipes, ["harissa-tuna-pitta", "steamed-rice", "test-draft-salad"]);
   assert.match(await shopping(), /Status: current/);
 
@@ -306,7 +316,7 @@ test("shopping list covers current recipes; it stays until rewritten and goes bl
   assert.deepEqual(commitLog.at(-1).paths.sort(), ["recipes/test-draft-salad.md", "shopping-list.json"]);
   assert.equal(files.has("shopping-list.json"), false);
   assert.match(await shopping(), /Status: none/);
-  const none = await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  const none = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(["steamed-rice"]) } });
   assert.ok(none.isError);
   assert.match(text(none), /no current recipes/);
 });
@@ -318,7 +328,7 @@ test("batch_changes lands everything in one commit, each operation seeing the on
     { action: "create_recipe", ...base, title: "Batch Pea Soup", instructions: ["Add 200g **red lentils**", "Season with **Salt**"], image: { url: "https://img.example/dish.png" } },
     { action: "set_current_recipes", slugs: ["steamed-rice"], current: true },
     { action: "update_recipe", slug: "batch-pea-soup", serves: 2 },
-    { action: "update_shopping_list", sections },
+    { action: "update_shopping_list", sections: sectionsFor(["batch-bean-stew", "batch-pea-soup", "steamed-rice"]) },
   ];
 
   const dry = await client.callTool({ name: "batch_changes", arguments: { operations: ops, dry_run: true } });
@@ -387,7 +397,7 @@ test("batch_changes lands everything in one commit, each operation seeing the on
 
 test("remove_draft deletes a disliked draft and its photo, refuses regular recipes, and clears the list when nothing is current", async () => {
   const draftOps = (title) => ({ action: "create_recipe", ...base, title, image: { url: "https://img.example/dish.png" } });
-  const created = await client.callTool({ name: "batch_changes", arguments: { operations: [draftOps("Remove Me Stew"), draftOps("Keep Me Stew"), { action: "update_shopping_list", sections }] } });
+  const created = await client.callTool({ name: "batch_changes", arguments: { operations: [draftOps("Remove Me Stew"), draftOps("Keep Me Stew"), { action: "update_shopping_list", sections: sectionsFor(["remove-me-stew", "keep-me-stew"]) }] } });
   assert.ok(!created.isError, text(created));
 
   // Regular recipes (and unknown slugs) can't be removed; nothing is committed.
@@ -613,6 +623,7 @@ test("tampered upload token is rejected", async () => {
 
 test("stocktake: only a signed-in editor saves what's at home, for the list the page was loaded with", async () => {
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice"], current: true } });
+  const sections = await currentSections();
   await client.callTool({ name: "update_shopping_list", arguments: { sections } });
   const site = "https://petrotiurin.github.io";
   const post = (body, token = "owner-token") =>
@@ -657,10 +668,10 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
   const stored = JSON.parse(files.get("shopping-list.json").toString());
   assert.match(stored.stocktake, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(stored.sections[0].items, [
-    { name: "Red onions", quantity: "3", note: "for both", have: 1 },
-    { name: "Parsley", have: true },
+    { name: "Red onions", quantity: "3", note: "for both", recipes: sections[0].items[0].recipes, have: 1 },
+    { name: "Parsley", recipes: sections[0].items[0].recipes, have: true },
   ]);
-  assert.deepEqual(stored.sections[1].items, [{ name: "Red lentils", quantity: "400g" }]);
+  assert.deepEqual(stored.sections[1].items, [{ name: "Red lentils", quantity: "400g", recipes: sections[0].items[0].recipes }]);
 
   const listText = await shopping();
   assert.match(listText, /Fresh produce \/ Red onions: 2 \(for both\) \[have 1 of 3\]/);
@@ -669,7 +680,7 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
 
   // Re-saving replaces the whole stocktake; a new list from the agent starts without one.
   await post({ items: items.map(({ have: _, ...i }) => (i.name === "Red lentils" ? { ...i, have: 150 } : i)) });
-  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).sections[1].items[0], { name: "Red lentils", quantity: "400g", have: 150 });
+  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).sections[1].items[0], { name: "Red lentils", quantity: "400g", recipes: sections[0].items[0].recipes, have: 150 });
   assert.match(await shopping(), /Red lentils: 250g \[have 150g of 400g\]/);
   await client.callTool({ name: "update_shopping_list", arguments: { sections } });
   const fresh = JSON.parse(files.get("shopping-list.json").toString());

@@ -48,16 +48,18 @@ You write it: whenever the current set changes (get_shopping_list says "outdated
 the ingredients into one deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the
 recipes' own units; keep different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if
 clearly pantry basics, else list them without a quantity), group it into shop-aisle sections, and call update_shopping_list.
-The server links the recipes itself. The page keeps showing the last list you saved, even if the current set has since changed,
-so refresh it after every such change. It goes blank only when no recipe is current (unmarking the last one also deletes the
-saved list) or when you replace the list.
+Tag every item with the slugs of the current recipes it is for (recipes: [...]); the page shows their photos on the row, and the
+server rejects a slug that isn't current or a current recipe with no items. The server links the recipes itself.
+The page keeps showing the last list you saved, even if the current set has since changed, so refresh it after every such
+change. It goes blank only when no recipe is current (unmarking the last one also deletes the saved list) or when you replace
+the list.
 Shopping list accuracy rules: build it ONLY from the current recipes' own ingredient lists, read fresh with get_recipe (never from
 memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own serves: scale each recipe's
 amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
 The site's 1/2/4 servings selector on the shopping page rescales quantity from this 2-serving base.
 Every ingredient of every current recipe must appear, and nothing else. Add up only the same ingredient in the same unit
 (2 + 1 onions -> 3); different forms stay separate (medium vs mild curry powder).
-The list is one homogenised list: no per-recipe notes, and notes never contain amounts (only quantity rescales). Quantities are ONE
+The list is one homogenised list: no per-recipe notes (which recipe an item is for goes in recipes, never in note), and notes never contain amounts (only quantity rescales). Quantities are ONE
 number in ONE metric unit per line: convert tbsp/tsp/cups/oz to g or ml (1 tbsp = 15ml, 1 tsp = 5ml; use the ingredient's usual
 weight for dry things, e.g. 1 tbsp flour ~ 10g) and add everything up, so "100ml + 3 tbsp" becomes "145ml". Recipes keep their own units;
 only the shopping list is converted. The server rejects kitchen measures and sums. Before saving, re-add each
@@ -192,6 +194,10 @@ const sectionsSchema = z
             name: z.string().min(1).describe('Ingredient, plain text, one line per ingredient across the WHOLE list, e.g. "Red onions"'),
             quantity: z.string().optional().describe('ONE combined amount in ONE metric unit: a count ("3"), grams ("450g") or millilitres ("145ml"). No tbsp/tsp/cups/oz and no sums like "100ml + 3 tbsp": convert (1 tbsp = 15ml, 1 tsp = 5ml) and add. Omit for "to taste" items.'),
             note: z.string().optional().describe('Optional buying info only, e.g. "skinless", "70% or higher", "to serve". Never which recipe it is for, and never amounts.'),
+            recipes: z
+              .array(z.string().min(1))
+              .min(1)
+              .describe('Slugs of the current recipes this item is for, e.g. ["best-ever-caesar-salad", "nutritionist-immunity-lemon-chicken-soup"]. The page shows their photos on the row. Every current recipe must appear on at least one item.'),
           })
         )
         .min(1)
@@ -549,7 +555,7 @@ export function buildServer({ origin }) {
       description:
         "Replace the site's shopping page with a combined ingredient list for ALL current recipes (drafts and recipes marked current). " +
         "You do the combining: read each current recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
-        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. The server records which recipes the list covers " +
+        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. Tag each item with the slugs of the recipes it is for. The server records which recipes the list covers " +
         "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
         "so call it after adding a draft or marking/unmarking recipes current. It goes blank only when no recipe is current. Fails if there are no current recipes.",
       inputSchema: { sections: sectionsSchema },
