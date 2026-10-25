@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-24",
+  "updated": "2026-10-25",
   "recipes": [
     "best-ever-caesar-salad",
     "blackened-fish-tacos-with-mango-salsa",
@@ -17,139 +17,220 @@
       "items": [
         {
           "name": "Avocados",
-          "quantity": "2"
+          "quantity": "2",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Red onions",
           "quantity": "1⅛",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa",
+            "smoked-salmon-dill-bagel-prep-mix",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Onion",
           "quantity": "½",
           "note": "large",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Carrots",
           "quantity": "1",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Celery sticks",
-          "quantity": "1"
+          "quantity": "1",
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Garlic cloves",
           "quantity": "1",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Fresh root ginger",
           "quantity": "2g",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Red cabbage",
           "quantity": "110g",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Sugar snap peas",
-          "quantity": "40g"
+          "quantity": "40g",
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Spring onions",
           "quantity": "3½",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw",
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Red peppers",
           "quantity": "½",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Green pepper",
           "quantity": "¼",
-          "have": true
+          "recipes": [
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Red chilli",
           "quantity": "½",
-          "note": "optional"
+          "note": "optional",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Tomatoes",
-          "quantity": "2"
+          "quantity": "2",
+          "recipes": [
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Cherry tomatoes",
-          "quantity": "80g"
+          "quantity": "80g",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Romaine lettuce",
-          "quantity": "1"
+          "quantity": "1",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Lemons",
-          "quantity": "2"
+          "quantity": "2",
+          "recipes": [
+            "best-ever-caesar-salad",
+            "nutritionist-immunity-lemon-chicken-soup",
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Limes",
           "quantity": "2",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw",
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Mango",
           "quantity": "150g",
-          "note": "ripe"
+          "note": "ripe",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Strawberries",
-          "quantity": "300g"
+          "quantity": "300g",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Spinach",
           "quantity": "50g",
           "note": "baby",
-          "have": true
+          "recipes": [
+            "egg-not-mayo-sandwich",
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Kale",
           "quantity": "40g",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Basil",
-          "quantity": "30g"
+          "quantity": "30g",
+          "recipes": [
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Mint",
-          "quantity": "15g"
+          "quantity": "15g",
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Coriander",
-          "quantity": "30g"
+          "quantity": "30g",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Parsley",
-          "quantity": "6g"
+          "quantity": "6g",
+          "recipes": [
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Dill",
           "quantity": "8g",
-          "have": true
+          "recipes": [
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Thyme",
           "quantity": "1",
-          "note": "sprig"
+          "note": "sprig",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Rosemary",
           "quantity": "½",
           "note": "sprig",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         }
       ]
     },
@@ -158,26 +239,42 @@
       "items": [
         {
           "name": "Cooked chicken breast",
-          "quantity": "340g"
+          "quantity": "340g",
+          "recipes": [
+            "best-ever-caesar-salad",
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "White fish fillets",
           "quantity": "250g",
-          "note": "such as cod or haddock"
+          "note": "such as cod or haddock",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Hot smoked salmon",
-          "quantity": "50g"
+          "quantity": "50g",
+          "recipes": [
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Parma ham",
           "quantity": "3",
-          "note": "slices"
+          "note": "slices",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Anchovies",
           "quantity": "4",
-          "note": "in oil"
+          "note": "in oil",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         }
       ]
     },
@@ -186,50 +283,83 @@
       "items": [
         {
           "name": "Medium free-range eggs",
-          "quantity": "4"
+          "quantity": "4",
+          "recipes": [
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Egg yolks",
-          "quantity": "1"
+          "quantity": "1",
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Cottage cheese",
           "quantity": "250g",
-          "note": "low-fat"
+          "note": "low-fat",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Greek yoghurt",
           "quantity": "235g",
-          "note": "0% or full-fat, plus extra to serve"
+          "note": "0% or full-fat, plus extra to serve",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa",
+            "overnight-oats",
+            "roasted-strawberry-cheesecake-chia-puddings",
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Natural yogurt",
           "quantity": "50g",
-          "have": true
+          "recipes": [
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Cream cheese",
           "quantity": "50g",
-          "note": "light"
+          "note": "light",
+          "recipes": [
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Thick kefir",
           "quantity": "30ml",
-          "note": "or strained natural yogurt"
+          "note": "or strained natural yogurt",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Parmesan cheese",
           "quantity": "15g",
-          "note": "plus extra to serve"
+          "note": "plus extra to serve",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Feta cheese",
-          "note": "optional, to serve"
+          "note": "optional, to serve",
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Semi-skimmed milk",
           "quantity": "390ml",
-          "have": true
+          "recipes": [
+            "overnight-oats",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         }
       ]
     },
@@ -240,18 +370,25 @@
           "name": "Bread",
           "quantity": "8",
           "note": "slices, of choice",
-          "have": true
+          "recipes": [
+            "egg-not-mayo-sandwich",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Sourdough",
           "quantity": "80g",
           "note": "thick slice",
-          "have": true
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Small corn tortillas",
           "quantity": "6",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         }
       ]
     },
@@ -261,56 +398,83 @@
         {
           "name": "Sundried tomatoes",
           "quantity": "10",
-          "note": "jarred, in oil; use the oil from the jar too"
+          "note": "jarred, in oil; use the oil from the jar too",
+          "recipes": [
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Smooth peanut butter",
           "quantity": "16g",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Light soy sauce",
           "quantity": "15ml",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Ginger paste",
           "quantity": "5ml",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Garlic paste",
           "quantity": "5ml",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "American mustard",
           "quantity": "10ml",
-          "have": true
+          "recipes": [
+            "egg-not-mayo-sandwich"
+          ]
         },
         {
           "name": "Worcestershire sauce",
-          "quantity": "12ml"
+          "quantity": "12ml",
+          "recipes": [
+            "best-ever-caesar-salad"
+          ]
         },
         {
           "name": "Balsamic vinegar",
           "quantity": "5ml",
-          "have": true
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Honey",
           "quantity": "20ml",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa",
+            "crunchy-peanut-slaw",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Maple syrup",
           "note": "to taste",
-          "have": true
+          "recipes": [
+            "overnight-oats",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Chicken stock cubes",
           "quantity": "1",
-          "have": true
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         }
       ]
     },
@@ -321,87 +485,140 @@
           "name": "Olive oil",
           "quantity": "35ml",
           "note": "including extra virgin",
-          "have": true
+          "recipes": [
+            "best-ever-caesar-salad",
+            "blackened-fish-tacos-with-mango-salsa",
+            "nutritionist-immunity-lemon-chicken-soup",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Rolled oats",
           "quantity": "90g",
-          "have": true
+          "recipes": [
+            "overnight-oats"
+          ]
         },
         {
           "name": "Chia seeds",
           "quantity": "72g",
-          "have": true
+          "recipes": [
+            "overnight-oats",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Raisins",
           "note": "to taste",
-          "have": true
+          "recipes": [
+            "overnight-oats"
+          ]
         },
         {
           "name": "Roasted peanuts",
-          "quantity": "15g"
+          "quantity": "15g",
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Pecans",
-          "note": "roasted, optional, to serve"
+          "note": "roasted, optional, to serve",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
         },
         {
           "name": "Cooked quinoa or rice",
           "quantity": "25g",
-          "have": true
+          "recipes": [
+            "crunchy-peanut-slaw"
+          ]
         },
         {
           "name": "Medium egg noodle nests",
-          "quantity": "50g"
+          "quantity": "50g",
+          "recipes": [
+            "nutritionist-immunity-lemon-chicken-soup"
+          ]
         },
         {
           "name": "Sesame seeds",
-          "quantity": "2g"
+          "quantity": "2g",
+          "recipes": [
+            "smoked-salmon-dill-bagel-prep-mix"
+          ]
         },
         {
           "name": "Garlic granules",
           "quantity": "5g",
-          "have": true
+          "recipes": [
+            "best-ever-caesar-salad",
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Smoked paprika",
           "quantity": "2g",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Ground cumin",
           "quantity": "1g",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Cayenne pepper",
           "quantity": "0.5g",
           "note": "optional",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Sugar",
           "quantity": "2g",
-          "have": true
+          "recipes": [
+            "blackened-fish-tacos-with-mango-salsa"
+          ]
         },
         {
           "name": "Chilli flakes",
           "quantity": "1g",
-          "have": true
+          "recipes": [
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Salt",
           "note": "to taste",
-          "have": true
+          "recipes": [
+            "best-ever-caesar-salad",
+            "blackened-fish-tacos-with-mango-salsa",
+            "crunchy-peanut-slaw",
+            "egg-not-mayo-sandwich",
+            "nutritionist-immunity-lemon-chicken-soup",
+            "smoked-salmon-dill-bagel-prep-mix",
+            "ultimate-healthy-toasties"
+          ]
         },
         {
           "name": "Black pepper",
           "note": "to taste",
-          "have": true
+          "recipes": [
+            "best-ever-caesar-salad",
+            "blackened-fish-tacos-with-mango-salsa",
+            "egg-not-mayo-sandwich",
+            "nutritionist-immunity-lemon-chicken-soup",
+            "smoked-salmon-dill-bagel-prep-mix",
+            "ultimate-healthy-toasties"
+          ]
         }
       ]
     }
-  ],
-  "stocktake": "2026-10-24T21:08:58.773Z"
+  ]
 }
