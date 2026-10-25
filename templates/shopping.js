@@ -3,6 +3,7 @@
 // list at runtime. Adds:
 // - the servings picker (1/2/4 per recipe, from the list's 2-serving base; opens on 4),
 // - ticks while shopping, kept in this browser only (anyone can use them),
+// - the recipes each item is for: its row shows their photos, and tapping them names the recipes,
 // - for the signed-in editor: the "At home" tab, where each row is a fill bar (slide across
 //   it for some, tap the house for all). Edits stay in this browser until Save, which sends
 //   them in one go to the MCP server's /stocktake endpoint (one commit, one deploy).
@@ -82,6 +83,7 @@
     draft: load(DRAFT_KEY, null), // unsaved "at home" edits: { id: true | number }
     tab: "list", // list | home (editor only)
     homeOpen: false, // the "Already at home" fold
+    openFor: [], // ids of the rows whose recipe names are shown
     collapsed: load("shopping-collapsed", []), // names of the aisle sections folded away (both tabs)
     session: load(SESSION_KEY, null),
     accountOpen: false,
@@ -281,8 +283,46 @@
     );
   }
 
+  // A row shows at most this many recipe photos, then "+n" (as in shopping-list.js).
+  var ROW_PHOTOS = 3;
+  function rowRecipes(item) {
+    return (item.recipes || [])
+      .map(function (slug) {
+        return data.recipes && data.recipes[slug];
+      })
+      .filter(Boolean);
+  }
+  /** The photos of the recipes an item is for; tapping them shows the recipes' names (links) under the row. */
+  function rowForHtml(item, rs) {
+    if (!rs.length) return "";
+    var open = state.openFor.indexOf(item.id) !== -1;
+    var imgs = rs.slice(0, ROW_PHOTOS).map(function (r) {
+      return '<img src="' + esc(r.image) + '" alt="">';
+    }).join("");
+    var more = rs.length > ROW_PHOTOS ? '<span class="row-more">+' + (rs.length - ROW_PHOTOS) + "</span>" : "";
+    var names = rs.map(function (r) {
+      return r.title;
+    }).join(", ");
+    return (
+      '<button type="button" class="row-for" data-for="' + item.id + '" data-focus="for-' + item.id + '" aria-expanded="' + open +
+      '" aria-label="For ' + esc(names) + '">' + imgs + more + "</button>"
+    );
+  }
+  function rowRecipesHtml(item, rs) {
+    if (!rs.length || state.openFor.indexOf(item.id) === -1) return "";
+    return (
+      '<div class="row-recipes">' +
+      rs.map(function (r) {
+        return '<a href="' + esc(r.href) + '"><img src="' + esc(r.image) + '" alt=""><span>' + esc(r.title) + "</span></a>";
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  // The tick and the quantity are both labels for the checkbox, so the whole row still ticks; the photos between them are a button.
   function shopRow(item, r) {
     var ticked = state.ticks.indexOf(item.id) !== -1;
+    var rs = rowRecipes(item);
     var partial = r.status === "partial";
     var qty = partial ? amountText(item, r.left) : needText(item);
     var some = partial
@@ -290,9 +330,10 @@
         '<span class="sr-only">(have ' + esc(amountText(item, effective()[item.id])) + " of " + esc(needText(item)) + " at home)</span>"
       : "";
     return (
-      '<li><label class="shop-item"><input type="checkbox" class="tick" data-tick="' + item.id + '" data-focus="tick-' + item.id + '"' +
-      (ticked ? " checked" : "") + '><span class="shop-name">' + esc(item.name) + noteHtml(item) + "</span>" + some +
-      '<span class="shop-qty">' + esc(qty) + "</span></label></li>"
+      '<li class="shop-row"><label class="shop-item"><input type="checkbox" class="tick" id="tick-' + item.id + '" data-tick="' + item.id +
+      '" data-focus="tick-' + item.id + '"' + (ticked ? " checked" : "") + '><span class="shop-name">' + esc(item.name) + noteHtml(item) +
+      "</span>" + some + "</label>" + rowForHtml(item, rs) + '<label class="shop-qty" for="tick-' + item.id + '">' + esc(qty) + "</label>" +
+      rowRecipesHtml(item, rs) + "</li>"
     );
   }
 
@@ -766,6 +807,11 @@
     } else if (el.hasAttribute("data-tab")) {
       state.tab = el.getAttribute("data-tab");
       state.message = null;
+    } else if (el.hasAttribute("data-for")) {
+      var forId = el.getAttribute("data-for");
+      var at = state.openFor.indexOf(forId);
+      if (at === -1) state.openFor.push(forId);
+      else state.openFor.splice(at, 1);
     } else if (el.hasAttribute("data-house")) {
       var id = el.getAttribute("data-house");
       setDraft(id, rowState(byId[id]).level === "all" ? 0 : true);

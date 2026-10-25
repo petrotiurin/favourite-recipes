@@ -42,6 +42,34 @@ export function validateSections(sections) {
   if (errors.length) throw new ShoppingListError(`Shopping list rejected:\n- ${errors.join("\n- ")}`);
 }
 
+/**
+ * Every item names the current recipes it is for (`recipes`: slugs), so the page can show which
+ * dish each ingredient goes into. Each slug must be a current recipe, and every current recipe
+ * must have at least one item (a recipe with nothing on the list was most likely left out).
+ */
+export function validateItemRecipes(sections, currentSlugs) {
+  const current = new Set(currentSlugs);
+  const used = new Set();
+  const errors = [];
+  for (const s of sections) {
+    for (const item of s.items) {
+      if (!item.recipes?.length) {
+        errors.push(`"${item.name}": recipes is required: the slugs of the current recipes it is for`);
+        continue;
+      }
+      for (const slug of item.recipes) {
+        if (current.has(slug)) used.add(slug);
+        else errors.push(`"${item.name}": "${slug}" is not a current recipe (current: ${[...current].join(", ")})`);
+      }
+    }
+  }
+  const missing = [...current].filter((slug) => !used.has(slug));
+  if (missing.length && !errors.length) {
+    errors.push(`no item is for ${missing.join(", ")}: every current recipe's ingredients must be on the list, each item naming its recipes`);
+  }
+  if (errors.length) throw new ShoppingListError(`Shopping list rejected:\n- ${errors.join("\n- ")}`);
+}
+
 export function buildShoppingList(sections, currentSlugs, now = new Date()) {
   return {
     updated: now.toISOString().slice(0, 10),
@@ -52,6 +80,7 @@ export function buildShoppingList(sections, currentSlugs, now = new Date()) {
         name: item.name.trim(),
         ...(item.quantity?.trim() ? { quantity: item.quantity.trim() } : {}),
         ...(item.note?.trim() ? { note: item.note.trim() } : {}),
+        ...(item.recipes?.length ? { recipes: [...new Set(item.recipes)] } : {}),
       })),
     })),
   };
@@ -202,6 +231,7 @@ export async function updateShoppingList(sections, batch) {
       "There are no current recipes, so there is nothing to shop for. Add a draft, or mark recipes current with set_current_recipes. The shopping page stays blank until then."
     );
   }
+  validateItemRecipes(sections, current.map((r) => r.slug));
   const list = buildShoppingList(sections, current.map((r) => r.slug));
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
   const subject = `Update shopping list (${current.length} current recipe${current.length === 1 ? "" : "s"})`;

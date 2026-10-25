@@ -49,12 +49,24 @@ function noteHtml(item) {
   return item.note ? `<span class="shop-note">${escapeHtml(item.note)}</span>` : "";
 }
 
-function renderItem(item, { status, left }) {
+// A row shows at most this many recipe photos, then "+n".
+const ROW_PHOTOS = 3;
+
+/** The photos of the recipes an item is for (its `recipes` slugs); shopping.js turns them into a button that names them. */
+function rowBubbles(item, bySlug) {
+  const rs = (item.recipes || []).map((slug) => bySlug.get(slug)).filter(Boolean);
+  if (!rs.length) return "";
+  const imgs = rs.slice(0, ROW_PHOTOS).map((r) => `<img src="${escapeHtml(r.image.replace(/^\//, ""))}" alt="" loading="lazy">`).join("");
+  const more = rs.length > ROW_PHOTOS ? `<span class="row-more">+${rs.length - ROW_PHOTOS}</span>` : "";
+  return `<span class="row-bubbles" aria-hidden="true">${imgs}${more}</span><span class="sr-only">(for ${escapeHtml(rs.map((r) => r.title).join(", "))})</span>`;
+}
+
+function renderItem(item, { status, left }, bySlug) {
   const partial =
     status === "partial"
       ? `${iconSome("icon icon-some")}<span class="sr-only">(have ${escapeHtml(fmtAmount(item.have, parseQuantity(item.quantity).unit))} of ${escapeHtml(item.quantity)} at home)</span>`
       : "";
-  return `        <li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">${escapeHtml(item.name)}${noteHtml(item)}</span>${partial}<span class="shop-qty">${escapeHtml(left)}</span></label></li>`;
+  return `        <li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">${escapeHtml(item.name)}${noteHtml(item)}</span>${partial}${rowBubbles(item, bySlug)}<span class="shop-qty">${escapeHtml(left)}</span></label></li>`;
 }
 
 /** "Home checked 18 Oct: 3 at home, 2 partly", when the editor has saved a stocktake. */
@@ -77,7 +89,7 @@ function homeCard(list) {
  * templates/shopping.js re-renders #shopping-app from the embedded JSON (servings, ticks
  * while shopping, and for the signed-in editor the "At home" tab and sign-in).
  */
-function renderStatic(list) {
+function renderStatic(list, bySlug) {
   const home = [];
   const sections = list.sections
     .map((s) => {
@@ -88,7 +100,7 @@ function renderStatic(list) {
       return `    <details class="shop-section" data-section="${escapeHtml(s.name)}" open>
       <summary><h2>${escapeHtml(s.name)}</h2><span class="section-count">${items.length}</span>${CHEVRON}</summary>
       <ul class="shop-list">
-${items.map(({ item, r }) => renderItem(item, r)).join("\n")}
+${items.map(({ item, r }) => renderItem(item, r, bySlug)).join("\n")}
       </ul>
     </details>`;
     })
@@ -105,8 +117,11 @@ ${home.map((item) => `        <li><span>${escapeHtml(item.name)}</span><span>${e
   return [homeCard(list), ...sections].filter(Boolean).join("\n");
 }
 
-/** Embedded for shopping.js: the list (with parsed amounts) and, when configured, how the editor signs in and saves. */
-function pageData(list, auth) {
+/**
+ * Embedded for shopping.js: the list (with parsed amounts), the recipes its items are for (title,
+ * photo, page) and, when configured, how the editor signs in and saves.
+ */
+function pageData(list, bySlug, auth) {
   const sections = list.sections.map((s) => ({
     name: s.name,
     items: s.items.map((item) => {
@@ -120,7 +135,11 @@ function pageData(list, auth) {
     .update(JSON.stringify(list.sections.map((s) => s.items.map((i) => [i.name, i.quantity || ""]))))
     .digest("hex")
     .slice(0, 12);
-  const data = { base: BASE_SERVINGS, servings: DEFAULT_SERVINGS, version, stocktake: list.stocktake || null, sections, auth };
+  const recipes = {};
+  bySlug.forEach((r, slug) => {
+    recipes[slug] = { title: r.title, image: r.image.replace(/^\//, ""), href: `recipes/${slug}.html` };
+  });
+  const data = { base: BASE_SERVINGS, servings: DEFAULT_SERVINGS, version, stocktake: list.stocktake || null, sections, recipes, auth };
   // Safe inside <script>: no "</script>" or "<!--" can survive the escape.
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }
@@ -135,6 +154,7 @@ function renderShoppingList(list, recipes, auth = null) {
   if (!list) {
     body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes and a shopping list has been made for them.</p>`;
   } else {
+    const bySlug = new Map(recipes.map((r) => [r.slug, r]));
     const photo = (r) => `<img src="${escapeHtml(r.image.replace(/^\//, ""))}" alt="" loading="lazy">`;
     const links = recipes
       .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span></a>`)
@@ -150,9 +170,9 @@ function renderShoppingList(list, recipes, auth = null) {
       </div>
     </details>
     <div id="shopping-app">
-${renderStatic(list)}
+${renderStatic(list, bySlug)}
     </div>
-    <script type="application/json" id="shopping-data">${pageData(list, auth)}</script>`;
+    <script type="application/json" id="shopping-data">${pageData(list, bySlug, auth)}</script>`;
   }
 
   const content = `  <main>

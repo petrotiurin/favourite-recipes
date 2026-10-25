@@ -153,6 +153,14 @@ Under the serif title, the list's recipes appear as **photo bubbles**: overlappi
 recipe as a link with its round photo and serif name ("To try" kicker after drafts). Aisle
 section names are serif small caps, like a cookbook index.
 
+Each list row also shows **which recipes the item is for**, as the same photo bubbles in small:
+24px circles (2px `--surface` ring) between the name and the quantity, at most three, then a muted
+"+n". With JS they are a button (`aria-label` "For <recipe names>"); tapping it opens a line of
+chips under the row, each a link to the recipe with its round photo and title on `--track` (long
+titles end in "…"), and tapping again closes it. The tick and the quantity are both labels for
+the row's checkbox, so tapping anywhere but the photos still ticks. Without JS the photos show
+but don't open. A ticked row's photos fade to half.
+
 **Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
 recipes · list made <date>", which expands to the recipe links; the servings card; the "Home
 checked <date>" card (when a stocktake exists or sign-in is configured) with **Update**; the
