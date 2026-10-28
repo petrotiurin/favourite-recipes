@@ -46,7 +46,7 @@ function renderRecipe(recipe, bodyHtml) {
     : "";
   const body = scaledBodyHtml;
   // Wrap the Ingredients section (up to the next h2) and what follows it, so wide
-  // screens can keep the ingredients in a sticky column beside the instructions
+  // screens can show the ingredients and instructions as two independently scrolling panes
   // (see `.recipe-body` in style.css). Narrow screens stack them as before.
   const ingStart = body.search(/<h2[^>]*>\s*Ingredients\b/i);
   const ingLength = ingStart === -1 ? -1 : body.slice(ingStart + 1).search(/<h2[\s>]/i) + 1;

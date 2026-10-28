@@ -117,6 +117,9 @@ On a phone the pill wraps under the servings, both flush left. The bar is hidden
 run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
 Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
 in an accent-ink kicker.
+From 720px the ingredients and the instructions sit side by side as two independent panes, each
+one screen tall with its own scroll: scrolling one never moves the other, and either can reach its
+end. The page snaps to the panes once the header has scrolled away.
 
 ## Components
 
