@@ -584,27 +584,35 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   font-weight: 600;
 }
 
-/* Tablets and up: ingredients in a sticky column beside the instructions,
-   so amounts stay in view while working through the steps. */
+/* Tablets and up: ingredients and instructions side by side as two independent
+   panes, each exactly one screen tall with its own scroll, so a long ingredient
+   list scrolls to its end without moving the steps (and vice versa). The page
+   snaps to the panes once the header has scrolled away, and a pane that hits its
+   end hands the scroll back to the page. */
 @media (min-width: 720px) {
   .recipe-page main {
     max-width: 1100px;
+  }
+
+  html:has(body.recipe-page) {
+    scroll-snap-type: y proximity;
   }
 
   .recipe-body {
     display: grid;
     grid-template-columns: minmax(240px, 1fr) 2fr;
     gap: 3rem;
-    align-items: start;
+    height: 100vh;
+    height: 100dvh;
     margin-top: 1rem;
+    scroll-snap-align: start;
   }
 
-  .recipe-ingredients {
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 2rem);
+  .recipe-ingredients,
+  .recipe-steps {
+    min-height: 0;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    padding-bottom: 1.5rem;
   }
 }
 
