@@ -184,7 +184,7 @@ otherwise that number is the plan) plus 1/2/4, each of which sets every recipe. 
 selected when the recipes are on a mix of your own. Under a `--line` rule, "Per recipe" (with
 "· as planned" or "· your mix" in accent ink) and a chevron opens a fold: one row per recipe with
 its round photo, serif name (two lines at most) and a stepper. A recipe changed from the plan has
-its count in accent ink and "plan n" muted under its name. Quantities follow at once: each
+its count in accent ink and "custom" muted under its name. Quantities follow at once: each
 recipe's share of an item scales with its own servings. The picks stay in this browser until the
 agent changes the plan. Without JS there is no card and the list shows the planned amounts.
 

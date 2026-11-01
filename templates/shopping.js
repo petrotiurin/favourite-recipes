@@ -321,7 +321,7 @@
     return (
       '<li class="serves-row' + (changed ? " is-changed" : "") + '">' +
       (r.image ? '<img src="' + esc(r.image) + '" alt="">' : "") +
-      '<span class="serves-name"><span>' + label + "</span>" + (changed ? '<small>plan ' + plan[slug] + "</small>" : "") + "</span>" +
+      '<span class="serves-name"><span>' + label + "</span>" + (changed ? '<small>custom</small>' : "") + "</span>" +
       '<span class="stepper">' +
       '<button type="button" class="step" data-step="' + esc(slug) + '" data-delta="-1" data-focus="step-down-' + esc(slug) + '"' +
       (n <= 1 ? " disabled" : "") + ' aria-label="Fewer servings of ' + label + '">' + ICON.minus + "</button>" +
