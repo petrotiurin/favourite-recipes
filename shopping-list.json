@@ -565,7 +565,7 @@
             "crispy-feta-eggs",
             "almond-croissant-oats"
           ],
-          "have": 30
+          "have": true
         },
         {
           "name": "Maple syrup",
@@ -789,5 +789,5 @@
       ]
     }
   ],
-  "stocktake": "2026-11-01T12:39:31.767Z"
+  "stocktake": "2026-11-01T12:40:03.932Z"
 }
