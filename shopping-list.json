@@ -119,7 +119,7 @@
         },
         {
           "name": "Tomatoes",
-          "quantity": "2",
+          "quantity": "4",
           "note": "ripe",
           "recipes": [
             "crispy-feta-eggs"
@@ -141,7 +141,7 @@
         },
         {
           "name": "Avocados",
-          "quantity": "5",
+          "quantity": "7",
           "recipes": [
             "spicy-tuna-loaded-sweet-potato",
             "loaded-chicken-fajita-nacho-bowls",
@@ -168,7 +168,7 @@
         },
         {
           "name": "Strawberries",
-          "quantity": "300g",
+          "quantity": "600g",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
@@ -182,7 +182,7 @@
         },
         {
           "name": "Spring onions",
-          "quantity": "2",
+          "quantity": "4",
           "note": "extra for the salmon topping",
           "recipes": [
             "crispy-feta-eggs",
@@ -209,7 +209,7 @@
         },
         {
           "name": "Basil",
-          "quantity": "2",
+          "quantity": "3",
           "note": "packs",
           "recipes": [
             "sticky-honey-halloumi-salad",
@@ -302,7 +302,7 @@
       "items": [
         {
           "name": "Semi-skimmed milk",
-          "quantity": "950ml",
+          "quantity": "1400ml",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie",
             "roasted-strawberry-cheesecake-chia-puddings",
@@ -311,7 +311,7 @@
         },
         {
           "name": "Eggs",
-          "quantity": "7",
+          "quantity": "11",
           "recipes": [
             "crispy-feta-eggs",
             "nutritionist-heal-me-chicken-soup",
@@ -320,7 +320,7 @@
         },
         {
           "name": "Greek yoghurt",
-          "quantity": "360g",
+          "quantity": "460g",
           "note": "0% or full-fat",
           "recipes": [
             "spicy-tuna-loaded-sweet-potato",
@@ -330,7 +330,7 @@
         },
         {
           "name": "Feta cheese",
-          "quantity": "180g",
+          "quantity": "240g",
           "note": "extra to serve",
           "recipes": [
             "spicy-tuna-loaded-sweet-potato",
@@ -347,7 +347,7 @@
         },
         {
           "name": "Cottage cheese",
-          "quantity": "230g",
+          "quantity": "460g",
           "note": "low-fat",
           "recipes": [
             "ultimate-healthy-toasties",
@@ -361,7 +361,7 @@
       "items": [
         {
           "name": "Bread",
-          "quantity": "4",
+          "quantity": "8",
           "note": "slices",
           "recipes": [
             "ultimate-healthy-toasties"
@@ -369,7 +369,7 @@
         },
         {
           "name": "Sourdough bread",
-          "quantity": "120g",
+          "quantity": "240g",
           "recipes": [
             "crispy-feta-eggs"
           ]
@@ -410,7 +410,7 @@
         },
         {
           "name": "Sundried tomatoes",
-          "quantity": "10",
+          "quantity": "20",
           "note": "in oil, jar",
           "recipes": [
             "ultimate-healthy-toasties"
@@ -418,7 +418,7 @@
         },
         {
           "name": "Sundried tomato oil",
-          "quantity": "30ml",
+          "quantity": "60ml",
           "note": "from the jar",
           "recipes": [
             "ultimate-healthy-toasties"
@@ -491,7 +491,7 @@
         },
         {
           "name": "Balsamic vinegar",
-          "quantity": "5ml",
+          "quantity": "10ml",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
@@ -519,7 +519,7 @@
         },
         {
           "name": "Honey",
-          "quantity": "53ml",
+          "quantity": "78ml",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth",
             "sticky-honey-halloumi-salad",
@@ -563,14 +563,14 @@
         },
         {
           "name": "Jumbo oats",
-          "quantity": "80g",
+          "quantity": "160g",
           "recipes": [
             "almond-croissant-oats"
           ]
         },
         {
           "name": "Chia seeds",
-          "quantity": "48g",
+          "quantity": "96g",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
@@ -598,7 +598,7 @@
         },
         {
           "name": "Olive oil",
-          "quantity": "65ml",
+          "quantity": "70ml",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth",
             "sticky-honey-halloumi-salad",
@@ -637,28 +637,28 @@
         },
         {
           "name": "Almond extract",
-          "quantity": "5ml",
+          "quantity": "10ml",
           "recipes": [
             "almond-croissant-oats"
           ]
         },
         {
           "name": "Ground almonds",
-          "quantity": "15g",
+          "quantity": "30g",
           "recipes": [
             "almond-croissant-oats"
           ]
         },
         {
           "name": "Flaked almonds",
-          "quantity": "5g",
+          "quantity": "10g",
           "recipes": [
             "almond-croissant-oats"
           ]
         },
         {
           "name": "Protein powder",
-          "quantity": "60g",
+          "quantity": "120g",
           "note": "vanilla or unflavoured, optional",
           "recipes": [
             "almond-croissant-oats"
