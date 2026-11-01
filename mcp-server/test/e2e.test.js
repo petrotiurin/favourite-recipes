@@ -110,10 +110,25 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "remove_draft", "set_current_recipes", "set_shopping_servings", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "set_current_recipes", "set_shopping_servings", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
+});
+
+test("the plan-recipes workflow ships with the server, as a tool and a prompt", async () => {
+  const guide = text(await client.callTool({ name: "get_workflow_guide", arguments: { name: "plan-recipes" } }));
+  assert.match(guide, /^# Plan recipes/);
+  assert.match(guide, /batch_changes/);
+  assert.match(guide, /set_shopping_servings/);
+  assert.doesNotMatch(guide, /<!--/);
+  const { prompts } = await client.listPrompts();
+  assert.deepEqual(prompts.map((p) => p.name), ["plan-recipes"]);
+  const p = await client.getPrompt({ name: "plan-recipes", arguments: { request: "harissa pitta, the soup just for me" } });
+  assert.equal(p.messages[0].role, "user");
+  assert.ok(p.messages[0].content.text.startsWith(guide));
+  assert.match(p.messages[0].content.text, /the soup just for me$/);
+  assert.match(client.getInstructions(), /get_workflow_guide\(\{ name: "plan-recipes" \}\)/);
 });
 
 const base = {

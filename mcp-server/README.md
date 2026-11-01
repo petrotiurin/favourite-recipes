@@ -16,6 +16,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | `remove_draft` | Deletes a draft the family didn't like (`recipes/<slug>.md` and its photo, one commit). **Only drafts** can be removed: a regular recipe is refused. If nothing is current afterwards, the shopping list is deleted too |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
 | `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
+| `get_workflow_guide` | The step-by-step guide for a multi-step flow (`plan-recipes`); the same text is the `plan-recipes` prompt |
 | `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
 | `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`), optionally with planned servings per recipe |
 | `set_shopping_servings` | Changes the planned servings of individual recipes on the saved list (e.g. one for 1, another for 2) without rebuilding it; the stocktake stays |
@@ -64,7 +65,7 @@ The site has a shopping page (`shopping-list.html`, linked by a button in the in
 - Promoting a draft doesn't change its currency, so it doesn't make the list outdated. Removing a draft does (it was current), so refresh the list afterwards.
 - Editing a current recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
 
-The end-to-end agent flow (add recipes, select existing ones, build the list, summarise) is the `plan-recipes` skill in `.claude/skills/plan-recipes/SKILL.md`.
+The end-to-end agent flow (add recipes, select existing ones, build the list, summarise) ships with the server: `workflows/plan-recipes.md`, served as the `plan-recipes` prompt (pick it from the client's prompt menu, or `/mcp__<server>__plan-recipes` in Claude Code) and by the `get_workflow_guide` tool. The server's instructions tell agents to call `get_workflow_guide` first whenever they're handed recipes to cook, so no skill is needed; the repo's `plan-recipes` skill only points to it. Edit the flow in `workflows/plan-recipes.md` (bundled via `includeFiles` in `vercel.json`) and deploy.
 
 ## Adding photos
 

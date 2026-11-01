@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { COURSES, config } from "./config.js";
 import { createUploadToken } from "./auth.js";
+import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import {
@@ -31,6 +32,11 @@ import {
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
+
+Workflow: when the user hands over recipes to cook or shop for (screenshots, links, pasted recipes, names of recipes we have),
+or asks for a shopping list, FIRST call get_workflow_guide({ name: "plan-recipes" }) and follow it step by step. It is the
+up-to-date flow (closing out last round, drafts, current recipes, servings, shopping list, one batch, summary); it overrides
+any older copy of it you may have in a skill. It is also offered as the "plan-recipes" prompt.
 
 One commit = one site deploy, and deploys queue behind each other, so a burst of single-change calls makes the site lag behind for
 minutes. Whenever you make MORE THAN ONE change in a go (several recipes, recipes + set_current_recipes, anything + the shopping
@@ -342,6 +348,46 @@ function resultText(verb, { slug, markdown, commit, draft, warnings }) {
 
 export function buildServer({ origin }) {
   const server = new McpServer({ name: "favourite-recipes", version: "1.0.0" }, { instructions: INSTRUCTIONS });
+
+  server.registerTool(
+    "get_workflow_guide",
+    {
+      title: "Get workflow guide",
+      description:
+        "The step-by-step guide for a multi-step job with this server. Call it before starting one and follow it. " +
+        WORKFLOW_NAMES.map((n) => `"${n}": ${WORKFLOWS[n].description}`).join(" "),
+      inputSchema: { name: z.enum(WORKFLOW_NAMES).describe("Which workflow") },
+      annotations: { readOnlyHint: true },
+    },
+    safe(async ({ name }) => ok(WORKFLOWS[name].text))
+  );
+
+  for (const [name, wf] of Object.entries(WORKFLOWS)) {
+    server.registerPrompt(
+      name,
+      {
+        title: wf.title,
+        description: wf.description,
+        argsSchema: {
+          request: z
+            .string()
+            .optional()
+            .describe("What to cook: recipe links, names of recipes we have, servings (\"the soup just for me\"). Attach screenshots in the chat."),
+        },
+      },
+      ({ request }) => ({
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `${wf.text}\n\n---\n\nFollow the workflow above for this request:\n\n${request?.trim() || "(see my message and any attachments)"}`,
+            },
+          },
+        ],
+      })
+    );
+  }
 
   server.registerTool(
     "list_recipes",
