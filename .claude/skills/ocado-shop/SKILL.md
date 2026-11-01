@@ -40,6 +40,8 @@ The favourites page is a long virtualised list: scroll it in steps (`window.scro
 - **Greek yoghurt: lactose-free only** (the favourite *M&S Lactose Free Greek Style Natural Yogurt*).
 - **Avocados: M&S Collection avocados** (*M&S Collection Perfect Pick Ripe Avocado*, 2 per pack, from favourites), not the cheaper loose ones.
 - **Chicken: from favourites only** (RSPCA-approved): *M&S British Chicken Breast Fillets* for raw, *Ocado British Flame-grilled Chicken Breast Pieces* or *M&S Plain Roasted Chicken Breast Slices* for cooked. Never swap in a cheaper search result.
+- **Pomegranate seeds: buy a whole pomegranate**, not packs of seeds (favourite first, else cheapest rated). 1 pomegranate covers the usual need; buy more only if the seed amount is large (one fruit ≈ 100-150g of seeds).
+- **Cherry tomatoes = baby plum tomatoes** (same thing for our purposes). Treat either as a match when checking favourites, and take a favourite of either kind before searching.
 
 If a non-negotiable is out of stock, don't substitute: tell the user.
 
