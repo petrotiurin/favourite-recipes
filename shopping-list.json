@@ -22,14 +22,16 @@
           "note": "bunches",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Fresh ginger",
           "quantity": "7.5g",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Garlic",
@@ -39,7 +41,8 @@
             "air-fried-salmon-with-jasmine-rice-and-curry-broth",
             "creamy-chicken-leek-and-pancetta-pie",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sweet potatoes",
@@ -56,7 +59,8 @@
             "spicy-tuna-loaded-sweet-potato",
             "loaded-chicken-fajita-nacho-bowls",
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": 1
         },
         {
           "name": "Onion",
@@ -64,7 +68,8 @@
           "note": "large",
           "recipes": [
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Carrots",
@@ -87,14 +92,16 @@
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Leeks",
           "quantity": "1",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": 1
         },
         {
           "name": "Chestnut mushrooms",
@@ -123,14 +130,16 @@
           "note": "ripe",
           "recipes": [
             "crispy-feta-eggs"
-          ]
+          ],
+          "have": 2
         },
         {
           "name": "Red peppers",
           "quantity": "1",
           "recipes": [
             "loaded-chicken-fajita-nacho-bowls"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Green peppers",
@@ -147,7 +156,8 @@
             "loaded-chicken-fajita-nacho-bowls",
             "crispy-feta-eggs",
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": 2
         },
         {
           "name": "Limes",
@@ -171,7 +181,8 @@
           "quantity": "300g",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": 300
         },
         {
           "name": "Pomegranate seeds",
@@ -187,7 +198,8 @@
           "recipes": [
             "crispy-feta-eggs",
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Dill",
@@ -196,7 +208,8 @@
           "recipes": [
             "spicy-tuna-loaded-sweet-potato",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Parsley",
@@ -205,7 +218,8 @@
           "recipes": [
             "sticky-honey-halloumi-salad",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": 1
         },
         {
           "name": "Basil",
@@ -215,7 +229,8 @@
             "sticky-honey-halloumi-salad",
             "ultimate-healthy-toasties",
             "crispy-feta-eggs"
-          ]
+          ],
+          "have": 2
         },
         {
           "name": "Chives",
@@ -223,7 +238,8 @@
           "note": "pack",
           "recipes": [
             "sticky-honey-halloumi-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tarragon",
@@ -247,14 +263,16 @@
           "note": "sprig",
           "recipes": [
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Greens",
           "note": "to serve",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -307,7 +325,8 @@
             "creamy-chicken-leek-and-pancetta-pie",
             "roasted-strawberry-cheesecake-chia-puddings",
             "almond-croissant-oats"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Eggs",
@@ -316,7 +335,8 @@
             "crispy-feta-eggs",
             "nutritionist-heal-me-chicken-soup",
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": 4
         },
         {
           "name": "Greek yoghurt",
@@ -326,7 +346,8 @@
             "spicy-tuna-loaded-sweet-potato",
             "loaded-chicken-fajita-nacho-bowls",
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Feta cheese",
@@ -336,7 +357,8 @@
             "spicy-tuna-loaded-sweet-potato",
             "loaded-chicken-fajita-nacho-bowls",
             "crispy-feta-eggs"
-          ]
+          ],
+          "have": 75
         },
         {
           "name": "Halloumi",
@@ -352,7 +374,8 @@
           "recipes": [
             "ultimate-healthy-toasties",
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -365,14 +388,16 @@
           "note": "slices",
           "recipes": [
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": 4
         },
         {
           "name": "Sourdough bread",
           "quantity": "120g",
           "recipes": [
             "crispy-feta-eggs"
-          ]
+          ],
+          "have": 125
         },
         {
           "name": "Ready-rolled puff pastry",
@@ -414,7 +439,8 @@
           "note": "in oil, jar",
           "recipes": [
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sundried tomato oil",
@@ -422,28 +448,32 @@
           "note": "from the jar",
           "recipes": [
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tomato purée",
           "quantity": "15g",
           "recipes": [
             "loaded-chicken-fajita-nacho-bowls"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Red or green curry paste",
           "quantity": "22.5g",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chicken bone broth",
           "quantity": "60ml",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chicken stock cubes",
@@ -451,14 +481,16 @@
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tahini",
           "quantity": "15g",
           "recipes": [
             "sticky-honey-halloumi-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Pesto",
@@ -480,42 +512,48 @@
           "quantity": "15ml",
           "recipes": [
             "spicy-tuna-loaded-sweet-potato"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "White wine vinegar",
           "quantity": "15ml",
           "recipes": [
             "spicy-tuna-loaded-sweet-potato"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Balsamic vinegar",
           "quantity": "5ml",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Dijon mustard",
           "quantity": "2.5ml",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Ginger paste",
           "quantity": "2.5ml",
           "recipes": [
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Soy sauce",
           "quantity": "7.5ml",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Honey",
@@ -526,21 +564,24 @@
             "ultimate-healthy-toasties",
             "crispy-feta-eggs",
             "almond-croissant-oats"
-          ]
+          ],
+          "have": 30
         },
         {
           "name": "Maple syrup",
           "note": "or honey or sweetener, to taste",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chili oil",
           "note": "optional, to serve",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -566,14 +607,16 @@
           "quantity": "80g",
           "recipes": [
             "almond-croissant-oats"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chia seeds",
           "quantity": "48g",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tortilla chips",
@@ -587,14 +630,16 @@
           "quantity": "7.5g",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Cornflour",
           "quantity": "3g",
           "recipes": [
             "sticky-honey-halloumi-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Olive oil",
@@ -605,35 +650,40 @@
             "loaded-chicken-fajita-nacho-bowls",
             "roasted-strawberry-cheesecake-chia-puddings",
             "nutritionist-heal-me-chicken-soup"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Garlic powder",
           "quantity": "1.5g",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Garlic granules",
           "quantity": "2.5g",
           "recipes": [
             "sticky-honey-halloumi-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Paprika",
           "quantity": "1g",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Fajita spice blend",
           "quantity": "2.5g",
           "recipes": [
             "loaded-chicken-fajita-nacho-bowls"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Almond extract",
@@ -647,7 +697,8 @@
           "quantity": "15g",
           "recipes": [
             "almond-croissant-oats"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Flaked almonds",
@@ -662,14 +713,16 @@
           "note": "vanilla or unflavoured, optional",
           "recipes": [
             "almond-croissant-oats"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sesame seeds",
           "note": "optional, to serve",
           "recipes": [
             "air-fried-salmon-with-jasmine-rice-and-curry-broth"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Pecans",
@@ -686,7 +739,8 @@
             "sticky-honey-halloumi-salad",
             "ultimate-healthy-toasties",
             "crispy-feta-eggs"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Salt",
@@ -701,7 +755,8 @@
             "crispy-feta-eggs",
             "almond-croissant-oats",
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Black pepper",
@@ -715,7 +770,8 @@
             "loaded-chicken-fajita-nacho-bowls",
             "crispy-feta-eggs",
             "ultimate-healthy-toasties"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -727,9 +783,11 @@
           "quantity": "60g",
           "recipes": [
             "creamy-chicken-leek-and-pancetta-pie"
-          ]
+          ],
+          "have": true
         }
       ]
     }
-  ]
+  ],
+  "stocktake": "2026-11-01T12:39:31.767Z"
 }
