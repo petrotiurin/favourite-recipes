@@ -1,7 +1,8 @@
 // Shopping page enhancement. Re-renders #shopping-app (and the account button in
 // #shopping-account) from the JSON the build embedded (#shopping-data); it never loads the
 // list at runtime. Adds:
-// - the servings picker (1/2/4 per recipe, from the list's 2-serving base; opens on 4),
+// - the servings picker: opens on the agent's plan (servings per recipe, from the list's 2-serving
+//   base), "1/2/4" sets every recipe, and "Per recipe" changes single recipes (kept in this browser),
 // - ticks while shopping, kept in this browser only (anyone can use them),
 // - the recipes each item is for: its row shows their photos, and tapping them names the recipes,
 // - for the signed-in editor: the "At home" tab, where each row is a fill bar (slide across
@@ -33,6 +34,7 @@
       else localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {}
   }
+  var PLAN_KEY = "shopping-plan:" + data.version;
   var TICKS_KEY = "shopping-ticks:" + data.version;
   var PENDING_KEY = "shopping-stocktake:" + data.version;
   var DRAFT_KEY = "shopping-draft:" + data.version;
@@ -42,10 +44,11 @@
   try {
     // Ticks, unsaved edits and saved-but-not-yet-deployed stocktakes belong to one list: drop other lists' ones.
     Object.keys(localStorage).forEach(function (k) {
-      if (/^shopping-(ticks|stocktake|draft):/.test(k) && [TICKS_KEY, PENDING_KEY, DRAFT_KEY].indexOf(k) === -1) {
+      if (/^shopping-(ticks|stocktake|draft|plan):/.test(k) && [TICKS_KEY, PENDING_KEY, DRAFT_KEY, PLAN_KEY].indexOf(k) === -1) {
         localStorage.removeItem(k);
       }
     });
+    localStorage.removeItem("shopping-servings"); // the old one-number-for-all pick
   } catch (e) {}
 
   var items = [];
@@ -73,9 +76,27 @@
     stocktakeAt = pending.saved;
   } else save(PENDING_KEY, undefined);
 
-  var storedServings = load("shopping-servings", data.servings);
+  // Servings per recipe: the agent's plan, or this browser's changes to it. Changes are dropped
+  // when the agent changes the plan, so a new plan always shows.
+  var plan = data.plan || {};
+  var slugs = Object.keys(plan);
+  var MAX_SERVINGS = 12;
+  function samePlan(a, b) {
+    return slugs.every(function (slug) {
+      return a && b && a[slug] === b[slug];
+    });
+  }
+  var storedPlan = load(PLAN_KEY, null);
+  var startServings = Object.assign({}, plan);
+  if (storedPlan && samePlan(storedPlan.plan, plan) && storedPlan.servings) {
+    slugs.forEach(function (slug) {
+      var n = storedPlan.servings[slug];
+      if (n >= 1 && n <= MAX_SERVINGS && n === Math.round(n)) startServings[slug] = n;
+    });
+  } else save(PLAN_KEY, undefined);
   var state = {
-    servings: [1, 2, 4].indexOf(storedServings) === -1 ? data.servings : storedServings,
+    servings: startServings, // slug -> servings
+    perRecipeOpen: false,
     ticks: load(TICKS_KEY, []),
     have: have,
     stocktakeAt: stocktakeAt,
@@ -120,15 +141,30 @@
   function withUnit(text, unit) {
     return text + (!unit ? "" : METRIC.test(unit) ? unit : " " + unit);
   }
-  function factor() {
-    return state.servings / data.base;
+  function servingsOf(slug) {
+    return state.servings[slug] || data.fallback;
   }
+  // Each recipe's share of the 2-serving amount times its servings / base; items without `amounts`
+  // (older lists) scale by their recipes' average. Keep in sync with neededAmount in shopping-list.js.
   function need(item) {
-    return item.amount === undefined ? null : item.amount * factor();
+    if (item.amount === undefined) return null;
+    if (item.amounts) {
+      return Object.keys(item.amounts).reduce(function (n, slug) {
+        return n + (item.amounts[slug] * servingsOf(slug)) / data.base;
+      }, 0);
+    }
+    var rs = item.recipes && item.recipes.length ? item.recipes : slugs;
+    var mean = rs.length
+      ? rs.reduce(function (n, slug) {
+          return n + servingsOf(slug);
+        }, 0) / rs.length
+      : data.fallback;
+    return (item.amount * mean) / data.base;
   }
   function needText(item) {
     if (item.amount === undefined) return item.quantity || "";
-    return factor() === 1 ? item.quantity : withUnit(formatNumber(need(item), item.unit), item.unit);
+    var n = need(item);
+    return Math.abs(n - item.amount) < 1e-9 ? item.quantity : withUnit(formatNumber(n, item.unit), item.unit);
   }
   function amountText(item, value) {
     return withUnit(formatNumber(value, item.unit), item.unit);
@@ -202,6 +238,8 @@
     person: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
     close: svg('<path d="M6 6l12 12M18 6L6 18"/>'),
     chevron: svg('<path d="M6 9l6 6 6-6"/>', "icon chevron"),
+    minus: svg('<path d="M6 12h12"/>'),
+    plus: svg('<path d="M12 6v12M6 12h12"/>'),
   };
 
   // --- rendering ---
@@ -261,12 +299,60 @@
     );
   }
 
+  /** The one number every recipe is on, or null when they differ. */
+  function uniform(map) {
+    var first = map[slugs[0]];
+    return slugs.every(function (slug) {
+      return map[slug] === first;
+    })
+      ? first
+      : null;
+  }
+  // "Plan" is the agent's plan; it is left out when the plan is one of 1/2/4 for every recipe (that button is the plan then).
+  function showPlanButton() {
+    var u = uniform(plan);
+    return slugs.length > 0 && [1, 2, 4].indexOf(u) === -1;
+  }
+  function planRecipeHtml(slug) {
+    var r = (data.recipes && data.recipes[slug]) || { title: slug };
+    var n = servingsOf(slug);
+    var changed = n !== plan[slug];
+    var label = esc(r.title);
+    return (
+      '<li class="serves-row' + (changed ? " is-changed" : "") + '">' +
+      (r.image ? '<img src="' + esc(r.image) + '" alt="">' : "") +
+      '<span class="serves-name"><span>' + label + "</span>" + (changed ? '<small>custom</small>' : "") + "</span>" +
+      '<span class="stepper">' +
+      '<button type="button" class="step" data-step="' + esc(slug) + '" data-delta="-1" data-focus="step-down-' + esc(slug) + '"' +
+      (n <= 1 ? " disabled" : "") + ' aria-label="Fewer servings of ' + label + '">' + ICON.minus + "</button>" +
+      '<span class="step-count" aria-live="polite" aria-label="' + label + ", " + n + " servings" + '">' + n + "</span>" +
+      '<button type="button" class="step" data-step="' + esc(slug) + '" data-delta="1" data-focus="step-up-' + esc(slug) + '"' +
+      (n >= MAX_SERVINGS ? " disabled" : "") + ' aria-label="More servings of ' + label + '">' + ICON.plus + "</button>" +
+      "</span></li>"
+    );
+  }
   function servingsHtml() {
-    var html = '<div class="shop-card"><span>Servings of each recipe</span><div class="seg" role="group" aria-label="Servings of each recipe">';
+    var onPlan = samePlan(state.servings, plan);
+    var u = uniform(state.servings);
+    var planButton = showPlanButton();
+    var html =
+      '<div class="shop-card servings-card"><div class="servings-top"><span>Servings</span>' +
+      '<div class="seg" role="group" aria-label="Servings of every recipe">';
+    if (planButton) {
+      html += '<button type="button" data-serves="plan" data-focus="serves-plan" aria-pressed="' + onPlan + '" aria-label="As planned">Plan</button>';
+    }
     [1, 2, 4].forEach(function (n) {
-      html += '<button type="button" data-serves="' + n + '" data-focus="serves-' + n + '" aria-pressed="' + (n === state.servings) + '">' + n + "</button>";
+      var pressed = u === n && !(planButton && onPlan);
+      html += '<button type="button" data-serves="' + n + '" data-focus="serves-' + n + '" aria-pressed="' + pressed + '" aria-label="' + n + ' for every recipe">' + n + "</button>";
     });
-    return html + "</div></div>";
+    html += "</div></div>";
+    if (!slugs.length) return html + "</div>";
+    var summary = onPlan ? (planButton ? "as planned" : "") : u === null ? "your mix" : "";
+    html +=
+      '<button type="button" class="per-recipe-toggle" data-act="per-recipe" data-focus="per-recipe" aria-expanded="' + state.perRecipeOpen + '">' +
+      "<span>Per recipe" + (summary ? '<span class="per-recipe-summary"> &middot; ' + summary + "</span>" : "") + "</span>" + ICON.chevron + "</button>";
+    if (state.perRecipeOpen) html += '<ul class="serves-list">' + slugs.map(planRecipeHtml).join("") + "</ul>";
+    return html + "</div>";
   }
 
   function homeCardHtml() {
@@ -531,6 +617,11 @@
     if (tabs) tabs.outerHTML = tabsHtml();
     var bar = document.getElementById("save-bar");
     if (bar) bar.outerHTML = saveBarHtml();
+  }
+
+  // Kept per list, with the plan it was made from; back on the plan, nothing is kept.
+  function saveServings() {
+    save(PLAN_KEY, samePlan(state.servings, plan) ? undefined : { plan: plan, servings: state.servings });
   }
 
   // --- unsaved edits ---
@@ -802,8 +893,20 @@
     if (!el || el.disabled) return;
     var act = el.getAttribute("data-act");
     if (el.hasAttribute("data-serves")) {
-      state.servings = Number(el.getAttribute("data-serves"));
-      save("shopping-servings", state.servings);
+      var serves = el.getAttribute("data-serves");
+      state.servings = {};
+      slugs.forEach(function (slug) {
+        state.servings[slug] = serves === "plan" ? plan[slug] : Number(serves);
+      });
+      saveServings();
+    } else if (el.hasAttribute("data-step")) {
+      var stepSlug = el.getAttribute("data-step");
+      var next = servingsOf(stepSlug) + Number(el.getAttribute("data-delta"));
+      if (next < 1 || next > MAX_SERVINGS) return;
+      state.servings[stepSlug] = next;
+      saveServings();
+    } else if (act === "per-recipe") {
+      state.perRecipeOpen = !state.perRecipeOpen;
     } else if (el.hasAttribute("data-tab")) {
       state.tab = el.getAttribute("data-tab");
       state.message = null;

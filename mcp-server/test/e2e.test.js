@@ -110,10 +110,25 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "list_recipes", "promote_recipe", "remove_draft", "set_current_recipes", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "set_current_recipes", "set_shopping_servings", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
+});
+
+test("the plan-recipes workflow ships with the server, as a tool and a prompt", async () => {
+  const guide = text(await client.callTool({ name: "get_workflow_guide", arguments: { name: "plan-recipes" } }));
+  assert.match(guide, /^# Plan recipes/);
+  assert.match(guide, /batch_changes/);
+  assert.match(guide, /set_shopping_servings/);
+  assert.doesNotMatch(guide, /<!--/);
+  const { prompts } = await client.listPrompts();
+  assert.deepEqual(prompts.map((p) => p.name), ["plan-recipes"]);
+  const p = await client.getPrompt({ name: "plan-recipes", arguments: { request: "harissa pitta, the soup just for me" } });
+  assert.equal(p.messages[0].role, "user");
+  assert.ok(p.messages[0].content.text.startsWith(guide));
+  assert.match(p.messages[0].content.text, /the soup just for me$/);
+  assert.match(client.getInstructions(), /get_workflow_guide\(\{ name: "plan-recipes" \}\)/);
 });
 
 const base = {
@@ -208,10 +223,15 @@ test("draft: false creates a regular recipe straight away", async () => {
   assert.doesNotMatch(files.get("recipes/test-regular-soup.md").toString(), /draft/);
 });
 
-// Every item is tagged with the recipes it is for; here each item is simply for all of the given recipes.
+// Every item is tagged with the recipes it is for; here each item is simply for all of the given recipes,
+// split evenly between them (an item for several recipes says how much each one needs).
+const split = (total, recipes) => {
+  const slugs = [...new Set(recipes)];
+  return slugs.length > 1 ? { amounts: Object.fromEntries(slugs.map((s) => [s, total / slugs.length])) } : {};
+};
 const sectionsFor = (recipes) => [
-  { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both", recipes }, { name: "Parsley", recipes }] },
-  { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils", recipes }] },
+  { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both", recipes, ...split(3, recipes) }, { name: "Parsley", recipes }] },
+  { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils", recipes, ...split(400, recipes) }] },
 ];
 const shopping = async (name = "get_shopping_list", args = {}) => text(await client.callTool({ name, arguments: args }));
 const listed = async () => JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
@@ -273,13 +293,33 @@ test("shopping list covers current recipes; it stays until rewritten and goes bl
   assert.ok(uncovered.isError);
   assert.match(text(uncovered), /no item is for test-draft-salad/);
 
+  // An item for several recipes says how much each one needs, adding up to its quantity.
+  const both = ["test-draft-salad", "steamed-rice"];
+  const withOnions = (onions) => [{ name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", recipes: both, ...onions }] }];
+  const noSplit = await client.callTool({ name: "update_shopping_list", arguments: { sections: withOnions({}) } });
+  assert.ok(noSplit.isError);
+  assert.match(text(noSplit), /"Red onions": amounts is required/);
+  const badSum = await client.callTool({ name: "update_shopping_list", arguments: { sections: withOnions({ amounts: { "test-draft-salad": 2, "steamed-rice": 2 } }) } });
+  assert.match(text(badSum), /amounts add up to 4, but quantity is "3"/);
+  const wrongKeys = await client.callTool({ name: "update_shopping_list", arguments: { sections: withOnions({ amounts: { "test-draft-salad": 3 } }) } });
+  assert.match(text(wrongKeys), /missing steamed-rice/);
+  const badServings = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(both), servings: { "harissa-tuna-pitta": 1 } } });
+  assert.match(text(badServings), /"harissa-tuna-pitta" is not a current recipe/);
+
   const r = await client.callTool({ name: "update_shopping_list", arguments: { sections: sectionsFor(["test-draft-salad", "steamed-rice", "steamed-rice"]) } });
   assert.ok(!r.isError, text(r));
   assert.deepEqual(commitLog.at(-1).paths, ["shopping-list.json"]);
   const stored = JSON.parse(files.get("shopping-list.json").toString());
   assert.deepEqual(stored.recipes, ["steamed-rice", "test-draft-salad"]);
   assert.match(stored.updated, /^\d{4}-\d{2}-\d{2}$/);
-  assert.deepEqual(stored.sections[0].items[0], { name: "Red onions", quantity: "3", note: "for both", recipes: ["test-draft-salad", "steamed-rice"] });
+  assert.deepEqual(stored.sections[0].items[0], {
+    name: "Red onions",
+    quantity: "3",
+    note: "for both",
+    recipes: ["test-draft-salad", "steamed-rice"],
+    amounts: { "test-draft-salad": 1.5, "steamed-rice": 1.5 },
+  });
+  assert.deepEqual(stored.servings, { "steamed-rice": 4, "test-draft-salad": 4 });
   assert.deepEqual(stored.sections[0].items[1], { name: "Parsley", recipes: ["test-draft-salad", "steamed-rice"] });
   assert.match(await shopping(), /Status: current/);
 
@@ -623,8 +663,14 @@ test("tampered upload token is rejected", async () => {
 
 test("stocktake: only a signed-in editor saves what's at home, for the list the page was loaded with", async () => {
   await client.callTool({ name: "set_current_recipes", arguments: { slugs: ["steamed-rice"], current: true } });
-  const sections = await currentSections();
-  await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  // The amounts are all for steamed-rice, planned for 2 (the list's base), so the stocktake reads in base amounts.
+  const all = (await listed()).filter((x) => x.current).map((x) => x.slug);
+  const sections = [
+    { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both", recipes: ["steamed-rice"] }, { name: "Parsley", recipes: all }] },
+    { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils", recipes: ["steamed-rice"] }] },
+  ];
+  const saveList = await client.callTool({ name: "update_shopping_list", arguments: { sections, servings: { "steamed-rice": 2 } } });
+  assert.ok(!saveList.isError, text(saveList));
   const site = "https://petrotiurin.github.io";
   const post = (body, token = "owner-token") =>
     stocktake.POST(
@@ -668,10 +714,10 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
   const stored = JSON.parse(files.get("shopping-list.json").toString());
   assert.match(stored.stocktake, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(stored.sections[0].items, [
-    { name: "Red onions", quantity: "3", note: "for both", recipes: sections[0].items[0].recipes, have: 1 },
-    { name: "Parsley", recipes: sections[0].items[0].recipes, have: true },
+    { name: "Red onions", quantity: "3", note: "for both", recipes: ["steamed-rice"], have: 1 },
+    { name: "Parsley", recipes: all, have: true },
   ]);
-  assert.deepEqual(stored.sections[1].items, [{ name: "Red lentils", quantity: "400g", recipes: sections[0].items[0].recipes }]);
+  assert.deepEqual(stored.sections[1].items, [{ name: "Red lentils", quantity: "400g", recipes: ["steamed-rice"] }]);
 
   const listText = await shopping();
   assert.match(listText, /Fresh produce \/ Red onions: 2 \(for both\) \[have 1 of 3\]/);
@@ -680,9 +726,31 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
 
   // Re-saving replaces the whole stocktake; a new list from the agent starts without one.
   await post({ items: items.map(({ have: _, ...i }) => (i.name === "Red lentils" ? { ...i, have: 150 } : i)) });
-  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).sections[1].items[0], { name: "Red lentils", quantity: "400g", recipes: sections[0].items[0].recipes, have: 150 });
+  assert.deepEqual(JSON.parse(files.get("shopping-list.json").toString()).sections[1].items[0], { name: "Red lentils", quantity: "400g", recipes: ["steamed-rice"], have: 150 });
   assert.match(await shopping(), /Red lentils: 250g \[have 150g of 400g\]/);
+
+  // Re-planning one recipe keeps the list and the stocktake; what's left to buy follows the plan.
+  const before = JSON.parse(files.get("shopping-list.json").toString());
+  const replan = await client.callTool({ name: "set_shopping_servings", arguments: { servings: { "steamed-rice": 1 } } });
+  assert.ok(!replan.isError, text(replan));
+  assert.deepEqual(commitLog.at(-1).paths, ["shopping-list.json"]);
+  const replanned = JSON.parse(files.get("shopping-list.json").toString());
+  assert.deepEqual(replanned.sections, before.sections);
+  assert.equal(replanned.stocktake, before.stocktake);
+  assert.equal(replanned.servings["steamed-rice"], 1);
+  assert.match(await shopping(), /Red lentils: 50g \[have 150g of 200g\]/);
+  assert.match(await shopping(), /Fresh produce \/ Red onions: 1\.5 \(for both\)\n/);
+  const commits2 = commitLog.length;
+  const same = await client.callTool({ name: "set_shopping_servings", arguments: { servings: { "steamed-rice": 1 } } });
+  assert.match(text(same), /Nothing changed/);
+  assert.equal(commitLog.length, commits2);
+  const notOnList = await client.callTool({ name: "set_shopping_servings", arguments: { servings: { "harissa-tuna-pitta": 1 } } });
+  assert.ok(notOnList.isError);
+  assert.match(text(notOnList), /"harissa-tuna-pitta" is not on the shopping list/);
+
+  // A rebuilt list keeps the plan for recipes it doesn't name, and starts without a stocktake.
   await client.callTool({ name: "update_shopping_list", arguments: { sections } });
+  assert.equal(JSON.parse(files.get("shopping-list.json").toString()).servings["steamed-rice"], 1);
   const fresh = JSON.parse(files.get("shopping-list.json").toString());
   assert.equal(fresh.stocktake, undefined);
   assert.ok(fresh.sections.flatMap((s) => s.items).every((i) => !("have" in i)));

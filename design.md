@@ -86,6 +86,7 @@ The **house** tells how much of an item is at home:
 | House with a cross | Clear everything at home |
 
 Others: **cart** (the list / left to buy), **↔ arrows** (slide), **check** (ticked, saved),
+**− / +** (fewer / more servings),
 **undo arrow** (drop unsaved changes), **person** (sign in), **×** (close).
 
 The definitions are duplicated in `templates/shopping-list.js` (static page) and
@@ -126,7 +127,11 @@ end. The page snaps to the panes once the header has scrolled away.
 - **Card** (`.shop-card`, `.shop-list`): `--surface`, 1px `--border`, 14px radius. Rows inside
   are divided by `--line`.
 - **Segmented control** (`.seg`): buttons on a `--track` pill; the selected one is `--raised`,
-  bold, with a light shadow. Used for servings (1/2/4); 4 is the default everywhere.
+  bold, with a light shadow. Used for servings (1/2/4); 4 is the default on recipe pages, the
+  shopping page opens on the agent's plan (with a "Plan" segment when it isn't one number).
+- **Stepper** (`.stepper`): − count + on the same `--track` pill as `.seg`, 44px buttons, the
+  count bold and tabular; a button at the limit (1 or 12) is disabled and muted. Used for the
+  servings of single recipes.
 - **Tabs** (`.tabs`): the same look as the segmented control, full width, icon + count per tab.
   A small accent dot on a tab means unsaved changes there.
 - **Pill button** (`.pill`): rounded outline button, for secondary actions such as "Sign in".
@@ -165,12 +170,23 @@ the row's checkbox, so tapping anywhere but the photos still ticks. Without JS t
 but don't open. A ticked row's photos fade to half.
 
 **Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
-recipes · list made <date>", which expands to the recipe links; the servings card; the "Home
+recipes · list made <date>", which expands to the recipe links (each with its planned servings,
+"for 2", muted on the right); the servings card; the "Home
 checked <date>" card (when a stocktake exists or sign-in is configured) with **Update**; the
 list, sectioned by aisle (tap a section's heading to fold it away), where each row is a round tick (kept in this browser), the name (+ a
 muted note) and the quantity on the right. Partly stocked items show only what's left to buy
 with the half-filled house; fully stocked items fold into "Already at home (N)". "Start again
 (untick all)" appears once something is ticked.
+
+The **servings card** opens on the agent's plan (servings per recipe). Top row: "Servings" and
+the segmented control: "Plan" (only when the plan isn't the same 1/2/4 for every recipe;
+otherwise that number is the plan) plus 1/2/4, each of which sets every recipe. No segment is
+selected when the recipes are on a mix of your own. Under a `--line` rule, "Per recipe" (with
+"· as planned" or "· your mix" in accent ink) and a chevron opens a fold: one row per recipe with
+its round photo, serif name (two lines at most) and a stepper. A recipe changed from the plan has
+its count in accent ink and "custom" muted under its name. Quantities follow at once: each
+recipe's share of an item scales with its own servings. The picks stay in this browser until the
+agent changes the plan. Without JS there is no card and the list shows the planned amounts.
 
 **Sign-in** is the bottom sheet: email + password (`autocomplete="username"` /
 `"current-password"`, so the browser fills them) → "Sign in". The fallback, "No password? Email me

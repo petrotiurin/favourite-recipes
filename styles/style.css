@@ -944,6 +944,153 @@ footer.site-footer {
   box-shadow: var(--shadow);
 }
 
+/* Servings: "Plan" / 1 / 2 / 4 for every recipe, then a fold with a stepper per recipe */
+.servings-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0.6rem 0.9rem 0.2rem;
+}
+
+.servings-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.per-recipe-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  font: inherit;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.per-recipe-summary {
+  color: var(--accent-ink);
+}
+
+.per-recipe-toggle .chevron {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.per-recipe-toggle[aria-expanded="false"] .chevron {
+  transform: rotate(-90deg);
+}
+
+.serves-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.serves-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 3.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.serves-row img {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--track);
+}
+
+.serves-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.serves-name > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.serves-name small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  background: var(--track);
+  border-radius: 10px;
+}
+
+.stepper .step {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.stepper .step:disabled {
+  color: var(--icon-muted);
+  cursor: default;
+}
+
+.stepper .step .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.step-count {
+  min-width: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.serves-row.is-changed .step-count {
+  color: var(--accent-ink);
+}
+
+/* The planned servings after each recipe in "For N recipes" */
+.shopping-recipes .planned {
+  margin-left: auto;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 .home-card {
   display: flex;
   align-items: center;
