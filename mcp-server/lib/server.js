@@ -37,6 +37,9 @@ Workflow: when the user hands over recipes to cook or shop for (screenshots, lin
 or asks for a shopping list, FIRST call get_workflow_guide({ name: "plan-recipes" }) and follow it step by step. It is the
 up-to-date flow (closing out last round, drafts, current recipes, servings, shopping list, one batch, summary); it overrides
 any older copy of it you may have in a skill. It is also offered as the "plan-recipes" prompt.
+When the user asks to shop the list at Ocado or at Sainsbury's (fill the basket/trolley), FIRST call
+get_workflow_guide({ name: "ocado-shop" }) or get_workflow_guide({ name: "sainsburys-shop" }) and follow it (also offered as
+the prompts of the same names).
 
 One commit = one site deploy, and deploys queue behind each other, so a burst of single-change calls makes the site lag behind for
 minutes. Whenever you make MORE THAN ONE change in a go (several recipes, recipes + set_current_recipes, anything + the shopping
@@ -369,10 +372,7 @@ export function buildServer({ origin }) {
         title: wf.title,
         description: wf.description,
         argsSchema: {
-          request: z
-            .string()
-            .optional()
-            .describe("What to cook: recipe links, names of recipes we have, servings (\"the soup just for me\"). Attach screenshots in the chat."),
+          request: z.string().optional().describe(wf.request),
         },
       },
       ({ request }) => ({

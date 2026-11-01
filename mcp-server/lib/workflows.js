@@ -3,11 +3,18 @@ import { readFileSync } from "node:fs";
 // Agent workflows the server hands out (as MCP prompts and through get_workflow_guide), so the
 // steps ship with the server: a deploy updates them for every client, and skills only point here.
 // The Markdown lives in workflows/ (bundled into the Vercel functions via vercel.json includeFiles).
+// A line `<!-- include: shared/<name> -->` pulls in workflows/shared/<name>.md, so rules shared by
+// several workflows (e.g. the shops' picking rules) are written once.
 
-const read = (name) =>
-  readFileSync(new URL(`../workflows/${name}.md`, import.meta.url), "utf8")
+const INCLUDE = /^<!--\s*include:\s*([\w/-]+)\s*-->\s*$/gm;
+
+const read = (name, seen = []) => {
+  if (seen.includes(name)) throw new Error(`workflow include cycle: ${[...seen, name].join(" -> ")}`);
+  return readFileSync(new URL(`../workflows/${name}.md`, import.meta.url), "utf8")
     .replace(/^<!--[\s\S]*?-->\s*/, "") // the maintainers' note at the top
+    .replace(INCLUDE, (_, inc) => read(inc, [...seen, name]))
     .trim();
+};
 
 export const WORKFLOWS = {
   "plan-recipes": {
@@ -15,7 +22,24 @@ export const WORKFLOWS = {
     description:
       "The full \"what are we cooking\" flow: close out last round's recipes, add new ones as drafts, mark existing ones current " +
       "(with planned servings), build the combined shopping list in one batch, and summarise.",
+    request: "What to cook: recipe links, names of recipes we have, servings (\"the soup just for me\"). Attach screenshots in the chat.",
     text: read("plan-recipes"),
+  },
+  "ocado-shop": {
+    title: "Fill the Ocado basket",
+    description:
+      "Fill the Ocado basket from the shopping list's \"To buy\" items with Claude in Chrome: favourites first, then search with " +
+      "the star cutoff and the family's product rules (free range chicken, lactose-free yoghurt…), never checks out.",
+    request: "Anything on top of the shopping list (\"also 2 more avocados\", \"skip the pecans\"), or a pasted list instead of it.",
+    text: read("ocado-shop"),
+  },
+  "sainsburys-shop": {
+    title: "Fill the Sainsbury's trolley",
+    description:
+      "Fill the Sainsbury's trolley from the shopping list's \"To buy\" items with Claude in Chrome: Nectar prices, star cutoff, " +
+      "the family's product rules (free range chicken, lactose-free yoghurt…), never checks out.",
+    request: "Anything on top of the shopping list (\"also 2 more avocados\", \"skip the pecans\"), or a pasted list instead of it.",
+    text: read("sainsburys-shop"),
   },
 };
 

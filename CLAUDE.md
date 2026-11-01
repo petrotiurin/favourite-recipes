@@ -45,7 +45,7 @@ build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (i
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
 mcp-server/         separate MCP server on Vercel for adding/editing recipes (not part of the site)
-mcp-server/workflows/  agent workflows the server serves (plan-recipes.md), as MCP prompts + get_workflow_guide
+mcp-server/workflows/  agent workflows the server serves (plan-recipes.md, ocado-shop.md, sainsburys-shop.md), as MCP prompts + get_workflow_guide; shared/ holds the rules every shop flow includes
 ```
 
 ## Build / preview locally
@@ -102,7 +102,7 @@ The editor taps **Sign in** (top right) or **Update** on the "Home checked" card
   "sections": [{ "name": "Fresh produce", "items": [{ "name": "Lemons", "quantity": "4", "have": 2 }, { "name": "Parsley", "have": true }] }] }
 ```
 
-`have: true` means enough at home (sliding a row all the way saves `true`); a number is the amount at home in the item's own unit. It is an absolute amount, so it isn't rescaled by the servings picker (what's left to buy is the amount the chosen servings need, minus it). The endpoint refuses a stocktake whose items (name + quantity) don't match the stored list (409), so a page loaded before the agent replaced the list can't write onto the new one. A new list from `update_shopping_list` starts without a stocktake. `get_shopping_list` reports what's left to buy and what to skip, which is what the `ocado-shop` skill shops from.
+`have: true` means enough at home (sliding a row all the way saves `true`); a number is the amount at home in the item's own unit. It is an absolute amount, so it isn't rescaled by the servings picker (what's left to buy is the amount the chosen servings need, minus it). The endpoint refuses a stocktake whose items (name + quantity) don't match the stored list (409), so a page loaded before the agent replaced the list can't write onto the new one. A new list from `update_shopping_list` starts without a stocktake. `get_shopping_list` reports what's left to buy and what to skip, which is what the `ocado-shop` and `sainsburys-shop` workflows shop from. Like `plan-recipes`, they're served by the MCP server (sources `mcp-server/workflows/ocado-shop.md` and `sainsburys-shop.md`; the skills only point there). Rules both shops share (what to buy, picking rules, non-negotiables, report back) live once in `mcp-server/workflows/shared/` and are included into each guide, so change a shared rule there, and shop-specific products in the shop's own guide.
 
 For everyone, the list shows only what's left to buy: partly stocked items show the remaining amount with a half-filled house, and fully stocked items fold into "Already at home". Anyone can tick items while shopping; those ticks stay in their own browser (`localStorage`, per list). Until the site redeploys, the saving browser shows its own saved stocktake. The look and the icon language are described in `design.md`.
 

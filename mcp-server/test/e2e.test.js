@@ -123,13 +123,33 @@ test("the plan-recipes workflow ships with the server, as a tool and a prompt", 
   assert.match(guide, /set_shopping_servings/);
   assert.doesNotMatch(guide, /<!--/);
   const { prompts } = await client.listPrompts();
-  assert.deepEqual(prompts.map((p) => p.name), ["plan-recipes"]);
+  assert.deepEqual(prompts.map((p) => p.name), ["plan-recipes", "ocado-shop", "sainsburys-shop"]);
   const p = await client.getPrompt({ name: "plan-recipes", arguments: { request: "harissa pitta, the soup just for me" } });
   assert.equal(p.messages[0].role, "user");
   assert.ok(p.messages[0].content.text.startsWith(guide));
   assert.match(p.messages[0].content.text, /the soup just for me$/);
   assert.match(client.getInstructions(), /get_workflow_guide\(\{ name: "plan-recipes" \}\)/);
 });
+
+for (const [name, title, own] of [
+  ["ocado-shop", /^# Ocado shop/, /ocado\.com\/favorites/],
+  ["sainsburys-shop", /^# Sainsbury's shop/, /window\.S = \{/], // the helper ships inside the guide
+]) {
+  test(`the ${name} workflow ships with the server, with the shared shop rules`, async () => {
+    const guide = text(await client.callTool({ name: "get_workflow_guide", arguments: { name } }));
+    assert.match(guide, title);
+    assert.match(guide, own);
+    for (const shared of ["## What to buy", "## Picking rules", "## Non-negotiable preferences", "## Report back"]) {
+      assert.equal(guide.split(shared).length, 2, `${name} has "${shared}" exactly once`);
+    }
+    assert.match(guide, /planned servings/);
+    assert.doesNotMatch(guide, /<!--|-->/); // includes expanded, maintainers' notes stripped
+    const p = await client.getPrompt({ name, arguments: { request: "also 2 more avocados" } });
+    assert.ok(p.messages[0].content.text.startsWith(guide));
+    assert.match(p.messages[0].content.text, /also 2 more avocados$/);
+    assert.match(client.getInstructions(), new RegExp(`get_workflow_guide\\(\\{ name: "${name}" \\}\\)`));
+  });
+}
 
 const base = {
   title: "Test Lentil Soup",
