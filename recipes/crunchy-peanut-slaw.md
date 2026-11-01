@@ -7,7 +7,6 @@ tags: [Meal Prep]
 total_mins: 20
 serves: 4
 calories: 250
-draft: true
 ---
 
 ## Ingredients

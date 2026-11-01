@@ -6,7 +6,6 @@ course: [Lunch]
 total_mins: 10
 serves: 4
 calories: 120
-current: true
 ---
 
 ## Ingredients

@@ -1,14 +1,15 @@
 {
-  "updated": "2026-10-25",
+  "updated": "2026-11-01",
   "recipes": [
-    "best-ever-caesar-salad",
-    "blackened-fish-tacos-with-mango-salsa",
-    "crunchy-peanut-slaw",
-    "egg-not-mayo-sandwich",
-    "nutritionist-immunity-lemon-chicken-soup",
-    "overnight-oats",
+    "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+    "almond-croissant-oats",
+    "creamy-chicken-leek-and-pancetta-pie",
+    "crispy-feta-eggs",
+    "loaded-chicken-fajita-nacho-bowls",
+    "nutritionist-heal-me-chicken-soup",
     "roasted-strawberry-cheesecake-chia-puddings",
-    "smoked-salmon-dill-bagel-prep-mix",
+    "spicy-tuna-loaded-sweet-potato",
+    "sticky-honey-halloumi-salad",
     "ultimate-healthy-toasties"
   ],
   "sections": [
@@ -16,146 +17,153 @@
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Avocados",
+          "name": "Bok choy",
           "quantity": "2",
+          "note": "bunches",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa",
-            "ultimate-healthy-toasties"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Fresh ginger",
+          "quantity": "15g",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Garlic",
+          "quantity": "5",
+          "note": "cloves",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Sweet potatoes",
+          "quantity": "1000g",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato",
+            "sticky-honey-halloumi-salad"
           ]
         },
         {
           "name": "Red onions",
-          "quantity": "1⅛",
+          "quantity": "4",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa",
-            "smoked-salmon-dill-bagel-prep-mix",
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls",
             "ultimate-healthy-toasties"
           ]
         },
         {
           "name": "Onion",
-          "quantity": "½",
+          "quantity": "1",
           "note": "large",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
+            "nutritionist-heal-me-chicken-soup"
           ]
         },
         {
           "name": "Carrots",
+          "quantity": "2",
+          "recipes": [
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Butternut squash",
+          "quantity": "200g",
+          "recipes": [
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Celery",
+          "quantity": "4",
+          "note": "sticks",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Leeks",
+          "quantity": "2",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie"
+          ]
+        },
+        {
+          "name": "Chestnut mushrooms",
+          "quantity": "100g",
+          "recipes": [
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Cucumber",
           "quantity": "1",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
+            "sticky-honey-halloumi-salad"
           ]
         },
         {
-          "name": "Celery sticks",
-          "quantity": "1",
+          "name": "Cherry tomatoes",
+          "quantity": "200g",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Garlic cloves",
-          "quantity": "1",
-          "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Fresh root ginger",
-          "quantity": "2g",
-          "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Red cabbage",
-          "quantity": "110g",
-          "recipes": [
-            "crunchy-peanut-slaw"
-          ]
-        },
-        {
-          "name": "Sugar snap peas",
-          "quantity": "40g",
-          "recipes": [
-            "crunchy-peanut-slaw"
-          ]
-        },
-        {
-          "name": "Spring onions",
-          "quantity": "3½",
-          "recipes": [
-            "crunchy-peanut-slaw",
-            "egg-not-mayo-sandwich"
-          ]
-        },
-        {
-          "name": "Red peppers",
-          "quantity": "½",
-          "recipes": [
-            "crunchy-peanut-slaw"
-          ]
-        },
-        {
-          "name": "Green pepper",
-          "quantity": "¼",
-          "recipes": [
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Red chilli",
-          "quantity": "½",
-          "note": "optional",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
           "name": "Tomatoes",
           "quantity": "2",
+          "note": "ripe",
           "recipes": [
-            "egg-not-mayo-sandwich"
+            "crispy-feta-eggs"
           ]
         },
         {
-          "name": "Cherry tomatoes",
-          "quantity": "80g",
+          "name": "Red peppers",
+          "quantity": "2",
           "recipes": [
-            "best-ever-caesar-salad"
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
-          "name": "Romaine lettuce",
-          "quantity": "1",
+          "name": "Green peppers",
+          "quantity": "2",
           "recipes": [
-            "best-ever-caesar-salad"
+            "loaded-chicken-fajita-nacho-bowls"
+          ]
+        },
+        {
+          "name": "Avocados",
+          "quantity": "5",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls",
+            "crispy-feta-eggs",
+            "ultimate-healthy-toasties"
+          ]
+        },
+        {
+          "name": "Limes",
+          "quantity": "2",
+          "note": "extra wedges to serve",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
           "name": "Lemons",
           "quantity": "2",
           "recipes": [
-            "best-ever-caesar-salad",
-            "nutritionist-immunity-lemon-chicken-soup",
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Limes",
-          "quantity": "2",
-          "recipes": [
-            "crunchy-peanut-slaw",
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Mango",
-          "quantity": "150g",
-          "note": "ripe",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
+            "sticky-honey-halloumi-salad",
+            "nutritionist-heal-me-chicken-soup"
           ]
         },
         {
@@ -166,70 +174,86 @@
           ]
         },
         {
-          "name": "Spinach",
-          "quantity": "50g",
-          "note": "baby",
+          "name": "Pomegranate seeds",
+          "quantity": "95g",
           "recipes": [
-            "egg-not-mayo-sandwich",
-            "smoked-salmon-dill-bagel-prep-mix"
+            "sticky-honey-halloumi-salad"
           ]
         },
         {
-          "name": "Kale",
-          "quantity": "40g",
+          "name": "Spring onions",
+          "quantity": "2",
+          "note": "extra for the salmon topping",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Basil",
-          "quantity": "30g",
-          "recipes": [
-            "ultimate-healthy-toasties"
-          ]
-        },
-        {
-          "name": "Mint",
-          "quantity": "15g",
-          "recipes": [
-            "crunchy-peanut-slaw"
-          ]
-        },
-        {
-          "name": "Coriander",
-          "quantity": "30g",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Parsley",
-          "quantity": "6g",
-          "recipes": [
-            "egg-not-mayo-sandwich"
+            "crispy-feta-eggs",
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         },
         {
           "name": "Dill",
-          "quantity": "8g",
+          "quantity": "1",
+          "note": "bunch",
           "recipes": [
-            "smoked-salmon-dill-bagel-prep-mix"
+            "spicy-tuna-loaded-sweet-potato",
+            "nutritionist-heal-me-chicken-soup"
           ]
         },
         {
-          "name": "Thyme",
-          "quantity": "1",
-          "note": "sprig",
+          "name": "Parsley",
+          "quantity": "2",
+          "note": "bunches",
           "recipes": [
-            "best-ever-caesar-salad"
+            "sticky-honey-halloumi-salad",
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Basil",
+          "quantity": "2",
+          "note": "packs",
+          "recipes": [
+            "sticky-honey-halloumi-salad",
+            "ultimate-healthy-toasties",
+            "crispy-feta-eggs"
+          ]
+        },
+        {
+          "name": "Chives",
+          "quantity": "1",
+          "note": "pack",
+          "recipes": [
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Tarragon",
+          "quantity": "1",
+          "note": "pack",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie"
+          ]
+        },
+        {
+          "name": "Coriander",
+          "quantity": "1",
+          "note": "pack, to serve",
+          "recipes": [
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
           "name": "Rosemary",
-          "quantity": "½",
+          "quantity": "1",
           "note": "sprig",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Greens",
+          "note": "to serve",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie"
           ]
         }
       ]
@@ -238,42 +262,37 @@
       "name": "Meat & fish",
       "items": [
         {
-          "name": "Cooked chicken breast",
-          "quantity": "340g",
-          "recipes": [
-            "best-ever-caesar-salad",
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "White fish fillets",
-          "quantity": "250g",
-          "note": "such as cod or haddock",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Hot smoked salmon",
-          "quantity": "50g",
-          "recipes": [
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Parma ham",
-          "quantity": "3",
-          "note": "slices",
-          "recipes": [
-            "best-ever-caesar-salad"
-          ]
-        },
-        {
-          "name": "Anchovies",
+          "name": "Salmon fillets",
           "quantity": "4",
-          "note": "in oil",
+          "note": "5oz each",
           "recipes": [
-            "best-ever-caesar-salad"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Tuna",
+          "quantity": "4",
+          "note": "tins",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato"
+          ]
+        },
+        {
+          "name": "Cooked chicken",
+          "quantity": "1060g",
+          "note": "shredded",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup",
+            "loaded-chicken-fajita-nacho-bowls"
+          ]
+        },
+        {
+          "name": "Smoked pancetta",
+          "quantity": "6",
+          "note": "rashers",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie"
           ]
         }
       ]
@@ -282,82 +301,56 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Medium free-range eggs",
-          "quantity": "4",
+          "name": "Semi-skimmed milk",
+          "quantity": "950ml",
           "recipes": [
-            "egg-not-mayo-sandwich"
-          ]
-        },
-        {
-          "name": "Egg yolks",
-          "quantity": "1",
-          "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Cottage cheese",
-          "quantity": "250g",
-          "note": "low-fat",
-          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie",
             "roasted-strawberry-cheesecake-chia-puddings",
-            "ultimate-healthy-toasties"
+            "almond-croissant-oats"
+          ]
+        },
+        {
+          "name": "Eggs",
+          "quantity": "7",
+          "recipes": [
+            "crispy-feta-eggs",
+            "nutritionist-heal-me-chicken-soup",
+            "creamy-chicken-leek-and-pancetta-pie"
           ]
         },
         {
           "name": "Greek yoghurt",
-          "quantity": "235g",
-          "note": "0% or full-fat, plus extra to serve",
+          "quantity": "360g",
+          "note": "0% or full-fat",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa",
-            "overnight-oats",
-            "roasted-strawberry-cheesecake-chia-puddings",
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Natural yogurt",
-          "quantity": "50g",
-          "recipes": [
-            "egg-not-mayo-sandwich"
-          ]
-        },
-        {
-          "name": "Cream cheese",
-          "quantity": "50g",
-          "note": "light",
-          "recipes": [
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Thick kefir",
-          "quantity": "30ml",
-          "note": "or strained natural yogurt",
-          "recipes": [
-            "best-ever-caesar-salad"
-          ]
-        },
-        {
-          "name": "Parmesan cheese",
-          "quantity": "15g",
-          "note": "plus extra to serve",
-          "recipes": [
-            "best-ever-caesar-salad"
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls",
+            "roasted-strawberry-cheesecake-chia-puddings"
           ]
         },
         {
           "name": "Feta cheese",
-          "note": "optional, to serve",
+          "quantity": "180g",
+          "note": "extra to serve",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls",
+            "crispy-feta-eggs"
           ]
         },
         {
-          "name": "Semi-skimmed milk",
-          "quantity": "390ml",
+          "name": "Halloumi",
+          "quantity": "225g",
           "recipes": [
-            "overnight-oats",
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Cottage cheese",
+          "quantity": "230g",
+          "note": "low-fat",
+          "recipes": [
+            "ultimate-healthy-toasties",
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
         }
@@ -368,26 +361,24 @@
       "items": [
         {
           "name": "Bread",
-          "quantity": "8",
-          "note": "slices, of choice",
+          "quantity": "4",
+          "note": "slices",
           "recipes": [
-            "egg-not-mayo-sandwich",
             "ultimate-healthy-toasties"
           ]
         },
         {
-          "name": "Sourdough",
-          "quantity": "80g",
-          "note": "thick slice",
+          "name": "Sourdough bread",
+          "quantity": "120g",
           "recipes": [
-            "best-ever-caesar-salad"
+            "crispy-feta-eggs"
           ]
         },
         {
-          "name": "Small corn tortillas",
-          "quantity": "6",
+          "name": "Ready-rolled puff pastry",
+          "quantity": "250g",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
+            "creamy-chicken-leek-and-pancetta-pie"
           ]
         }
       ]
@@ -396,53 +387,106 @@
       "name": "Tins & jars",
       "items": [
         {
+          "name": "Chickpeas",
+          "quantity": "1",
+          "note": "400g can",
+          "recipes": [
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Coconut milk",
+          "quantity": "300ml",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Black beans",
+          "quantity": "160g",
+          "recipes": [
+            "loaded-chicken-fajita-nacho-bowls"
+          ]
+        },
+        {
           "name": "Sundried tomatoes",
           "quantity": "10",
-          "note": "jarred, in oil; use the oil from the jar too",
+          "note": "in oil, jar",
           "recipes": [
             "ultimate-healthy-toasties"
           ]
         },
         {
-          "name": "Smooth peanut butter",
-          "quantity": "16g",
+          "name": "Sundried tomato oil",
+          "quantity": "30ml",
+          "note": "from the jar",
           "recipes": [
-            "crunchy-peanut-slaw"
+            "ultimate-healthy-toasties"
           ]
         },
         {
-          "name": "Light soy sauce",
-          "quantity": "15ml",
+          "name": "Tomato purée",
+          "quantity": "30g",
           "recipes": [
-            "crunchy-peanut-slaw"
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
-          "name": "Ginger paste",
-          "quantity": "5ml",
+          "name": "Red or green curry paste",
+          "quantity": "45g",
           "recipes": [
-            "crunchy-peanut-slaw"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         },
         {
-          "name": "Garlic paste",
-          "quantity": "5ml",
+          "name": "Chicken bone broth",
+          "quantity": "120ml",
           "recipes": [
-            "crunchy-peanut-slaw"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         },
         {
-          "name": "American mustard",
-          "quantity": "10ml",
+          "name": "Chicken stock cubes",
+          "quantity": "3",
           "recipes": [
-            "egg-not-mayo-sandwich"
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup"
           ]
         },
         {
-          "name": "Worcestershire sauce",
-          "quantity": "12ml",
+          "name": "Tahini",
+          "quantity": "30g",
           "recipes": [
-            "best-ever-caesar-salad"
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Pesto",
+          "note": "to serve",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato"
+          ]
+        },
+        {
+          "name": "Jalapeños",
+          "note": "jar, sliced, to taste",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato",
+            "loaded-chicken-fajita-nacho-bowls"
+          ]
+        },
+        {
+          "name": "Sriracha",
+          "quantity": "30ml",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato"
+          ]
+        },
+        {
+          "name": "White wine vinegar",
+          "quantity": "30ml",
+          "recipes": [
+            "spicy-tuna-loaded-sweet-potato"
           ]
         },
         {
@@ -453,27 +497,49 @@
           ]
         },
         {
-          "name": "Honey",
-          "quantity": "20ml",
+          "name": "Dijon mustard",
+          "quantity": "5ml",
           "recipes": [
-            "blackened-fish-tacos-with-mango-salsa",
-            "crunchy-peanut-slaw",
-            "ultimate-healthy-toasties"
+            "creamy-chicken-leek-and-pancetta-pie"
+          ]
+        },
+        {
+          "name": "Ginger paste",
+          "quantity": "5ml",
+          "recipes": [
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Soy sauce",
+          "quantity": "15ml",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Honey",
+          "quantity": "53ml",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+            "sticky-honey-halloumi-salad",
+            "ultimate-healthy-toasties",
+            "crispy-feta-eggs",
+            "almond-croissant-oats"
           ]
         },
         {
           "name": "Maple syrup",
-          "note": "to taste",
+          "note": "or honey or sweetener, to taste",
           "recipes": [
-            "overnight-oats",
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
         },
         {
-          "name": "Chicken stock cubes",
-          "quantity": "1",
+          "name": "Chili oil",
+          "note": "optional, to serve",
           "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         }
       ]
@@ -482,43 +548,127 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Olive oil",
-          "quantity": "35ml",
-          "note": "including extra virgin",
+          "name": "Jasmine rice",
+          "quantity": "200g",
           "recipes": [
-            "best-ever-caesar-salad",
-            "blackened-fish-tacos-with-mango-salsa",
-            "nutritionist-immunity-lemon-chicken-soup",
-            "roasted-strawberry-cheesecake-chia-puddings"
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         },
         {
-          "name": "Rolled oats",
-          "quantity": "90g",
+          "name": "Brown rice",
+          "quantity": "150g",
           "recipes": [
-            "overnight-oats"
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Jumbo oats",
+          "quantity": "80g",
+          "recipes": [
+            "almond-croissant-oats"
           ]
         },
         {
           "name": "Chia seeds",
-          "quantity": "72g",
+          "quantity": "48g",
           "recipes": [
-            "overnight-oats",
             "roasted-strawberry-cheesecake-chia-puddings"
           ]
         },
         {
-          "name": "Raisins",
-          "note": "to taste",
+          "name": "Tortilla chips",
+          "quantity": "160g",
           "recipes": [
-            "overnight-oats"
+            "loaded-chicken-fajita-nacho-bowls"
           ]
         },
         {
-          "name": "Roasted peanuts",
+          "name": "Plain flour",
           "quantity": "15g",
           "recipes": [
-            "crunchy-peanut-slaw"
+            "creamy-chicken-leek-and-pancetta-pie"
+          ]
+        },
+        {
+          "name": "Cornflour",
+          "quantity": "6g",
+          "recipes": [
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Olive oil",
+          "quantity": "65ml",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+            "sticky-honey-halloumi-salad",
+            "loaded-chicken-fajita-nacho-bowls",
+            "roasted-strawberry-cheesecake-chia-puddings",
+            "nutritionist-heal-me-chicken-soup"
+          ]
+        },
+        {
+          "name": "Garlic powder",
+          "quantity": "3g",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Garlic granules",
+          "quantity": "5g",
+          "recipes": [
+            "sticky-honey-halloumi-salad"
+          ]
+        },
+        {
+          "name": "Paprika",
+          "quantity": "2g",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
+          ]
+        },
+        {
+          "name": "Fajita spice blend",
+          "quantity": "5g",
+          "recipes": [
+            "loaded-chicken-fajita-nacho-bowls"
+          ]
+        },
+        {
+          "name": "Almond extract",
+          "quantity": "5ml",
+          "recipes": [
+            "almond-croissant-oats"
+          ]
+        },
+        {
+          "name": "Ground almonds",
+          "quantity": "15g",
+          "recipes": [
+            "almond-croissant-oats"
+          ]
+        },
+        {
+          "name": "Flaked almonds",
+          "quantity": "5g",
+          "recipes": [
+            "almond-croissant-oats"
+          ]
+        },
+        {
+          "name": "Protein powder",
+          "quantity": "60g",
+          "note": "vanilla or unflavoured, optional",
+          "recipes": [
+            "almond-croissant-oats"
+          ]
+        },
+        {
+          "name": "Sesame seeds",
+          "note": "optional, to serve",
+          "recipes": [
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth"
           ]
         },
         {
@@ -529,80 +679,27 @@
           ]
         },
         {
-          "name": "Cooked quinoa or rice",
-          "quantity": "25g",
-          "recipes": [
-            "crunchy-peanut-slaw"
-          ]
-        },
-        {
-          "name": "Medium egg noodle nests",
-          "quantity": "50g",
-          "recipes": [
-            "nutritionist-immunity-lemon-chicken-soup"
-          ]
-        },
-        {
-          "name": "Sesame seeds",
-          "quantity": "2g",
-          "recipes": [
-            "smoked-salmon-dill-bagel-prep-mix"
-          ]
-        },
-        {
-          "name": "Garlic granules",
-          "quantity": "5g",
-          "recipes": [
-            "best-ever-caesar-salad",
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Smoked paprika",
-          "quantity": "2g",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Ground cumin",
-          "quantity": "1g",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Cayenne pepper",
-          "quantity": "0.5g",
-          "note": "optional",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
-          "name": "Sugar",
-          "quantity": "2g",
-          "recipes": [
-            "blackened-fish-tacos-with-mango-salsa"
-          ]
-        },
-        {
           "name": "Chilli flakes",
-          "quantity": "1g",
+          "note": "to taste",
           "recipes": [
-            "ultimate-healthy-toasties"
+            "spicy-tuna-loaded-sweet-potato",
+            "sticky-honey-halloumi-salad",
+            "ultimate-healthy-toasties",
+            "crispy-feta-eggs"
           ]
         },
         {
           "name": "Salt",
           "note": "to taste",
           "recipes": [
-            "best-ever-caesar-salad",
-            "blackened-fish-tacos-with-mango-salsa",
-            "crunchy-peanut-slaw",
-            "egg-not-mayo-sandwich",
-            "nutritionist-immunity-lemon-chicken-soup",
-            "smoked-salmon-dill-bagel-prep-mix",
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+            "spicy-tuna-loaded-sweet-potato",
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup",
+            "sticky-honey-halloumi-salad",
+            "loaded-chicken-fajita-nacho-bowls",
+            "crispy-feta-eggs",
+            "almond-croissant-oats",
             "ultimate-healthy-toasties"
           ]
         },
@@ -610,12 +707,26 @@
           "name": "Black pepper",
           "note": "to taste",
           "recipes": [
-            "best-ever-caesar-salad",
-            "blackened-fish-tacos-with-mango-salsa",
-            "egg-not-mayo-sandwich",
-            "nutritionist-immunity-lemon-chicken-soup",
-            "smoked-salmon-dill-bagel-prep-mix",
+            "air-fried-salmon-with-jasmine-rice-and-curry-broth",
+            "spicy-tuna-loaded-sweet-potato",
+            "creamy-chicken-leek-and-pancetta-pie",
+            "nutritionist-heal-me-chicken-soup",
+            "sticky-honey-halloumi-salad",
+            "loaded-chicken-fajita-nacho-bowls",
+            "crispy-feta-eggs",
             "ultimate-healthy-toasties"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Frozen",
+      "items": [
+        {
+          "name": "Frozen peas",
+          "quantity": "120g",
+          "recipes": [
+            "creamy-chicken-leek-and-pancetta-pie"
           ]
         }
       ]
