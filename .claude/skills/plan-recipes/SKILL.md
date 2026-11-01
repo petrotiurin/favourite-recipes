@@ -36,6 +36,8 @@ Call `list_recipes` once up front. Then sort every item the user mentioned:
 
 A draft the user names in this request is one they're cooking (again): treat it as existing, leave it as it is, and don't ask about it.
 
+**Servings per recipe.** Note any recipe the user says is for a different number of people this round ("the soup just for me", "the pie for two"): that becomes its planned servings on the shopping list (step 3). Don't ask if they don't say: unnamed recipes keep the previous list's plan, else 4. Show the plan in the plan below when any recipe differs ("C (for 1)").
+
 ### 0b. Ask about each leftover draft
 
 Skip if there are no leftover drafts. Otherwise, **before** any plan or write, call the `AskUserQuestion` tool: one question per draft (the tool takes up to 4 questions per call; use further calls for more), each with these options:
@@ -139,7 +141,8 @@ This step always happens, even if nothing was added and the user only picked exi
 2. Read every one of those that already exists with `get_recipe` (you wrote the new ones yourself, so you already have their ingredients).
 3. Combine the ingredients into one list:
    - **One line per ingredient across the whole list.** Add up amounts of the same ingredient (2 + 1 onions → 3; 100g + 150g feta → 250g). Convert everything to one unit first (see "One metric unit per line"). If units can't be added (1 lemon and juice of ½ a lemon → 2 lemons, round up), pick the sensible shopping unit.
-   - **Always 2 servings per recipe**: scale each recipe's amounts by 2 / `serves` (serves 4 → halve, serves 1 → double, serves 2 → as written). The shopping page's 1/2/4 selector rescales from this 2-serving base, so the saved list must be exactly 2 servings. Use the recipes' own units.
+   - **Always 2 servings per recipe**: scale each recipe's amounts by 2 / `serves` (serves 4 → halve, serves 1 → double, serves 2 → as written), even for a recipe planned for 1 or 4: the planned servings are separate (below) and the page rescales from this 2-serving base, so the saved list must be exactly 2 servings. Use the recipes' own units.
+   - **Each recipe's share** (`amounts`): an item for more than one recipe also says how much of its 2-serving `quantity` each recipe needs, keyed by slug, as numbers in the same unit, adding up to `quantity` (3 red onions, 2 for the tacos and 1 for the salsa → `quantity: "3", recipes: ["tacos", "salsa"], amounts: { "tacos": 2, "salsa": 1 }`). The page scales each recipe's share by its own servings. The server rejects a multi-recipe item without `amounts`, or whose amounts don't add up. One-recipe items don't need it.
    - **One homogenised list, no per-recipe notes.** `note` never says which recipe an item is for: that goes in `recipes` (below). `note` is only for buying info ("skinless", "70% or higher", "to serve") and never contains amounts: the 1/2/4 servings selector rescales `quantity` only.
    - **One metric unit per line.** Convert tablespoons, teaspoons, cups, oz and pinches to grams or millilitres (1 tbsp = 15ml, 1 tsp = 5ml; for dry ingredients use the usual weight, e.g. 1 tbsp flour ≈ 10g, 1 tsp salt ≈ 6g) and add everything into one number, so "100ml + 3 tbsp" becomes "145ml". Counts stay counts ("3", "2 heads"). Only the shopping list is converted: recipes keep their own units. The server rejects kitchen measures and sums.
    - Keep genuinely different items separate ("garlic cloves" vs "garlic powder", "smoked paprika" vs "paprika").
@@ -147,9 +150,9 @@ This step always happens, even if nothing was added and the user only picked exi
    - **Tag every item with its recipes**: `recipes: ["slug-a", "slug-b"]`, the slugs of every current recipe the combined line came from (lemons from the Caesar salad and the soup → both slugs). The shopping page shows those recipes' photos on the row. The server rejects a slug that isn't current and a current recipe that no item is tagged with.
    - "To taste" / "to serve" items: list them without a quantity (merge duplicates). Plain pantry basics (salt, pepper, oil) can go in a "Pantry" section so they can be checked off.
    - Drop the prep note unless it matters for buying.
-   - **Accuracy checklist (a wrong list is worse than none).** Build it only from the recipes' ingredient lists as read with `get_recipe` in this run, never from memory or the previous list. Every ingredient of every current recipe appears exactly once, and nothing that isn't in a recipe does. Scale every recipe to 2 servings first (see above), then only add up the same ingredient in the same unit, and one metric unit per line. Keep different forms separate (medium vs mild curry powder). Notes carry no recipe names or amounts (see below). Every item's `recipes` lists exactly the recipes it was added up from. Before saving, re-add every line against the recipes, and confirm the recipes covered are exactly the current set.
+   - **Accuracy checklist (a wrong list is worse than none).** Build it only from the recipes' ingredient lists as read with `get_recipe` in this run, never from memory or the previous list. Every ingredient of every current recipe appears exactly once, and nothing that isn't in a recipe does. Scale every recipe to 2 servings first (see above), then only add up the same ingredient in the same unit, and one metric unit per line. Keep different forms separate (medium vs mild curry powder). Notes carry no recipe names or amounts (see below). Every item's `recipes` lists exactly the recipes it was added up from, and its `amounts` are each recipe's own 2-serving amount. Before saving, re-add every line against the recipes, and confirm the recipes covered are exactly the current set.
 4. Group into shop-aisle sections, e.g. **Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen**. Only include sections that have items.
-5. This becomes the **last** operation: `{ action: "update_shopping_list", sections }`. It covers whatever is current after the operations before it, and the server records which recipes those are and links them on the page.
+5. This becomes the **last** operation: `{ action: "update_shopping_list", sections, servings }`. It covers whatever is current after the operations before it, and the server records which recipes those are and links them on the page. `servings` (optional) is the planned servings for the recipes the user gave a number for, e.g. `{ "spicy-tuna-loaded-sweet-potato": 1, "creamy-chicken-leek-and-pancetta-pie": 2 }`. The shopping page opens on that plan; the user can still pick 1/2/4 for everything or change single recipes there.
 
 ## 4. Commit everything in one go
 
@@ -167,7 +170,7 @@ Finish with one message to the user containing the items below. **Whenever you l
 2. **Existing recipes made current**: a bullet per recipe (and "already current" ones, if any).
 3. **Last round's recipes**, as bullets grouped by outcome: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
 4. **Anything left out or needing a decision** (unmatched names, skipped recipes).
-5. **The shopping list**, written out in full, grouped by section, as a checklist the user can read without opening the site, e.g.
+5. **The shopping list**, written out in full at the planned servings (`get_shopping_list` after the commit gives these amounts under "To buy"), grouped by section, as a checklist the user can read without opening the site. Say what it's planned for (e.g. "4 servings each, the soup for 1"), e.g.
 
    **Fresh produce**
    - 3 red onions (for the tacos and the salsa)
@@ -180,6 +183,7 @@ Keep it factual and short; don't repeat the recipe steps.
 ## Notes
 
 - The shopping page shows the saved list until you save a new one, so re-run steps 3-4 whenever the current set changes (recipes added, marked or unmarked, a recipe's ingredients edited).
+- If the user only wants different servings for some recipes ("make the pie for 2 after all"), don't rebuild the list: call `set_shopping_servings({ servings: { slug: n } })`. It keeps the list and the stocktake.
 - Promoting a draft (`promote_recipe`) does not change whether it's current: in this flow a liked draft is promoted **and** unmarked in the same batch. Only promote when the user says they've tried it and liked it.
 - `remove_draft` is permanent on the site and only works on drafts. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
 - Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.

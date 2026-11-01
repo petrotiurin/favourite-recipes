@@ -17,7 +17,17 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
-import { getShoppingList, updateShoppingList, shoppingPageUrl, stocktakeLines, ShoppingListError } from "./shopping-list.js";
+import {
+  getShoppingList,
+  updateShoppingList,
+  setShoppingServings,
+  shoppingPageUrl,
+  stocktakeLines,
+  servingsLines,
+  ShoppingListError,
+  DEFAULT_SERVINGS,
+  MAX_SERVINGS,
+} from "./shopping-list.js";
 
 const INSTRUCTIONS = `Manages the family's "Our Favourite Recipes" website (a static site on GitHub Pages).
 Every create/update is committed straight to the main branch and the site redeploys in ~1 minute.
@@ -56,7 +66,13 @@ the list.
 Shopping list accuracy rules: build it ONLY from the current recipes' own ingredient lists, read fresh with get_recipe (never from
 memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own serves: scale each recipe's
 amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
-The site's 1/2/4 servings selector on the shopping page rescales quantity from this 2-serving base.
+Items for several recipes also say how much of that 2-serving quantity each recipe needs (amounts: { slug: number }, in the item's
+unit, adding up to quantity), so the page can scale every recipe on its own.
+Planned servings: each recipe on the list is planned for a number of people (servings: { slug: n }, 1-${MAX_SERVINGS}). The shopping
+page opens on that plan, and the user can switch everything to 1/2/4 or change single recipes there. Pass servings to
+update_shopping_list when the user says how many a recipe is for this week ("the soup just for me", "the pie for two");
+recipes you don't name keep their previous plan, else ${DEFAULT_SERVINGS}. To change only the plan later, use set_shopping_servings:
+it keeps the list and the stocktake and needs no rebuild.
 Every ingredient of every current recipe must appear, and nothing else. Add up only the same ingredient in the same unit
 (2 + 1 onions -> 3); different forms stay separate (medium vs mild curry powder).
 The list is one homogenised list: no per-recipe notes (which recipe an item is for goes in recipes, never in note), and notes never contain amounts (only quantity rescales). Quantities are ONE
@@ -198,6 +214,10 @@ const sectionsSchema = z
               .array(z.string().min(1))
               .min(1)
               .describe('Slugs of the current recipes this item is for, e.g. ["best-ever-caesar-salad", "nutritionist-immunity-lemon-chicken-soup"]. The page shows their photos on the row. Every current recipe must appear on at least one item.'),
+            amounts: z
+              .record(z.string(), z.number().positive())
+              .optional()
+              .describe('Required when the item is for more than one recipe and has a quantity: how much of the 2-serving quantity each recipe needs, as numbers in the quantity\'s unit, keyed by exactly the slugs in recipes and adding up to quantity. E.g. quantity "3" for two recipes -> { "best-ever-caesar-salad": 2, "nutritionist-immunity-lemon-chicken-soup": 1 }. Lets the page scale each recipe on its own.'),
           })
         )
         .min(1)
@@ -205,6 +225,10 @@ const sectionsSchema = z
   )
   .min(1)
   .describe("The whole list, grouped into shop sections. Replaces whatever list is there.");
+
+const servingsSchema = z
+  .record(z.string(), z.number().int().min(1).max(MAX_SERVINGS))
+  .describe(`How many people a recipe is planned for this week, by slug, e.g. { "spicy-tuna-loaded-sweet-potato": 1, "creamy-chicken-leek-and-pancetta-pie": 2 }. 1-${MAX_SERVINGS}. The shopping page opens on this plan.`);
 
 const operationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("create_recipe"), ...createShape }).describe("Same fields as the create_recipe tool"),
@@ -215,8 +239,11 @@ const operationSchema = z.discriminatedUnion("action", [
     .object({ action: z.literal("set_current_recipes"), slugs: z.array(z.string()).min(1), current: z.boolean() })
     .describe("Same as the set_current_recipes tool"),
   z
-    .object({ action: z.literal("update_shopping_list"), sections: sectionsSchema })
+    .object({ action: z.literal("update_shopping_list"), sections: sectionsSchema, servings: servingsSchema.optional() })
     .describe("Same as the update_shopping_list tool. Covers the recipes that are current after the operations before it."),
+  z
+    .object({ action: z.literal("set_shopping_servings"), servings: servingsSchema })
+    .describe("Same as the set_shopping_servings tool."),
 ]);
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
@@ -250,9 +277,14 @@ async function runOperation(op, cs) {
       return { ...r, currentChanged: r.changed.length > 0, lines };
     }
     case "update_shopping_list": {
-      const r = await updateShoppingList(args.sections, cs);
+      const r = await updateShoppingList(args.sections, cs, args.servings);
       const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
-      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${r.current.map((c) => c.slug).join(", ")}`] };
+      const plan = Object.entries(r.list.servings).map(([slug, n]) => `${slug} x${n}`).join(", ");
+      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`] };
+    }
+    case "set_shopping_servings": {
+      const r = await setShoppingServings(args.servings, cs);
+      return { ...r, lines: [r.changed.length ? `Planned servings: ${r.changed.map(([slug, n]) => `${slug} x${n}`).join(", ")}` : "set_shopping_servings: already planned like that"] };
     }
     default:
       throw new UserError(`Unknown action "${action}"`);
@@ -287,8 +319,8 @@ function shoppingResult({ list, current, commit }) {
     "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever the current recipes change. It only goes blank when no recipe is current.",
     "A new list starts without a stocktake: the user marks what's already at home on the page (signed in), and get_shopping_list then shows what's left to buy.",
     "",
-    "Covers:",
-    ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
+    "Covers (planned servings, which the page opens on):",
+    ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}: ${list.servings[r.slug]}`),
   ].join("\n");
 }
 
@@ -530,7 +562,8 @@ export function buildServer({ origin }) {
         "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
         "'outdated' (the current recipes changed since it was written; the site still shows it, so rewrite it) or 'none'. " +
         "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine, and the user's " +
-        "stocktake: items already at home (have: true) or partly at home (have: <amount in the item's unit>), with what is left to buy.",
+        "planned servings per recipe and stocktake: items already at home (have: true) or partly at home (have: <amount in the item's unit>), " +
+        "with what is left to buy at the planned servings.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -555,12 +588,38 @@ export function buildServer({ origin }) {
       description:
         "Replace the site's shopping page with a combined ingredient list for ALL current recipes (drafts and recipes marked current). " +
         "You do the combining: read each current recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
-        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. Tag each item with the slugs of the recipes it is for. The server records which recipes the list covers " +
+        "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. Tag each item with the slugs of the recipes it is for, " +
+        "and for an item with several recipes give each one's share in amounts. Optionally plan servings per recipe. The server records which recipes the list covers " +
         "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
         "so call it after adding a draft or marking/unmarking recipes current. It goes blank only when no recipe is current. Fails if there are no current recipes.",
-      inputSchema: { sections: sectionsSchema },
+      inputSchema: {
+        sections: sectionsSchema,
+        servings: servingsSchema
+          .optional()
+          .describe(`Planned servings for individual recipes, by slug. Recipes left out keep what the previous list planned, else ${DEFAULT_SERVINGS}.`),
+      },
     },
-    safe(async ({ sections }) => ok(shoppingResult(await updateShoppingList(sections))))
+    safe(async ({ sections, servings }) => ok(shoppingResult(await updateShoppingList(sections, undefined, servings))))
+  );
+
+  server.registerTool(
+    "set_shopping_servings",
+    {
+      title: "Set shopping list servings",
+      description:
+        "Change how many people individual recipes on the saved shopping list are planned for (e.g. one recipe just for 1, another for 2). " +
+        "The shopping page opens on this plan and rescales each recipe's share of every item; the user can still pick 1/2/4 for all, or " +
+        "change single recipes, on the page. Doesn't rebuild the list: quantities and the stocktake stay. Only recipes on the saved list.",
+      inputSchema: { servings: servingsSchema },
+    },
+    safe(async ({ servings }) => {
+      const { list, changed, commit } = await setShoppingServings(servings);
+      const lines = commit
+        ? [`Saved the planned servings and committed to main: ${commit.url}`, `It will be live in about a minute at ${shoppingPageUrl()}`]
+        : ["Nothing changed: those recipes are already planned like that."];
+      if (changed.length) lines.push("", `Changed: ${changed.map(([slug, n]) => `${slug} -> ${n}`).join(", ")}`);
+      return ok([...lines, "", "Planned servings:", ...servingsLines(list)].join("\n"));
+    })
   );
 
   server.registerTool(

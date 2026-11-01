@@ -15,9 +15,10 @@ function formatDate(iso) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-// The saved list is written for this many servings of every recipe; the picker rescales from it.
+// The saved list is written for this many servings of every recipe; the page rescales from it.
 const BASE_SERVINGS = 2;
-// What the page's picker starts on (templates/shopping.js), unless this browser picked another.
+// The list's `servings` plans each recipe (set by the agent); a recipe without a plan gets this.
+// Keep both in sync with mcp-server/lib/shopping-list.js.
 const DEFAULT_SERVINGS = 4;
 
 /** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }; else null. Keep in sync with mcp-server/lib/shopping-list.js. */
@@ -28,13 +29,46 @@ function parseQuantity(quantity) {
 
 const fmtAmount = (amount, unit) => `${Math.round(amount * 100) / 100}${!unit ? "" : /^(g|kg|ml|l)$/i.test(unit) ? unit : ` ${unit}`}`;
 
-/** What's left to buy at the base servings: { status: "buy" | "partial" | "home", left }, `left` being the quantity text. */
-function remaining(item) {
+/** slug -> planned servings for every recipe the list covers. */
+function planOf(list) {
+  const plan = {};
+  for (const slug of [...(Array.isArray(list.recipes) ? list.recipes : [])].sort()) {
+    const n = list.servings && list.servings[slug];
+    plan[slug] = Number.isInteger(n) && n > 0 ? n : DEFAULT_SERVINGS;
+  }
+  return plan;
+}
+
+/**
+ * How much of an item the plan needs: each recipe's share of the 2-serving quantity (`amounts`, or
+ * all of it for a one-recipe item) times its servings / BASE_SERVINGS; items without `amounts` (older
+ * lists) scale by the average of their recipes' servings. null when the quantity has no amount.
+ * Keep in sync with neededAmount in mcp-server/lib/shopping-list.js and need() in templates/shopping.js.
+ */
+function neededAmount(item, plan) {
   const q = parseQuantity(item.quantity);
+  if (!q) return null;
+  const servingsOf = (slug) => plan[slug] || DEFAULT_SERVINGS;
+  if (item.amounts) return Object.entries(item.amounts).reduce((n, [slug, a]) => n + (a * servingsOf(slug)) / BASE_SERVINGS, 0);
+  const slugs = item.recipes && item.recipes.length ? item.recipes : Object.keys(plan);
+  const mean = slugs.length ? slugs.reduce((n, slug) => n + servingsOf(slug), 0) / slugs.length : DEFAULT_SERVINGS;
+  return (q.amount * mean) / BASE_SERVINGS;
+}
+
+/** The quantity text at the planned servings. */
+function needText(item, plan) {
+  const need = neededAmount(item, plan);
+  const q = parseQuantity(item.quantity);
+  return need === null || Math.abs(need - q.amount) < 1e-9 ? item.quantity || "" : fmtAmount(need, q.unit);
+}
+
+/** What's left to buy at the planned servings: { status: "buy" | "partial" | "home", left }, `left` being the quantity text. */
+function remaining(item, plan) {
+  const need = neededAmount(item, plan);
   if (item.have === true) return { status: "home", left: "" };
-  if (typeof item.have !== "number" || !q) return { status: "buy", left: item.quantity || "" };
-  const left = q.amount - item.have;
-  return left > 0 ? { status: "partial", left: fmtAmount(left, q.unit) } : { status: "home", left: "" };
+  if (typeof item.have !== "number" || need === null) return { status: "buy", left: needText(item, plan) };
+  const left = need - item.have;
+  return left > 1e-9 ? { status: "partial", left: fmtAmount(left, parseQuantity(item.quantity).unit) } : { status: "home", left: "" };
 }
 
 // House icons, the page's one icon language (design.md). Duplicated in templates/shopping.js.
@@ -61,22 +95,22 @@ function rowBubbles(item, bySlug) {
   return `<span class="row-bubbles" aria-hidden="true">${imgs}${more}</span><span class="sr-only">(for ${escapeHtml(rs.map((r) => r.title).join(", "))})</span>`;
 }
 
-function renderItem(item, { status, left }, bySlug) {
+function renderItem(item, { status, left }, bySlug, plan) {
   const partial =
     status === "partial"
-      ? `${iconSome("icon icon-some")}<span class="sr-only">(have ${escapeHtml(fmtAmount(item.have, parseQuantity(item.quantity).unit))} of ${escapeHtml(item.quantity)} at home)</span>`
+      ? `${iconSome("icon icon-some")}<span class="sr-only">(have ${escapeHtml(fmtAmount(item.have, parseQuantity(item.quantity).unit))} of ${escapeHtml(needText(item, plan))} at home)</span>`
       : "";
   return `        <li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">${escapeHtml(item.name)}${noteHtml(item)}</span>${partial}${rowBubbles(item, bySlug)}<span class="shop-qty">${escapeHtml(left)}</span></label></li>`;
 }
 
 /** "Home checked 18 Oct: 3 at home, 2 partly", when the editor has saved a stocktake. */
-function homeCard(list) {
+function homeCard(list, plan) {
   if (!list.stocktake) return "";
   let home = 0;
   let partly = 0;
   list.sections.forEach((s) =>
     s.items.forEach((item) => {
-      const { status } = remaining(item);
+      const { status } = remaining(item, plan);
       if (status === "home") home++;
       else if (status === "partial") partly++;
     })
@@ -85,22 +119,22 @@ function homeCard(list) {
 }
 
 /**
- * The page without JS: what's left to buy at 2 servings, then what's already at home.
+ * The page without JS: what's left to buy at the planned servings, then what's already at home.
  * templates/shopping.js re-renders #shopping-app from the embedded JSON (servings, ticks
  * while shopping, and for the signed-in editor the "At home" tab and sign-in).
  */
-function renderStatic(list, bySlug) {
+function renderStatic(list, bySlug, plan) {
   const home = [];
   const sections = list.sections
     .map((s) => {
       const items = s.items
-        .map((item) => ({ item, r: remaining(item) }))
+        .map((item) => ({ item, r: remaining(item, plan) }))
         .filter(({ item, r }) => (r.status === "home" ? (home.push(item), false) : true));
       if (!items.length) return "";
       return `    <details class="shop-section" data-section="${escapeHtml(s.name)}" open>
       <summary><h2>${escapeHtml(s.name)}</h2><span class="section-count">${items.length}</span>${CHEVRON}</summary>
       <ul class="shop-list">
-${items.map(({ item, r }) => renderItem(item, r, bySlug)).join("\n")}
+${items.map(({ item, r }) => renderItem(item, r, bySlug, plan)).join("\n")}
       </ul>
     </details>`;
     })
@@ -110,18 +144,18 @@ ${items.map(({ item, r }) => renderItem(item, r, bySlug)).join("\n")}
     sections.push(`    <details class="shop-home">
       <summary>Already at home (${home.length})</summary>
       <ul>
-${home.map((item) => `        <li><span>${escapeHtml(item.name)}</span><span>${escapeHtml(item.quantity || "")}</span></li>`).join("\n")}
+${home.map((item) => `        <li><span>${escapeHtml(item.name)}</span><span>${escapeHtml(needText(item, plan))}</span></li>`).join("\n")}
       </ul>
     </details>`);
   }
-  return [homeCard(list), ...sections].filter(Boolean).join("\n");
+  return [homeCard(list, plan), ...sections].filter(Boolean).join("\n");
 }
 
 /**
- * Embedded for shopping.js: the list (with parsed amounts), the recipes its items are for (title,
- * photo, page) and, when configured, how the editor signs in and saves.
+ * Embedded for shopping.js: the list (with parsed amounts), the planned servings per recipe, the
+ * recipes its items are for (title, photo, page) and, when configured, how the editor signs in and saves.
  */
-function pageData(list, bySlug, auth) {
+function pageData(list, bySlug, auth, plan) {
   const sections = list.sections.map((s) => ({
     name: s.name,
     items: s.items.map((item) => {
@@ -139,7 +173,7 @@ function pageData(list, bySlug, auth) {
   bySlug.forEach((r, slug) => {
     recipes[slug] = { title: r.title, image: r.image.replace(/^\//, ""), href: `recipes/${slug}.html` };
   });
-  const data = { base: BASE_SERVINGS, servings: DEFAULT_SERVINGS, version, stocktake: list.stocktake || null, sections, recipes, auth };
+  const data = { base: BASE_SERVINGS, fallback: DEFAULT_SERVINGS, plan, version, stocktake: list.stocktake || null, sections, recipes, auth };
   // Safe inside <script>: no "</script>" or "<!--" can survive the escape.
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }
@@ -155,9 +189,14 @@ function renderShoppingList(list, recipes, auth = null) {
     body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes and a shopping list has been made for them.</p>`;
   } else {
     const bySlug = new Map(recipes.map((r) => [r.slug, r]));
+    const plan = planOf(list);
     const photo = (r) => `<img src="${escapeHtml(r.image.replace(/^\//, ""))}" alt="" loading="lazy">`;
     const links = recipes
-      .map((r) => `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span></a>`)
+      .map(
+        (r) =>
+          `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span>` +
+          `<small class="planned">for ${plan[r.slug] || DEFAULT_SERVINGS}</small></a>`
+      )
       .join("\n        ");
     const updated = formatDate(list.updated);
     const count = `${recipes.length} recipe${recipes.length === 1 ? "" : "s"}`;
@@ -170,9 +209,9 @@ function renderShoppingList(list, recipes, auth = null) {
       </div>
     </details>
     <div id="shopping-app">
-${renderStatic(list, bySlug)}
+${renderStatic(list, bySlug, plan)}
     </div>
-    <script type="application/json" id="shopping-data">${pageData(list, bySlug, auth)}</script>`;
+    <script type="application/json" id="shopping-data">${pageData(list, bySlug, auth, plan)}</script>`;
   }
 
   const content = `  <main>

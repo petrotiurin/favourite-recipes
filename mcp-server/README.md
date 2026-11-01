@@ -17,8 +17,9 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
 | `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
 | `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
-| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`) |
-| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_current_recipes`, `update_shopping_list`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
+| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`), optionally with planned servings per recipe |
+| `set_shopping_servings` | Changes the planned servings of individual recipes on the saved list (e.g. one for 1, another for 2) without rebuilding it; the stocktake stays |
+| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_current_recipes`, `update_shopping_list`, `set_shopping_servings`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
 
 ## One commit per deploy
 
@@ -51,7 +52,10 @@ Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see w
 
 A recipe is *current* when the family is cooking it right now: every draft is, plus any regular recipe the agent marks with `set_current_recipes` (`current: true` in its frontmatter). The site and `list_recipes` order recipes as drafts, then other current recipes, then the rest. The rotation can hold only existing recipes, only drafts, or both.
 
-The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?, recipes}]}]`.
+The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?, recipes, amounts?}]}]` and optionally `servings: { slug: n }`.
+
+- Quantities are for 2 servings of every recipe. An item for several recipes carries `amounts` (slug → that recipe's share of `quantity`, same unit, adding up to it), so the page can scale each recipe on its own; the server refuses a multi-recipe item without it, or whose amounts don't add up.
+- `servings` is the plan: how many people each recipe is cooked for (1-12). The page opens on it; the user can switch everything to 1/2/4 or change single recipes. Recipes the call doesn't name keep the previous list's plan, else 4. `set_shopping_servings` changes only the plan, keeping the items and the stocktake.
 
 - Each item's `recipes` is the slugs of the current recipes it is for; the page shows their photos on the row and names them on a tap. The server refuses a slug that isn't current and a current recipe that no item is for.
 - The server fills in the list's top-level `recipes` (the current slugs) itself and the page links to them. It refuses when nothing is current and when an ingredient is listed twice.
