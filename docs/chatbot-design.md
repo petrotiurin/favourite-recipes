@@ -89,7 +89,7 @@ Alternatives considered:
 ### D2. One tool registry for MCP and chat (refactor first)
 
 Today the tools are defined inline in `lib/server.js` (`registerTool` with zod schemas). Pull them
-into a registry (`lib/tools.js`: name, description, zod schema, handler, `access: "read" | "write"`)
+into a registry (`lib/tools.js`: name, description, zod schema, handler, `access: "read" | "stage" | "write"`, see 4.1)
 that both `server.js` (MCP) and `api/chat.js` (Claude tool definitions via zod → JSON Schema)
 consume. Without this, the two tool sets will drift, the same way CLAUDE.md already warns about
 for `recipe-format.js` and the add-recipe skill.
@@ -150,9 +150,75 @@ the sign-in sheet and session handling from `templates/shopping.js` into a share
 on one signs you in on the other (same origin). Generalise `SHOPPING_EDITORS` to `EDITORS` (keep
 the old name as a fallback).
 
-**Tools are gated on the server, never in the prompt.** `/chat` verifies the token on every
-request, and an anonymous request is sent to Claude **without** the write tools in `tools`. A
-jailbreak can't call a tool that isn't there.
+### 4.1 Auth model: checked in layers, failing closed
+
+Auth is enforced on the server, at several independent layers, so that no single mistake (a tool
+list built wrong, a model inventing a tool name, a forged request) can lead to a write. The prompt
+is never one of the layers.
+
+**1. Who is calling: decided once per request, from a verified token.**
+`/chat` builds a `caller` from the request before anything else runs:
+
+| Caller | How it's established | `role` |
+| --- | --- | --- |
+| Visitor | no `Authorization` header | `public` |
+| Editor | Supabase access token, verified with Supabase (`/auth/v1/user`, as `verifyEditor` does today) **and** the email is in `EDITORS` | `editor` |
+| Signed in, not an editor | valid token, email not in `EDITORS` | `public` (the panel explains why) |
+| Bad or expired token | verification fails | **request refused (401)**, never downgraded to public, so the client knows to refresh or sign in again |
+| MCP agent | the existing `MCP_AUTH_TOKEN` on `/mcp` | `agent` (as today) |
+
+The `caller` is frozen (`Object.freeze`) and passed explicitly to everything below. Nothing reads
+roles from the request body, the conversation, page context or model output.
+
+**2. What the model is offered.** A public caller's request goes to the public model with only
+read and UI tools in its tool list. The editor model and key are used only for `role: editor`.
+
+**3. Every tool checks the caller itself.** This is the layer you asked for: even if layer 2 were
+wrong, a write still can't run.
+
+- Each registry entry declares `access: "read" | "stage" | "write"`. (`stage` = changes the plan
+  tray, `write` = commits to the repo.)
+- **One dispatcher runs every tool call**, MCP and chat alike: look up the tool by name (an
+  unknown name is an error), check `access` against `caller.role`, *then* call the handler. A
+  public caller calling a `stage`/`write` tool gets an error result and the attempt is logged.
+- **Defence in depth inside the handlers:** the functions that commit (`ChangeSet` commit in
+  `lib/github.js`, `saveStocktake`, tray writes) take the `caller` as a required argument and
+  assert `role ∈ {editor, agent}` themselves. A handler that forgets the check, or a future
+  code path that skips the dispatcher, still can't commit.
+- **Default deny:** a tool with no `access` declared is treated as `write`. A new tool can't be
+  public by accident.
+
+**4. Saving re-checks.** "Save to site" is its own request (`POST /chat/plan/apply`), not a model
+tool call. It verifies the token afresh and re-checks `EDITORS`, so removing someone from the list
+takes effect at once, even mid-session. A token that expired during a long chat means signing in
+again before Save, not a silent failure.
+
+**5. Data ownership.**
+
+- A conversation is loaded only if `conversation.user_email === caller.email`; otherwise 404 (not
+  403, so ids can't be probed). Conversation ids are random UUIDs.
+- The tray is household-wide but editor-only: public callers can't read it.
+- Supabase tables have Row Level Security on with **no** policies for the `anon` and
+  `authenticated` roles, so the browser can't read or write them directly with the public anon
+  key. Only `/chat` (service-role key, server-side) touches them.
+
+**6. Transport and browser.**
+
+- Tokens go in the `Authorization` header, never in cookies, so CSRF doesn't apply. CORS on
+  `/chat` allows only the site's origin (as `/stocktake` does).
+- The session lives in `localStorage` (as on the shopping page), so XSS would leak it: the safe
+  renderer (§8) and building cards from server data, not model HTML, are part of the auth story.
+- Tokens are short-lived (Supabase default 1 hour) with refresh in `auth.js`; sign-out clears
+  the session and the panel's cached history.
+
+**7. Tested, not assumed.** A test walks the whole tool registry and calls every `stage`/`write`
+tool with a public caller, an expired token and a non-editor email, and expects refusal each
+time. It runs over the registry, so a newly added tool is covered automatically. Also tested:
+loading another user's conversation (404), applying the tray without a token (401), and a forged
+`role` in the request body (ignored).
+
+**Logging:** refused tool calls and failed token checks are logged with the caller's email or
+IP, but never the token.
 
 ## 5. Conversations and persistence
 
@@ -395,7 +461,7 @@ Each phase ships and is useful on its own.
 
 | # | Phase | Contents | Depends on |
 | --- | --- | --- | --- |
-| 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2), `search_recipes`, page-context JSON in the build | – |
+| 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
 | 3 | Sign-in + per-user chats | Shared `auth.js`, editor key + model, Supabase tables, chats list, server-owned history | 1 |
