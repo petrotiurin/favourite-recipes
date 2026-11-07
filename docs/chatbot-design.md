@@ -338,6 +338,10 @@ collect in the tray and go live together with one **Save to site**: one commit, 
 idea as `batch_changes` in plan-recipes and the stocktake's "Save (n)" (`design.md`, "Batch
 writes").
 
+**Weeks.** Planning always starts in **next week**: everything the chat adds to the plan goes
+there. This week is never edited directly: it's next week *promoted* by the week switch
+(`start_next_week`), which is its own tray item (Switch) and goes first in a batch.
+
 **What's in it.** Staged changes: new recipes (drafts, full structured fields + photo), edits,
 promotions, removals, next week / not next week, the week switch, servings, and the shopping list.
 Each is a small card with a kicker (New, Edit, Promote, Remove, Next week, Switch, List), "added by" and × to drop it.
@@ -377,8 +381,8 @@ plain button with no model in it. So the list is built **before** Save becomes a
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
 - **Finalise list** sends a fixed request to the agent, which first says what it's doing ("I'll
   switch weeks first, then build the shopping list for next week's 5 recipes"), then:
-  1. **switches weeks if needed**, as plan-recipes does: when next week already had recipes before
-     this tray, it stages `start_next_week` (first in the batch, so the tray's additions land in
+  1. **promotes next week if needed**, as plan-recipes does: when next week already had recipes
+     before this tray (the old plan, now being cooked), it stages `start_next_week` (first in the batch, so the tray's additions land in
      the new next week) and asks one `ask_user` per draft in this week (*Liked* · *Not for us* ·
      *Not tried yet*, with the recipe's card; not tried → *Keep it this week* · *Back to the book*),
      staging the answers;
@@ -393,8 +397,8 @@ plain button with no model in it. So the list is built **before** Save becomes a
 - **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
   has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
   stays a tap by a person (below).
-- **No list needed** when the tray doesn't change next week or the servings (e.g. only a typo fix,
-  a promotion, or a change to this week): Save is available straight away, no Finalise step.
+- **No list needed** when the tray doesn't change next week or the servings (e.g. only a typo fix
+  or promoting a draft): Save is available straight away, no Finalise step.
 
 #### Save
 
@@ -430,8 +434,7 @@ never commits directly.
 The server decides what qualifies, from the change itself:
 
 - **Can be saved alone:** title, steps, notes, time, calories, tags, course, photo, promoting a
-  draft, ingredient edits to a recipe that isn't in next week, and adding to or taking off *this*
-  week (the list is built from next week only).
+  draft, and ingredient edits to a recipe that isn't in next week.
 - **Waits for Finalise:** new recipes, removals, adding to or taking off next week, the week switch,
   servings, and ingredient edits to a recipe in next week (they change the shopping list, so they
   mark it out of date).
@@ -576,6 +579,7 @@ Decided:
 - CLAUDE.md gets reframed rather than patched (§2).
 - Tray: photos generated when a recipe is staged; the shopping list is built by "Finalise list" before Save appears; a tray expires 7 days after its first item; quick fixes that don't touch the week get their own "Save now" (7.1, Q5).
 - Sign-in stays email + password + email code; no Google or Apple for now (4.2).
+- Planning always starts in next week; this week is only ever next week promoted by the switch (7.1).
 
 Open:
 
@@ -586,10 +590,11 @@ Open:
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
 - **Q8.** Retention for stored chats.
-- **Q13.** Now that next week exists on the site (main, #31): when the tray's first item is added
-  and next week is *already* planned, is the tray for the week after (Finalise switches weeks
-  first, as plan-recipes does) or an addition to the planned next week? Suggest the agent asks once
-  per tray, with chips *Add to next week* · *Plan the week after*.
+- **Q13.** This week is only ever next week promoted (decided). Open: *when* the promotion
+  happens. When the tray's first item goes in and next week already has recipes, the agent can't
+  tell whether that week has started (promote first, then plan a fresh next week) or is still being
+  planned (add to it). Suggest it asks once per tray: *Next week has started* · *Still planning
+  it*.
 - **Q14.** Next week is now visible on the site, so "what have we added so far" partly exists there.
   The tray still earns its place (one deploy, previews before anything is public, Finalise), but
   should Save be offered per item for next-week additions too, or keep one Save for the week?
