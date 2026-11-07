@@ -333,33 +333,91 @@ available.
 
 ### 7.1 The plan tray ("what we've added so far")
 
-This is the core of the editor experience, and it fits how the server already works: every commit
-redeploys, so changes should be collected and saved once.
+The tray is the chat's basket of changes to the site. While you chat nothing is saved; changes
+collect in the tray and go live together with one **Save to site**: one commit, one deploy. Same
+idea as `batch_changes` in plan-recipes and the stocktake's "Save (n)" (`design.md`, "Batch
+writes").
 
-- A **plan** is a list of staged changes: new recipe drafts (full structured fields), edits,
-  promotions, removals, current/not-current, servings, and finally the shopping list.
-- **D5. One plan per household, not per chat** (decided, Q3). "What have we added for next
-  week" is about the week, not about a conversation; both editors, on any device, any chat, see
-  and add to the same tray. Stored in Supabase (`plans`: status `open | applied`, items JSON,
-  updated by, updated at).
-- The panel shows a **tray strip** above the input while the plan is non-empty: small cards for
-  each staged item with a status kicker (New, Edit, Promote, Remove, This week), × to drop one,
-  and **Save to site (n)**. That's the same pattern as the stocktake's sticky "Save (n)" bar
-  (`design.md`, "Batch writes").
-- Cards for **new** recipes are previews built from the staged fields (there's no page yet): the
-  source photo if we have its URL, else a placeholder until generation runs. Tapping one opens a
-  read-only preview of the staged recipe (ingredients + steps) in the panel.
-- Staging runs the change through `batch_changes` with `dry_run: true`, so validation errors (bad
-  slug, missing calories, unknown recipe on the list) show up while chatting, not at save time.
-- **Save** re-validates against the current repo (things may have changed since staging), commits
-  once, empties the tray and posts a summary in the chat. The shopping list is rebuilt as the
-  last step of every save that changes the current set, as `plan-recipes` already requires.
-- Confirmation: Save is a **button press by the human**, not a model tool call. The model can
-  suggest saving; only the user commits. That's also our main defence against prompt injection
-  from fetched pages and screenshots.
+**What's in it.** Staged changes: new recipes (drafts, full structured fields + photo), edits,
+promotions, removals, this week / not this week, servings, and the shopping list. Each is a small
+card with a kicker (New, Edit, Promote, Remove, This week, List), "added by" and × to drop it.
+Tapping a new recipe's card opens its staged ingredients and steps (it has no page yet).
+
+**D5. One tray per household** (decided, Q3): both editors, any device, any chat, see and add to
+the same tray. Stored in Supabase (`trays`: status, items JSON, list version, created at, updated
+at/by). Public callers can't see it (4.1). The panel loads the tray from `/chat` when it opens,
+like the chat itself; the site's pages still never load what they show at runtime.
+
+#### Photos are generated when a recipe is staged (decided)
+
+Generating is cheap, and the cards are the point of the tray, so a new recipe gets its photo as
+soon as it's staged, not at Save:
+
+- Order as today: the source page's photo (`og:image` / JSON-LD), else generated with OpenRouter.
+- The card shows "Making the photo…" until it's ready (generation runs in the background; the
+  chat goes on).
+- Staged photos live in a private **Supabase Storage** bucket (`tray-photos/<tray>/<slug>.jpg`),
+  shown to editors through short-lived signed URLs. Not in git: committing them would deploy
+  (the upload page uses `[skip ci]` for this today) and leave orphans when an item is dropped.
+- Don't like it? "New photo" on the card regenerates; an upload link stays the fallback.
+- At Save the photo bytes go into the same commit as the recipe (`images/recipes/<slug>.jpg`),
+  then the staged copy is deleted. Dropping an item or the tray expiring deletes its photo too.
+
+#### Finalise, then Save (decided)
+
+The shopping list is written by the model (it combines and converts ingredients), while Save is a
+plain button with no model in it. So the list is built **before** Save becomes available:
+
+```
+ collecting ──"Finalise list"──▶ finalising ──list staged──▶ ready ──"Save to site"──▶ saved
+     ▲                              (agent)                    │
+     └──────────── any change to the tray (add, drop, edit) ───┘   list marked out of date
+```
+
+- **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
+- **Finalise list** sends a fixed request to the agent, which first says what it's doing ("I'll
+  close out last week, then build the shopping list for these 5 recipes"), then:
+  1. closes out last round as plan-recipes does: one `ask_user` per leftover draft
+     (*Liked* · *Not for us* · *Not cooked yet*, with the recipe's card), staging the answers;
+  2. reads every recipe that will be current after Save, staged new ones included (reads inside a
+     `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
+  The tray shows "Building the list…" meanwhile.
+- **Ready:** a **List** card ("86 items for 5 recipes", tap to preview by aisle) appears and the
+  button becomes **Save to site (n)**.
+- **Any later change** to the tray (adding, dropping or editing an item) marks the list out of
+  date: the List card says so, Save goes away and **Finalise list** comes back. The list stores a
+  hash of the tray items it was built from, so "out of date" is exact, not guessed.
+- **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
+  has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
+  stays a tap by a person (below).
+- **No list needed** when the tray doesn't change what's current or the servings (e.g. only a typo
+  fix or a promotion): Save is available straight away, no Finalise step.
+
+#### Save
+
+- Re-validates everything against the repo as it is now (things may have changed since staging,
+  e.g. an edit through the MCP), then commits once, with the photos, and empties the tray. The
+  chat gets a summary with the new cards, shown as "Publishing…" until the pages are live (§7.3).
+- If a staged item clashes (its recipe was changed or removed elsewhere), Save stops and that
+  card says what clashed, with *Drop it* · *Re-check*. Nothing is committed until it's resolved.
+- Save is a **button press by a person**, never a model tool call. The model can suggest it; only
+  the user commits. That's also the main defence against instructions hidden in fetched pages or
+  screenshots: at worst they put something odd in the tray, where you see it before saving.
+
+#### 7 days, then it expires (decided)
+
+We shop for a week, so a tray lives **7 days from its first item**:
+
+- The tray strip shows when it expires ("until Fri"). From a day before, opening the chat says
+  "The tray expires tomorrow" with *Finalise list* / *Save to site* chips.
+- On expiry the items and their staged photos are deleted. The chats that added them keep their
+  history, so it can be rebuilt by asking.
+- Saving empties the tray; the next item starts a new 7-day tray.
+- Errors found while staging (dry-run of each change) show on the card straight away, so an
+  expiring tray isn't full of surprises.
 
 Open: should single, obviously-safe edits ("fix the typo in step 3") skip the tray? Suggest no in
-v1: one rule is easier to trust.
+v1: one rule is easier to trust (Q5).
 
 ### 7.2 Page context
 
@@ -483,7 +541,7 @@ Each phase ships and is useful on its own.
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
 | 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
-| 4 | Editor writes via the tray | Staging, dry-run validation, household tray UI ("added by"), Save → one `batch_changes`, publishing state | 2, 3 |
+| 4 | Editor writes via the tray | Staging with dry-run validation, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
 
@@ -498,6 +556,7 @@ Decided:
 - **Q4.** Chat history is per user (§5).
 - Suggested replies on most turns (6.1).
 - CLAUDE.md gets reframed rather than patched (§2).
+- Tray: photos generated when a recipe is staged; the shopping list is built by "Finalise list" before Save appears; a tray expires 7 days after its first item (7.1).
 - Sign-in stays email + password + email code; no Google or Apple for now (4.2).
 
 Open:
