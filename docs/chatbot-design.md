@@ -391,9 +391,15 @@ plain button with no model in it. So the list is built **before** Save becomes a
        land in the fresh next week), then one `ask_user` per draft in this week (*Liked* ·
        *Not for us* · *Not tried yet*, with the recipe's card; not tried → *Keep it this week* ·
        *Back to the book*), staging the answers. The list is built for the tray's recipes only.
-     - **Not yet** → no switch; the tray's recipes are added to the existing next week, and the
-       list is rebuilt for all of it (what was there plus the tray).
+     - **Not yet** → **nothing happens.** Finalise stops, nothing is staged, the tray stays as
+       it was, and next week and its shopping list are untouched. The bot says so and offers to
+       come back to it later.
      If next week is empty there's nothing to promote and no question.
+
+     **Only on an explicit ask** does the agent add to an already-planned next week or overwrite its
+     shopping list ("add these to next week", "redo next week's list"). Neither is ever a default or
+     a side effect of another answer. Before staging an overwrite it says what will be replaced
+     (e.g. "next week's list from Sunday, with its at-home check") and waits for a yes.
   2. reads every recipe that will be in next week after Save, staged new ones included (reads inside
      a `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
   The tray shows "Building the list…" meanwhile.
@@ -599,7 +605,9 @@ Open:
   writes?
 - **Q8.** Retention for stored chats.
 - **Q13.** Decided: the tray collects without asking; at Finalise, if next week already has
-  recipes, the agent asks whether it's ready to be promoted (*Promote it* · *Not yet*), 7.1.
+  recipes, the agent asks whether it's ready to be promoted (*Promote it* · *Not yet*). *Not yet*
+  does nothing; adding to a planned next week or overwriting its list happens only on an explicit
+  ask (7.1).
 - **Q14.** Next week is now visible on the site, so "what have we added so far" partly exists there.
   The tray still earns its place (one deploy, previews before anything is public, Finalise), but
   should Save be offered per item for next-week additions too, or keep one Save for the week?
