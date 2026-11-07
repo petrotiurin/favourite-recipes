@@ -1,5 +1,5 @@
 const { layout } = require("./layout");
-const { isDraft, isThisWeek, isNextWeek, isHiddenUntilNextWeek } = require("./status");
+const { isThisWeek, isNextWeek, isHiddenUntilNextWeek } = require("./status");
 
 function escapeHtml(str) {
   return String(str)
@@ -17,15 +17,19 @@ function courseClasses(r) {
     .concat(isThisWeek(r) ? ["is-current"] : [])
     .concat(isNextWeek(r) ? ["is-next"] : [])
     .concat(isHiddenUntilNextWeek(r) ? ["is-next-only"] : [])
-    .concat(isDraft(r) ? ["is-draft"] : [])
     .join(" ");
 }
 
-/** The small-caps line above a tile's name: draft or this week, else its course. Next week isn't marked on tiles. */
+/**
+ * The small-caps line above a tile's name: its week, else its course. Tiles are labelled by week only
+ * (whether a recipe is a draft shows on its own page). "This week" everywhere; "Next week" only under the
+ * Next week tab, where it replaces the usual label (CSS swaps them), so next week stays unmarked elsewhere.
+ */
 function kicker(r) {
-  if (isDraft(r)) return `<p class="kicker kicker-draft">To try</p>`;
-  if (isThisWeek(r)) return `<p class="kicker kicker-current">This week</p>`;
-  return `<p class="kicker">${escapeHtml((r.course || []).join(" · "))}</p>`;
+  const [cls, label] = isThisWeek(r) ? [" kicker-current", "This week"] : ["", escapeHtml((r.course || []).join(" · "))];
+  if (!isNextWeek(r)) return `<p class="kicker${cls}">${label}</p>`;
+  return `<p class="kicker${cls} kicker-outside-next">${label}</p>
+        <p class="kicker kicker-next kicker-on-next">Next week</p>`;
 }
 
 const ICON_SEARCH =

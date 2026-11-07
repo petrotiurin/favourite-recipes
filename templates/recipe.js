@@ -1,6 +1,6 @@
 const { layout } = require("./layout");
 const { markScalableQuantities } = require("./quantities");
-const { isDraft, isThisWeek, isNextWeek } = require("./status");
+const { isThisWeek, isNextWeek } = require("./status");
 
 function escapeHtml(str) {
   return String(str)
@@ -13,9 +13,9 @@ function escapeHtml(str) {
 const DEFAULT_SERVINGS = 4;
 
 function renderRecipe(recipe, bodyHtml) {
-  // Small-caps line above the name: draft, the week(s) it's planned for, then course and tags.
+  // Small-caps line above the name: the week(s) it's planned for, then course and tags.
+  // (A draft says so in the line under the title, not here.)
   const status = [
-    ...(isDraft(recipe) ? [`<span class="kicker-draft">To try</span>`] : []),
     ...(isThisWeek(recipe) ? [`<span class="kicker-current">This week</span>`] : []),
     ...(isNextWeek(recipe) ? [`<span class="kicker-next">Next week</span>`] : []),
   ];

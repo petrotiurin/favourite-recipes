@@ -101,16 +101,22 @@ h3 {
   color: var(--text-muted);
 }
 
-.kicker-draft {
-  color: var(--draft);
-}
-
 .kicker-current {
   color: var(--accent-ink);
 }
 
 .kicker-next {
   color: var(--next);
+}
+
+/* A next-week tile carries two labels: its usual one, and "Next week", shown instead under the Next week tab */
+.kicker-on-next,
+main:has(#filter-next:checked) .tile .kicker-outside-next {
+  display: none;
+}
+
+main:has(#filter-next:checked) .tile .kicker-on-next {
+  display: block;
 }
 
 /* Top bar: the name in italic serif, the shopping list on the right */
@@ -410,7 +416,7 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   font-family: var(--serif);
   font-style: italic;
   font-size: 1.05rem;
-  color: var(--text-muted);
+  color: var(--draft); /* only shown on drafts: the one place a draft is marked */
 }
 
 .recipe-hero {
@@ -745,17 +751,6 @@ footer.site-footer {
   object-fit: cover;
   flex: none;
   background: var(--track);
-}
-
-.shopping-recipes a.is-draft span::after {
-  content: "To try";
-  margin-left: 0.5rem;
-  font-family: var(--sans);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--draft);
 }
 
 .shopping-recipes a:hover {

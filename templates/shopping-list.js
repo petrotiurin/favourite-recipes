@@ -194,7 +194,7 @@ function renderShoppingList(list, recipes, auth = null) {
     const links = recipes
       .map(
         (r) =>
-          `<a${r.draft === true ? ' class="is-draft"' : ""} href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span>` +
+          `<a href="recipes/${r.slug}.html">${photo(r)}<span>${escapeHtml(r.title)}</span>` +
           `<small class="planned">for ${plan[r.slug] || DEFAULT_SERVINGS}</small></a>`
       )
       .join("\n        ");

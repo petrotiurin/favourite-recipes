@@ -45,7 +45,7 @@ draft: true          # new recipes start as drafts; omit only if the user says i
 ---
 ```
 
-**Drafts.** Add new recipes as drafts (`draft: true`) by default — they get a purple "To try" kicker until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes, its weeks included). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Being a draft says nothing about the week: only add `current: true` (this week) or `next: true` (next week) if the user says which week it's for. Key order in the frontmatter: `scalable`, `current`, `next`, `draft`.
+**Drafts.** Add new recipes as drafts (`draft: true`) by default — their recipe page says it's a draft until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes, its weeks included). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Being a draft says nothing about the week: only add `current: true` (this week) or `next: true` (next week) if the user says which week it's for. Key order in the frontmatter: `scalable`, `current`, `next`, `draft`.
 
 Body:
 

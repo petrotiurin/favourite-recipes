@@ -73,7 +73,7 @@ calories: 195                      # kcal per serving, required (source's figure
 scalable: false                    # optional: hides the servings selector (only when the ingredient list already gives per-person amounts)
 current: true                      # optional: in THIS week (being cooked now). Top of the home page, "This week" kicker + tab.
 next: true                         # optional: in NEXT week (being planned). Only under the "Next week" tab; the shopping list is built from these.
-draft: true                        # optional: not tried yet. "To try" kicker. Says nothing about the week. Promoting just drops this line.
+draft: true                        # optional: not tried yet. Marked only by a line on its recipe page (tiles show the week). Says nothing about the week. Promoting just drops this line.
 ---
 ```
 

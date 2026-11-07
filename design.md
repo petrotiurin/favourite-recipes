@@ -55,7 +55,7 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
-| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker |
+| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the italic "A draft: …" line under a draft's title |
 | `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the "Next week" tab and the recipe-page kicker |
 
 ## Type
@@ -69,7 +69,8 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week", recipe pages only).
+  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week"). Kickers name the week, never
+  the draft status.
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
@@ -103,21 +104,22 @@ then "This week" in accent ink and "Next week" in teal, each only when that week
 filters are one row that scrolls sideways.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
-Every recipe is the same tile, with no feature slot: square photo (no radius), kicker ("To try",
-"This week", else the course), serif name, then "20 min · 412 kcal". This week's recipes come
+Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the week,
+else the course; never "draft" or "To try"), serif name, then "20 min · 412 kcal". This week's recipes come
 first; a "The rest of the book" divider spans the grid where the others start; it hides while a
 filter or a search is active.
 
 **Next week stays out of the way.** Tiles never say "Next week": next week's recipes sit in the
 rest of the book like any other, and only the "Next week" tab gathers them (CSS-only, so it works
-without JS). A draft that's only in next week (`.is-next-only`) is hidden from All, the course tabs
+without JS). Under that tab every tile's kicker reads "Next week" in teal: a next-week tile carries
+a second kicker (`.kicker-on-next`) that CSS swaps in for its usual one (`.kicker-outside-next`). A
+draft that's only in next week (`.is-next-only`) is hidden from All, the course tabs
 and search until the switch makes it this week's; the "Next week" tab is the one place it shows.
 
 ## Recipe page
 
-Back link (chevron + "All recipes"), kicker (status: "To try", "This week", "Next week", whichever
-apply; then course and tags), serif title, and for
-drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
+Back link (chevron + "All recipes"), kicker ("This week" and/or "Next week", then course and tags), serif title, and for
+drafts one italic serif line in plum saying it's a draft (the only place a draft is marked). Then the photo: edge to edge at 4:5 on a phone,
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
 each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
 the segmented control (1/2/4, the same `.seg` as the shopping page; it opens on 4, whatever
@@ -167,7 +169,7 @@ interactive part from the embedded JSON.
 
 Under the serif title, the list's recipes appear as **photo bubbles**: overlapping 36px circles
 (2px `--bg` ring) followed by "For N recipes · list made <date>". Opening that summary lists each
-recipe as a link with its round photo and serif name ("To try" kicker after drafts). Aisle
+recipe as a link with its round photo and serif name. Aisle
 section names are serif small caps, like a cookbook index.
 
 Each list row also shows **which recipes the item is for**, as the same photo bubbles in small:

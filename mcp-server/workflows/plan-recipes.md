@@ -11,7 +11,7 @@ This is the whole flow from "here are the recipes" to "here is the shopping list
 Vocabulary (see the server's instructions for details):
 - **This week** (`current: true`): the recipes being cooked now. Shown at the top of the home page.
 - **Next week** (`next: true`): the recipes being planned. Only shown under the site's "Next week" tab; the shopping list is built from these alone. A recipe can be in both weeks.
-- **Draft**: a recipe nobody has tried yet ("To try" on the site). Being a draft says nothing about the week. A draft ends one of two ways: liked → `promote_recipe` (regular recipe, weeks unchanged), not liked → `remove_draft` (deleted; only drafts can be removed, and never one that's planned for next week).
+- **Draft**: a recipe nobody has tried yet (marked by a line on its recipe page; the site labels tiles by week only). Being a draft says nothing about the week. A draft ends one of two ways: liked → `promote_recipe` (regular recipe, weeks unchanged), not liked → `remove_draft` (deleted; only drafts can be removed, and never one that's planned for next week).
 - **The switch** (`start_next_week`): next week's recipes become this week, next week is emptied. The shopping list is left alone (it keeps showing until a new one is saved).
 - **Shopping list**: one combined, deduplicated list for all of next week's recipes, written by you with `update_shopping_list`.
 
@@ -47,7 +47,7 @@ Skip if you're not switching, or this week has no drafts. Otherwise, **before** 
 - "Liked it" → keep it as a regular recipe (promoted; leaves this week)
 - "Didn't like it" → remove it from the site
 - "Not tried, carry over" → stays a draft and stays in this week after the switch
-- "Not tried, back to the book" → stays a draft, leaves this week (still on the site as "To try", in no week)
+- "Not tried, back to the book" → stays a draft, leaves this week (still on the site, in no week)
 
 Name the recipe in each question ("Did you like Harissa Tuna Pitta?") and put what the options do in their descriptions. Say in the question that "Didn't like it" deletes the recipe and its photo.
 

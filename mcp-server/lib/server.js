@@ -63,8 +63,8 @@ list_recipes shows current: true / next: true and lists this week first (drafts 
   a draft that is ONLY in next week is hidden everywhere else until the switch.
 
 Drafts first: a recipe the family hasn't cooked and liked yet should be created as a DRAFT (create_recipe's draft defaults to
-true). Drafts get a "To try" kicker on the site. Being a draft says nothing about the week: a draft is in whichever week(s) you put
-it in, or in none (then it sits in the book as "To try"). Once the user says they tried it and liked it, call promote_recipe to turn
+true). The site labels recipes by week only; a draft is marked by a line on its own page. Being a draft says nothing about the
+week: a draft is in whichever week(s) you put it in, or in none (then it sits in the book). Once the user says they tried it and liked it, call promote_recipe to turn
 it into a regular recipe (its weeks don't change). Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
 
@@ -333,7 +333,7 @@ function switchLines({ started, stayed, carried, left, droppedDrafts, subject })
     ...(stayed.length ? [`  (already in this week too: ${stayed.join(", ")})`] : []),
     ...(carried.length ? [`  carried over from last week: ${carried.join(", ")}`] : []),
     ...(left.length ? [`  left this week: ${left.join(", ")}`] : []),
-    ...(droppedDrafts.length ? [`  drafts back in the book (still "To try", in no week): ${droppedDrafts.join(", ")}`] : []),
+    ...(droppedDrafts.length ? [`  drafts back in the book (still drafts, in no week): ${droppedDrafts.join(", ")}`] : []),
     "  the shopping list is unchanged: the page keeps showing it until next week is planned and a new list saved",
   ];
 }
