@@ -340,7 +340,8 @@ writes").
 
 **Weeks.** Planning always starts in **next week**: everything the chat adds to the plan goes
 there. This week is never edited directly: it's next week *promoted* by the week switch
-(`start_next_week`), which is its own tray item (Switch) and goes first in a batch.
+(`start_next_week`), which is its own tray item (Switch) and goes first in a batch. Whether to
+promote is asked at Finalise, not while the tray is being built (see below).
 
 **What's in it.** Staged changes: new recipes (drafts, full structured fields + photo), edits,
 promotions, removals, next week / not next week, the week switch, servings, and the shopping list.
@@ -381,11 +382,17 @@ plain button with no model in it. So the list is built **before** Save becomes a
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
 - **Finalise list** sends a fixed request to the agent, which first says what it's doing ("I'll
   switch weeks first, then build the shopping list for next week's 5 recipes"), then:
-  1. **promotes next week if needed**, as plan-recipes does: when next week already had recipes
-     before this tray (the old plan, now being cooked), it stages `start_next_week` (first in the batch, so the tray's additions land in
-     the new next week) and asks one `ask_user` per draft in this week (*Liked* · *Not for us* ·
-     *Not tried yet*, with the recipe's card; not tried → *Keep it this week* · *Back to the book*),
-     staging the answers;
+  1. **asks whether next week is ready to be promoted**, if next week already has recipes on the
+     site (an earlier plan). The tray itself is built without asking: it just collects. The
+     question comes here, at Finalise, with that week's recipe cards:
+     *"Next week has 4 recipes. Is it ready to become this week?"*
+     - **Promote it** → stages `start_next_week` (first in the batch, so the tray's additions
+       land in the fresh next week), then one `ask_user` per draft in this week (*Liked* ·
+       *Not for us* · *Not tried yet*, with the recipe's card; not tried → *Keep it this week* ·
+       *Back to the book*), staging the answers. The list is built for the tray's recipes only.
+     - **Not yet** → no switch; the tray's recipes are added to the existing next week, and the
+       list is rebuilt for all of it (what was there plus the tray).
+     If next week is empty there's nothing to promote and no question.
   2. reads every recipe that will be in next week after Save, staged new ones included (reads inside
      a `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
   The tray shows "Building the list…" meanwhile.
@@ -590,11 +597,8 @@ Open:
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
 - **Q8.** Retention for stored chats.
-- **Q13.** This week is only ever next week promoted (decided). Open: *when* the promotion
-  happens. When the tray's first item goes in and next week already has recipes, the agent can't
-  tell whether that week has started (promote first, then plan a fresh next week) or is still being
-  planned (add to it). Suggest it asks once per tray: *Next week has started* · *Still planning
-  it*.
+- **Q13.** Decided: the tray collects without asking; at Finalise, if next week already has
+  recipes, the agent asks whether it's ready to be promoted (*Promote it* · *Not yet*), 7.1.
 - **Q14.** Next week is now visible on the site, so "what have we added so far" partly exists there.
   The tray still earns its place (one deploy, previews before anything is public, Finalise), but
   should Save be offered per item for next-week additions too, or keep one Save for the week?
