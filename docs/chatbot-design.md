@@ -555,9 +555,12 @@ it went wrong, and so the model trial (Q9) has real numbers.
 **Privacy.** Traces contain what people typed, so:
 
 - Never in a trace: Supabase tokens, API keys, `Authorization` headers, raw IPs, emails.
-- Screenshots and photos are replaced by a placeholder (`[image 1.2 MB]`), not uploaded.
-- Retention matches the chats: traces are deleted after 2 weeks (Q8), or as close as the Langfuse
-  plan allows.
+- Screenshots and photos sent in chat are uploaded with the trace (decided), so a bad recipe
+  import can be checked against what the model actually saw. Generated dish photos are linked, not
+  re-uploaded.
+- Traces are kept for **a month** (decided), longer than the chats themselves (2 weeks, Q8), so
+  something reported late can still be looked into. Set via Langfuse's data retention, or a monthly
+  clean-up if the plan doesn't offer it.
 - Use the EU region (or self-host) so chat text stays in one place.
 
 **What it's for in practice:**
