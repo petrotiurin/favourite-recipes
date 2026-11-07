@@ -59,8 +59,8 @@ list_recipes shows current: true / next: true and lists this week first (drafts 
   already has recipes), call start_next_week: next week's recipes become this week, next week is emptied. Before switching, ask
   about this week's drafts (see the plan-recipes workflow): liked -> promote_recipe, didn't like -> remove_draft, not tried ->
   carry_over (stays in this week) or left to drop back into the book.
-- The home page shows this week at the top, then the rest of the book. Next week is only shown under its own "Next week" tab;
-  a draft that is ONLY in next week is hidden everywhere else until the switch.
+- The home page shows this week at the top, then the rest of the book, with a link to a separate Next week page;
+  a draft that is ONLY in next week is only on that page until the switch.
 
 Drafts first: a recipe the family hasn't cooked and liked yet should be created as a DRAFT (create_recipe's draft defaults to
 true). The site labels recipes by week only; a draft is marked by a line on its own page. Being a draft says nothing about the

@@ -1,9 +1,9 @@
 // Recipe status. Two weeks, both independent of `draft` (not tried yet):
 //   `current: true`  this week: what's being cooked now, shown at the top of the home page
-//   `next: true`     next week: what's being planned; only shown under the "Next week" tab, and
+//   `next: true`     next week: what's being planned; listed on next-week.html, and
 //                    what the shopping list is for
-// A recipe can be in both weeks. A draft that's only in next week is hidden from the rest of the
-// home page (and search) until the switch makes it this week's. Keep in sync with mcp-server/lib/recipes.js.
+// A recipe can be in both weeks. A draft that's only in next week is left off the home page
+// (and so out of search) until the switch makes it this week's. Keep in sync with mcp-server/lib/recipes.js.
 const isDraft = (r) => r.draft === true;
 const isThisWeek = (r) => r.current === true;
 const isNextWeek = (r) => r.next === true;

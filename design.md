@@ -56,7 +56,7 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
 | `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the italic "A draft: …" line under a draft's title |
-| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the "Next week" tab and the recipe-page kicker |
+| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the home page's "Next week · n" link, the Next week page's kickers, the recipe-page kicker |
 
 ## Type
 
@@ -99,9 +99,14 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 
 Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
 underneath. No headline: straight into a search field drawn as an underline with a search icon,
-and the filters as plain words (active one bold and underlined): All (preselected), the courses,
-then "This week" in accent ink and "Next week" in teal, each only when that week has recipes. On a phone the
-filters are one row that scrolls sideways.
+and the filters as plain words (active one bold and underlined): All (preselected) and the courses,
+nothing else, so the row fits a phone. Weeks are not filters.
+
+**Week heading** (`.week-head`), between the filters and the grid: "This week" on the left (accent
+ink, kicker style; only when this week has recipes) and, on the right, a teal **"Next week · n →"**
+link to the Next week page, or a quiet muted "Next week: not planned" when next week is empty. While a
+course is picked or a search is typed, the "This week" label hides (the grid isn't this week any
+more) but the link stays.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
 Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the week,
@@ -109,12 +114,17 @@ else the course; never "draft" or "To try"), serif name, then "20 min · 412 kca
 first; a "The rest of the book" divider spans the grid where the others start; it hides while a
 filter or a search is active.
 
-**Next week stays out of the way.** Tiles never say "Next week": next week's recipes sit in the
-rest of the book like any other, and only the "Next week" tab gathers them (CSS-only, so it works
-without JS). Under that tab every tile's kicker reads "Next week" in teal: a next-week tile carries
-a second kicker (`.kicker-on-next`) that CSS swaps in for its usual one (`.kicker-outside-next`). A
-draft that's only in next week (`.is-next-only`) is hidden from All, the course tabs
-and search until the switch makes it this week's; the "Next week" tab is the one place it shows.
+**Next week stays out of the way.** Home tiles never say "Next week": next week's recipes sit in
+the rest of the book like any other. A draft that's only in next week isn't on the home page at all
+(so search can't find it) until the switch makes it this week's.
+
+## Next week page
+
+`next-week.html` (`templates/next-week.js`), reached only from the home page's week link. Top bar
+as everywhere (the shopping list stays there: no button on this page), a back link (chevron +
+"This week"), a teal kicker "Planning · n recipes", the serif title "Next week" (`.page-title`), then
+next week's recipes in the same grid, alphabetical, every kicker "Next week" in teal. When nothing
+is planned it says so in one italic serif line. Always built, so the link never breaks.
 
 ## Recipe page
 

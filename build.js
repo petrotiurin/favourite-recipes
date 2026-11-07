@@ -5,7 +5,8 @@ const { marked } = require("marked");
 const { renderIndex } = require("./templates/index");
 const { renderRecipe } = require("./templates/recipe");
 const { renderShoppingList } = require("./templates/shopping-list");
-const { byStatusThenTitle } = require("./templates/status");
+const { renderNextWeek } = require("./templates/next-week");
+const { byStatusThenTitle, isNextWeek } = require("./templates/status");
 
 const ROOT = __dirname;
 const RECIPES_DIR = path.join(ROOT, "recipes");
@@ -101,6 +102,8 @@ function build() {
   const recipes = loadRecipes().sort(byStatusThenTitle);
 
   fs.writeFileSync(path.join(DIST_DIR, "index.html"), renderIndex(recipes));
+  const nextWeek = recipes.filter(isNextWeek).sort((a, b) => a.title.localeCompare(b.title));
+  fs.writeFileSync(path.join(DIST_DIR, "next-week.html"), renderNextWeek(nextWeek));
 
   for (const recipe of recipes) {
     const bodyHtml = marked.parse(recipe.body);

@@ -10,7 +10,7 @@ This is the whole flow from "here are the recipes" to "here is the shopping list
 
 Vocabulary (see the server's instructions for details):
 - **This week** (`current: true`): the recipes being cooked now. Shown at the top of the home page.
-- **Next week** (`next: true`): the recipes being planned. Only shown under the site's "Next week" tab; the shopping list is built from these alone. A recipe can be in both weeks.
+- **Next week** (`next: true`): the recipes being planned. Listed on the site's Next week page (linked from the home page); the shopping list is built from these alone. A recipe can be in both weeks.
 - **Draft**: a recipe nobody has tried yet (marked by a line on its recipe page; the site labels tiles by week only). Being a draft says nothing about the week. A draft ends one of two ways: liked → `promote_recipe` (regular recipe, weeks unchanged), not liked → `remove_draft` (deleted; only drafts can be removed, and never one that's planned for next week).
 - **The switch** (`start_next_week`): next week's recipes become this week, next week is emptied. The shopping list is left alone (it keeps showing until a new one is saved).
 - **Shopping list**: one combined, deduplicated list for all of next week's recipes, written by you with `update_shopping_list`.

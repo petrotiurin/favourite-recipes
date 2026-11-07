@@ -32,7 +32,7 @@ The other flow is the agent working through the recipes MCP server: **use the `p
 ```
 recipes/            source of truth: one .md file per recipe (frontmatter + body)
 images/recipes/     source of truth: one hero image per recipe
-templates/          JS functions that render HTML strings (layout.js, index.js, recipe.js)
+templates/          JS functions that render HTML strings (layout.js, index.js, next-week.js, tiles.js, recipe.js)
 templates/search.js client-side search script, copied verbatim into dist/ (see "Hard constraint" above)
 templates/servings.js client-side servings selector, copied verbatim into dist/; quantities.js tags scalable numbers at build time
 styles/style.css    the one stylesheet, copied verbatim into dist/
@@ -41,7 +41,7 @@ templates/wakelock.js client-side "Keep screen on" toggle (Screen Wake Lock API)
 templates/shopping-list.js  renders shopping-list.html (the list, or a blank page) + the JSON shopping.js works from
 templates/shopping.js       shopping page: planned/per-recipe servings, local ticks, editor sign-in sheet + "At home" tab (stocktake)
 design.md           UI design notes: palette tokens, the house icon language, components and interaction rules
-build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, recipes/<slug>.html, shopping-list.html)
+build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
 mcp-server/         separate MCP server on Vercel for adding/editing recipes (not part of the site)
@@ -71,15 +71,15 @@ total_mins: 15
 serves: 2                          # number of people the recipe serves, required
 calories: 195                      # kcal per serving, required (source's figure, else estimated from ingredients)
 scalable: false                    # optional: hides the servings selector (only when the ingredient list already gives per-person amounts)
-current: true                      # optional: in THIS week (being cooked now). Top of the home page, "This week" kicker + tab.
-next: true                         # optional: in NEXT week (being planned). Only under the "Next week" tab; the shopping list is built from these.
+current: true                      # optional: in THIS week (being cooked now). Top of the home page, under a "This week" heading; "This week" kicker.
+next: true                         # optional: in NEXT week (being planned). Listed on next-week.html (linked from the home page); the shopping list is built from these.
 draft: true                        # optional: not tried yet. Marked only by a line on its recipe page (tiles show the week). Says nothing about the week. Promoting just drops this line.
 ---
 ```
 
 New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe (the MCP server's `promote_recipe` tool drops `draft: true`; its weeks don't change). A draft the family didn't like is deleted with the MCP server's `remove_draft` tool (recipe file + photo); it refuses anything that isn't a draft, so regular recipes can't be removed through the server, and it refuses a draft planned for next week (the family keeps those).
 
-**This week and next week.** Two independent flags, neither implied by `draft`: `current: true` is this week (what's being cooked now), `next: true` is next week (what's being planned and shopped for). A recipe can be in this week, next week, both, or neither. The index shows this week at the top (drafts first), then "The rest of the book" (alphabetical); next week's recipes are unmarked in the book and grouped only under the "Next week" tab, and a draft that's only in next week is hidden from everything but that tab (search included) until the switch. The MCP's `list_recipes` orders this week, next week, the rest. `set_week_recipes` adds/removes recipes from a week; `start_next_week` is the switch (next week becomes this week, next week is emptied, `carry_over` keeps chosen this-week recipes); both are agent-driven.
+**This week and next week.** Two independent flags, neither implied by `draft`: `current: true` is this week (what's being cooked now), `next: true` is next week (what's being planned and shopped for). A recipe can be in this week, next week, both, or neither. The index shows this week at the top (drafts first), then "The rest of the book" (alphabetical); the filters are courses only. A heading above the grid says "This week" with a teal "Next week · n →" link to `next-week.html` (or "Next week: not planned"). Next week's recipes are unmarked in the book and listed together only on `next-week.html` (`templates/next-week.js`); a draft that's only in next week isn't on the home page at all (search included) until the switch. The MCP's `list_recipes` orders this week, next week, the rest. `set_week_recipes` adds/removes recipes from a week; `start_next_week` is the switch (next week becomes this week, next week is emptied, `carry_over` keeps chosen this-week recipes); both are agent-driven.
 
 Followed by a Markdown body with `## Ingredients` (bulleted, quantities bolded) and `## Instructions` (numbered). See the `add-recipe` skill for the exact rules.
 
