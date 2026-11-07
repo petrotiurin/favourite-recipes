@@ -144,7 +144,8 @@ Streaming is needed for the chat UX anyway.
 
 Anonymous visitors can chat (decided, Q1): read-only, rate-limited, on the public model.
 
-**Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback). Extract
+**Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback), and adds
+Apple and Google sign-in (4.2). Extract
 the sign-in sheet and session handling from `templates/shopping.js` into a shared
 `templates/auth.js`; both pages keep the session under the same `localStorage` key, so signing in
 on one signs you in on the other (same origin). Generalise `SHOPPING_EDITORS` to `EDITORS` (keep
@@ -219,6 +220,90 @@ loading another user's conversation (404), applying the tray without a token (40
 
 **Logging:** refused tool calls and failed token checks are logged with the caller's email or
 IP, but never the token.
+
+### 4.2 Sign in with Apple and Google
+
+Added next to the existing email + password and email code, through Supabase Auth's Apple and
+Google providers. The result is the same Supabase session (access + refresh token), so everything
+on the server (`verifyEditor`, the `EDITORS` check, 4.1) stays exactly as it is. **Signing in with
+Google or Apple proves who you are. It doesn't make you an editor; only `EDITORS` does that.**
+
+**The flow (PKCE)**
+
+1. The sheet's "Continue with Apple / Google" sends the browser to Supabase's
+   `/auth/v1/authorize?provider=…&redirect_to=<this page>` with a PKCE challenge. The secret half
+   (the code verifier) stays in this browser's `localStorage`.
+2. Supabase hands over to Apple/Google, the person approves, and Supabase redirects back to the page
+   with a one-time `?code=` in the URL.
+3. `auth.js` swaps the code plus the verifier for the session (`/auth/v1/token?grant_type=pkce`),
+   then removes the code from the URL.
+
+PKCE rather than the older implicit flow the magic link uses today (tokens in the URL fragment):
+the tokens never appear in the URL or browser history, and a stolen code is useless without the
+verifier. It's a few lines of vanilla JS (`crypto.subtle` for the SHA-256), no library. The magic
+link could move to PKCE at the same time.
+
+**Coming back to the right place.** Sign-in leaves the page, so `auth.js` remembers where you were
+(page, open chat, conversation id, an unsent message) in `sessionStorage` and restores it after the
+redirect. That's the same mechanism as navigation (§7.3).
+
+**Accounts and the editors list (the main gap)**
+
+- **Sign-ups stay off.** Visitors don't need an account to chat, so only invited editors have one.
+  Supabase then refuses an Apple/Google sign-in that doesn't match an existing user, which is what
+  we want.
+- **Matching by email.** Supabase links a Google/Apple identity to the existing invited user when
+  the provider vouches for the same, verified email. Google: the Gmail address, verified, so it
+  links. If an editor was invited with a different address than their Google account, it won't
+  match: invite them by their Google email, or add both.
+- **Apple's "Hide My Email"** gives a random `@privaterelay.appleid.com` address that won't match
+  anything: sign-in fails with sign-ups off. The sheet should say so ("Choose *Share My Email* when
+  Apple asks"). Apple also only shares the email on the *first* sign-in; if it was hidden then, the
+  person has to remove the app in their Apple ID settings and try again.
+- The server keeps checking the **email on the Supabase user**, never a name or display field
+  from the provider.
+
+**Setup and upkeep**
+
+| | Google | Apple |
+| --- | --- | --- |
+| Account needed | Google Cloud project (free) | **Apple Developer Program, $99/year** |
+| Create | OAuth client (Web), consent screen with only `email` + `profile` | App ID + Services ID with Sign in with Apple, a signing key (.p8) |
+| Redirect URI to register | `https://<project>.supabase.co/auth/v1/callback` | the same |
+| Upkeep | Publish the consent screen (basic scopes need no Google review), or list editors as test users | **The client secret Supabase needs is a JWT made from the key, and expires every 6 months at most**: set a reminder to regenerate it, or Apple sign-in quietly stops working |
+
+In Supabase: enable both providers, keep sign-ups off, and widen Auth → URL Configuration →
+Redirect URLs from the shopping page to the whole site (`https://petrotiurin.github.io/favourite-recipes/**`),
+since the chat lets you sign in from any page.
+
+Cosmetic: the Google consent screen says "continue to `<project>.supabase.co`" unless the Supabase
+project has a custom domain (a paid add-on). Fine for a family site.
+
+**UI (sheet order)**
+
+1. **Continue with Apple**, **Continue with Google**: full-width buttons at the top.
+2. "or", then email + password, as today.
+3. "No password? Email me a code", as today.
+
+After an Apple/Google sign-in the sheet doesn't offer "Set a password" (no need). The avatar menu
+shows which method you used.
+
+**design.md exception:** Apple and Google require their own button styles: Apple's black (or
+white) button with the Apple logo, and Google's white button with the multicolour "G". That breaks
+"one accent, no other hues", so design.md should list it as a deliberate exception, limited to these
+two buttons on the sign-in sheet.
+
+**Edge cases**
+
+- **In-app browsers** (opening the site from inside Instagram, WhatsApp etc.): Google blocks
+  sign-in in embedded webviews. Detect it where possible and suggest "Open in Safari/Chrome"; email
+  sign-in still works there.
+- **Added to the home screen on iOS:** the redirect may finish in Safari instead of the home-screen
+  app, leaving the app signed out. Email code sign-in works inside it.
+- **Signing out** signs you out of the site only, not of your Apple/Google account.
+
+This is also a change to the shopping page's sign-in (it moves into the shared `auth.js`), so the
+CLAUDE.md stocktake section and the Setup paragraph need updating with it.
 
 ## 5. Conversations and persistence
 
@@ -464,7 +549,7 @@ Each phase ships and is useful on its own.
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
-| 3 | Sign-in + per-user chats | Shared `auth.js`, editor key + model, Supabase tables, chats list, server-owned history | 1 |
+| 3 | Sign-in + per-user chats | Shared `auth.js` (PKCE), Apple and Google sign-in (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
 | 4 | Editor writes via the tray | Staging, dry-run validation, household tray UI ("added by"), Save → one `batch_changes`, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
@@ -491,3 +576,7 @@ Open:
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
 - **Q8.** Retention for stored chats.
+- **Q11.** Apple sign-in needs an Apple Developer Program membership ($99/year) and a client secret
+  regenerated at least every 6 months. Worth it, or Google + email first and Apple later?
+- **Q12.** Which email each editor will use with Google/Apple, so the invites in Supabase and the
+  `EDITORS` list match.
