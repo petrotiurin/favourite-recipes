@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { clearCache } from "./cache.js";
 
 // The ONLY paths this server is ever allowed to write or delete. Everything
 // else in the repo (including this server's own code, build.js, templates,
@@ -16,6 +17,17 @@ export function isAllowedPath(path) {
 export function assertAllowedPath(path) {
   if (!isAllowedPath(path)) {
     throw new Error(`Refusing to write "${path}": only recipes/<slug>.md, images/recipes/<slug>.<ext> and shopping-list.json may be changed`);
+  }
+}
+
+/**
+ * Defence in depth (docs/chatbot-design.md 4.1 layer 3): everything that commits takes the caller and
+ * checks the role itself, so a code path that skips the tool dispatcher still can't write for a public caller.
+ */
+export function assertCanCommit(caller) {
+  if (!caller || (caller.role !== "editor" && caller.role !== "agent")) {
+    console.warn(`Refused a commit: caller role "${caller?.role ?? "none"}" may not write`);
+    throw new Error("Refusing to commit: only an editor or the MCP agent may change the site");
   }
 }
 
@@ -65,7 +77,8 @@ export async function listDir(path) {
  * changes: [{ path, content: Buffer }] to write, or [{ path, delete: true }] to remove.
  * Uses the Git Data API so a recipe + its image land atomically in one commit.
  */
-export async function commitChanges(changes, message) {
+export async function commitChanges(changes, message, caller) {
+  assertCanCommit(caller);
   if (!changes.length) throw new Error("Nothing to commit");
   for (const c of changes) assertAllowedPath(c.path);
 
@@ -96,6 +109,7 @@ export async function commitChanges(changes, message) {
 
     try {
       await gh("PATCH", `/git/refs/heads/${config.branch}`, { sha: commit.sha, force: false });
+      clearCache(); // the cached recipe index no longer matches the branch
       return { sha: commit.sha, url: commit.html_url };
     } catch (err) {
       if (err.status !== 422 || attempt === 3) throw err;
@@ -145,13 +159,14 @@ export class ChangeSet {
     return [...this.staged.keys()];
   }
 
-  async commit(message) {
+  async commit(message, caller) {
+    assertCanCommit(caller);
     const changes = [];
     for (const [path, content] of this.staged) {
       if (content !== null) changes.push({ path, content });
       // A file staged and then deleted again within one batch never existed on the branch: nothing to delete.
       else if (await readFile(path)) changes.push({ path, delete: true });
     }
-    return commitChanges(changes, message);
+    return commitChanges(changes, message, caller);
   }
 }

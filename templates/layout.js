@@ -1,4 +1,16 @@
-function layout({ title, bodyClass = "", content, rootPrefix = "" }) {
+// Embedded in every page for the chat (docs/chatbot-design.md 7.2): which page this is, so "this recipe" can be resolved.
+// Data only, baked in at build time. "<" (and friends) are escaped so no value can close the script element.
+function pageContextJson(context) {
+  return JSON.stringify(context)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+function layout({ title, bodyClass = "", content, rootPrefix = "", pageContext }) {
+  if (!pageContext || !pageContext.page) throw new Error(`layout: "${title}" needs a pageContext ({ page: ... })`);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -12,6 +24,7 @@ function layout({ title, bodyClass = "", content, rootPrefix = "" }) {
 </head>
 <body class="${bodyClass}">
 ${content}
+  <script type="application/json" id="page-context">${pageContextJson(pageContext)}</script>
   <footer class="site-footer">Our Favourite Recipes</footer>
 </body>
 </html>

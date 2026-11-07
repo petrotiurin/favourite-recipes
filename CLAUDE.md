@@ -1,21 +1,45 @@
 # Our Favourite Recipes
 
-Static GitHub Pages site for the family's favourite recipes. Originally migrated from a Notion database.
+The family's cooking app: the recipe book, this week's and next week's plans, and the shopping list. (It started as a
+migration of a Notion database; it has long outgrown that.) It has three parts:
 
-## Hard constraint: static first
+1. **The site** (GitHub Pages): static HTML/CSS generated at build time from `recipes/*.md` and `shopping-list.json` by
+   the Node build script (`build.js`). Every page is complete and readable with JS off. No framework runtime, no
+   build-time CMS calls at request time, no client-side data fetching to *load* what a page shows.
+2. **Enhancements** (`templates/*.js`): hand-written vanilla JS, copied verbatim into `dist/`. Rules:
+   - No frameworks (React/Vue/etc.), no bundler, no npm packages shipped to `dist/`; hand-written vanilla JS only. Small,
+     pinned CDN libraries are acceptable only if a future feature really needs one.
+   - Optional enhancement: the page's core content (recipe list, recipe pages, shopping list) must already be fully present
+     and readable with JS disabled; JS only adds interactivity on top.
+   - Pages render from data already baked into the HTML at build time (the DOM, or a JSON literal the build script
+     embedded). Runtime network calls are only for **actions**, never to load what the page shows, and only to **our own
+     backend** (part 3) and Supabase Auth, never to third-party APIs directly: saving a stocktake, signing in, and (planned)
+     chatting.
+   - The scripts today: `templates/search.js` (client-side title filtering over the already-rendered recipe list),
+     `templates/servings.js` (the 1/2/4-servings selector on recipe pages, rescaling ingredient quantities tagged at build time
+     by `templates/quantities.js`), `templates/wakelock.js` (the "Keep screen on" toggle on recipe pages, using the Screen Wake
+     Lock API while cooking) and `templates/shopping.js` (below).
+   - `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It
+     signs in with Supabase Auth: email + password, or an email code as the fallback (the same email also carries a magic link;
+     plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still
+     never *loads* the list at runtime: it re-renders from the JSON literal the build embedded.
+   - Every page embeds a page-context literal, `<script type="application/json" id="page-context">` (`{ "page": "recipe", "slug",
+     "title" }`, `{ "page": "index" }`, `{ "page": "next-week" }`, `{ "page": "shopping" }`), written by `templates/layout.js`
+     (every page gets it; `<` is escaped). The chat will use it to know which page the user is on. Nothing reads it yet.
+3. **The backend** (`mcp-server/` on Vercel, **not part of the site**; see `mcp-server/README.md`): the only place with secrets
+   and the only writer to the repo. It serves the MCP tools for agents (`/mcp`: add/edit recipes by committing `recipes/*.md` and
+   `images/recipes/*` to `main`), `/stocktake` for the site and (planned) `/chat`, and holds the validation rules (its tools
+   mirror the `add-recipe` skill rules in `mcp-server/lib/recipe-format.js`: keep the two in sync if the format changes). It
+   never ships anything into `dist/`. Every write is a commit to `main` and every commit is a site deploy, so writes are batched.
+   - **One tool registry, one dispatcher**: every tool is defined once in `mcp-server/lib/tools.js` (name, description, zod
+     schema, `access: "read" | "stage" | "write"`, handler) and every call, MCP or chat, goes through `dispatch(name, args, caller)`,
+     which checks `caller.role` (`public` may only run `read`; `editor` and `agent` run all; a tool with no `access` counts as
+     `write`). `lib/server.js` registers the MCP tools from the registry with a frozen `{ role: "agent" }` caller. The functions
+     that commit (`ChangeSet.commit` / `commitChanges` in `lib/github.js`, `saveStocktake`, the recipe and shopping-list writers)
+     take the caller and assert the role themselves. A new tool goes in the registry with its access level, and the registry test
+     (`mcp-server/test/tools.test.js`) covers it automatically.
 
-This site has **no framework, no bundler, and no client-side data fetching** by design — no framework runtime, no build-time CMS calls at request time. Everything is plain HTML/CSS generated at build time from Markdown files checked into this repo. Do not add React/Vue/etc., a bundler, or any JS *dependency* to `dist/` output.
-
-One exception: small, dependency-free vanilla JS is allowed for progressive-enhancement UI (e.g. `templates/search.js`, which does client-side title filtering over the already-rendered recipe list, and `templates/servings.js`, the 1/2/4-servings selector on recipe pages that rescales ingredient quantities tagged at build time by `templates/quantities.js`, and `templates/wakelock.js`, the "Keep screen on" toggle on recipe pages that uses the Screen Wake Lock API while cooking). Rules for that JS:
-- No frameworks, no bundler, no npm packages shipped to `dist/` — hand-written vanilla JS only.
-- No fetching/loading data at runtime — it must only operate on data already baked into the rendered HTML at build time (DOM already in the page, or a JSON literal the build script embedded).
-- It must be optional enhancement: the page's core content (recipe list, recipe pages) must already be fully present and readable with JS disabled: JS only adds interactivity (filtering, search) on top.
-
-One deliberate exception to "no network at runtime": `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It signs in with Supabase Auth: email + password, or an email code as the fallback (the same email also carries a magic link; plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still never *loads* the list at runtime: it re-renders from the JSON literal the build embedded. Small, pinned CDN libraries are acceptable if a future feature really needs one, but still no bundler or npm packages in `dist/`.
-
-The only allowed "moving part" beyond that is the Node build script that runs before deploy.
-
-The `mcp-server/` folder is **not part of the site**: it's a separate MCP server deployed to Vercel (see `mcp-server/README.md`) that lets an agent add/edit recipes by committing `recipes/*.md` and `images/recipes/*` to `main`. It never ships anything into `dist/`, and its tools mirror the `add-recipe` skill rules (`mcp-server/lib/recipe-format.js` — keep the two in sync if the format changes).
+The only allowed "moving part" in the build is the Node build script that runs before deploy.
 
 ## UI design
 
@@ -26,6 +50,16 @@ The `mcp-server/` folder is **not part of the site**: it's a separate MCP server
 New recipes are added by asking Claude Code, in chat, to add one. **Always use the `add-recipe` skill** (`.claude/skills/add-recipe/SKILL.md`) for this — it has the exact Markdown formatting rules, the ingredient-bolding rule, and the image rules. Don't freehand a recipe file without it.
 
 The other flow is the agent working through the recipes MCP server: **use the `plan-recipes` workflow** when the user hands over screenshots, links and/or names of recipes we already have. They are always for **next week**. If next week already has recipes, it first switches weeks (`start_next_week`), asking via `AskUserQuestion` about each of this week's drafts: liked → promoted, not liked → removed (unless it's planned for next week: kept, with a warning), not tried → carried over in this week or back to the book. Then it adds the new ones to next week as drafts (photos come from the source link, else the MCP server generates them with OpenRouter; upload links are only a fallback), adds existing ones to next week, always builds next week's shopping list and finishes with a summary. It uses the MCP tools only, never local files, and sends all its writes in one `batch_changes` call: every commit to `main` is a site deploy, so a call per change floods the Pages workflow. The workflow itself ships with the server: its source is `mcp-server/workflows/plan-recipes.md`, served as the `plan-recipes` MCP prompt and by the `get_workflow_guide` tool (the server's instructions tell agents to call it first). `.claude/skills/plan-recipes/SKILL.md` only points there, so change the flow in the server's file; a server deploy updates it for every client.
+
+## Chat
+
+A recipe chat assistant (a bubble on every page: read-only for visitors, the full MCP toolset through a plan tray for signed-in
+editors) is designed in `docs/chatbot-design.md` and built in phases. Phase 0 (groundwork) is in: this CLAUDE.md framing, the tool
+registry and dispatcher (`mcp-server/lib/tools.js`), the `search_recipes` read tool and the catalogue helper
+(`mcp-server/lib/recipes.js`, `catalogue()`), and the page-context JSON in every page. Read the design doc before working on any of
+it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
+is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
+enforced on the server by the dispatcher, never by the prompt.
 
 ## Directory layout
 
@@ -44,7 +78,13 @@ design.md           UI design notes: palette tokens, the house icon language, co
 build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
-mcp-server/         separate MCP server on Vercel for adding/editing recipes (not part of the site)
+mcp-server/         separate backend on Vercel: MCP server for adding/editing recipes, /stocktake, later /chat (not part of the site)
+mcp-server/lib/tools.js  the tool registry (access levels) + dispatch() + toolDefinitions(role) (OpenAI-style function tools from the zod schemas)
+mcp-server/lib/cache.js  short in-memory cache (60s, cleared on commit) behind search_recipes and the chat catalogue
+docs/chatbot-design.md  design of the recipe chat assistant (phased; see "Chat")
+templates/chat.js        (planned, phase 1) the chat bubble + panel, vanilla JS, talks only to /chat
+templates/auth.js        (planned, phase 3) the sign-in sheet and session handling shared by the shopping page and the chat
+mcp-server/api/chat.js   (planned, phase 1) the /chat endpoint: streams a model through OpenRouter, runs tools via dispatch()
 mcp-server/workflows/  agent workflows the server serves (plan-recipes.md, ocado-shop.md, sainsburys-shop.md), as MCP prompts + get_workflow_guide; shared/ holds the rules every shop flow includes
 ```
 

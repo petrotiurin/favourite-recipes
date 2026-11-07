@@ -65,7 +65,7 @@ ${tiles}
   </main>
   <script src="search.js" defer></script>`;
 
-  return layout({ title: "Our Favourite Recipes", content, rootPrefix: "" });
+  return layout({ title: "Our Favourite Recipes", content, rootPrefix: "", pageContext: { page: "index" } });
 }
 
 module.exports = { renderIndex };

@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. No code yet. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phase 0 (groundwork) is built; the chat itself is not. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 ## 1. Desired outcome

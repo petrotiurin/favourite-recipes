@@ -9,6 +9,7 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 | Tool | What it does |
 | --- | --- |
 | `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts, `current: true` for this week's and `next: true` for next week's. Order: this week (drafts first), next week, the rest |
+| `search_recipes` | Find recipes: `text` (title/method), `include_ingredients` / `exclude_ingredients` (substring of the **bolded** ingredient names, case-insensitive), `course`, `tags`, `max_calories`, `max_minutes`, `draft`, `week` (`this` / `next` / `none`); all optional, ANDed. Compact rows (slug, title, course, tags, total_mins, calories, draft, current, next, url). Reads from GitHub with a 60s in-memory cache (cleared on our own commits) |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
 | `create_image_upload_link` | Fallback to generated photos: returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
 | `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false`; `week: "next"` (or `"this"`) puts it straight into that week |
@@ -30,6 +31,8 @@ Every commit to `main` triggers the Pages workflow, and only one deploy runs at 
 - **`batch_changes`.** Agents do their reads first, then send all the writes in one call. Each operation sees the ones before it (e.g. the shopping list covers recipes created earlier in the same batch), and a rejected operation commits nothing. The server's instructions tell agents to use it whenever they make more than one change.
 - **Photos for recipes that don't exist yet** are committed with `[skip ci]`, because no page shows them until `create_recipe` (or `batch_changes`) commits the recipe, and that commit deploys. Replacing an existing recipe's photo deploys as usual.
 - **The workflow** (`.github/workflows/deploy.yml`) never cancels a deploy that has started; pushes that arrive meanwhile collapse into one queued run for the newest commit.
+
+Every tool is defined once in `lib/tools.js` (the registry: name, description, zod schema, `access: "read" | "stage" | "write"`, handler) and runs through `dispatch(name, args, caller)`, which checks the caller's role (`public` may only run `read`; `editor` and `agent` run all; a missing `access` counts as `write`) before the handler. `/mcp` registers the registry's tools with a fixed `{ role: "agent" }` caller; the functions that commit take the caller and assert the role again. `toolDefinitions(role)` turns the registry into OpenAI-style function tools for the chat. `test/tools.test.js` walks the registry and expects every non-read tool to refuse a public caller.
 
 Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see what it has staged, and nothing reaches GitHub until it commits. The single-change tools commit their own `ChangeSet`; `batch_changes` shares one across all its operations.
 

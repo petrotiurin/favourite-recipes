@@ -1,4 +1,4 @@
-import { ChangeSet } from "./github.js";
+import { ChangeSet, assertCanCommit } from "./github.js";
 import { listRecipes, isNextWeek } from "./recipes.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
 
@@ -232,7 +232,8 @@ export function applyStocktake(list, items, now = new Date()) {
 }
 
 /** Commits the stocktake to shopping-list.json (one commit = one site deploy). */
-export async function saveStocktake(items, now = new Date()) {
+export async function saveStocktake(items, caller, now = new Date()) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = new ChangeSet();
   const list = applyStocktake(await readStoredList(cs), items, now);
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
@@ -244,7 +245,8 @@ export async function saveStocktake(items, now = new Date()) {
     if (status in counts) counts[status]++;
   }
   const commit = await cs.commit(
-    `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`
+    `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`,
+    caller
   );
   return { list, commit, counts };
 }
@@ -317,7 +319,8 @@ export async function getShoppingList(cs = new ChangeSet()) {
  * `servings` (slug -> people) plans individual recipes; the others keep what the previous list
  * planned for them, else DEFAULT_SERVINGS.
  */
-export async function updateShoppingList(sections, batch, servings = {}) {
+export async function updateShoppingList(sections, batch, servings = {}, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   validateSections(sections);
   const next = (await listRecipes(cs)).filter(isNextWeek);
@@ -333,7 +336,7 @@ export async function updateShoppingList(sections, batch, servings = {}) {
   const list = buildShoppingList(sections, slugs, new Date(), resolveServings(slugs, servings, previous?.servings));
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
   const subject = `Update shopping list (${next.length} next-week recipe${next.length === 1 ? "" : "s"})`;
-  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
+  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
   return { list, next, commit, subject };
 }
 
@@ -342,7 +345,8 @@ export async function updateShoppingList(sections, batch, servings = {}) {
  * without rebuilding the list: quantities stay at the 2-serving base and the stocktake (absolute
  * amounts) is kept. The page opens on the new plan once the site redeploys.
  */
-export async function setShoppingServings(servings, batch) {
+export async function setShoppingServings(servings, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const list = await readStoredList(cs);
   if (!list?.sections?.length) {
@@ -356,6 +360,6 @@ export async function setShoppingServings(servings, batch) {
   const updated = { ...list, servings: resolveServings(list.recipes, servings, before) };
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(updated)));
   const subject = `Set shopping list servings (${changed.map(([slug, n]) => `${slug}: ${n}`).join(", ")})`;
-  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
+  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
   return { list: updated, changed, commit, subject };
 }

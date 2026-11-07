@@ -223,7 +223,7 @@ ${renderStatic(list, bySlug, plan)}
 ${body}
   </main>${list ? '\n  <script src="shopping.js" defer></script>' : ""}`;
 
-  return layout({ title: "Shopping list — Our Favourite Recipes", bodyClass: "shopping-page", content, rootPrefix: "" });
+  return layout({ title: "Shopping list — Our Favourite Recipes", bodyClass: "shopping-page", content, rootPrefix: "", pageContext: { page: "shopping" } });
 }
 
 module.exports = { renderShoppingList };

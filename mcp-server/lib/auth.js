@@ -67,5 +67,5 @@ export async function verifyEditor(request) {
   if (!email || !config.shoppingEditors.includes(email)) {
     return { status: 403, error: `${email || "This account"} isn't allowed to edit the shopping list.` };
   }
-  return { email };
+  return { email, userId: user?.id };
 }

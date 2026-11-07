@@ -110,7 +110,7 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "set_shopping_servings", "set_week_recipes", "start_next_week", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "search_recipes", "set_shopping_servings", "set_week_recipes", "start_next_week", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
   assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
