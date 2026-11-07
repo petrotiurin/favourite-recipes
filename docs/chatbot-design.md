@@ -9,7 +9,7 @@ A small chat bubble in the bottom-right corner of every page. Tapped, it expands
 where anyone can ask about our recipes ("something with chicken under 300 kcal", "what can I swap
 for crème fraîche here?") and get answers grounded in **our** recipe book, with links to the pages.
 A signed-in editor can do in chat everything the agent does today through the MCP server: add
-recipes (as drafts), edit them, promote/remove drafts, mark recipes current, and build the
+recipes (as drafts), edit them, promote/remove drafts, plan next week, switch weeks, and build the
 shopping list.
 
 Must-haves from the brief:
@@ -34,7 +34,7 @@ has long outgrown that: an MCP server, an agent workflow, sign-in, a stocktake t
 browser, and now a chat. Rather than adding a third exception, **rewrite the framing** so the rules
 describe what the project is now. Proposed shape:
 
-> **Our Favourite Recipes** is the family's cooking app: the recipe book, this week's plan and the
+> **Our Favourite Recipes** is the family's cooking app: the recipe book, this week's and next week's plans and the
 > shopping list. It has three parts:
 >
 > 1. **The site** (GitHub Pages): static HTML/CSS built from `recipes/*.md` and
@@ -135,7 +135,7 @@ Streaming is needed for the chat UX anyway.
 | --- | --- | --- |
 | Read tools (list, search, get recipe, shopping list) | ✓ | ✓ |
 | Navigate / show cards / quick replies | ✓ | ✓ |
-| Write tools (create, update, promote, remove draft, set current, shopping list) | – | ✓ |
+| Write tools (create, update, promote, remove draft, set weeks, switch weeks, shopping list) | – | ✓ |
 | Image attachments (recipe screenshots) | – | ✓ |
 | `fetch_url` of links | – | ✓ |
 | Model / OpenRouter key | public | editor |
@@ -271,7 +271,7 @@ them).
 
 | Tool | Notes |
 | --- | --- |
-| `search_recipes` | **New.** Filters: text, ingredients (include/exclude, matched on the bolded ingredient names), course, tags, max calories, max minutes, status (draft/current/other). Returns compact rows. "Chicken under 300 kcal" needs ingredient matching, which `list_recipes` doesn't have. |
+| `search_recipes` | **New.** Filters: text, ingredients (include/exclude, matched on the bolded ingredient names), course, tags, max calories, max minutes, status (draft) and week (this week / next week / neither). Returns compact rows. "Chicken under 300 kcal" needs ingredient matching, which `list_recipes` doesn't have. |
 | `get_recipe` | Existing. |
 | `get_shopping_list` | Existing ("do we need eggs?"). |
 
@@ -287,7 +287,7 @@ with a short in-memory cache, so the bot already knows a recipe minutes before t
 ### Write (editors)
 
 The existing tools, unchanged in behaviour: `create_recipe`, `update_recipe`, `promote_recipe`,
-`remove_draft`, `set_current_recipes`, `update_shopping_list`, `set_shopping_servings`,
+`remove_draft`, `set_week_recipes`, `start_next_week`, `update_shopping_list`, `set_shopping_servings`,
 `create_image_upload_link`. In chat they don't commit right away; they **stage** into the plan
 tray (§7). One `apply_plan` turns the tray into a single `batch_changes` commit.
 
@@ -312,7 +312,7 @@ available.
   whenever there's a likely next step, and the server nudges with a reminder on turns that end
   without any. They're skipped only when the reply is a plain fact with no obvious follow-up.
 - **Two kinds, drawn differently.** *Suggestions* (`suggest_replies`) are optional next steps,
-  shown as outline chips: "Show me more like this", "Under 20 minutes", "Add to this week".
+  shown as outline chips: "Show me more like this", "Under 20 minutes", "Add to next week".
   *Questions* (`ask_user`) need an answer: solid chips, and the input placeholder reads "Or type
   an answer". `multi: true` allows several choices plus "Done" (e.g. picking which of five
   recommendations to add).
@@ -339,8 +339,8 @@ idea as `batch_changes` in plan-recipes and the stocktake's "Save (n)" (`design.
 writes").
 
 **What's in it.** Staged changes: new recipes (drafts, full structured fields + photo), edits,
-promotions, removals, this week / not this week, servings, and the shopping list. Each is a small
-card with a kicker (New, Edit, Promote, Remove, This week, List), "added by" and × to drop it.
+promotions, removals, next week / not next week, the week switch, servings, and the shopping list.
+Each is a small card with a kicker (New, Edit, Promote, Remove, Next week, Switch, List), "added by" and × to drop it.
 Tapping a new recipe's card opens its staged ingredients and steps (it has no page yet).
 
 **D5. One tray per household** (decided, Q3): both editors, any device, any chat, see and add to
@@ -376,11 +376,14 @@ plain button with no model in it. So the list is built **before** Save becomes a
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
 - **Finalise list** sends a fixed request to the agent, which first says what it's doing ("I'll
-  close out last week, then build the shopping list for these 5 recipes"), then:
-  1. closes out last round as plan-recipes does: one `ask_user` per leftover draft
-     (*Liked* · *Not for us* · *Not cooked yet*, with the recipe's card), staging the answers;
-  2. reads every recipe that will be current after Save, staged new ones included (reads inside a
-     `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
+  switch weeks first, then build the shopping list for next week's 5 recipes"), then:
+  1. **switches weeks if needed**, as plan-recipes does: when next week already had recipes before
+     this tray, it stages `start_next_week` (first in the batch, so the tray's additions land in
+     the new next week) and asks one `ask_user` per draft in this week (*Liked* · *Not for us* ·
+     *Not tried yet*, with the recipe's card; not tried → *Keep it this week* · *Back to the book*),
+     staging the answers;
+  2. reads every recipe that will be in next week after Save, staged new ones included (reads inside
+     a `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
   The tray shows "Building the list…" meanwhile.
 - **Ready:** a **List** card ("86 items for 5 recipes", tap to preview by aisle) appears and the
   button becomes **Save to site (n)**.
@@ -390,8 +393,8 @@ plain button with no model in it. So the list is built **before** Save becomes a
 - **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
   has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
   stays a tap by a person (below).
-- **No list needed** when the tray doesn't change what's current or the servings (e.g. only a typo
-  fix or a promotion): Save is available straight away, no Finalise step.
+- **No list needed** when the tray doesn't change next week or the servings (e.g. only a typo fix,
+  a promotion, or a change to this week): Save is available straight away, no Finalise step.
 
 #### Save
 
@@ -427,10 +430,11 @@ never commits directly.
 The server decides what qualifies, from the change itself:
 
 - **Can be saved alone:** title, steps, notes, time, calories, tags, course, photo, promoting a
-  draft, and ingredient edits to a recipe that isn't on this week's list.
-- **Waits for Finalise:** new recipes, removals, this week / not this week, servings, and
-  ingredient edits to a recipe on this week's list (they change the shopping list, so they mark it
-  out of date).
+  draft, ingredient edits to a recipe that isn't in next week, and adding to or taking off *this*
+  week (the list is built from next week only).
+- **Waits for Finalise:** new recipes, removals, adding to or taking off next week, the week switch,
+  servings, and ingredient edits to a recipe in next week (they change the shopping list, so they
+  mark it out of date).
 
 ### 7.2 Page context
 
@@ -441,11 +445,11 @@ index: active filter and search text) and sends it with every message.
 
 - The server **re-resolves** the slug itself (`get_recipe`) instead of trusting page text, and
   injects it as a short system note on that turn ("The user is viewing: Steamed rice
-  (steamed-rice), serves 4, a regular recipe, not current").
+  (steamed-rice), serves 4, a regular recipe, in this week, not in next week").
 - **Vocabulary clash to settle in the prompt:** on a recipe page, "add this recipe" can't mean
-  create (it exists). It should mean "add it to this week" (stage `set_current_recipes`). The site
-  already overloads "current"; the bot should say "this week" to users and keep "current" for
-  tools.
+  create (it exists). It should mean "add it to next week" (stage `set_week_recipes`), since
+  planning is always for next week, the same as plan-recipes. The bot says "this week" and "next
+  week" to users; `current` / `next` stay tool words.
 - The panel shows the context as a dismissable chip above the input ("On: Steamed rice") so the
   user knows what "this" refers to and can drop it.
 
@@ -505,7 +509,7 @@ draft kickers, calm states.
 3. **Trusting client history** would let anyone forge tool results; editors' history must be
    server-owned (D4).
 4. **Abuse and cost** of a public endpoint calling a paid model (§8).
-5. **"Current" vs "add"**: "add this recipe" on an existing recipe's page (§7.2).
+5. **"Add" on an existing recipe**: "add this recipe" on its own page means "add to next week" (§7.2).
 6. **Deploy lag**: saved recipes aren't on the site for a minute or two (§7.3).
 7. **Full page loads** on navigation close the chat unless it's restored (§7.3).
 8. **Inputs the editor flow depends on**: today you hand over screenshots and links. The chat needs
@@ -536,8 +540,9 @@ Ranked roughly by value for effort:
 3. **"What can I make with what's at home?"** using the stocktake on `shopping-list.json`.
 4. **Stocktake by chat** for editors: "we've got 6 eggs and plenty of rice" → stages the
    `/stocktake` update.
-5. **Close out the week by chat**: on Sunday, ask_user chips for each draft (liked / not for us /
-   not cooked), the same decisions plan-recipes asks today.
+5. **Switch weeks by chat**: on the day next week starts, ask_user chips for each of this week's
+   drafts (liked / not for us / not tried), the same decisions plan-recipes asks today, staged as a
+   `start_next_week` on its own.
 6. **Week balance**: totals for the planned week (calories, protein, how many fish/veg dinners)
    shown on the tray.
 7. **Voice input** (Web Speech API, progressive) for hands-busy cooking.
@@ -581,3 +586,10 @@ Open:
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
 - **Q8.** Retention for stored chats.
+- **Q13.** Now that next week exists on the site (main, #31): when the tray's first item is added
+  and next week is *already* planned, is the tray for the week after (Finalise switches weeks
+  first, as plan-recipes does) or an addition to the planned next week? Suggest the agent asks once
+  per tray, with chips *Add to next week* · *Plan the week after*.
+- **Q14.** Next week is now visible on the site, so "what have we added so far" partly exists there.
+  The tray still earns its place (one deploy, previews before anything is public, Finalise), but
+  should Save be offered per item for next-week additions too, or keep one Save for the week?
