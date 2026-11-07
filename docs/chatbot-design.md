@@ -380,8 +380,9 @@ plain button with no model in it. So the list is built **before** Save becomes a
 ```
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
-- **Finalise list** sends a fixed request to the agent, which first says what it's doing ("I'll
-  switch weeks first, then build the shopping list for next week's 5 recipes"), then:
+- **Finalise list** sends a fixed request to the agent, which first says what it's doing ("Next week
+  already has 4 recipes, so first: is it ready to become this week? Then I'll build the shopping
+  list"), then:
   1. **asks whether next week is ready to be promoted**, if next week already has recipes on the
      site (an earlier plan). The tray itself is built without asking: it just collects. The
      question comes here, at Finalise, with that week's recipe cards:
