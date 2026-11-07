@@ -533,7 +533,11 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 **Scores** (quality signals, per trace):
 
-- Thumbs up / down on bot messages in the panel (two small stroke icons, no emoji; feedback goes through `/chat`).
+- Thumbs up / down, **for editors only** (decided, Q19): two small stroke icons under the bot's
+  last message of each turn (one turn = one trace = one score). Thumbs down opens optional reason
+  chips (*Wrong recipe* · *Didn't do what I asked* · *Wrong amounts* · *Too slow* · *Something
+  else*) and an optional note, sent as the score's comment. Tapping the other thumb switches it;
+  tapping the chosen one clears it. Visitors see no controls. Sent through `/chat`.
 - Automatic: tool error, refused tool call, empty reply, the user dropping a tray item the bot just
   staged, a Finalise that ended in *Not yet*.
 
@@ -561,7 +565,7 @@ it went wrong, and so the model trial (Q9) has real numbers.
 - Traces are kept for **a month** (decided), longer than the chats themselves (2 weeks, Q8), so
   something reported late can still be looked into. Set via Langfuse's data retention, or a monthly
   clean-up if the plan doesn't offer it.
-- Use the EU region (or self-host) so chat text stays in one place.
+- **Langfuse Cloud**, EU region (decided, Q18), so chat text stays in one place.
 
 **What it's for in practice:**
 
@@ -642,9 +646,9 @@ Each phase ships and is useful on its own.
 | # | Phase | Contents | Depends on |
 | --- | --- | --- | --- |
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
-| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing and thumbs up/down (8.1) | 0 |
+| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing (8.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
-| 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
+| 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history, editors' thumbs up / down (8.1) | 1 |
 | 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
@@ -677,14 +681,13 @@ Decided:
   group (7.1).
 - **Q17.** Clashes at Save are resolved through the bot: the card is only flagged with the reason;
   the bot explains and asks with chips (7.1).
+- **Q18.** Langfuse Cloud, EU region; traces kept a month, screenshots included (8.1).
+- **Q19.** Thumbs up / down for editors only (8.1).
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
 
 Open:
 
-- **Q18.** Langfuse Cloud (EU region; the free tier is likely enough for a family) or self-hosted?
-  Suggest Cloud: self-hosting needs Postgres, ClickHouse and storage, a lot to run for one site.
-- **Q19.** thumbs up/down on bot messages: in from phase 1, or only for editors?
 
 Open (Petro will settle these):
 
