@@ -69,7 +69,7 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week"). Kickers name the week, never
+  `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week"). Kickers name the week, never
   the draft status.
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
