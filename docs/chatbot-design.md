@@ -686,9 +686,6 @@ Decided:
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
 
-Open:
-
-
 Open (Petro will settle these):
 
 - **Q9.** Which models to start with for `CHAT_PUBLIC_MODEL` and `CHAT_EDITOR_MODEL`. Suggest a
