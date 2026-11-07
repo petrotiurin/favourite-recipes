@@ -565,7 +565,7 @@ it went wrong, and so the model trial (Q9) has real numbers.
 - Cost per chat and per day, for each key, against the OpenRouter credit limits (Q10).
 - The model trial (Q9): run the same set of real questions and a full planning run on each
   candidate model and compare in Langfuse (datasets / experiments).
-- Debugging: a 👎 or a failed Save links straight to the trace with every tool call.
+- Debugging: a thumbs-down or a failed Save links straight to the trace with every tool call.
 - Security: refused write attempts and failed token checks show up as events and can be filtered.
 
 ## 9. UI (to add to design.md when built)
