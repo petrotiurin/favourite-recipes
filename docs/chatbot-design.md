@@ -261,9 +261,10 @@ devices. The shared thing between editors is the plan tray (D5), not the convers
 item records who added it and shows a one-line reason ("added by Petro: from the chat about quick
 dinners") instead of linking into a chat the other person can't open.
 
-Gaps to settle: retention (suggest: auto-archive after 30 days idle, delete after 180); a very long
-chat (summarise older turns on the server once a chat passes a size limit, instead of dropping
-them).
+**Retention** (decided, Q8): a chat is deleted 2 weeks after its last message, messages and all.
+The chats list shows when each one goes ("until Sat"). Visitors' chats in the browser follow the
+same 2 weeks. A long chat summarises older turns on the server once it passes a size limit, rather
+than dropping them.
 
 ## 6. Tools
 
@@ -594,20 +595,27 @@ Decided:
 - Tray: photos generated when a recipe is staged; the shopping list is built by "Finalise list" before Save appears; a tray expires 7 days after its first item; quick fixes that don't touch the week get their own "Save now" (7.1, Q5).
 - Sign-in stays email + password + email code; no Google or Apple for now (4.2).
 - Planning always starts in next week; this week is only ever next week promoted by the switch (7.1).
+- **Q6.** One editors list for everything: `SHOPPING_EDITORS` becomes `EDITORS` (old name kept as a
+  fallback).
+- **Q8.** Chats are deleted 2 weeks after their last message (§5).
+- **Q13.** The tray collects without asking; at Finalise, if next week already has recipes, the
+  agent asks whether it's ready to be promoted (*Promote it* · *Not yet*). *Not yet* does nothing;
+  adding to a planned next week or overwriting its list happens only on an explicit ask (7.1).
+- **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
+  Save now stays for quick fixes only.
 
-Open:
+Open (Petro will settle these):
 
 - **Q9.** Which models to start with for `CHAT_PUBLIC_MODEL` and `CHAT_EDITOR_MODEL`. Suggest a
   short trial in phase 1/4: a handful of real questions and one full plan-recipes run, comparing
   tool-calling reliability and cost per chat.
 - **Q10.** Credit limits for the two keys (sets how tight the public rate limits need to be).
-- **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
-  writes?
-- **Q8.** Retention for stored chats.
-- **Q13.** Decided: the tray collects without asking; at Finalise, if next week already has
-  recipes, the agent asks whether it's ready to be promoted (*Promote it* · *Not yet*). *Not yet*
-  does nothing; adding to a planned next week or overwriting its list happens only on an explicit
-  ask (7.1).
-- **Q14.** Next week is now visible on the site, so "what have we added so far" partly exists there.
-  The tray still earns its place (one deploy, previews before anything is public, Finalise), but
-  should Save be offered per item for next-week additions too, or keep one Save for the week?
+
+Open (from the tray sketch):
+
+- **Q15.** Tray size on a phone: with 7 or 8 changes it takes ~190px of the panel. Suggest it
+  folds to one line ("Tray · 8 changes · Finalise list") and opens on tap.
+- **Q16.** Card order in the tray: as added, or grouped (switch, new recipes, next week, edits,
+  list)? Suggest grouped, so it reads as a checklist before Save.
+- **Q17.** Fixing a clash: on the flagged tray card (*Drop it* / *Re-check*) or by answering the
+  agent? Suggest both, doing the same thing.
