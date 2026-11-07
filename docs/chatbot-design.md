@@ -349,6 +349,10 @@ promotions, removals, next week / not next week, the week switch, servings, and 
 Each is a small card with a kicker (New, Edit, Promote, Remove, Next week, Switch, List), "added by" and × to drop it.
 Tapping a new recipe's card opens its staged ingredients and steps (it has no page yet).
 
+**Size on a phone** (decided, Q15): the strip shows the cards in a sideways-scrolling row. While
+the on-screen keyboard is open (detected with `visualViewport`), it folds to one line
+("Tray · 8 changes"), tappable to open; it unfolds when the keyboard closes or a message is sent.
+
 **D5. One tray per household** (decided, Q3): both editors, any device, any chat, see and add to
 the same tray. Stored in Supabase (`trays`: status, items JSON, list version, created at, updated
 at/by). Public callers can't see it (4.1). The panel loads the tray from `/chat` when it opens,
@@ -601,6 +605,9 @@ Decided:
 - **Q13.** The tray collects without asking; at Finalise, if next week already has recipes, the
   agent asks whether it's ready to be promoted (*Promote it* · *Not yet*). *Not yet* does nothing;
   adding to a planned next week or overwriting its list happens only on an explicit ask (7.1).
+- **Q15.** The tray strip stays full size (cards in a sideways-scrolling row) normally, and folds
+  to one line ("Tray · 8 changes") while the keyboard is open, so the conversation keeps room
+  while typing. It comes back when the keyboard closes or the message is sent (7.1).
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
 
@@ -613,8 +620,6 @@ Open (Petro will settle these):
 
 Open (from the tray sketch):
 
-- **Q15.** Tray size on a phone: with 7 or 8 changes it takes ~190px of the panel. Suggest it
-  folds to one line ("Tray · 8 changes · Finalise list") and opens on tap.
 - **Q16.** Card order in the tray: as added, or grouped (switch, new recipes, next week, edits,
   list)? Suggest grouped, so it reads as a checklist before Save.
 - **Q17.** Fixing a clash: on the flagged tray card (*Drop it* / *Re-check*) or by answering the
