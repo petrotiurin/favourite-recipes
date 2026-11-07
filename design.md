@@ -235,3 +235,26 @@ On the **At home** tab every row is a fill bar:
 - the round house-with-cross button clears every row;
 - a sticky bar at the bottom holds undo + **Save (n)** while there are unsaved changes, and
   "✓ Saved <date>" otherwise.
+
+## Chat
+
+`templates/chat.js` (+ the `.chat-*` rules at the end of `styles/style.css`), on every page of a build that has `CHAT_API_URL`.
+
+- **Bubble** (`.chat-bubble`): 56px round, `--accent-strong` with `--on-accent` speech-bubble stroke icon, bottom right, 16px +
+  safe-area inset. A small `--on-accent` dot marks an unread reply. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
+  of the screen (shopping page Save bar), hides while a sheet is open (`body.sheet-open`), and is covered by the panel on phones.
+- **Panel** (`.chat-panel`): a full-height sheet on phones (sized with `visualViewport`, so the input stays above the keyboard; the page behind
+  doesn't scroll), a 400×640 floating panel anchored above the bubble from 720px. Header: serif title, "New chat" text button, round close
+  button. Escape closes it.
+- **Messages:** the user's in a `--current-soft` bubble on the right; the bot's as plain text on the surface (no box), at most paragraphs,
+  bold, bullet/numbered lists and links. Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
+  origin (anything else is shown as plain text).
+- **Status line** (`.chat-status`): one quiet muted italic line while it works ("Thinking…", "Looking through the recipes…"), never tool names;
+  gone when the answer is done. Errors are the muted red box (`.chat-error`).
+- **Suggested replies** (`.chat-chip`): outline pills (1px `--border`, 44px tall, sentence case, no emoji) under the last bot message. Only the
+  last message's chips are live; older rows fade to 40% and are disabled.
+- **Context chip** (`.chat-context`): "On: Steamed Rice" on a `--track` pill above the input, dismissable with ×; it tells the user what "this
+  recipe" means.
+- **First run:** the empty chat says what it can do and that chats are stored in this browser for two weeks (history is in `localStorage`, last
+  ~20 turns, dropped after two weeks).
+- Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.

@@ -51,21 +51,37 @@ export function verifyUploadToken(token) {
 }
 
 /**
- * The shopping page's editor: a Supabase Auth access token (magic-link sign-in on the page) whose
- * email is listed in EDITORS (or its old name SHOPPING_EDITORS). Supabase checks the token itself (/auth/v1/user), so this works
- * whatever JWT signing keys the project uses. Returns { email }, or { status, error } when refused.
+ * Who a Supabase Auth access token belongs to. Supabase checks the token itself (/auth/v1/user), so this works
+ * whatever JWT signing keys the project uses. Returns { email, userId, isEditor } (isEditor: the email is in EDITORS,
+ * or its old name SHOPPING_EDITORS), or { status, error } when the token is missing, bad or expired (401), or
+ * Supabase can't be reached (503). A bad token is never treated as "no token".
  */
-export async function verifyEditor(request) {
+export async function verifyUser(request) {
   const token = (request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!token) return { status: 401, error: "Sign in to save the stocktake." };
-  const res = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: config.supabaseAnonKey, Authorization: `Bearer ${token}` },
-  });
+  if (!token) return { status: 401, error: "Sign in first." };
+  if (!config.supabaseUrl || !config.supabaseAnonKey) return { status: 401, error: "Sign-in isn't set up on this server." };
+  let res;
+  try {
+    res = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
+      headers: { apikey: config.supabaseAnonKey, Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { status: 503, error: "Couldn't check your sign-in. Try again in a minute." };
+  }
   if (!res.ok) return { status: 401, error: "Your sign-in has expired. Sign in again." };
   const user = await res.json();
   const email = String(user?.email || "").toLowerCase();
-  if (!email || !config.shoppingEditors.includes(email)) {
-    return { status: 403, error: `${email || "This account"} isn't allowed to edit the shopping list.` };
-  }
-  return { email, userId: user?.id };
+  return { email, userId: user?.id, isEditor: !!email && config.shoppingEditors.includes(email) };
+}
+
+/**
+ * The shopping page's editor: a Supabase Auth access token (sign-in on the page) whose email is listed in EDITORS
+ * (or its old name SHOPPING_EDITORS). Returns { email, userId }, or { status, error } when refused.
+ */
+export async function verifyEditor(request) {
+  if (!(request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)) return { status: 401, error: "Sign in to save the stocktake." };
+  const user = await verifyUser(request);
+  if (user.error) return user;
+  if (!user.isEditor) return { status: 403, error: `${user.email || "This account"} isn't allowed to edit the shopping list.` };
+  return { email: user.email, userId: user.userId };
 }

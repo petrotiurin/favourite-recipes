@@ -11,6 +11,21 @@ export const config = {
   supabaseUrl: (process.env.SUPABASE_URL || "").replace(/\/$/, ""),
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
   // EDITORS is the one editors list (SHOPPING_EDITORS is its old name, still read as a fallback).
+  // Supabase service-role key: server only (rate-limit counters now, chats and the tray later). Never sent to the browser.
+  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  // The chat (docs/chatbot-design.md D3): OpenRouter's OpenAI-compatible API. The public key falls back to OPENROUTER_API_KEY
+  // as a convenience for small setups; give it its own key with its own credit limit so photos and chat can't starve each other.
+  openrouterBaseUrl: (process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1").replace(/\/$/, ""),
+  chatPublicKey: process.env.OPENROUTER_CHAT_PUBLIC_KEY || process.env.OPENROUTER_API_KEY,
+  chatPublicModel: process.env.CHAT_PUBLIC_MODEL || "google/gemini-2.5-flash",
+  chatPublicHourlyLimit: Number(process.env.CHAT_PUBLIC_HOURLY_LIMIT) || 20,
+  chatPublicDailyLimit: Number(process.env.CHAT_PUBLIC_DAILY_LIMIT) || 100,
+  // Salt for hashing visitor IPs (rate limits, traces). Falls back to the service key, so no raw IP is ever stored either way.
+  ipHashSalt: process.env.IP_HASH_SALT,
+  // Langfuse tracing: off unless all three are set.
+  langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,
+  langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,
+  langfuseBaseUrl: (process.env.LANGFUSE_BASE_URL || "").replace(/\/$/, ""),
   shoppingEditors: (process.env.EDITORS || process.env.SHOPPING_EDITORS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
 };
 
@@ -30,6 +45,13 @@ export function assertStocktakeConfigured() {
   if (missing.length) {
     throw new Error(`Stocktake saving is not set up: missing environment variables ${missing.join(", ")}`);
   }
+}
+
+export function assertChatConfigured() {
+  const missing = [];
+  if (!config.githubToken) missing.push("GITHUB_TOKEN");
+  if (!config.chatPublicKey) missing.push("OPENROUTER_CHAT_PUBLIC_KEY");
+  if (missing.length) throw new Error(`The chat is not set up: missing environment variables ${missing.join(", ")}`);
 }
 
 export const SHOPPING_LIST_PATH = "shopping-list.json";

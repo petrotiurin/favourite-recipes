@@ -56,8 +56,16 @@ The other flow is the agent working through the recipes MCP server: **use the `p
 A recipe chat assistant (a bubble on every page: read-only for visitors, the full MCP toolset through a plan tray for signed-in
 editors) is designed in `docs/chatbot-design.md` and built in phases. Phase 0 (groundwork) is in: this CLAUDE.md framing, the tool
 registry and dispatcher (`mcp-server/lib/tools.js`), the `search_recipes` read tool and the catalogue helper
-(`mcp-server/lib/recipes.js`, `catalogue()`), and the page-context JSON in every page. Read the design doc before working on any of
-it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
+(`mcp-server/lib/recipes.js`, `catalogue()`), and the page-context JSON in every page. **Phase 1 (read-only, anonymous chat) is in:**
+`POST /chat` (`mcp-server/api/chat.js`, agent loop in `lib/chat.js`, prompt in `lib/chat-prompt.js`) streams Server-Sent Events from
+an OpenRouter model (`OPENROUTER_CHAT_PUBLIC_KEY`, `CHAT_PUBLIC_MODEL`) that may only call read tools plus the UI tool `suggest_replies`;
+the caller is always a frozen `{ role: "public", ip }` (a bad token is a 401, a valid one is still public until phase 3; a role is never
+read from the body), client history is reduced to plain user/assistant text, the page is re-resolved server-side, and per-IP rate limits
+(hashed IP, counters in Supabase: `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing
+(`lib/langfuse.js`) apply. The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
+set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
+Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase, site on :4000; see the top of
+`mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
 is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
 enforced on the server by the dispatcher, never by the prompt.
 
@@ -78,13 +86,15 @@ design.md           UI design notes: palette tokens, the house icon language, co
 build.js            reads recipes/*.md (+ shopping-list.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 dist/               build output — gitignored, never hand-edit, regenerated every build
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
-mcp-server/         separate backend on Vercel: MCP server for adding/editing recipes, /stocktake, later /chat (not part of the site)
+mcp-server/         separate backend on Vercel: MCP server for adding/editing recipes, /stocktake, /chat (not part of the site)
 mcp-server/lib/tools.js  the tool registry (access levels) + dispatch() + toolDefinitions(role) (OpenAI-style function tools from the zod schemas)
 mcp-server/lib/cache.js  short in-memory cache (60s, cleared on commit) behind search_recipes and the chat catalogue
 docs/chatbot-design.md  design of the recipe chat assistant (phased; see "Chat")
-templates/chat.js        (planned, phase 1) the chat bubble + panel, vanilla JS, talks only to /chat
+templates/chat.js        the chat bubble + panel, vanilla JS, talks only to /chat; included on every page only when CHAT_API_URL is set at build time
 templates/auth.js        (planned, phase 3) the sign-in sheet and session handling shared by the shopping page and the chat
-mcp-server/api/chat.js   (planned, phase 1) the /chat endpoint: streams a model through OpenRouter, runs tools via dispatch()
+mcp-server/api/chat.js   the /chat endpoint: streams a model through OpenRouter, runs tools via dispatch(); lib/chat.js (agent loop), lib/chat-prompt.js, lib/rate-limit.js, lib/langfuse.js
+mcp-server/scripts/dev.js  local harness: backend :8787 + built site :4000 with fake GitHub / OpenRouter / Supabase (scripts/fakes.js); `npm run dev` in mcp-server/
+supabase/           `supabase init` layout: migrations/ (rate_limits table + rate_limit_hit function; later phases add chat tables), config.toml for `supabase start`
 mcp-server/workflows/  agent workflows the server serves (plan-recipes.md, ocado-shop.md, sainsburys-shop.md), as MCP prompts + get_workflow_guide; shared/ holds the rules every shop flow includes
 ```
 

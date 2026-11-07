@@ -35,6 +35,8 @@ jobs:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           STOCKTAKE_API_URL: ${{ vars.STOCKTAKE_API_URL }}
+          # Where the chat widget posts (the MCP server's /chat). Without it the site has no chat bubble.
+          CHAT_API_URL: ${{ vars.CHAT_API_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

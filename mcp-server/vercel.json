@@ -7,6 +7,7 @@
   "rewrites": [
     { "source": "/mcp", "destination": "/api/mcp" },
     { "source": "/upload", "destination": "/api/upload" },
-    { "source": "/stocktake", "destination": "/api/stocktake" }
+    { "source": "/stocktake", "destination": "/api/stocktake" },
+    { "source": "/chat", "destination": "/api/chat" }
   ]
 }

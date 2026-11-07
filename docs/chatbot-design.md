@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phase 0 (groundwork) is built; the chat itself is not. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork) and 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness) are built. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 ## 1. Desired outcome

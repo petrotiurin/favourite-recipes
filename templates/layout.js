@@ -9,6 +9,15 @@ function pageContextJson(context) {
     .replace(/\u2029/g, "\\u2029");
 }
 
+// The chat widget (docs/chatbot-design.md): only on builds that know where the chat API lives (CHAT_API_URL, a public value
+// from the repo's Actions variables). Without it no bubble and no script at all.
+function chatScript(rootPrefix) {
+  const api = process.env.CHAT_API_URL;
+  if (!api) return "";
+  const attr = String(api).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `\n  <script src="${rootPrefix}chat.js" data-api="${attr}" defer></script>`;
+}
+
 function layout({ title, bodyClass = "", content, rootPrefix = "", pageContext }) {
   if (!pageContext || !pageContext.page) throw new Error(`layout: "${title}" needs a pageContext ({ page: ... })`);
   return `<!doctype html>
@@ -25,7 +34,7 @@ function layout({ title, bodyClass = "", content, rootPrefix = "", pageContext }
 <body class="${bodyClass}">
 ${content}
   <script type="application/json" id="page-context">${pageContextJson(pageContext)}</script>
-  <footer class="site-footer">Our Favourite Recipes</footer>
+  <footer class="site-footer">Our Favourite Recipes</footer>${chatScript(rootPrefix)}
 </body>
 </html>
 `;

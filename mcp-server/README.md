@@ -87,6 +87,12 @@ Ranked by how well each one works in practice:
 
 `POST /stocktake` is called by the shopping page, not by agents. The signed-in editor sends `Authorization: Bearer <Supabase access token>` and `{ items: [{ name, quantity?, have? }] }`, covering every item on the stored list. The server checks the token with Supabase (`/auth/v1/user`, so any JWT signing setup works) and the email against `EDITORS`. It refuses a list that doesn't match the stored one with 409, then commits `shopping-list.json` with each item's `have` (`true` or an amount in the item's unit) and a `stocktake` timestamp. Without the three Supabase variables it answers 503. The page signs the editor in with a Supabase email + password, or an email code as the fallback (its Magic Link email template must include `{{ .Token }}`) and sends all of their edits in one request when they press Save. See CLAUDE.md → "Stocktake" for the page side.
 
+## Chat endpoint
+
+`POST /chat` is called by the site's chat widget (`templates/chat.js`), not by agents. Body `{ conversation_id?, messages: [{ role, content }], page: { page, slug?, servings?, filter?, search? } }`; the answer is a Server-Sent Events stream (`text`, `status`, `suggestions`, `done`, `error`). Phase 1 is anonymous and read-only: the model only sees the read tools and `suggest_replies`, every call goes through `dispatch()`, history from the client is reduced to plain user/assistant text, and the page is re-resolved on the server. A bearer token is verified if sent (bad or expired: 401) but doesn't change what the caller may do yet. Rate limits are per hashed IP (429 with a friendly message). CORS allows only the site's origin. The design is `docs/chatbot-design.md`.
+
+Run it locally without any real service: `npm run dev` (see the top of `scripts/dev.js`). The tests (`npm test`) use the same fakes from `scripts/fakes.js`.
+
 ## Setup
 
 Environment variables, set in Vercel → Project → Settings → Environment Variables:
@@ -101,6 +107,15 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `SUPABASE_URL` | For `/stocktake`: the Supabase project URL (`https://<ref>.supabase.co`) |
 | `SUPABASE_ANON_KEY` | For `/stocktake`: the project's anon / publishable key (public; used to ask Supabase who a token belongs to) |
 | `EDITORS` | For `/stocktake`: comma-separated emails allowed to save the stocktake. The old name `SHOPPING_EDITORS` still works as a fallback |
+| `SUPABASE_SERVICE_ROLE_KEY` | For `/chat` rate limits: the project's service-role key (**server only**, never public). Without it limiting is skipped with a warning. Apply `supabase/migrations/*.sql` to the project first (`supabase db push` or the SQL editor) |
+| `OPENROUTER_CHAT_PUBLIC_KEY` | For `/chat`: OpenRouter key for visitors' chats, with its own credit limit (when it runs dry the chat says it's resting for everyone). Falls back to `OPENROUTER_API_KEY` if unset, which is only a convenience: use a separate key so chat can't starve photos |
+| `CHAT_PUBLIC_MODEL` | Optional; the visitors' chat model, defaults to `google/gemini-2.5-flash`. Needs tool calling and streaming |
+| `OPENROUTER_BASE_URL` | Optional; defaults to `https://openrouter.ai/api/v1` (the local dev harness points it at a mock) |
+| `CHAT_PUBLIC_HOURLY_LIMIT` / `CHAT_PUBLIC_DAILY_LIMIT` | Optional; messages per visitor (hashed IP) per hour / day, default 20 / 100 |
+| `IP_HASH_SALT` | Optional salt for hashing visitor IPs (rate limits, traces); defaults to the service-role key. Raw IPs are never stored |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | Optional: all three turn on Langfuse tracing of chats (one trace per request, a generation per model call, a span per tool call). Never contains tokens, IPs or emails |
+
+The site build also needs `CHAT_API_URL` (a repo Actions **variable**, e.g. `https://<vercel-domain>/chat`) to show the chat bubble; without it the site has no chat. The Supabase Auth redirect URLs don't change in this phase (chat is anonymous).
 
 Deploys are configured as follows:
 
