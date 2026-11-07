@@ -533,11 +533,10 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 **Scores** (quality signals, per trace):
 
-- Thumbs up / down, **for editors only** (decided, Q19): two small stroke icons under the bot's
-  last message of each turn (one turn = one trace = one score). Thumbs down opens optional reason
-  chips (*Wrong recipe* · *Didn't do what I asked* · *Wrong amounts* · *Too slow* · *Something
-  else*) and an optional note, sent as the score's comment. Tapping the other thumb switches it;
-  tapping the chosen one clears it. Visitors see no controls. Sent through `/chat`.
+- Thumbs up / down, **for editors only** (decided, Q19), sent through `/chat` and recorded as the
+  Langfuse score `user-feedback` on that turn's trace (1 = up, 0 = down). Visitors see no controls.
+  See "Feedback controls" in §9 for how they look and behave
+  ([sketch](https://claude.ai/artifact/LRzwSs6zavKTLxNeqzahCv)).
 - Automatic: tool error, refused tool call, empty reply, the user dropping a tray item the bot just
   staged, a Finalise that ended in *Not yet*.
 
@@ -579,6 +578,27 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 Follow `design.md`: stroke icons (a speech-bubble icon, no emoji), orange accent, purple only for
 draft kickers, calm states.
+
+**Feedback controls** (editors only; 8.1, [sketch](https://claude.ai/artifact/LRzwSs6zavKTLxNeqzahCv)):
+
+- **Where:** one pair per turn, under the bot's last message of that turn (one turn is one trace,
+  so one score), left-aligned, before that turn's suggested-reply chips. Earlier turns keep their
+  pair, dimmed to about half opacity, and still work.
+- **Look:** two thumb icons (up, down) as 32px round icon buttons with 17px stroke icons in
+  `--icon-muted`, no labels, no emoji; a `--track` circle on hover. `aria-label` "Good reply" /
+  "Bad reply", `aria-pressed` for the chosen one.
+- **Thumbs up:** one tap fills the icon in `--accent-strong` and shows a muted "Thanks" beside it.
+  The score is sent at once.
+- **Thumbs down:** fills the same way, sends the score at once, and opens a small box under the row:
+  "What went wrong? (optional)", reason chips you can pick several of (*Wrong recipe* · *Didn't do
+  what I asked* · *Wrong amounts* · *Too slow* · *Something else*; picked chips get the accent
+  border on `--current-soft`), a one-line "Add a note" field, and *Skip* (text button) · *Send*
+  (small primary button). Send adds the reasons and note to the score as its comment; Skip keeps
+  the plain thumbs down.
+- **After sending:** the box closes to one muted line beside the icons, "Sent: Wrong amounts" (or
+  just "Sent").
+- **Changing it:** tapping the other thumb switches the score (thumbs down opens the box again);
+  tapping the chosen thumb clears it (the score is deleted).
 
 - **Bubble:** 56px round, `--accent-strong`, bottom-right with 16px + safe-area inset. Unread dot
   when a reply finished while the panel was closed.
