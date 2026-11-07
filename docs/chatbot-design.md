@@ -349,6 +349,11 @@ promotions, removals, next week / not next week, the week switch, servings, and 
 Each is a small card with a kicker (New, Edit, Promote, Remove, Next week, Switch, List), "added by" and × to drop it.
 Tapping a new recipe's card opens its staged ingredients and steps (it has no page yet).
 
+**Card order** (decided, Q16): grouped, in the order Save applies them: 1. Switch, 2. this week's
+drafts (Promote / Remove), 3. New recipes, 4. Added to next week, 5. Edits, 6. Shopping list. Newest
+first within a group, each still marked who added it. A newly added card is highlighted and the row
+scrolls to it.
+
 **Size on a phone** (decided, Q15): the strip shows the cards in a sideways-scrolling row. While
 the on-screen keyboard is open (detected with `visualViewport`), it folds to one line
 ("Tray · 8 changes"), tappable to open; it unfolds when the keyboard closes or a message is sent.
@@ -608,6 +613,9 @@ Decided:
 - **Q15.** The tray strip stays full size (cards in a sideways-scrolling row) normally, and folds
   to one line ("Tray · 8 changes") while the keyboard is open, so the conversation keeps room
   while typing. It comes back when the keyboard closes or the message is sent (7.1).
+- **Q16.** Tray cards are grouped, in the order Save applies them: switch, this week's drafts
+  (promote/remove), new recipes, added to next week, edits, shopping list; newest first within a
+  group (7.1).
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
 
@@ -620,7 +628,5 @@ Open (Petro will settle these):
 
 Open (from the tray sketch):
 
-- **Q16.** Card order in the tray: as added, or grouped (switch, new recipes, next week, edits,
-  list)? Suggest grouped, so it reads as a checklist before Save.
 - **Q17.** Fixing a clash: on the flagged tray card (*Drop it* / *Re-check*) or by answering the
   agent? Suggest both, doing the same thing.
