@@ -10,7 +10,8 @@ export const config = {
   // Stocktake saves from the shopping page: the editor signs in with Supabase Auth, and only these emails may save.
   supabaseUrl: (process.env.SUPABASE_URL || "").replace(/\/$/, ""),
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-  shoppingEditors: (process.env.SHOPPING_EDITORS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
+  // EDITORS is the one editors list (SHOPPING_EDITORS is its old name, still read as a fallback).
+  shoppingEditors: (process.env.EDITORS || process.env.SHOPPING_EDITORS || "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean),
 };
 
 export function assertConfigured() {
@@ -23,7 +24,7 @@ export function assertConfigured() {
 }
 
 export function assertStocktakeConfigured() {
-  const missing = ["GITHUB_TOKEN", "SUPABASE_URL", "SUPABASE_ANON_KEY", "SHOPPING_EDITORS"].filter(
+  const missing = ["GITHUB_TOKEN", "SUPABASE_URL", "SUPABASE_ANON_KEY", "EDITORS"].filter(
     (name, i) => ![config.githubToken, config.supabaseUrl, config.supabaseAnonKey, config.shoppingEditors.length][i]
   );
   if (missing.length) {

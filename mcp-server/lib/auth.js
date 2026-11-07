@@ -52,7 +52,7 @@ export function verifyUploadToken(token) {
 
 /**
  * The shopping page's editor: a Supabase Auth access token (magic-link sign-in on the page) whose
- * email is listed in SHOPPING_EDITORS. Supabase checks the token itself (/auth/v1/user), so this works
+ * email is listed in EDITORS (or its old name SHOPPING_EDITORS). Supabase checks the token itself (/auth/v1/user), so this works
  * whatever JWT signing keys the project uses. Returns { email }, or { status, error } when refused.
  */
 export async function verifyEditor(request) {

@@ -82,7 +82,7 @@ Ranked by how well each one works in practice:
 
 ## Stocktake endpoint
 
-`POST /stocktake` is called by the shopping page, not by agents. The signed-in editor sends `Authorization: Bearer <Supabase access token>` and `{ items: [{ name, quantity?, have? }] }`, covering every item on the stored list. The server checks the token with Supabase (`/auth/v1/user`, so any JWT signing setup works) and the email against `SHOPPING_EDITORS`. It refuses a list that doesn't match the stored one with 409, then commits `shopping-list.json` with each item's `have` (`true` or an amount in the item's unit) and a `stocktake` timestamp. Without the three Supabase variables it answers 503. The page signs the editor in with a Supabase email + password, or an email code as the fallback (its Magic Link email template must include `{{ .Token }}`) and sends all of their edits in one request when they press Save. See CLAUDE.md → "Stocktake" for the page side.
+`POST /stocktake` is called by the shopping page, not by agents. The signed-in editor sends `Authorization: Bearer <Supabase access token>` and `{ items: [{ name, quantity?, have? }] }`, covering every item on the stored list. The server checks the token with Supabase (`/auth/v1/user`, so any JWT signing setup works) and the email against `EDITORS`. It refuses a list that doesn't match the stored one with 409, then commits `shopping-list.json` with each item's `have` (`true` or an amount in the item's unit) and a `stocktake` timestamp. Without the three Supabase variables it answers 503. The page signs the editor in with a Supabase email + password, or an email code as the fallback (its Magic Link email template must include `{{ .Token }}`) and sends all of their edits in one request when they press Save. See CLAUDE.md → "Stocktake" for the page side.
 
 ## Setup
 
@@ -97,7 +97,7 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `PUBLIC_SITE_URL` | Optional; defaults to `https://petrotiurin.github.io/favourite-recipes`. Its origin is the only one allowed to call `/stocktake` (CORS) |
 | `SUPABASE_URL` | For `/stocktake`: the Supabase project URL (`https://<ref>.supabase.co`) |
 | `SUPABASE_ANON_KEY` | For `/stocktake`: the project's anon / publishable key (public; used to ask Supabase who a token belongs to) |
-| `SHOPPING_EDITORS` | For `/stocktake`: comma-separated emails allowed to save the stocktake |
+| `EDITORS` | For `/stocktake`: comma-separated emails allowed to save the stocktake. The old name `SHOPPING_EDITORS` still works as a fallback |
 
 Deploys are configured as follows:
 

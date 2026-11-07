@@ -3,7 +3,7 @@ import { verifyEditor } from "../lib/auth.js";
 import { saveStocktake, StocktakeError } from "../lib/shopping-list.js";
 
 // The shopping page (on GitHub Pages) posts the stocktake here: which items are already at home,
-// fully or partly. The editor is signed in with Supabase Auth on the page; only SHOPPING_EDITORS
+// fully or partly. The editor is signed in with Supabase Auth on the page; only EDITORS
 // may save. Saving commits shopping-list.json, so the site redeploys with the stocktake baked in.
 
 function corsHeaders(request) {

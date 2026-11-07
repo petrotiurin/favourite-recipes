@@ -11,7 +11,7 @@ process.env.MCP_AUTH_TOKEN = "secret";
 process.env.OPENROUTER_API_KEY = "or-test";
 process.env.SUPABASE_URL = "https://sb.test/";
 process.env.SUPABASE_ANON_KEY = "anon-test";
-process.env.SHOPPING_EDITORS = "Owner@Example.com, partner@example.com";
+process.env.EDITORS = "Owner@Example.com, partner@example.com";
 
 // --- fake GitHub: repo files live in a Map, commits update it -------------
 const ROOT = new URL("../../", import.meta.url);
