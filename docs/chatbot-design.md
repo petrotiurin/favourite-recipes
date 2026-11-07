@@ -515,6 +515,59 @@ index: active filter and search text) and sends it with every message.
   time limits, so it can't be used to probe Vercel's network.
 - **Privacy:** chats are stored. Say so in the panel's first-run line.
 
+### 8.1 Observability (Langfuse)
+
+Every chat turn is traced in **Langfuse**, so we can see what the agent did, what it cost and where
+it went wrong, and so the model trial (Q9) has real numbers.
+
+**What a trace holds.** One trace per `/chat` request (one user turn):
+
+| Field | Value |
+| --- | --- |
+| Session | the conversation id, so a whole chat reads as one session |
+| User | the Supabase user id for editors; `public` plus a hashed IP for visitors (never the raw IP or email) |
+| Tags / metadata | mode (`public` / `editor`), model, page context, tray state, prompt version (the git sha of the system prompt and workflow guide) |
+| Generations | each model call: input/output tokens, cost (OpenRouter returns it in `usage`), latency, finish reason |
+| Spans | each tool call: name, `access` level, arguments, result size, duration, and **refused** when 4.1's dispatcher blocks it |
+| Events | tray changes (staged, dropped, Finalise, promote question answered, clash), Save / Save now with the commit link, rate-limit hits, OpenRouter out-of-credit |
+
+**Scores** (quality signals, per trace):
+
+- 👍 / 👎 on bot messages in the panel (a small, optional control; feedback goes through `/chat`).
+- Automatic: tool error, refused tool call, empty reply, the user dropping a tray item the bot just
+  staged, a Finalise that ended in *Not yet*.
+
+**How it's wired.**
+
+- The Langfuse JS SDK in the Vercel functions (`/chat`, and `/mcp` through the shared tool
+  dispatcher, so agent writes through the MCP server are traced the same way).
+- Sending is asynchronous and flushed after the response with Vercel's `waitUntil`, so tracing
+  never adds latency. **If Langfuse is down or slow, the chat carries on**: tracing errors are
+  swallowed and logged once.
+- Env vars on Vercel: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`. Without
+  them tracing is off and nothing else changes.
+- OpenRouter can also forward its own request logs to Langfuse ("broadcast"); check whether that's
+  worth turning on alongside, or whether our own traces are enough (ours have the tool calls and
+  tray events, OpenRouter's don't).
+- Prompts stay in git (the workflow guides already live there); Langfuse only records which
+  version a trace used.
+
+**Privacy.** Traces contain what people typed, so:
+
+- Never in a trace: Supabase tokens, API keys, `Authorization` headers, raw IPs, emails.
+- Screenshots and photos are replaced by a placeholder (`[image 1.2 MB]`), not uploaded.
+- Retention matches the chats: traces are deleted after 2 weeks (Q8), or as close as the Langfuse
+  plan allows.
+- Use the EU region (or self-host) so chat text stays in one place.
+
+**What it's for in practice:**
+
+- Cost per chat and per day, for each key, against the OpenRouter credit limits (Q10).
+- The model trial (Q9): run the same set of real questions and a full planning run on each
+  candidate model and compare in Langfuse (datasets / experiments).
+- Debugging: a 👎 or a failed Save links straight to the trace with every tool call.
+- Security: refused write attempts and failed token checks show up as events and can be filtered.
+
 ## 9. UI (to add to design.md when built)
 
 Follow `design.md`: stroke icons (a speech-bubble icon, no emoji), orange accent, purple only for
@@ -556,8 +609,7 @@ draft kickers, calm states.
     sees the first's result).
 11. **Undo after save**: today nothing reverts a commit. At least show what was committed with a
     link; a revert tool is a later phase.
-12. **Observability**: log tool calls, errors and token usage per chat (Vercel logs are enough for
-    v1) so cost and failures are visible.
+12. **Observability**: tool calls, errors, cost and quality per chat, in Langfuse (8.1).
 
 ## 11. Suggested additional features
 
@@ -587,7 +639,7 @@ Each phase ships and is useful on its own.
 | # | Phase | Contents | Depends on |
 | --- | --- | --- | --- |
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
-| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
+| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing and 👍/👎 (8.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
 | 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
 | 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
@@ -624,6 +676,12 @@ Decided:
   the bot explains and asks with chips (7.1).
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
+
+Open:
+
+- **Q18.** Langfuse Cloud (EU region; the free tier is likely enough for a family) or self-hosted?
+  Suggest Cloud: self-hosting needs Postgres, ClickHouse and storage, a lot to run for one site.
+- **Q19.** 👍/👎 on bot messages: in from phase 1, or only for editors?
 
 Open (Petro will settle these):
 
