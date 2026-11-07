@@ -144,8 +144,7 @@ Streaming is needed for the chat UX anyway.
 
 Anonymous visitors can chat (decided, Q1): read-only, rate-limited, on the public model.
 
-**Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback), and adds
-Google sign-in (4.2). Extract
+**Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback; see 4.2). Extract
 the sign-in sheet and session handling from `templates/shopping.js` into a shared
 `templates/auth.js`; both pages keep the session under the same `localStorage` key, so signing in
 on one signs you in on the other (same origin). Generalise `SHOPPING_EDITORS` to `EDITORS` (keep
@@ -196,7 +195,7 @@ again before Save, not a silent failure.
 
 **5. Data ownership.**
 
-- A conversation is loaded only if `conversation.user_email === caller.email`; otherwise 404 (not
+- A conversation is loaded only if `conversation.user_id === caller.userId` (the Supabase user id, which never changes, unlike an email); otherwise 404 (not
   403, so ids can't be probed). Conversation ids are random UUIDs.
 - The tray is household-wide but editor-only: public callers can't read it.
 - Supabase tables have Row Level Security on with **no** policies for the `anon` and
@@ -221,85 +220,23 @@ loading another user's conversation (404), applying the tray without a token (40
 **Logging:** refused tool calls and failed token checks are logged with the caller's email or
 IP, but never the token.
 
-### 4.2 Sign in with Google
+### 4.2 Sign-in methods: unchanged
 
-Added next to the existing email + password and email code, through Supabase Auth's Google
-provider. The result is the same Supabase session (access + refresh token), so everything on the
-server (`verifyEditor`, the `EDITORS` check, 4.1) stays exactly as it is. **Signing in with Google
-proves who you are. It doesn't make you an editor; only `EDITORS` does that.**
+The chat uses the sign-in the shopping page has today: **email + password**, with the 6-digit
+email code (and its magic link) as the fallback. No new providers. What the chat does need:
 
-Sign in with Apple is **out**: it needs the Apple Developer Program ($99/year) and a client secret
-regenerated at least every 6 months. Email + password and the email code cover Apple users.
+- The sign-in sheet and session code move from `templates/shopping.js` into the shared
+  `templates/auth.js` (no behaviour change), so every page can sign in.
+- The chat lets you sign in from any page, and the magic link returns to the page it was sent
+  from, so Supabase's Auth → Redirect URLs must allow the whole site
+  (`https://petrotiurin.github.io/favourite-recipes/**`), not just the shopping page.
+- Signing in restores the open chat, conversation and unsent message (the same `sessionStorage`
+  restore as navigation, §7.3).
 
-**The flow (PKCE)**
-
-1. The sheet's "Continue with Google" sends the browser to Supabase's
-   `/auth/v1/authorize?provider=google&redirect_to=<this page>` with a PKCE challenge. The secret
-   half (the code verifier) stays in this browser's `localStorage`.
-2. Supabase hands over to Google, the person approves, and Supabase redirects back to the page
-   with a one-time `?code=` in the URL.
-3. `auth.js` swaps the code plus the verifier for the session (`/auth/v1/token?grant_type=pkce`),
-   then removes the code from the URL.
-
-PKCE rather than the older implicit flow the magic link uses today (tokens in the URL fragment):
-the tokens never appear in the URL or browser history, and a stolen code is useless without the
-verifier. It's a few lines of vanilla JS (`crypto.subtle` for the SHA-256), no library. The magic
-link could move to PKCE at the same time.
-
-**Coming back to the right place.** Sign-in leaves the page, so `auth.js` remembers where you were
-(page, open chat, conversation id, an unsent message) in `sessionStorage` and restores it after the
-redirect. That's the same mechanism as navigation (§7.3).
-
-**Accounts and the editors list (the main gap)**
-
-- **Sign-ups stay off.** Visitors don't need an account to chat, so only invited editors have one.
-  Supabase then refuses a Google sign-in that doesn't match an existing user, which is what we want.
-- **Matching by email.** Supabase links a Google identity to the existing invited user when Google
-  vouches for the same, verified email (it does for Gmail addresses). If an editor was invited with
-  a different address than their Google account, it won't match: invite them by their Google email,
-  or add both. The sheet's error should say this rather than a bare "sign-in failed".
-- The server keeps checking the **email on the Supabase user**, never a name or display field
-  from Google.
-
-**Setup and upkeep** (all free)
-
-- Google Cloud project → OAuth client (type Web), consent screen asking only for `email` +
-  `profile`, authorised redirect URI `https://<project>.supabase.co/auth/v1/callback`.
-- Publish the consent screen (these basic scopes need no Google review), or keep it in testing
-  and list the editors as test users.
-- Client ID + secret go into Supabase → Auth → Providers → Google. They don't expire.
-
-In Supabase: enable the Google provider, keep sign-ups off, and widen Auth → URL Configuration →
-Redirect URLs from the shopping page to the whole site (`https://petrotiurin.github.io/favourite-recipes/**`),
-since the chat lets you sign in from any page.
-
-Cosmetic: the Google consent screen says "continue to `<project>.supabase.co`" unless the Supabase
-project has a custom domain (a paid add-on). Fine for a family site.
-
-**UI (sheet order)**
-
-1. **Continue with Google**: a full-width button at the top.
-2. "or", then email + password, as today.
-3. "No password? Email me a code", as today.
-
-After a Google sign-in the sheet doesn't offer "Set a password" (no need). The avatar menu shows
-which method you used.
-
-**design.md exception:** Google's branding rules require its own button style: white (or dark)
-with the standard multicolour "G". That breaks "one accent, no other hues", so design.md should
-list it as a deliberate exception, limited to that one button on the sign-in sheet.
-
-**Edge cases**
-
-- **In-app browsers** (opening the site from inside Instagram, WhatsApp etc.): Google blocks
-  sign-in in embedded webviews. Detect it where possible and suggest "Open in Safari/Chrome"; email
-  sign-in still works there.
-- **Added to the home screen on iOS:** the redirect may finish in Safari instead of the home-screen
-  app, leaving the app signed out. Email code sign-in works inside it.
-- **Signing out** signs you out of the site only, not of your Google account.
-
-This is also a change to the shopping page's sign-in (it moves into the shared `auth.js`), so the
-CLAUDE.md stocktake section and the Setup paragraph need updating with it.
+Considered and deferred: Google sign-in (free; it would match accounts by verified email, and
+needs a design.md exception for Google's button style) and Apple sign-in (needs the $99/year Apple
+Developer Program and a secret renewed every 6 months). Either can be added later without
+server changes: they produce the same Supabase session, and the `EDITORS` check stays the gate.
 
 ## 5. Conversations and persistence
 
@@ -307,7 +244,7 @@ CLAUDE.md stocktake section and the Setup paragraph need updating with it.
 
 Git is out: every commit is a site deploy. We already have a Supabase project.
 
-- **Editors:** `conversations` (id, user email, title, created/updated, archived) and `messages`
+- **Editors:** `conversations` (id, Supabase user id, title, created/updated, archived) and `messages`
   (conversation id, role, content JSON incl. tool calls/results, created). Only `/chat` touches
   them, with the service-role key. The client sends `{ conversation_id, message, page }`, never the
   history. **This matters for safety**: if the client sent the history, anyone could fabricate an
@@ -545,7 +482,7 @@ Each phase ships and is useful on its own.
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
-| 3 | Sign-in + per-user chats | Shared `auth.js` (PKCE), Google sign-in (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
+| 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
 | 4 | Editor writes via the tray | Staging, dry-run validation, household tray UI ("added by"), Save → one `batch_changes`, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
@@ -561,7 +498,7 @@ Decided:
 - **Q4.** Chat history is per user (§5).
 - Suggested replies on most turns (6.1).
 - CLAUDE.md gets reframed rather than patched (§2).
-- Sign-in: Google, email + password, email code. No Apple (4.2).
+- Sign-in stays email + password + email code; no Google or Apple for now (4.2).
 
 Open:
 
@@ -573,5 +510,3 @@ Open:
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
 - **Q8.** Retention for stored chats.
-- **Q12.** Which email each editor will use with Google, so the invites in Supabase and the
-  `EDITORS` list match.
