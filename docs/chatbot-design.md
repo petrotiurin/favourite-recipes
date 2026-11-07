@@ -429,8 +429,12 @@ plain button with no model in it. So the list is built **before** Save becomes a
 - Re-validates everything against the repo as it is now (things may have changed since staging,
   e.g. an edit through the MCP), then commits once, with the photos, and empties the tray. The
   chat gets a summary with the new cards, shown as "Publishing…" until the pages are live (§7.3).
-- If a staged item clashes (its recipe was changed or removed elsewhere), Save stops and that
-  card says what clashed, with *Drop it* · *Re-check*. Nothing is committed until it's resolved.
+- If a staged item clashes (its recipe was changed, renamed, promoted or removed elsewhere since
+  it was staged), Save stops and nothing is committed. The card is flagged with a one-line reason
+  ("changed elsewhere"), but has no buttons of its own: **the bot resolves it** (decided, Q17). It
+  explains what changed and asks with chips (e.g. *Keep yours (15 min)* · *Keep theirs (20 min)* ·
+  *Drop it*), or takes a typed answer. Tapping the flagged card asks the bot about it. If the fix
+  changes next week, the list goes out of date and Finalise list comes back, like any tray change.
 - Save is a **button press by a person**, never a model tool call. The model can suggest it; only
   the user commits. That's also the main defence against instructions hidden in fetched pages or
   screenshots: at worst they put something odd in the tray, where you see it before saving.
@@ -616,6 +620,8 @@ Decided:
 - **Q16.** Tray cards are grouped, in the order Save applies them: switch, this week's drafts
   (promote/remove), new recipes, added to next week, edits, shopping list; newest first within a
   group (7.1).
+- **Q17.** Clashes at Save are resolved through the bot: the card is only flagged with the reason;
+  the bot explains and asks with chips (7.1).
 - **Q14.** One Save for the week: adding to next week waits for Finalise (it changes the list);
   Save now stays for quick fixes only.
 
@@ -626,7 +632,3 @@ Open (Petro will settle these):
   tool-calling reliability and cost per chat.
 - **Q10.** Credit limits for the two keys (sets how tight the public rate limits need to be).
 
-Open (from the tray sketch):
-
-- **Q17.** Fixing a clash: on the flagged tray card (*Drop it* / *Re-check*) or by answering the
-  agent? Suggest both, doing the same thing.
