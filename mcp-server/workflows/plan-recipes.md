@@ -4,16 +4,18 @@ the get_workflow_guide tool. This file is the single source of truth: skills onl
 a server deploy updates the workflow everywhere. Keep it in step with the tools in lib/server.js.
 -->
 
-# Plan recipes: add / pick recipes, then build the shopping list
+# Plan recipes: plan next week, then build the shopping list
 
-This is the whole flow from "here are the recipes" to "here is the shopping list". It works **only through the recipes MCP server** (`list_recipes`, `get_recipe`, `create_image_upload_link`, `get_shopping_list`, and `batch_changes` for the writes; the single-change tools `create_recipe`, `update_recipe`, `set_current_recipes`, `update_shopping_list`, `set_shopping_servings`, `promote_recipe`, `remove_draft` take the same fields). Never edit `recipes/*.md` or `shopping-list.json` by hand, even if you have the repo checked out: the server validates every change.
+This is the whole flow from "here are the recipes" to "here is the shopping list". The recipes the user hands over are always for **next week**: this week's recipes stay as they are while they're still being cooked. It works **only through the recipes MCP server** (`list_recipes`, `get_recipe`, `create_image_upload_link`, `get_shopping_list`, and `batch_changes` for the writes; the single-change tools `create_recipe`, `update_recipe`, `set_week_recipes`, `start_next_week`, `update_shopping_list`, `set_shopping_servings`, `promote_recipe`, `remove_draft` take the same fields). Never edit `recipes/*.md` or `shopping-list.json` by hand, even if you have the repo checked out: the server validates every change.
 
 Vocabulary (see the server's instructions for details):
-- **Draft**: a new recipe nobody has tried yet. Always current. A draft ends one of two ways: liked → `promote_recipe` (regular recipe), not liked → `remove_draft` (deleted; only drafts can be removed).
-- **Current**: the recipes being cooked now: all drafts, plus regular recipes marked current. Listed first on the site and on the shopping list.
-- **Shopping list**: one combined, deduplicated list for all current recipes, written by you with `update_shopping_list`.
+- **This week** (`current: true`): the recipes being cooked now. Shown at the top of the home page.
+- **Next week** (`next: true`): the recipes being planned. Only shown under the site's "Next week" tab; the shopping list is built from these alone. A recipe can be in both weeks.
+- **Draft**: a recipe nobody has tried yet ("To try" on the site). Being a draft says nothing about the week. A draft ends one of two ways: liked → `promote_recipe` (regular recipe, weeks unchanged), not liked → `remove_draft` (deleted; only drafts can be removed, and never one that's planned for next week).
+- **The switch** (`start_next_week`): next week's recipes become this week, next week is emptied. The shopping list is left alone (it keeps showing until a new one is saved).
+- **Shopping list**: one combined, deduplicated list for all of next week's recipes, written by you with `update_shopping_list`.
 
-**Write once.** Every commit redeploys the site and deploys queue behind each other, so one call per change (add each recipe, fix each, mark current, save the list) leaves the site minutes behind. Do all the reading and asking first, then send **every write in a single `batch_changes` call** (step 4). Don't call `create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_current_recipes` or `update_shopping_list` one by one in this flow.
+**Write once.** Every commit redeploys the site and deploys queue behind each other, so one call per change (add each recipe, fix each, plan a week, save the list) leaves the site minutes behind. Do all the reading and asking first, then send **every write in a single `batch_changes` call** (step 4). Don't call `create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_week_recipes`, `start_next_week` or `update_shopping_list` one by one in this flow.
 
 ## 0. Work out what the user gave you
 
@@ -30,37 +32,42 @@ Call `list_recipes` once up front. Then sort every item the user mentioned:
 1. **A screenshot/link/text of a recipe** → new. But first check it isn't already logged (same or very similar title in `list_recipes`). If it is, treat it as existing and say so.
 2. **A name or description** → search the list: match on title first, then tags, course, and what you can infer from the description. If a recipe clearly matches, use it. If several plausibly match, or none does, **ask** the user instead of picking: show the candidates (title + course + time). If nothing matches and they want it added, ask for a screenshot, link or the recipe text.
 
-**Last round's recipes (close them out).** From the same `list_recipes` result, take the recipes that are current now (`current: true`) but **aren't named in this request** (e.g. last week's). They get closed out so the rotation and the shopping list only hold this round's recipes:
+**Switch first if next week isn't empty.** From the same `list_recipes` result, look at next week (`next: true`). If it has **any** recipes, the user forgot to switch: next week has become this week. Don't ask whether they mean to add to it: handing over recipes always means planning a **fresh** next week, so the switch (`start_next_week`) comes first in the batch. (Only if the user explicitly says they're *adding* to next week, e.g. "add one more for next week", skip the switch and add to it.) Say in the plan that you switched.
 
-- **Regular current recipes** (`current: true`, no `draft: true`): take them out of current with `set_current_recipes` (`current: false`). No question needed. If the user wants one kept, they'll have named it in the request, and then it isn't a leftover.
-- **Drafts** (`draft: true`, not in this request): ask the user whether they liked each one (step 0b). Liked → promote it to a regular recipe and take it out of current. Didn't like → remove it. Not tried yet → leave it as a draft (it stays current and goes on the shopping list).
+If next week is empty, there's no switch: this week stays as it is and the new recipes go into next week.
 
-A draft the user names in this request is one they're cooking (again): treat it as existing, leave it as it is, and don't ask about it.
+**This week's drafts (only when switching).** When you switch, this week (`current: true`) is ending. Regular recipes in it just leave this week (unless they're also in next week), no question needed. Every **draft** in this week gets a question (step 0b). A draft that's also in next week gets a shorter one: it stays in this week after the switch anyway, and "Didn't like it" can't remove it (see below).
 
-**Servings per recipe.** Note any recipe the user says is for a different number of people this round ("the soup just for me", "the pie for two"): that becomes its planned servings on the shopping list (step 3). Don't ask if they don't say: unnamed recipes keep the previous list's plan, else 4. Show the plan in the plan below when any recipe differs ("C (for 1)").
+**Servings per recipe.****Servings per recipe.** Note any recipe the user says is for a different number of people this round ("the soup just for me", "the pie for two"): that becomes its planned servings on the shopping list (step 3). Don't ask if they don't say: unnamed recipes keep the previous list's plan, else 4. Show the plan in the plan below when any recipe differs ("C (for 1)").
 
-### 0b. Ask about each leftover draft
+### 0b. Ask about each of this week's drafts
 
-Skip if there are no leftover drafts. Otherwise, **before** any plan or write, call the `AskUserQuestion` tool: one question per draft (the tool takes up to 4 questions per call; use further calls for more), each with these options:
+Skip if you're not switching, or this week has no drafts. Otherwise, **before** any plan or write, call the `AskUserQuestion` tool: one question per draft (the tool takes up to 4 questions per call; use further calls for more), each with these options:
 
-- "Liked it" → keep it as a regular recipe (promoted, no longer current)
+- "Liked it" → keep it as a regular recipe (promoted; leaves this week)
 - "Didn't like it" → remove it from the site
-- "Haven't tried it yet" → leave it as a draft
+- "Not tried, carry over" → stays a draft and stays in this week after the switch
+- "Not tried, back to the book" → stays a draft, leaves this week (still on the site as "To try", in no week)
 
 Name the recipe in each question ("Did you like Harissa Tuna Pitta?") and put what the options do in their descriptions. Say in the question that "Didn't like it" deletes the recipe and its photo.
 
-If `AskUserQuestion` isn't available or fails, ask the same thing in plain chat (one numbered list covering every draft) and wait for the answer. Never guess an answer, and never remove a draft unless the user clearly said they didn't like it: removal is permanent on the site (it only survives in git history). An unclear or skipped answer means "haven't tried it yet": leave the draft alone.
+**A draft that's also in next week** (the user planned it again): it's in this week after the switch anyway, so leave out the two "Not tried" options. If they say "Didn't like it", **don't remove it**: it's on next week's plan, and the server refuses (`remove_draft` won't delete a draft planned for next week). Keep it and warn them in the plan and the summary ("You didn't like X, but it's on next week's plan, so I kept it. Say if you want it taken off next week and removed."). If they say so, in this batch: take it out of next week (`set_week_recipes` week "next", add false) **before** `start_next_week`, then `remove_draft` it right **after** the switch, and leave it off the shopping list.
+
+If `AskUserQuestion` isn't available or fails, ask the same thing in plain chat (one numbered list covering every draft) and wait for the answer. Never guess an answer, and never remove a draft unless the user clearly said they didn't like it: removal is permanent on the site (it only survives in git history). An unclear or skipped answer means "Not tried, back to the book": the draft stays on the site.
 
 **Plan.** Before changing anything, write a short plan back to the user, with the recipes as **bullet points** (one recipe per bullet, never a comma-separated run-on line):
 
-> **New**
+> **Switched to a new week** (last week's plan is now this week)
+> - G
+>
+> **Next week: new**
 > - A
 > - B
 >
-> **Existing (will be marked current)**
+> **Next week: existing**
 > - C
 >
-> **Taken out of current**
+> **Carried over in this week**
 > - D
 >
 > **Liked, now regular**
@@ -68,6 +75,9 @@ If `AskUserQuestion` isn't available or fails, ask the same thing in plain chat 
 >
 > **Removed**
 > - F
+>
+> **Back to the book (not tried)**
+> - H
 
 Leave out the groups that are empty. Then carry on; only stop to ask if something is ambiguous or missing.
 
@@ -122,23 +132,23 @@ Fractions of a listed amount ("half the **sugar**", "the remaining **sugar**") a
 - A recipe from a **screenshot, pasted text or from memory** (or a link without a usable photo): `image: { generate: true, description }`. The server generates the photo from the title and ingredients in 10-20s; in `batch_changes` all of them run in parallel. `description` is one sentence on how the finished dish looks as served (e.g. "golden traybake of chicken thighs and potatoes, scattered with parsley"); take it from the screenshot when it shows the dish. Don't wait for approval: a photo can always be replaced later.
 - **Fallback: upload link.** Only when the user wants their own photo, or generation still fails after one retry (the batch error says which recipe). Call `create_image_upload_link` **once** with all of those recipes, `create_image_upload_link({ recipes: [{ title: "A" }, { title: "B" }] })`: it returns **one** link to a page that lists every recipe. Send the link with a numbered list in the same order as the page, naming each recipe, ask them to say when they're all uploaded, wait, then use `image: { uploaded: true }` for those recipes. To swap a generated photo for a real one later, pass the existing recipe's `slug`: it's replaced as soon as it's uploaded.
 
-**Write each recipe** as a `create_recipe` operation: `{ action: "create_recipe", title, course, ..., image }`, with `image: { generate: true, description }`, `{ url }`, or (fallback) `{ uploaded: true }` and the same title as its upload link. Leave `draft` at its default (true): new recipes are drafts and therefore current. If a recipe's slug already exists (`list_recipes`), it was already logged: treat it as existing.
+**Write each recipe** as a `create_recipe` operation: `{ action: "create_recipe", title, course, ..., image, week: "next" }`, with `image: { generate: true, description }`, `{ url }`, or (fallback) `{ uploaded: true }` and the same title as its upload link. Leave `draft` at its default (true): new recipes are drafts. Always pass `week: "next"`: that puts it on next week's plan (and the shopping list). If a recipe's slug already exists (`list_recipes`), it was already logged: treat it as existing.
 
-## 2. Select the existing recipes
+## 2. Select the existing recipes, and switch
 
-All the existing recipes found in step 0 go in **one** `{ action: "set_current_recipes", slugs: [...], current: true }` operation. Recipes that are already current (and drafts) are skipped; note them as "already current" in the summary.
+All the existing recipes found in step 0 (regular recipes and drafts alike, including ones from this week the user wants again) go in **one** `{ action: "set_week_recipes", week: "next", slugs: [...], add: true }` operation. Recipes already in next week are skipped; note them as "already planned" in the summary.
 
-Close out last round's recipes (step 0):
-- Each leftover draft the user **didn't like**: a `{ action: "remove_draft", slug }` operation.
-- Each leftover draft the user **liked**: a `{ action: "promote_recipe", slug }` operation (the recipe stays current when promoted), and its slug goes in the `current: false` operation below so it leaves the rotation.
-- Leftover regular current recipes, plus the liked drafts just promoted, go in **one** `{ action: "set_current_recipes", slugs: [...], current: false }` operation.
-- Drafts the user hasn't tried yet: no operation.
+When switching (step 0):
+- Each of this week's drafts the user **didn't like** (and that isn't in next week): a `{ action: "remove_draft", slug }` operation.
+- Each of this week's drafts the user **liked**: a `{ action: "promote_recipe", slug }` operation (its weeks don't change; the switch takes it out of this week unless it's also in next week).
+- Then **one** `{ action: "start_next_week", carry_over: [...] }` operation, `carry_over` being the drafts the user chose "Not tried, carry over" for (leave it out if there are none). Everything else in this week leaves it; next week's recipes become this week's; next week is emptied.
+- Drafts the user chose "Not tried, back to the book" for: no operation (the switch takes them out of this week).
 
 ## 3. Build the shopping list (always)
 
 This step always happens, even if nothing was added and the user only picked existing recipes.
 
-1. Work out the set the list must cover: the new drafts, the existing recipes being marked current, and any leftover drafts the user hasn't tried yet. Recipes taken out of current, promoted-and-unmarked and removed ones are not on it. If that set is empty, skip the `update_shopping_list` operation (the server clears the saved list when nothing is current any more).
+1. Work out the set the list must cover: **next week only**, i.e. the new drafts and the existing recipes added to next week (after the switch, if any). This week's recipes, carried-over drafts included, are **not** on it: their food is already bought. If that set is empty, skip the `update_shopping_list` operation (the page keeps showing the last list).
 2. Read every one of those that already exists with `get_recipe` (you wrote the new ones yourself, so you already have their ingredients).
 3. Combine the ingredients into one list:
    - **One line per ingredient across the whole list.** Add up amounts of the same ingredient (2 + 1 onions → 3; 100g + 150g feta → 250g). Convert everything to one unit first (see "One metric unit per line"). If units can't be added (1 lemon and juice of ½ a lemon → 2 lemons, round up), pick the sensible shopping unit.
@@ -148,44 +158,47 @@ This step always happens, even if nothing was added and the user only picked exi
    - **One metric unit per line.** Convert tablespoons, teaspoons, cups, oz and pinches to grams or millilitres (1 tbsp = 15ml, 1 tsp = 5ml; for dry ingredients use the usual weight, e.g. 1 tbsp flour ≈ 10g, 1 tsp salt ≈ 6g) and add everything into one number, so "100ml + 3 tbsp" becomes "145ml". Counts stay counts ("3", "2 heads"). Only the shopping list is converted: recipes keep their own units. The server rejects kitchen measures and sums.
    - Keep genuinely different items separate ("garlic cloves" vs "garlic powder", "smoked paprika" vs "paprika").
    - Keep `note` to short buying info ("finely diced", "skinless"), never the recipe it's for.
-   - **Tag every item with its recipes**: `recipes: ["slug-a", "slug-b"]`, the slugs of every current recipe the combined line came from (lemons from the Caesar salad and the soup → both slugs). The shopping page shows those recipes' photos on the row. The server rejects a slug that isn't current and a current recipe that no item is tagged with.
+   - **Tag every item with its recipes**: `recipes: ["slug-a", "slug-b"]`, the slugs of every next-week recipe the combined line came from (lemons from the Caesar salad and the soup → both slugs). The shopping page shows those recipes' photos on the row. The server rejects a slug that isn't in next week and a next-week recipe that no item is tagged with.
    - "To taste" / "to serve" items: list them without a quantity (merge duplicates). Plain pantry basics (salt, pepper, oil) can go in a "Pantry" section so they can be checked off.
    - Drop the prep note unless it matters for buying.
-   - **Accuracy checklist (a wrong list is worse than none).** Build it only from the recipes' ingredient lists as read with `get_recipe` in this run, never from memory or the previous list. Every ingredient of every current recipe appears exactly once, and nothing that isn't in a recipe does. Scale every recipe to 2 servings first (see above), then only add up the same ingredient in the same unit, and one metric unit per line. Keep different forms separate (medium vs mild curry powder). Notes carry no recipe names or amounts (see below). Every item's `recipes` lists exactly the recipes it was added up from, and its `amounts` are each recipe's own 2-serving amount. Before saving, re-add every line against the recipes, and confirm the recipes covered are exactly the current set.
+   - **Accuracy checklist (a wrong list is worse than none).** Build it only from the recipes' ingredient lists as read with `get_recipe` in this run, never from memory or the previous list. Every ingredient of every next-week recipe appears exactly once, and nothing that isn't in a recipe does. Scale every recipe to 2 servings first (see above), then only add up the same ingredient in the same unit, and one metric unit per line. Keep different forms separate (medium vs mild curry powder). Notes carry no recipe names or amounts (see below). Every item's `recipes` lists exactly the recipes it was added up from, and its `amounts` are each recipe's own 2-serving amount. Before saving, re-add every line against the recipes, and confirm the recipes covered are exactly next week's set.
 4. Group into shop-aisle sections, e.g. **Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen**. Only include sections that have items.
-5. This becomes the **last** operation: `{ action: "update_shopping_list", sections, servings }`. It covers whatever is current after the operations before it, and the server records which recipes those are and links them on the page. `servings` (optional) is the planned servings for the recipes the user gave a number for, e.g. `{ "spicy-tuna-loaded-sweet-potato": 1, "creamy-chicken-leek-and-pancetta-pie": 2 }`. The shopping page opens on that plan; the user can still pick 1/2/4 for everything or change single recipes there.
+5. This becomes the **last** operation: `{ action: "update_shopping_list", sections, servings }`. It covers whatever is in next week after the operations before it, and the server records which recipes those are and links them on the page. `servings` (optional) is the planned servings for the recipes the user gave a number for, e.g. `{ "spicy-tuna-loaded-sweet-potato": 1, "creamy-chicken-leek-and-pancetta-pie": 2 }`. The shopping page opens on that plan; the user can still pick 1/2/4 for everything or change single recipes there.
 
 ## 4. Commit everything in one go
 
-1. Put the operations in this order: `create_recipe` for each new recipe, `remove_draft` for the disliked drafts, `promote_recipe` for the liked drafts, the `set_current_recipes` operations (`current: false` first, then `current: true`), then `update_shopping_list`.
-2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed, so fixing things here is free. Fix any rejected operation (missing quantity / "to taste" note, duplicate shopping item, missing photo, bad field, `remove_draft` on a recipe that isn't a draft) and **every** warning (unbolded ingredient, repeated amount) in your operations. Warnings don't block the commit, but don't leave any as "minor": an unbolded or loosely referenced ingredient is still an inconsistency on the site, and fixing it after the commit costs another commit and deploy. Repeat the dry run until it reports no warnings.
+1. Put the operations in this order: `remove_draft` for the disliked drafts, `promote_recipe` for the liked drafts, `start_next_week` (when switching), then `create_recipe` for each new recipe (`week: "next"`), `set_week_recipes` (week "next", add true) for the existing ones, then `update_shopping_list`. The switch must come **before** anything that plans the new next week, or it would move those recipes straight into this week.
+2. Call `batch_changes({ operations, dry_run: true })`. Nothing is committed, so fixing things here is free. Fix any rejected operation (missing quantity / "to taste" note, duplicate shopping item, missing photo, bad field, `remove_draft` on a recipe that isn't a draft or is planned for next week) and **every** warning (unbolded ingredient, repeated amount) in your operations. Warnings don't block the commit, but don't leave any as "minor": an unbolded or loosely referenced ingredient is still an inconsistency on the site, and fixing it after the commit costs another commit and deploy. Repeat the dry run until it reports no warnings.
 3. Call `batch_changes({ operations })` once. It's all or nothing: if an operation is rejected, nothing was committed, so fix it and send the whole batch again. Never fix things afterwards with separate `update_recipe` calls.
 
-That's one commit and one site deploy for the whole plan. If you have to change something afterwards (the user corrects a recipe), gather the fixes and send them as one more batch, ending with `update_shopping_list` if ingredients or the current set changed.
+That's one commit and one site deploy for the whole plan. If you have to change something afterwards (the user corrects a recipe), gather the fixes and send them as one more batch, ending with `update_shopping_list` if ingredients or next week's set changed.
 
 ## 5. Summary
 
-Finish with one message to the user containing the items below. **Whenever you list recipes (new, made current, promoted, removed, taken out of current), use bullet points: one recipe per bullet,** not a sentence or comma-separated line.
+Finish with one message to the user containing the items below. **Whenever you list recipes (this week, next week, promoted, removed, carried over, back in the book), use bullet points: one recipe per bullet,** not a sentence or comma-separated line.
 
-1. **Recipes added** (new drafts): a bullet per recipe, each linked to its page. Mention any estimated serves/calories, and which photos were generated (the user can swap in their own via an upload link).
-2. **Existing recipes made current**: a bullet per recipe (and "already current" ones, if any).
-3. **Last round's recipes**, as bullets grouped by outcome: which drafts were promoted (liked, no longer current), which were removed (not liked), which stay as drafts (not tried yet), and which regular recipes were taken out of current.
-4. **Anything left out or needing a decision** (unmatched names, skipped recipes).
-5. **The shopping list**, written out in full at the planned servings (`get_shopping_list` after the commit gives these amounts under "To buy"), grouped by section, as a checklist the user can read without opening the site. Say what it's planned for (e.g. "4 servings each, the soup for 1"), e.g.
+1. **The switch**, if you made it: what this week is now (bullets), and that last week's recipes left it.
+2. **Next week: recipes added** (new drafts): a bullet per recipe, each linked to its page. Mention any estimated serves/calories, and which photos were generated (the user can swap in their own via an upload link).
+3. **Next week: existing recipes**: a bullet per recipe (and "already planned" ones, if any).
+4. **Last week's drafts**, as bullets grouped by outcome: promoted (liked), removed (not liked), carried over (stay in this week), back in the book (not tried). Flag any draft they didn't like that was kept because it's on next week's plan.
+5. **Anything left out or needing a decision** (unmatched names, skipped recipes).
+6. **The shopping list** (next week's), written out in full at the planned servings (`get_shopping_list` after the commit gives these amounts under "To buy"), grouped by section, as a checklist the user can read without opening the site. Say what it's planned for (e.g. "4 servings each, the soup for 1"), e.g.
 
    **Fresh produce**
    - 3 red onions (for the tacos and the salsa)
    - Parsley
 
-6. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute, and that the new list starts without a stocktake: they can sign in there and tap "What's at home?" to tick what they already have, so the Ocado shop only buys the rest.
+7. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute, and that the new list starts without a stocktake: they can sign in there and tap "What's at home?" to tick what they already have, so the Ocado shop only buys the rest.
 
 Keep it factual and short; don't repeat the recipe steps.
 
 ## Notes
 
-- The shopping page shows the saved list until you save a new one, so re-run steps 3-4 whenever the current set changes (recipes added, marked or unmarked, a recipe's ingredients edited).
+- The shopping page shows the saved list until you save a new one, so re-run steps 3-4 whenever next week changes (recipes added or taken out, a next-week recipe's ingredients edited). Changing this week doesn't affect it.
+- "Start next week" on its own (the user says the new week has begun, nothing to plan): ask about this week's drafts (step 0b), then one batch of `remove_draft` / `promote_recipe` / `start_next_week`. No shopping list step: it keeps showing until next week is planned.
+- Adding a recipe to **this** week mid-week (a swap): `set_week_recipes` week "this" (or `create_recipe` with `week: "this"`). It doesn't go on the shopping list.
 - If the user only wants different servings for some recipes ("make the pie for 2 after all"), don't rebuild the list: call `set_shopping_servings({ servings: { slug: n } })`. It keeps the list and the stocktake.
-- Promoting a draft (`promote_recipe`) does not change whether it's current: in this flow a liked draft is promoted **and** unmarked in the same batch. Only promote when the user says they've tried it and liked it.
-- `remove_draft` is permanent on the site and only works on drafts. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
+- Promoting a draft (`promote_recipe`) doesn't change its weeks. Only promote when the user says they've tried it and liked it (that can be mid-week too: a one-off `promote_recipe` is fine).
+- `remove_draft` is permanent on the site, only works on drafts, and refuses a draft planned for next week. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
 - Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.
 - `batch_changes` with `dry_run: true` doesn't generate photos (it only checks the operations), so dry runs cost nothing.

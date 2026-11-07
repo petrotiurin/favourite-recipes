@@ -13,7 +13,9 @@ import {
   updateRecipe,
   promoteRecipe,
   removeDraft,
-  setCurrentRecipes,
+  setWeekRecipes,
+  startNextWeek,
+  WEEKS,
   readRecipeImage,
   pageUrl,
   UserError,
@@ -35,54 +37,61 @@ Every create/update is committed straight to the main branch and the site redepl
 
 Workflow: when the user hands over recipes to cook or shop for (screenshots, links, pasted recipes, names of recipes we have),
 or asks for a shopping list, FIRST call get_workflow_guide({ name: "plan-recipes" }) and follow it step by step. It is the
-up-to-date flow (closing out last round, drafts, current recipes, servings, shopping list, one batch, summary); it overrides
+up-to-date flow (switching weeks, drafts, next week's recipes, servings, shopping list, one batch, summary); it overrides
 any older copy of it you may have in a skill. It is also offered as the "plan-recipes" prompt.
 When the user asks to shop the list at Ocado or at Sainsbury's (fill the basket/trolley), FIRST call
 get_workflow_guide({ name: "ocado-shop" }) or get_workflow_guide({ name: "sainsburys-shop" }) and follow it (also offered as
 the prompts of the same names).
 
 One commit = one site deploy, and deploys queue behind each other, so a burst of single-change calls makes the site lag behind for
-minutes. Whenever you make MORE THAN ONE change in a go (several recipes, recipes + set_current_recipes, anything + the shopping
+minutes. Whenever you make MORE THAN ONE change in a go (several recipes, recipes + set_week_recipes, anything + the shopping
 list), do the reads first (list_recipes, get_recipe, get_shopping_list), then send all the writes in ONE batch_changes call: it
 applies them in order and commits them together. Use batch_changes with dry_run: true first if you want to see warnings before
 anything is committed. The single-change tools are fine for one-off edits. Photos uploaded for recipes that don't exist yet don't
 trigger a deploy on their own; the create_recipe that follows does.
 
+Two weeks: the site has a THIS WEEK (what the family is cooking now, current: true) and a NEXT WEEK (what they're
+planning and shopping for, next: true). A recipe can be in this week, next week, both (cooked two weeks running) or neither.
+list_recipes shows current: true / next: true and lists this week first (drafts first), then next week, then the rest.
+- New recipes for the plan go into next week: create_recipe with week: "next". Existing recipes are added to (or taken out of)
+  a week with set_week_recipes({ week: "this" | "next", slugs, add: true | false }).
+- The switch: when the user says next week has started (or, if they forgot, FIRST thing before planning whenever next week
+  already has recipes), call start_next_week: next week's recipes become this week, next week is emptied. Before switching, ask
+  about this week's drafts (see the plan-recipes workflow): liked -> promote_recipe, didn't like -> remove_draft, not tried ->
+  carry_over (stays in this week) or left to drop back into the book.
+- The home page shows this week at the top, then the rest of the book. Next week is only shown under its own "Next week" tab;
+  a draft that is ONLY in next week is hidden everywhere else until the switch.
+
 Drafts first: a recipe the family hasn't cooked and liked yet should be created as a DRAFT (create_recipe's draft defaults to
-true). Drafts are highlighted on the site, listed first and tagged "Draft". Once the user says they tried it and liked it, call
-promote_recipe to turn it into a regular recipe. Only pass draft: false to create_recipe when the user says it's already a
+true). Drafts get a "To try" kicker on the site. Being a draft says nothing about the week: a draft is in whichever week(s) you put
+it in, or in none (then it sits in the book as "To try"). Once the user says they tried it and liked it, call promote_recipe to turn
+it into a regular recipe (its weeks don't change). Only pass draft: false to create_recipe when the user says it's already a
 tried-and-tested favourite (e.g. migrating an existing family recipe).
 
 A draft the family tried and did NOT like is deleted with remove_draft (the recipe file and its photo). Only drafts can be
-removed: a regular recipe can't be deleted through this server. A removed draft was current, so refresh the shopping list afterwards.
+removed: a regular recipe can't be deleted through this server. remove_draft also refuses a draft that is planned for next week:
+the family keeps those, so tell the user it's still on next week's plan instead.
 
-Current recipes: the recipes the family is cooking right now. Three tiers, always listed in this order on the site and in
-list_recipes: (1) drafts, which are always current, (2) regular recipes marked current, (3) all the others. Mark existing recipes
-current (or take them out again) with set_current_recipes; list_recipes shows current: true on every current recipe. A recipe can
-be current without being a draft, so the rotation may hold only existing recipes, only drafts, or a mix. Promoting a draft does
-NOT change its currency: it stays current (promote_recipe writes current: true) until you unmark it with set_current_recipes.
-
-Shopping list: the site has a separate shopping page that covers the ingredients of ALL current recipes (drafts and current ones).
-You write it: whenever the current set changes (get_shopping_list says "outdated"), read every current recipe (get_recipe), combine
+Shopping list: the site has a separate shopping page for NEXT WEEK's recipes only (this week's food is already bought).
+You write it: whenever next week changes (get_shopping_list says "outdated"), read every next-week recipe (get_recipe), combine
 the ingredients into one deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the
 recipes' own units; keep different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if
 clearly pantry basics, else list them without a quantity), group it into shop-aisle sections, and call update_shopping_list.
-Tag every item with the slugs of the current recipes it is for (recipes: [...]); the page shows their photos on the row, and the
-server rejects a slug that isn't current or a current recipe with no items. The server links the recipes itself.
-The page keeps showing the last list you saved, even if the current set has since changed, so refresh it after every such
-change. It goes blank only when no recipe is current (unmarking the last one also deletes the saved list) or when you replace
-the list.
-Shopping list accuracy rules: build it ONLY from the current recipes' own ingredient lists, read fresh with get_recipe (never from
+Tag every item with the slugs of the next-week recipes it is for (recipes: [...]); the page shows their photos on the row, and the
+server rejects a slug that isn't in next week or a next-week recipe with no items. The server links the recipes itself.
+The page keeps showing the last list you saved until you save a new one: changing the weeks (start_next_week included) never
+alters or clears it, so after the switch it simply still shows the list that was built for what is now this week.
+Shopping list accuracy rules: build it ONLY from next week's recipes' own ingredient lists, read fresh with get_recipe (never from
 memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own serves: scale each recipe's
 amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
 Items for several recipes also say how much of that 2-serving quantity each recipe needs (amounts: { slug: number }, in the item's
 unit, adding up to quantity), so the page can scale every recipe on its own.
 Planned servings: each recipe on the list is planned for a number of people (servings: { slug: n }, 1-${MAX_SERVINGS}). The shopping
 page opens on that plan, and the user can switch everything to 1/2/4 or change single recipes there. Pass servings to
-update_shopping_list when the user says how many a recipe is for this week ("the soup just for me", "the pie for two");
+update_shopping_list when the user says how many a recipe is for ("the soup just for me", "the pie for two");
 recipes you don't name keep their previous plan, else ${DEFAULT_SERVINGS}. To change only the plan later, use set_shopping_servings:
 it keeps the list and the stocktake and needs no rebuild.
-Every ingredient of every current recipe must appear, and nothing else. Add up only the same ingredient in the same unit
+Every ingredient of every next-week recipe must appear, and nothing else. Add up only the same ingredient in the same unit
 (2 + 1 onions -> 3); different forms stay separate (medium vs mild curry powder).
 The list is one homogenised list: no per-recipe notes (which recipe an item is for goes in recipes, never in note), and notes never contain amounts (only quantity rescales). Quantities are ONE
 number in ONE metric unit per line: convert tbsp/tsp/cups/oz to g or ml (1 tbsp = 15ml, 1 tsp = 5ml; use the ingredient's usual
@@ -192,6 +201,10 @@ const createShape = {
       "Default true (recommended): the recipe is added as a highlighted draft until promoted with promote_recipe. " +
         "Pass false only if the user says it's already a tried-and-tested favourite."
     ),
+  week: z
+    .enum(WEEKS)
+    .optional()
+    .describe('Put the new recipe straight into a week: "next" for recipes being planned (the usual case, they go on the shopping list), "this" for one being cooked this week. Omit to just add it to the book.'),
 };
 
 const updateShape = {
@@ -222,7 +235,7 @@ const sectionsSchema = z
             recipes: z
               .array(z.string().min(1))
               .min(1)
-              .describe('Slugs of the current recipes this item is for, e.g. ["best-ever-caesar-salad", "nutritionist-immunity-lemon-chicken-soup"]. The page shows their photos on the row. Every current recipe must appear on at least one item.'),
+              .describe('Slugs of the next-week recipes this item is for, e.g. ["best-ever-caesar-salad", "nutritionist-immunity-lemon-chicken-soup"]. The page shows their photos on the row. Every next-week recipe must appear on at least one item.'),
             amounts: z
               .record(z.string(), z.number().positive())
               .optional()
@@ -245,11 +258,14 @@ const operationSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("promote_recipe"), slug: z.string() }).describe("Same as the promote_recipe tool"),
   z.object({ action: z.literal("remove_draft"), slug: z.string() }).describe("Same as the remove_draft tool"),
   z
-    .object({ action: z.literal("set_current_recipes"), slugs: z.array(z.string()).min(1), current: z.boolean() })
-    .describe("Same as the set_current_recipes tool"),
+    .object({ action: z.literal("set_week_recipes"), week: z.enum(WEEKS), slugs: z.array(z.string()).min(1), add: z.boolean() })
+    .describe("Same as the set_week_recipes tool"),
+  z
+    .object({ action: z.literal("start_next_week"), carry_over: z.array(z.string()).optional() })
+    .describe("Same as the start_next_week tool. Put it after the promote_recipe / remove_draft operations for this week's drafts and before anything that plans the new next week."),
   z
     .object({ action: z.literal("update_shopping_list"), sections: sectionsSchema, servings: servingsSchema.optional() })
-    .describe("Same as the update_shopping_list tool. Covers the recipes that are current after the operations before it."),
+    .describe("Same as the update_shopping_list tool. Covers the recipes that are in next week after the operations before it."),
   z
     .object({ action: z.literal("set_shopping_servings"), servings: servingsSchema })
     .describe("Same as the set_shopping_servings tool."),
@@ -262,7 +278,8 @@ async function runOperation(op, cs) {
   switch (action) {
     case "create_recipe": {
       const r = await createRecipe(args, cs);
-      return { ...r, currentChanged: true, lines: [`Created "${r.slug}"${r.draft ? " (draft)" : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
+      const tags = [r.draft ? "draft" : null, r.week ? `${r.week} week` : null].filter(Boolean).join(", ");
+      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
     }
     case "update_recipe": {
       const r = await updateRecipe(args, cs);
@@ -270,20 +287,20 @@ async function runOperation(op, cs) {
     }
     case "promote_recipe": {
       const r = await promoteRecipe(args.slug, cs);
-      return { ...r, lines: [`Promoted "${r.slug}" (draft -> regular, stays current)`] };
+      return { ...r, lines: [`Promoted "${r.slug}" (draft -> regular, its weeks unchanged)`] };
     }
     case "remove_draft": {
       const r = await removeDraft(args.slug, cs);
-      const lines = [`Removed draft "${r.slug}" (recipe${r.removedImages.length ? " and photo" : ""} deleted)`];
-      if (r.clearedShoppingList) lines.push("  no recipe is current any more, so the shopping list is cleared too");
-      return { ...r, currentChanged: true, lines };
+      return { ...r, lines: [`Removed draft "${r.slug}" (recipe${r.removedImages.length ? " and photo" : ""} deleted)`] };
     }
-    case "set_current_recipes": {
-      const r = await setCurrentRecipes(args.slugs, args.current, cs);
-      const lines = [r.changed.length ? `${args.current ? "Marked current" : "Removed from current"}: ${r.changed.join(", ")}` : "set_current_recipes: nothing changed"];
-      if (r.unchanged.length) lines.push(`  already ${args.current ? "current" : "not current"}: ${r.unchanged.join(", ")}`);
-      if (r.clearedShoppingList) lines.push("  no recipe is current any more, so the shopping list is cleared too");
-      return { ...r, currentChanged: r.changed.length > 0, lines };
+    case "set_week_recipes": {
+      const r = await setWeekRecipes(args.slugs, args.week, args.add, cs);
+      return { ...r, nextChanged: args.week === "next" && r.changed.length > 0, lines: weekLines(r) };
+    }
+    case "start_next_week": {
+      const r = await startNextWeek(args.carry_over, cs);
+      // Only empties next week, which leaves the saved list showing as it is: nothing to refresh.
+      return { ...r, lines: switchLines(r) };
     }
     case "update_shopping_list": {
       const r = await updateShoppingList(args.sections, cs, args.servings);
@@ -298,6 +315,27 @@ async function runOperation(op, cs) {
     default:
       throw new UserError(`Unknown action "${action}"`);
   }
+}
+
+const WEEK_NAME = { this: "this week", next: "next week" };
+
+function weekLines({ changed, unchanged, week, add }) {
+  const lines = [changed.length ? `${add ? "Added to" : "Taken out of"} ${WEEK_NAME[week]}: ${changed.join(", ")}` : "set_week_recipes: nothing changed"];
+  if (unchanged.length) lines.push(`  already ${add ? "in" : "not in"} ${WEEK_NAME[week]}: ${unchanged.join(", ")}`);
+  return lines;
+}
+
+function switchLines({ started, stayed, carried, left, droppedDrafts, subject }) {
+  const list = (xs) => (xs.length ? xs.join(", ") : "none");
+  return [
+    subject ? "Started next week: next week's recipes are now this week, and next week is empty." : "start_next_week: nothing to change (both weeks were already empty).",
+    `  this week now: ${list([...started, ...stayed, ...carried])}`,
+    ...(stayed.length ? [`  (already in this week too: ${stayed.join(", ")})`] : []),
+    ...(carried.length ? [`  carried over from last week: ${carried.join(", ")}`] : []),
+    ...(left.length ? [`  left this week: ${left.join(", ")}`] : []),
+    ...(droppedDrafts.length ? [`  drafts back in the book (still "To try", in no week): ${droppedDrafts.join(", ")}`] : []),
+    "  the shopping list is unchanged: the page keeps showing it until next week is planned and a new list saved",
+  ];
 }
 
 function ok(text, extra = []) {
@@ -319,26 +357,27 @@ const safe = (fn) => async (args) => {
   }
 };
 
-function shoppingResult({ list, current, commit }) {
+function shoppingResult({ list, next, commit }) {
   const items = list.sections.reduce((n, s) => n + s.items.length, 0);
   return [
-    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${current.length} current recipe${current.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
+    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${next.length} next-week recipe${next.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
     `It will be live in about a minute at ${shoppingPageUrl()}`,
     "",
-    "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever the current recipes change. It only goes blank when no recipe is current.",
+    "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever next week's recipes change (the switch to a new week doesn't touch it).",
     "A new list starts without a stocktake: the user marks what's already at home on the page (signed in), and get_shopping_list then shows what's left to buy.",
     "",
     "Covers (planned servings, which the page opens on):",
-    ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}: ${list.servings[r.slug]}`),
+    ...next.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}: ${list.servings[r.slug]}`),
   ].join("\n");
 }
 
-function resultText(verb, { slug, markdown, commit, draft, warnings }) {
+function resultText(verb, { slug, markdown, commit, draft, week, warnings }) {
   const lines = [];
   if (commit) {
     lines.push(`${verb} "${slug}" and committed to main: ${commit.url}`);
     lines.push(`It will be live in about a minute at ${pageUrl(slug)}`);
   }
+  if (week === "next") lines.push("", "It's in next week: refresh the shopping list with update_shopping_list.");
   if (draft) {
     lines.push("", `It's a draft. Once the user has cooked it and wants to keep it, call promote_recipe with slug "${slug}".`);
   }
@@ -395,7 +434,8 @@ export function buildServer({ origin }) {
       title: "List recipes",
       description:
         "List every recipe on the site with its slug, title, course, tags, time, servings and calories. " +
-        "Order: drafts (draft: true), then other current recipes, then the rest. Every current recipe, drafts included, has current: true.",
+        "current: true = in this week, next: true = in next week (a recipe can be in both), draft: true = not tried yet. " +
+        "Order: this week (drafts first), then next week, then the rest.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
@@ -508,7 +548,7 @@ export function buildServer({ origin }) {
       description:
         "Add a new recipe to the site. Writes recipes/<slug>.md (+ the photo) in one commit to main. The slug is derived from the title. " +
         "Fails if a recipe with that slug already exists. New recipes are drafts by default (recommended): promote them with " +
-        "promote_recipe once the user has tried and liked them.",
+        "promote_recipe once the user has tried and liked them. Pass week: \"next\" to plan it for next week.",
       inputSchema: createShape,
     },
     safe(async (args) => ok(resultText("Created", await createRecipe(args))))
@@ -521,7 +561,7 @@ export function buildServer({ origin }) {
       description:
         "Turn a draft into a regular recipe (the user cooked it and wants to keep it). Removes draft: true from its frontmatter " +
         "in one commit to main; nothing else in the file changes. Fails if the recipe isn't a draft. " +
-        "The recipe's currency is unchanged: it stays current (current: true is written) until you unmark it with set_current_recipes.",
+        "Its weeks are unchanged: a draft in this week stays in this week.",
       inputSchema: {
         slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
       },
@@ -537,23 +577,21 @@ export function buildServer({ origin }) {
         "Delete a draft the family tried and did not like: removes recipes/<slug>.md and its photo in one commit to main. " +
         "ONLY drafts can be removed; it fails for a regular recipe (promote_recipe keeps a liked one). This is permanent on the site " +
         "(it can only be recovered from git history), so only call it when the user said they didn't like it. " +
-        "A draft is always current, so the current set changes: refresh the shopping list with update_shopping_list " +
-        "(if no recipe is current afterwards, the saved list is deleted too).",
+        "Refuses a draft that is planned for next week (the family keeps those: tell the user instead). " +
+        "The shopping list isn't touched (it's for next week, which this draft isn't in).",
       inputSchema: {
         slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
       },
     },
     safe(async ({ slug }) => {
-      const { title, removedImages, commit, clearedShoppingList } = await removeDraft(slug);
-      const lines = [
-        `Removed draft "${title}" (${slug}): deleted recipes/${slug}.md${removedImages.map((p) => ` and ${p}`).join("")}.`,
-        `Committed to main: ${commit.url}`,
-        `The site updates in about a minute at ${config.siteUrl}/`,
-        "",
-      ];
-      if (clearedShoppingList) lines.push("No recipe is current any more, so the shopping list was cleared too.");
-      else lines.push("The current set changed: call update_shopping_list to refresh the shopping list.");
-      return ok(lines.join("\n"));
+      const { title, removedImages, commit } = await removeDraft(slug);
+      return ok(
+        [
+          `Removed draft "${title}" (${slug}): deleted recipes/${slug}.md${removedImages.map((p) => ` and ${p}`).join("")}.`,
+          `Committed to main: ${commit.url}`,
+          `The site updates in about a minute at ${config.siteUrl}/`,
+        ].join("\n")
+      );
     })
   );
 
@@ -571,31 +609,51 @@ export function buildServer({ origin }) {
   );
 
   server.registerTool(
-    "set_current_recipes",
+    "set_week_recipes",
     {
-      title: "Set recipes current",
+      title: "Set this week's / next week's recipes",
       description:
-        "Add regular recipes to the current rotation (current: true) or take them out of it, in one commit to main. Current recipes are " +
-        "highlighted on the site, listed after the drafts and before all other recipes, and their ingredients go on the shopping list. " +
-        "Drafts are always current and can't be changed here (promote one first, it stays current, then unmark it). Slugs already in the " +
-        "requested state are skipped. If nothing is current afterwards, the saved shopping list is deleted too; otherwise call update_shopping_list.",
+        "Add recipes to this week (current: true) or next week (next: true), or take them out, in one commit to main. Drafts and " +
+        "regular recipes alike; a recipe can be in both weeks. This week is shown at the top of the home page; next week only under its " +
+        "own tab, and its ingredients are what the shopping list covers, so call update_shopping_list after changing next week. " +
+        "Slugs already in the requested state are skipped.",
       inputSchema: {
+        week: z.enum(WEEKS).describe('"this" = this week (being cooked now), "next" = next week (being planned, on the shopping list)'),
         slugs: z.array(z.string()).min(1).describe("Slugs from list_recipes"),
-        current: z.boolean().describe("true = make current, false = no longer current"),
+        add: z.boolean().describe("true = put them in that week, false = take them out of it"),
       },
     },
-    safe(async ({ slugs, current }) => {
-      const { changed, unchanged, commit, clearedShoppingList } = await setCurrentRecipes(slugs, current);
-      const lines = [];
-      if (commit) {
-        lines.push(`${current ? "Marked current" : "Removed from current"}: ${changed.join(", ")}`, `Committed to main: ${commit.url}`);
-        lines.push(`The site updates in about a minute at ${config.siteUrl}/`);
-      } else {
-        lines.push("Nothing changed.");
-      }
-      if (unchanged.length) lines.push(`Already ${current ? "current" : "not current"}: ${unchanged.join(", ")}`);
-      if (clearedShoppingList) lines.push("", "No recipe is current any more, so the shopping list was cleared too.");
-      else if (commit) lines.push("", "The current set changed: call update_shopping_list to refresh the shopping list.");
+    safe(async ({ week, slugs, add }) => {
+      const r = await setWeekRecipes(slugs, week, add);
+      const lines = weekLines(r);
+      if (r.commit) lines.push(`Committed to main: ${r.commit.url}`, `The site updates in about a minute at ${config.siteUrl}/`);
+      if (r.commit && week === "next") lines.push("", "Next week changed: call update_shopping_list to refresh the shopping list.");
+      return ok(lines.join("\n"));
+    })
+  );
+
+  server.registerTool(
+    "start_next_week",
+    {
+      title: "Start next week",
+      description:
+        "The switch from one week to the next, in one commit: next week's recipes become this week's and next week is emptied. " +
+        "Recipes in this week that aren't in next week leave it, except the carry_over ones (e.g. drafts the family hasn't tried yet " +
+        "and wants to keep cooking). A draft that leaves goes back into the book, still a draft. Call it when the user says the new " +
+        "week has started, and FIRST before planning whenever next week already has recipes. Before calling it, ask about this " +
+        "week's drafts and send promote_recipe / remove_draft for them in the same batch_changes, before this operation. " +
+        "The shopping list is not touched: it keeps showing until next week is planned and a new list saved.",
+      inputSchema: {
+        carry_over: z
+          .array(z.string())
+          .optional()
+          .describe("Slugs of recipes in this week now that should stay in this week (e.g. untried drafts the user wants to carry over)."),
+      },
+    },
+    safe(async ({ carry_over }) => {
+      const r = await startNextWeek(carry_over);
+      const lines = switchLines(r);
+      if (r.commit) lines.push(`Committed to main: ${r.commit.url}`, `The site updates in about a minute at ${config.siteUrl}/`);
       return ok(lines.join("\n"));
     })
   );
@@ -605,22 +663,27 @@ export function buildServer({ origin }) {
     {
       title: "Get shopping list",
       description:
-        "Show the stored shopping list and whether it is current. Status is 'current' (covers exactly today's draft recipes), " +
-        "'outdated' (the current recipes changed since it was written; the site still shows it, so rewrite it) or 'none'. " +
-        "Also lists the current recipes (drafts and recipes marked current) so you know which ones to combine, and the user's " +
+        "Show the stored shopping list and whether it is up to date. Status is 'current' (covers exactly next week's recipes), " +
+        "'outdated' (next week changed since it was written; the site still shows it, so rewrite it), 'not planned' (next week is " +
+        "empty, e.g. just after start_next_week: the page keeps showing the last list) or 'none'. " +
+        "Also lists next week's recipes so you know which ones to combine, and the user's " +
         "planned servings per recipe and stocktake: items already at home (have: true) or partly at home (have: <amount in the item's unit>), " +
         "with what is left to buy at the planned servings.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
     safe(async () => {
-      const { list, current, status } = await getShoppingList();
+      const { list, next, status } = await getShoppingList();
+      const note = {
+        outdated: " (next week's recipes changed; the site still shows the old list until you call update_shopping_list)",
+        "not planned": " (next week has no recipes yet; the site keeps showing the last list, made for what is now this week)",
+      };
       const lines = [
-        `Status: ${status}${status === "outdated" ? " (the current recipes changed; the site still shows the old list until you call update_shopping_list)" : ""}`,
+        `Status: ${status}${note[status] || ""}`,
         `Page: ${shoppingPageUrl()}`,
         "",
-        current.length ? "Current recipes (the ones to combine):" : "There are no current recipes right now.",
-        ...current.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
+        next.length ? "Next week's recipes (the ones to combine):" : "Next week has no recipes yet.",
+        ...next.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
       ];
       if (list) lines.push("", ...stocktakeLines(list), "", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
       return ok(lines.join("\n"));
@@ -632,12 +695,12 @@ export function buildServer({ origin }) {
     {
       title: "Update shopping list",
       description:
-        "Replace the site's shopping page with a combined ingredient list for ALL current recipes (drafts and recipes marked current). " +
-        "You do the combining: read each current recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
+        "Replace the site's shopping page with a combined ingredient list for ALL of next week's recipes (next: true). " +
+        "You do the combining: read each next-week recipe with get_recipe, merge duplicate ingredients (add up quantities), and group the items " +
         "into sections such as 'Fresh produce', 'Meat & fish', 'Dairy & eggs', 'Pantry'. Tag each item with the slugs of the recipes it is for, " +
         "and for an item with several recipes give each one's share in amounts. Optionally plan servings per recipe. The server records which recipes the list covers " +
         "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
-        "so call it after adding a draft or marking/unmarking recipes current. It goes blank only when no recipe is current. Fails if there are no current recipes.",
+        "so call it after changing next week. Fails if next week has no recipes.",
       inputSchema: {
         sections: sectionsSchema,
         servings: servingsSchema
@@ -674,7 +737,7 @@ export function buildServer({ origin }) {
       title: "Batch changes",
       description:
         "Apply several changes in ONE commit to main, so the site deploys once instead of once per change. Operations run in order, " +
-        "each seeing the result of the ones before it (e.g. create drafts, mark existing recipes current, then update_shopping_list " +
+        "each seeing the result of the ones before it (e.g. start_next_week, create drafts for next week, add existing recipes to next week, then update_shopping_list " +
         "covering all of them). Each operation takes the same fields as the tool it is named after. All or nothing: if any operation " +
         "is rejected, nothing is committed and the error names the operation. dry_run: true validates everything and reports warnings " +
         "without committing (it doesn't generate photos, so image: { generate: true } is only checked).",
@@ -698,8 +761,8 @@ export function buildServer({ origin }) {
 
       const report = results.flatMap((r, i) => r.lines.map((l, j) => (j === 0 ? `${i + 1}. ${l}` : `   ${l}`)));
       const lastShopping = results.findLastIndex((r) => r.shoppingList);
-      const staleList = results.some((r, i) => r.currentChanged && i > lastShopping) && !results.at(-1).clearedShoppingList;
-      const footer = staleList ? ["", "The current recipes changed after the last shopping list update: refresh it with update_shopping_list."] : [];
+      const staleList = results.some((r, i) => r.nextChanged && i > lastShopping);
+      const footer = staleList ? ["", "Next week's recipes changed after the last shopping list update: refresh it with update_shopping_list."] : [];
 
       if (!cs.size) return ok(["Nothing to commit: every operation was a no-op.", "", ...report].join("\n"));
       if (dry_run) {

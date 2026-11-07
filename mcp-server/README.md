@@ -8,23 +8,24 @@ It's a separate deployment from the site. Vercel only builds this folder, and th
 
 | Tool | What it does |
 | --- | --- |
-| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts and `current: true` for every current recipe. Order: drafts, other current recipes, the rest |
+| `list_recipes` | All recipes: slug, title, course, tags, time, servings, calories, `draft: true` for drafts, `current: true` for this week's and `next: true` for next week's. Order: this week (drafts first), next week, the rest |
 | `get_recipe` | Full Markdown of one recipe; with `include_image: true` it also returns the photo |
 | `create_image_upload_link` | Fallback to generated photos: returns one one-hour link to a page where a person uploads the dish photos for one or more recipes (`recipes: [{title} or {slug}, ...]`) from their phone |
-| `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false` |
-| `promote_recipe` | Turns a draft into a regular recipe (replaces `draft: true` with `current: true`, one commit). Its currency is unchanged: it stays current |
-| `remove_draft` | Deletes a draft the family didn't like (`recipes/<slug>.md` and its photo, one commit). **Only drafts** can be removed: a regular recipe is refused. If nothing is current afterwards, the shopping list is deleted too |
+| `create_recipe` | New recipe from structured fields; the Markdown and photo go in one commit. Added as a draft unless `draft: false`; `week: "next"` (or `"this"`) puts it straight into that week |
+| `promote_recipe` | Turns a draft into a regular recipe (drops `draft: true`, one commit). Its weeks are unchanged |
+| `remove_draft` | Deletes a draft the family didn't like (`recipes/<slug>.md` and its photo, one commit). **Only drafts** can be removed: a regular recipe is refused, and so is a draft planned for next week (the family keeps those) |
 | `update_recipe` | Changes only the fields you pass; the slug/URL never changes |
-| `set_current_recipes` | Adds regular recipes to the current rotation (`current: true`) or removes them, many slugs in one commit. Drafts are always current and can't be toggled. Unmarking the last current recipe also deletes the shopping list |
+| `set_week_recipes` | Adds recipes to this week (`current: true`) or next week (`next: true`), or takes them out, many slugs in one commit. Drafts and regular recipes alike; a recipe can be in both weeks |
+| `start_next_week` | The switch, in one commit: next week's recipes become this week's, next week is emptied. `carry_over` keeps chosen recipes (untried drafts) in this week too. The shopping list isn't touched |
 | `get_workflow_guide` | The step-by-step guide for a multi-step flow (`plan-recipes`, `ocado-shop`, `sainsburys-shop`); the same text is the prompt of that name |
-| `get_shopping_list` | The stored shopping list, the current recipes, and whether the list is `current`, `outdated` or `none` |
-| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all current recipes (one commit of `shopping-list.json`), optionally with planned servings per recipe |
+| `get_shopping_list` | The stored shopping list, next week's recipes, and whether the list is `current`, `outdated`, `not planned` (next week empty) or `none` |
+| `update_shopping_list` | Replaces the site's shopping page with the list the agent built from all of next week's recipes (one commit of `shopping-list.json`), optionally with planned servings per recipe |
 | `set_shopping_servings` | Changes the planned servings of individual recipes on the saved list (e.g. one for 1, another for 2) without rebuilding it; the stocktake stays |
-| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_current_recipes`, `update_shopping_list`, `set_shopping_servings`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
+| `batch_changes` | Runs several of the write tools above (`create_recipe`, `update_recipe`, `promote_recipe`, `remove_draft`, `set_week_recipes`, `start_next_week`, `update_shopping_list`, `set_shopping_servings`) in order and commits them **together in one commit**, so the site deploys once. All or nothing; `dry_run: true` validates and reports warnings without committing |
 
 ## One commit per deploy
 
-Every commit to `main` triggers the Pages workflow, and only one deploy runs at a time, so a burst of single-change calls (as in "add five recipes, mark two current, update the shopping list") used to queue up a dozen deploys and leave the site minutes behind. To avoid that:
+Every commit to `main` triggers the Pages workflow, and only one deploy runs at a time, so a burst of single-change calls (as in "add five recipes, plan two more for next week, update the shopping list") used to queue up a dozen deploys and leave the site minutes behind. To avoid that:
 
 - **`batch_changes`.** Agents do their reads first, then send all the writes in one call. Each operation sees the ones before it (e.g. the shopping list covers recipes created earlier in the same batch), and a rejected operation commits nothing. The server's instructions tell agents to use it whenever they make more than one change.
 - **Photos for recipes that don't exist yet** are committed with `[skip ci]`, because no page shows them until `create_recipe` (or `batch_changes`) commits the recipe, and that commit deploys. Replacing an existing recipe's photo deploys as usual.
@@ -34,7 +35,7 @@ Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see w
 
 ## What's enforced
 
-- **Deletion is limited to drafts.** `remove_draft` is the only way a recipe leaves the site, and it refuses anything without `draft: true` (promoted recipes are protected). `assertAllowedPath` still applies to the deleted recipe and photo paths.
+- **Deletion is limited to drafts.** `remove_draft` is the only way a recipe leaves the site, and it refuses anything without `draft: true` (promoted recipes are protected) and any draft with `next: true` (planned for next week). `assertAllowedPath` still applies to the deleted recipe and photo paths.
 - **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.js`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
@@ -43,29 +44,30 @@ Internally every write goes through a `ChangeSet` (`lib/github.js`): reads see w
   - Instructions are numbered by the server, and you get a warning if an ingredient is mentioned without being bolded.
   - Quantities stay in the ingredient list, because the site's servings selector rescales only that list. ASCII fractions ("1/2") are converted to "½" so they scale. You get a warning if a step repeats an amount (e.g. "add 37.5g **sugar**"); the server's instructions tell the agent to write "half the **sugar**" / "the remaining **sugar**" instead.
   - `scalable: false` (optional) hides the servings selector, for recipes whose ingredient list can't be multiplied.
-  - New recipes are drafts (`draft: true`) by default, and the server's instructions tell the agent to keep it that way until the family has tried the dish, then call `promote_recipe`, or `remove_draft` if they didn't like it. Drafts are highlighted on the site, sorted first and get a "Draft" filter tab.
+  - New recipes are drafts (`draft: true`) by default, and the server's instructions tell the agent to keep it that way until the family has tried the dish, then call `promote_recipe`, or `remove_draft` if they didn't like it. Drafts get a purple "To try" kicker on the site; being a draft says nothing about the week.
   - The slug is derived from the title.
   - Creating a recipe whose slug already exists is refused.
 - **Photos are required and normalised.** Generated photos are centre-cropped to 4:3 (the index tile ratio) first. The server fixes EXIF rotation, downsizes to at most 1600px on the long edge, strips metadata and saves a JPEG at `images/recipes/<slug>.jpg`.
 - **Edits are minimal.** Existing recipes round-trip byte-for-byte (see the tests), so editing one field doesn't reformat the rest of the file.
 
-## Current recipes and the shopping list
+## This week, next week and the shopping list
 
-A recipe is *current* when the family is cooking it right now: every draft is, plus any regular recipe the agent marks with `set_current_recipes` (`current: true` in its frontmatter). The site and `list_recipes` order recipes as drafts, then other current recipes, then the rest. The rotation can hold only existing recipes, only drafts, or both.
+Two weeks, both independent of `draft`: **this week** (`current: true`, what the family is cooking now) and **next week** (`next: true`, what they're planning and shopping for). A recipe can be in this week, next week, both or neither. The site's home page shows this week at the top and then the rest of the book; next week only appears under its own "Next week" tab, and a draft that's only in next week is hidden everywhere else until the switch. `list_recipes` orders recipes as this week (drafts first), next week, the rest.
 
-The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering all current recipes. The server doesn't merge ingredients: the agent reads each current recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?, recipes, amounts?}]}]` and optionally `servings: { slug: n }`.
+`start_next_week` is the switch: every recipe's `current` becomes what its `next` was (plus the `carry_over` slugs, which must be in this week), and `next` is removed everywhere. The agent calls it when the user says the new week has started, and first thing before planning whenever next week already has recipes (handing over recipes always plans a fresh next week). Before the switch, the agent asks about each of this week's drafts: liked → `promote_recipe`, didn't like → `remove_draft` (refused if it's planned for next week: kept, and the user is told), not tried → carried over or back to the book (a draft in no week).
+
+The site has a shopping page (`shopping-list.html`, linked by a button in the index header) covering **next week's** recipes only. The server doesn't merge ingredients: the agent reads each next-week recipe, combines and groups the items itself, and calls `update_shopping_list` with `sections: [{name, items: [{name, quantity?, note?, recipes, amounts?}]}]` and optionally `servings: { slug: n }`.
 
 - Quantities are for 2 servings of every recipe. An item for several recipes carries `amounts` (slug → that recipe's share of `quantity`, same unit, adding up to it), so the page can scale each recipe on its own; the server refuses a multi-recipe item without it, or whose amounts don't add up.
 - `servings` is the plan: how many people each recipe is cooked for (1-12). The page opens on it; the user can switch everything to 1/2/4 or change single recipes. Recipes the call doesn't name keep the previous list's plan, else 4. `set_shopping_servings` changes only the plan, keeping the items and the stocktake.
 
-- Each item's `recipes` is the slugs of the current recipes it is for; the page shows their photos on the row and names them on a tap. The server refuses a slug that isn't current and a current recipe that no item is for.
-- The server fills in the list's top-level `recipes` (the current slugs) itself and the page links to them. It refuses when nothing is current and when an ingredient is listed twice.
-- **The page shows the saved list until it is rewritten.** Changing which recipes are current does not alter it. `build.js` blanks the page only when no recipe is current. Unmarking the last current recipe (`set_current_recipes`) deletes `shopping-list.json` in the same commit, so an old list can't resurface once something becomes current again.
-- `get_shopping_list` reports `current` (covers exactly the current recipes), `outdated` (the set changed since, so the agent should rewrite it) or `none`.
-- Promoting a draft doesn't change its currency, so it doesn't make the list outdated. Removing a draft does (it was current), so refresh the list afterwards.
-- Editing a current recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
+- Each item's `recipes` is the slugs of the next-week recipes it is for; the page shows their photos on the row and names them on a tap. The server refuses a slug that isn't in next week and a next-week recipe that no item is for.
+- The server fills in the list's top-level `recipes` (the next-week slugs) itself and the page links to them. It refuses when next week is empty and when an ingredient is listed twice.
+- **The page shows the saved list until it is rewritten.** Changing the weeks, the switch included, never alters or deletes it: after the switch it simply still shows the list made for what is now this week. `build.js` blanks the page only when there is no `shopping-list.json`.
+- `get_shopping_list` reports `current` (covers exactly next week's recipes), `outdated` (next week changed since, so the agent should rewrite it), `not planned` (next week is empty, e.g. right after the switch) or `none`.
+- Changing this week, promoting a draft or removing one (never in next week) doesn't make the list outdated. Editing a next-week recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
 
-The end-to-end agent flow (add recipes, select existing ones, build the list, summarise) ships with the server: `workflows/plan-recipes.md`, served as the `plan-recipes` prompt (pick it from the client's prompt menu, or `/mcp__<server>__plan-recipes` in Claude Code) and by the `get_workflow_guide` tool. The server's instructions tell agents to call `get_workflow_guide` first whenever they're handed recipes to cook, so no skill is needed; the repo's `plan-recipes` skill only points to it. Edit the flow in `workflows/plan-recipes.md` (bundled via `includeFiles` in `vercel.json`) and deploy.
+The end-to-end agent flow (switch weeks if needed, add recipes to next week, select existing ones, build the list, summarise) ships with the server: `workflows/plan-recipes.md`, served as the `plan-recipes` prompt (pick it from the client's prompt menu, or `/mcp__<server>__plan-recipes` in Claude Code) and by the `get_workflow_guide` tool. The server's instructions tell agents to call `get_workflow_guide` first whenever they're handed recipes to cook, so no skill is needed; the repo's `plan-recipes` skill only points to it. Edit the flow in `workflows/plan-recipes.md` (bundled via `includeFiles` in `vercel.json`) and deploy.
 
 The shopping flows work the same way: `workflows/ocado-shop.md` and `workflows/sainsburys-shop.md` (fill the basket/trolley from `get_shopping_list`'s "To buy" with Claude in Chrome; never check out), served as the `ocado-shop` / `sainsburys-shop` prompts and by `get_workflow_guide`. The repo's skills of the same names only point to them. Rules every shop shares (what to buy, picking rules, non-negotiables, report back) are written once in `workflows/shared/*.md`; a guide pulls one in with a line `<!-- include: shared/<name> -->`, expanded when the server loads it, and adds its shop's own products in an `### At <shop>` section. To serve another flow, add its Markdown to `workflows/` and an entry in `lib/workflows.js`.
 

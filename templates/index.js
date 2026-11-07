@@ -1,5 +1,5 @@
 const { layout } = require("./layout");
-const { isDraft, isCurrent } = require("./status");
+const { isDraft, isThisWeek, isNextWeek, isHiddenUntilNextWeek } = require("./status");
 
 function escapeHtml(str) {
   return String(str)
@@ -14,15 +14,17 @@ const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 function courseClasses(r) {
   return (r.course || [])
     .map((c) => `course-${String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`)
-    .concat(isCurrent(r) ? ["is-current"] : [])
+    .concat(isThisWeek(r) ? ["is-current"] : [])
+    .concat(isNextWeek(r) ? ["is-next"] : [])
+    .concat(isHiddenUntilNextWeek(r) ? ["is-next-only"] : [])
     .concat(isDraft(r) ? ["is-draft"] : [])
     .join(" ");
 }
 
-/** The small-caps line above a tile's name: its place in the rotation, else its course. */
+/** The small-caps line above a tile's name: draft or this week, else its course. Next week isn't marked on tiles. */
 function kicker(r) {
   if (isDraft(r)) return `<p class="kicker kicker-draft">To try</p>`;
-  if (isCurrent(r)) return `<p class="kicker kicker-current">This week</p>`;
+  if (isThisWeek(r)) return `<p class="kicker kicker-current">This week</p>`;
   return `<p class="kicker">${escapeHtml((r.course || []).join(" · "))}</p>`;
 }
 
@@ -32,9 +34,11 @@ const ICON_CART =
   '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>';
 
 function renderIndex(recipes) {
-  // Recipes arrive drafts first, then other current ones, then the rest; a divider
-  // marks where the rest begins (hidden by the CSS while filtering or searching).
-  const restStart = recipes.findIndex((r) => !isCurrent(r));
+  // Recipes arrive with this week first (drafts first), then the rest; a divider marks where
+  // the rest begins (hidden by the CSS while filtering or searching). Next week's recipes sit in
+  // the rest unmarked; drafts that are only in next week are hidden by the CSS unless the
+  // "Next week" tab is picked.
+  const restStart = recipes.findIndex((r) => !isThisWeek(r));
   const tiles = recipes
     .map((r, i) => {
       const divider = i === restStart && i > 0 ? `      <p class="tile-divider">The rest of the book</p>\n` : "";
@@ -47,12 +51,9 @@ function renderIndex(recipes) {
     })
     .join("\n");
 
-  // The Current tab (drafts + current recipes) only appears when some regular recipe
-  // is current, since otherwise it would be the same as the Drafts tab. Drafts likewise.
-  const filters = COURSES.concat(recipes.some((r) => r.current === true && !isDraft(r)) ? ["Current"] : []).concat(
-    recipes.some(isDraft) ? ["Drafts"] : []
-  );
-  const FILTER_NAMES = { Current: "This week", Drafts: "To try" };
+  // "This week" and "Next week" tabs, each only when that week has recipes.
+  const filters = COURSES.concat(recipes.some(isThisWeek) ? ["Current"] : []).concat(recipes.some(isNextWeek) ? ["Next"] : []);
+  const FILTER_NAMES = { Current: "This week", Next: "Next week" };
 
   // Each input must sit directly before its label: the CSS highlights the
   // active filter with `.filter-input:checked + .filter-label`.
@@ -62,7 +63,7 @@ function renderIndex(recipes) {
       filters.map((c) => {
         const id = `filter-${c.toLowerCase()}`;
         return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">
-      <label for="${id}" class="filter-label${c === "Drafts" ? " filter-label-draft" : c === "Current" ? " filter-label-current" : ""}">${FILTER_NAMES[c] || c}</label>`;
+      <label for="${id}" class="filter-label${FILTER_NAMES[c] ? " filter-label-current" : ""}">${FILTER_NAMES[c] || c}</label>`;
       })
     )
     .join("\n");

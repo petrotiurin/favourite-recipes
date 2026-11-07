@@ -1,4 +1,4 @@
-import { config, COURSES, SHOPPING_LIST_PATH, CARD_ASPECT } from "./config.js";
+import { config, COURSES, CARD_ASPECT } from "./config.js";
 import { ChangeSet, isAllowedPath } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import { generateDishImage } from "./image-generation.js";
@@ -21,10 +21,16 @@ export const pageUrl = (slug) => `${config.siteUrl}/recipes/${slug}.html`;
 
 export class UserError extends Error {}
 
-// Keep in sync with templates/status.js: drafts are always current, `current: true` marks regular recipes in the rotation.
+// Keep in sync with templates/status.js. Two weeks, both independent of `draft`:
+//   `current: true` = this week (what's being cooked now), `next: true` = next week (what the shopping list is for).
+// A recipe can be in both (cooked two weeks running). Order: this week (drafts first), next week, the rest.
 export const isDraft = (r) => r.draft === true;
-export const isCurrent = (r) => r.draft === true || r.current === true;
-const rank = (r) => (isDraft(r) ? 0 : isCurrent(r) ? 1 : 2);
+export const isThisWeek = (r) => r.current === true;
+export const isNextWeek = (r) => r.next === true;
+const rank = (r) => (isThisWeek(r) ? (isDraft(r) ? 0 : 1) : isNextWeek(r) ? 2 : 3);
+export const WEEKS = ["this", "next"];
+const WEEK_KEY = { this: "current", next: "next" };
+const WEEK_NAME = { this: "this week", next: "next week" };
 
 function assertSlug(slug) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new UserError(`"${slug}" is not a valid recipe slug`);
@@ -50,11 +56,12 @@ export async function listRecipes(cs = new ChangeSet()) {
         calories: data.calories,
         ...(data.scalable === false ? { scalable: false } : {}),
         ...(data.draft === true ? { draft: true } : {}),
-        ...(isCurrent(data) ? { current: true } : {}), // drafts are always current
+        ...(isThisWeek(data) ? { current: true } : {}),
+        ...(isNextWeek(data) ? { next: true } : {}),
       };
     })
   );
-  // Same order as the site: drafts, then current recipes, then the rest; alphabetical within each.
+  // Same order as the site: this week (drafts first), then next week, then the rest; alphabetical within each.
   return recipes.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
@@ -181,6 +188,7 @@ export async function createRecipe(input, batch) {
     calories: input.calories,
     ...(input.scalable === false ? { scalable: false } : {}),
     ...(input.draft !== false ? { draft: true } : {}), // new recipes start as drafts unless told otherwise
+    ...(input.week ? { [WEEK_KEY[input.week]]: true } : {}),
   };
   const sections = [
     { heading: "Ingredients", content: input.ingredients.map(renderIngredient).join("\n") },
@@ -192,19 +200,18 @@ export async function createRecipe(input, batch) {
   cs.write(recipePath(slug), Buffer.from(markdown));
   if (imageBuffer) cs.write(imagePathFor(slug), imageBuffer);
 
-  const subject = `${data.draft ? "Add draft recipe" : "Add recipe"}: ${title}`;
+  const subject = `${data.draft ? "Add draft recipe" : "Add recipe"}: ${title}${input.week ? ` (${WEEK_NAME[input.week]})` : ""}`;
   const commit = batch ? null : await cs.commit(subject + via("Added"));
-  return { slug, markdown, commit, subject, draft: !!data.draft, warnings: instructionWarnings(input.ingredients, input.instructions) };
+  return { slug, markdown, commit, subject, draft: !!data.draft, week: input.week || null, warnings: instructionWarnings(input.ingredients, input.instructions) };
 }
 
-/** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. */
+/** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. Its weeks are unchanged. */
 export async function promoteRecipe(slug, batch) {
   const cs = batch || new ChangeSet();
   const { markdown: before } = await getRecipe(slug, cs);
   const { data, sections } = parseRecipe(before);
   if (data.draft !== true) throw new UserError(`"${slug}" is not a draft, it's already a regular recipe.`);
   delete data.draft;
-  data.current = true; // drafts are implicitly current, so promoting keeps the recipe in the rotation
   const markdown = serializeRecipe(data, sections);
   cs.write(recipePath(slug), Buffer.from(markdown));
   const subject = `Promote recipe: ${data.title} (draft -> regular)`;
@@ -213,21 +220,12 @@ export async function promoteRecipe(slug, batch) {
 }
 
 /**
- * Nothing current any more -> the shopping list goes too (staged in the same commit), so an old list
- * can't reappear when something else becomes current later. Returns whether it was removed.
+ * Adds recipes to / takes them out of this week (`current: true`) or next week (`next: true`), all in one commit.
+ * Drafts and regular recipes alike. A recipe can be in both weeks.
  */
-async function clearShoppingListIfNoneCurrent(cs) {
-  const stillCurrent = (await listRecipes(cs)).filter(isCurrent);
-  if (stillCurrent.length || !(await cs.read(SHOPPING_LIST_PATH))) return false;
-  cs.remove(SHOPPING_LIST_PATH);
-  return true;
-}
-
-/**
- * Adds regular recipes to / removes them from the current rotation (`current: true`),
- * all in one commit. Drafts are always current, so they can't be added or removed here.
- */
-export async function setCurrentRecipes(slugs, current, batch) {
+export async function setWeekRecipes(slugs, week, add, batch) {
+  if (!WEEKS.includes(week)) throw new UserError(`week must be one of: ${WEEKS.join(", ")}`);
+  const key = WEEK_KEY[week];
   const cs = batch || new ChangeSet();
   const unique = [...new Set(slugs)];
   const updates = [];
@@ -237,32 +235,64 @@ export async function setCurrentRecipes(slugs, current, batch) {
   for (const slug of unique) {
     const { markdown: before } = await getRecipe(slug, cs);
     const { data, sections } = parseRecipe(before);
-    if (data.draft === true) {
-      throw new UserError(
-        current
-          ? `"${slug}" is a draft, and drafts are always current already.`
-          : `"${slug}" is a draft, and drafts are always current. Promote it with promote_recipe once it's tried (it stays current), then unmark it.`
-      );
-    }
-    if ((data.current === true) === current) {
+    if ((data[key] === true) === add) {
       unchanged.push(slug);
       continue;
     }
-    if (current) data.current = true;
-    else delete data.current;
+    if (add) data[key] = true;
+    else delete data[key];
     updates.push([recipePath(slug), Buffer.from(serializeRecipe(data, sections))]);
     changed.push(slug);
     titles.push(data.title);
   }
   // Stage only once every slug checked out, so a refused call leaves a batch untouched.
   for (const [path, content] of updates) cs.write(path, content);
-  if (!changed.length) return { changed, unchanged, commit: null, subject: null, clearedShoppingList: false };
+  if (!changed.length) return { changed, unchanged, week, add, commit: null, subject: null };
 
-  const clearedShoppingList = current ? false : await clearShoppingListIfNoneCurrent(cs);
-  const verb = current ? "Make current" : "Remove from current";
+  const verb = `${add ? "Add to" : "Take out of"} ${WEEK_NAME[week]}`;
   const subject = `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}`;
   const commit = batch ? null : await cs.commit(subject + via("Updated"));
-  return { changed, unchanged, commit, subject, clearedShoppingList };
+  return { changed, unchanged, week, add, commit, subject };
+}
+
+/**
+ * The switch: next week becomes this week. Every recipe's `current` becomes what its `next` was, and next week
+ * is emptied. `carryOver` (slugs that are in this week now, e.g. drafts the family hasn't got round to) stay in
+ * this week as well. The shopping list isn't touched: it was built for next week, so it now covers this week and
+ * the page keeps showing it until a new next week is planned and a new list saved.
+ */
+export async function startNextWeek(carryOver = [], batch) {
+  const cs = batch || new ChangeSet();
+  const recipes = await listRecipes(cs);
+  const bySlug = new Map(recipes.map((r) => [r.slug, r]));
+  const carry = new Set(carryOver);
+  const bad = [...carry].filter((slug) => !bySlug.get(slug)?.current);
+  if (bad.length) {
+    throw new UserError(`carry_over: ${bad.map((s) => `"${s}"`).join(", ")} ${bad.length === 1 ? "is" : "are"} not in this week, so there's nothing to carry over.`);
+  }
+
+  const report = { started: [], stayed: [], carried: [], left: [], droppedDrafts: [] };
+  let writes = 0;
+  for (const r of recipes) {
+    const nowThis = r.next === true || carry.has(r.slug);
+    if (r.next && r.current) report.stayed.push(r.slug);
+    else if (r.next) report.started.push(r.slug);
+    else if (carry.has(r.slug)) report.carried.push(r.slug);
+    else if (r.current) (r.draft ? report.droppedDrafts : report.left).push(r.slug);
+    if (nowThis === !!r.current && !r.next) continue;
+    const { markdown } = await getRecipe(r.slug, cs);
+    const { data, sections } = parseRecipe(markdown);
+    if (nowThis) data.current = true;
+    else delete data.current;
+    delete data.next;
+    cs.write(recipePath(r.slug), Buffer.from(serializeRecipe(data, sections)));
+    writes++;
+  }
+  const thisWeek = [...report.started, ...report.stayed, ...report.carried];
+  const subject = `Start next week (${thisWeek.length} recipe${thisWeek.length === 1 ? "" : "s"} this week)`;
+  if (!writes) return { ...report, thisWeek, commit: null, subject: null };
+  const commit = batch ? null : await cs.commit(subject + via("Switched"));
+  return { ...report, thisWeek, commit, subject };
 }
 
 /**
@@ -276,6 +306,12 @@ export async function removeDraft(slug, batch) {
   if (data.draft !== true) {
     throw new UserError(`"${slug}" is not a draft, so it can't be removed. Only drafts (recipes nobody has tried yet) can be removed through the server.`);
   }
+  if (isNextWeek(data)) {
+    // The family's rule: a disliked draft that's already planned for next week is kept, and the user is told.
+    throw new UserError(
+      `"${slug}" is planned for next week, so it isn't removed. Tell the user it's still on next week's plan; if they want it gone, take it out of next week first (set_week_recipes with week: "next", add: false), refresh the shopping list, then remove it.`
+    );
+  }
 
   cs.remove(recipePath(slug));
   const removedImages = [];
@@ -286,11 +322,9 @@ export async function removeDraft(slug, batch) {
     }
   }
 
-  // Drafts are always current, so removing the last current recipe leaves nothing to shop for.
-  const clearedShoppingList = await clearShoppingListIfNoneCurrent(cs);
   const subject = `Remove draft recipe: ${data.title}`;
   const commit = batch ? null : await cs.commit(subject + via("Removed"));
-  return { slug, title: data.title, removedImages, commit, subject, clearedShoppingList };
+  return { slug, title: data.title, removedImages, commit, subject };
 }
 
 export async function updateRecipe(input, batch) {

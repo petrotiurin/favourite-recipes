@@ -5,7 +5,7 @@ const { marked } = require("marked");
 const { renderIndex } = require("./templates/index");
 const { renderRecipe } = require("./templates/recipe");
 const { renderShoppingList } = require("./templates/shopping-list");
-const { isCurrent, byStatusThenTitle } = require("./templates/status");
+const { byStatusThenTitle } = require("./templates/status");
 
 const ROOT = __dirname;
 const RECIPES_DIR = path.join(ROOT, "recipes");
@@ -49,12 +49,14 @@ function loadRecipes() {
 
 /**
  * The shopping list is written by the agent (via the MCP server's
- * update_shopping_list tool) and shown as-is until the agent writes a new one.
- * It is blank only when there is no list or no recipe is current. The recipes
- * it links to are the ones it was built from that still exist.
+ * update_shopping_list tool) for next week's recipes, and shown as-is until the
+ * agent writes a new one: switching weeks doesn't touch it, so after the switch
+ * it still shows the list made for what is now this week. It is blank only when
+ * there is no list. The recipes it links to are the ones it was built from that
+ * still exist.
  */
-function loadShoppingList(currentRecipes, allRecipes) {
-  if (!currentRecipes.length || !fs.existsSync(SHOPPING_LIST_FILE)) return null;
+function loadShoppingList(allRecipes) {
+  if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
   let list;
   try {
     list = JSON.parse(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"));
@@ -95,7 +97,7 @@ function build() {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }
 
-  // Drafts first, then current recipes, then the rest; alphabetical within each group.
+  // This week first (drafts first), then the rest; alphabetical within each group.
   const recipes = loadRecipes().sort(byStatusThenTitle);
 
   fs.writeFileSync(path.join(DIST_DIR, "index.html"), renderIndex(recipes));
@@ -106,8 +108,7 @@ function build() {
     fs.writeFileSync(path.join(DIST_DIR, "recipes", `${recipe.slug}.html`), html);
   }
 
-  const currentRecipes = recipes.filter(isCurrent);
-  const shopping = loadShoppingList(currentRecipes, recipes);
+  const shopping = loadShoppingList(recipes);
   fs.writeFileSync(path.join(DIST_DIR, "shopping-list.html"), renderShoppingList(shopping?.list ?? null, shopping?.recipes ?? [], stocktakeAuth()));
 
   console.log(`Built ${recipes.length} recipe(s) into dist/`);

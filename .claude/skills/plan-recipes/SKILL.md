@@ -1,6 +1,6 @@
 ---
 name: plan-recipes
-description: Full flow for "what are we cooking": takes screenshots, links, pasted text and/or names of recipes we already have, adds the new ones as draft recipes, marks existing ones as current, builds the combined shopping list, and reports back with a summary. Use whenever the user hands over recipes to cook or shop for (screenshots, links, recipe names or descriptions), or asks for a shopping list for some recipes. Uses the recipes MCP server, not local files.
+description: Full flow for "what are we cooking": takes screenshots, links, pasted text and/or names of recipes we already have, plans them for next week (new ones as drafts, existing ones added to next week; switches weeks first if next week was already planned), builds next week's shopping list, and reports back with a summary. Use whenever the user hands over recipes to cook or shop for (screenshots, links, recipe names or descriptions), or asks for a shopping list for some recipes. Uses the recipes MCP server, not local files.
 ---
 
 # Plan recipes

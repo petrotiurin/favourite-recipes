@@ -7,6 +7,7 @@ tags: [High Protein]
 total_mins: 40
 serves: 4
 calories: 400
+current: true
 draft: true
 ---
 

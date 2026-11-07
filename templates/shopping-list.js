@@ -179,14 +179,14 @@ function pageData(list, bySlug, auth, plan) {
 }
 
 /**
- * `list` is the agent-written shopping-list.json, or null when there is nothing
- * current to show. `recipes` are the recipes the list was built from (for the links).
+ * `list` is the agent-written shopping-list.json (made for next week's recipes),
+ * or null when there is none. `recipes` are the recipes the list was built from (for the links).
  * `auth` ({ supabaseUrl, supabaseKey, api }) turns on the editor's stocktake, or null.
  */
 function renderShoppingList(list, recipes, auth = null) {
   let body;
   if (!list) {
-    body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once there are current recipes and a shopping list has been made for them.</p>`;
+    body = `    <p class="shopping-empty">Nothing to buy right now. The list appears here once next week's recipes are planned and a shopping list has been made for them.</p>`;
   } else {
     const bySlug = new Map(recipes.map((r) => [r.slug, r]));
     const plan = planOf(list);

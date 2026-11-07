@@ -235,10 +235,6 @@ main {
   color: var(--accent-ink);
 }
 
-.filter-label-draft {
-  color: var(--draft);
-}
-
 .filter-input:checked + .filter-label {
   font-weight: 600;
   color: var(--text);
@@ -251,10 +247,6 @@ main {
   color: var(--accent-ink);
 }
 
-.filter-input:checked + .filter-label-draft {
-  color: var(--draft);
-}
-
 .filter-input:focus-visible + .filter-label {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -265,7 +257,9 @@ main:has(#filter-lunch:checked) .tile-grid .tile:not(.course-lunch),
 main:has(#filter-dinner:checked) .tile-grid .tile:not(.course-dinner),
 main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack),
 main:has(#filter-current:checked) .tile-grid .tile:not(.is-current),
-main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft),
+main:has(#filter-next:checked) .tile-grid .tile:not(.is-next),
+/* A draft that's only in next week stays out of sight (search included) until the switch, except under "Next week" */
+main:not(:has(#filter-next:checked)) .tile-grid .tile.is-next-only,
 main:has(.filter-input:not(#filter-all):checked) .tile-divider,
 .tile-grid.is-searching .tile-divider {
   display: none;

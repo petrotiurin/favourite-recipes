@@ -48,13 +48,13 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--line` | `#efedea` | Dividers between rows inside a card |
 | `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
 | `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers, "Step n", active wake lock |
+| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" / "Next week" kickers and tabs, "Step n", active wake lock |
 | `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
 | `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
-| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker and filter |
+| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker |
 
 ## Type
 
@@ -67,7 +67,7 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week").
+  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week", and "Next week" on recipe pages).
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
@@ -96,18 +96,25 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 
 Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
 underneath. No headline: straight into a search field drawn as an underline with a search icon,
-and the filters as plain words (active one bold and underlined; "This week" in accent ink, "To
-try" in plum). On a phone the filters are one row that scrolls sideways.
+and the filters as plain words (active one bold and underlined): All (preselected), the courses,
+then "This week" and "Next week" in accent ink, each only when that week has recipes. On a phone the
+filters are one row that scrolls sideways.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
 Every recipe is the same tile, with no feature slot: square photo (no radius), kicker ("To try",
-"This week", else the course), serif name, then "20 min · 412 kcal". A "The rest of the book"
-divider spans the grid where the non-current recipes start; it hides while a filter or a search
-is active.
+"This week", else the course), serif name, then "20 min · 412 kcal". This week's recipes come
+first; a "The rest of the book" divider spans the grid where the others start; it hides while a
+filter or a search is active.
+
+**Next week stays out of the way.** Tiles never say "Next week": next week's recipes sit in the
+rest of the book like any other, and only the "Next week" tab gathers them (CSS-only, so it works
+without JS). A draft that's only in next week (`.is-next-only`) is hidden from All, the course tabs
+and search until the switch makes it this week's; the "Next week" tab is the one place it shows.
 
 ## Recipe page
 
-Back link (chevron + "All recipes"), kicker (status, course and tags), serif title, and for
+Back link (chevron + "All recipes"), kicker (status: "To try", "This week", "Next week", whichever
+apply; then course and tags), serif title, and for
 drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
 each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
