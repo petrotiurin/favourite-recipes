@@ -17,7 +17,7 @@ function renderRecipe(recipe, bodyHtml) {
   const status = [
     ...(isDraft(recipe) ? [`<span class="kicker-draft">To try</span>`] : []),
     ...(isThisWeek(recipe) ? [`<span class="kicker-current">This week</span>`] : []),
-    ...(isNextWeek(recipe) ? [`<span class="kicker-current">Next week</span>`] : []),
+    ...(isNextWeek(recipe) ? [`<span class="kicker-next">Next week</span>`] : []),
   ];
   const kicker = [...status, ...[...(recipe.course || []), ...(recipe.tags || [])].map(escapeHtml)].join(" &middot; ");
   const meta = [

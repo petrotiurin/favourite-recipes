@@ -19,7 +19,7 @@ The `mcp-server/` folder is **not part of the site**: it's a separate MCP server
 
 ## UI design
 
-`design.md` is the UI reference: colour tokens (the orange accent, purple only for drafts, no other hues such as green), the house icon language, the shared components and the interaction rules. Read it before changing any page's look or behaviour, and update it in the same change when you add or alter a pattern.
+`design.md` is the UI reference: colour tokens (the orange accent for this week, purple only for drafts, teal only for next week, no other hues such as green), the house icon language, the shared components and the interaction rules. Read it before changing any page's look or behaviour, and update it in the same change when you add or alter a pattern.
 
 ## How new recipes get added
 

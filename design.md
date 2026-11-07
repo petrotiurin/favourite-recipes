@@ -23,8 +23,9 @@ photos. Photos lead every list, because that's how we pick what to cook next.
   names), not tinted cards or dashed borders.
 - **No emoji in the UI.** Meta reads as plain words ("20 min · 566 kcal"); icons are the stroke
   SVGs below.
-- **One accent.** Orange is the only accent colour. Purple is reserved for drafts. No green,
-  red or blue for state; error messages are the one exception (a muted red box).
+- **One accent.** Orange is the only accent colour, and also this week's colour. Two reserved
+  hues besides it: purple for drafts, teal (`--next`) for next week. No other colours for state
+  (no green, red or blue); error messages are the one exception (a muted red box).
 - **Calm states.** Highlight with low-opacity tints of the accent, not solid fills. A screen
   full of "done" rows should still look quiet.
 - **Batch writes.** Every save is a commit and a site deploy, so editing UIs collect changes
@@ -48,13 +49,14 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--line` | `#efedea` | Dividers between rows inside a card |
 | `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
 | `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" / "Next week" kickers and tabs, "Step n", active wake lock |
+| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers and tab, "Step n", active wake lock |
 | `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
 | `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
 | `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker |
+| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the "Next week" tab and the recipe-page kicker |
 
 ## Type
 
@@ -67,7 +69,7 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week", and "Next week" on recipe pages).
+  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week", recipe pages only).
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
@@ -97,7 +99,7 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
 underneath. No headline: straight into a search field drawn as an underline with a search icon,
 and the filters as plain words (active one bold and underlined): All (preselected), the courses,
-then "This week" and "Next week" in accent ink, each only when that week has recipes. On a phone the
+then "This week" in accent ink and "Next week" in teal, each only when that week has recipes. On a phone the
 filters are one row that scrolls sideways.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.

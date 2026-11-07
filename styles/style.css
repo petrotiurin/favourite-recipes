@@ -14,6 +14,7 @@
   --shadow-hover: 0 8px 22px rgba(22, 21, 20, 0.12);
   --draft: #6e4d96;
   --draft-soft: #f4f0f8;
+  --next: #2b6c6e; /* next week only: the "Next week" tab and kicker (this week is the orange accent) */
   --current-soft: #fbf1ea;
   /* See design.md: accent-ink is the accent for small text, accent-strong a filled button with on-accent text. */
   --accent-ink: #a44617;
@@ -41,6 +42,7 @@
     --shadow-hover: 0 8px 22px rgba(0, 0, 0, 0.5);
     --draft: #b49ae0;
     --draft-soft: #251f2e;
+    --next: #7fc4c1;
     --current-soft: #2e221a;
     --accent-ink: #eb9a6c;
     --accent-strong: #e0804c;
@@ -105,6 +107,10 @@ h3 {
 
 .kicker-current {
   color: var(--accent-ink);
+}
+
+.kicker-next {
+  color: var(--next);
 }
 
 /* Top bar: the name in italic serif, the shopping list on the right */
@@ -235,6 +241,10 @@ main {
   color: var(--accent-ink);
 }
 
+.filter-label-next {
+  color: var(--next);
+}
+
 .filter-input:checked + .filter-label {
   font-weight: 600;
   color: var(--text);
@@ -245,6 +255,10 @@ main {
 
 .filter-input:checked + .filter-label-current {
   color: var(--accent-ink);
+}
+
+.filter-input:checked + .filter-label-next {
+  color: var(--next);
 }
 
 .filter-input:focus-visible + .filter-label {

@@ -63,7 +63,7 @@ function renderIndex(recipes) {
       filters.map((c) => {
         const id = `filter-${c.toLowerCase()}`;
         return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">
-      <label for="${id}" class="filter-label${FILTER_NAMES[c] ? " filter-label-current" : ""}">${FILTER_NAMES[c] || c}</label>`;
+      <label for="${id}" class="filter-label${c === "Current" ? " filter-label-current" : c === "Next" ? " filter-label-next" : ""}">${FILTER_NAMES[c] || c}</label>`;
       })
     )
     .join("\n");
