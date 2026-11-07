@@ -416,8 +416,21 @@ We shop for a week, so a tray lives **7 days from its first item**:
 - Errors found while staging (dry-run of each change) show on the card straight away, so an
   expiring tray isn't full of surprises.
 
-Open: should single, obviously-safe edits ("fix the typo in step 3") skip the tray? Suggest no in
-v1: one rule is easier to trust (Q5).
+#### Quick fixes: "Save now" (decided, Q5)
+
+A fix like "it's 35 minutes, not 25" goes into the tray as a card like everything else. If it
+doesn't touch the week's plan, its card has its own **Save now**, which commits just that item (one
+commit, one deploy; same re-check and same human tap as Save). The rest of the tray waits. This
+stops quick fixes getting stuck behind an unfinished week or lost when a tray expires. The agent
+never commits directly.
+
+The server decides what qualifies, from the change itself:
+
+- **Can be saved alone:** title, steps, notes, time, calories, tags, course, photo, promoting a
+  draft, and ingredient edits to a recipe that isn't on this week's list.
+- **Waits for Finalise:** new recipes, removals, this week / not this week, servings, and
+  ingredient edits to a recipe on this week's list (they change the shopping list, so they mark it
+  out of date).
 
 ### 7.2 Page context
 
@@ -541,7 +554,7 @@ Each phase ships and is useful on its own.
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
 | 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
-| 4 | Editor writes via the tray | Staging with dry-run validation, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
+| 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
 
@@ -556,12 +569,11 @@ Decided:
 - **Q4.** Chat history is per user (§5).
 - Suggested replies on most turns (6.1).
 - CLAUDE.md gets reframed rather than patched (§2).
-- Tray: photos generated when a recipe is staged; the shopping list is built by "Finalise list" before Save appears; a tray expires 7 days after its first item (7.1).
+- Tray: photos generated when a recipe is staged; the shopping list is built by "Finalise list" before Save appears; a tray expires 7 days after its first item; quick fixes that don't touch the week get their own "Save now" (7.1, Q5).
 - Sign-in stays email + password + email code; no Google or Apple for now (4.2).
 
 Open:
 
-- **Q5.** Any single edits allowed to skip the tray? (rec: no, in v1)
 - **Q9.** Which models to start with for `CHAT_PUBLIC_MODEL` and `CHAT_EDITOR_MODEL`. Suggest a
   short trial in phase 1/4: a handful of real questions and one full plan-recipes run, comparing
   tool-calling reliability and cost per chat.
