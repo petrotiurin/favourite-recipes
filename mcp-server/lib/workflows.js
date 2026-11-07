@@ -20,8 +20,9 @@ export const WORKFLOWS = {
   "plan-recipes": {
     title: "Plan recipes and the shopping list",
     description:
-      "The full \"what are we cooking\" flow: close out last round's recipes, add new ones as drafts, mark existing ones current " +
-      "(with planned servings), build the combined shopping list in one batch, and summarise.",
+      "The full \"what are we cooking next week\" flow: switch weeks first if next week is already planned (asking about this week's " +
+      "drafts), add new recipes to next week as drafts, add existing ones to next week (with planned servings), build next week's " +
+      "shopping list in one batch, and summarise.",
     request: "What to cook: recipe links, names of recipes we have, servings (\"the soup just for me\"). Attach screenshots in the chat.",
     text: read("plan-recipes"),
   },

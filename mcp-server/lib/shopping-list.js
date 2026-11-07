@@ -1,12 +1,13 @@
 import { ChangeSet } from "./github.js";
-import { listRecipes, isCurrent } from "./recipes.js";
+import { listRecipes, isNextWeek } from "./recipes.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
 
-// The agent combines the current recipes' ingredients itself; this module only
-// validates and stores the result as shopping-list.json at the repo root, which
-// build.js turns into shopping-list.html. The file records which current recipes
-// (drafts + recipes marked current) it was built from, and the site shows it only
-// while that still matches the recipes that are current now (keep in sync with
+// The shopping list is for NEXT WEEK's recipes (`next: true`). The agent combines their
+// ingredients itself; this module only validates and stores the result as shopping-list.json
+// at the repo root, which build.js turns into shopping-list.html. The file records which
+// recipes it was built from. The site shows the saved list until a new one is saved: after
+// the switch (start_next_week) those recipes are this week's and the list stays, so it
+// covers this week until next week is planned and a new list saved (keep in sync with
 // loadShoppingList in build.js).
 
 export const shoppingPageUrl = () => `${config.siteUrl}/shopping-list.html`;
@@ -51,30 +52,30 @@ export function validateSections(sections) {
 }
 
 /**
- * Every item names the current recipes it is for (`recipes`: slugs), so the page can show which
- * dish each ingredient goes into. Each slug must be a current recipe, and every current recipe
+ * Every item names the next-week recipes it is for (`recipes`: slugs), so the page can show which
+ * dish each ingredient goes into. Each slug must be a next-week recipe, and every next-week recipe
  * must have at least one item (a recipe with nothing on the list was most likely left out).
  */
-export function validateItemRecipes(sections, currentSlugs) {
-  const current = new Set(currentSlugs);
+export function validateItemRecipes(sections, nextSlugs) {
+  const next = new Set(nextSlugs);
   const used = new Set();
   const errors = [];
   for (const s of sections) {
     for (const item of s.items) {
       if (!item.recipes?.length) {
-        errors.push(`"${item.name}": recipes is required: the slugs of the current recipes it is for`);
+        errors.push(`"${item.name}": recipes is required: the slugs of the next-week recipes it is for`);
         continue;
       }
       for (const slug of item.recipes) {
-        if (current.has(slug)) used.add(slug);
-        else errors.push(`"${item.name}": "${slug}" is not a current recipe (current: ${[...current].join(", ")})`);
+        if (next.has(slug)) used.add(slug);
+        else errors.push(`"${item.name}": "${slug}" is not a next-week recipe (next week: ${[...next].join(", ")})`);
       }
       errors.push(...amountErrors(item));
     }
   }
-  const missing = [...current].filter((slug) => !used.has(slug));
+  const missing = [...next].filter((slug) => !used.has(slug));
   if (missing.length && !errors.length) {
-    errors.push(`no item is for ${missing.join(", ")}: every current recipe's ingredients must be on the list, each item naming its recipes`);
+    errors.push(`no item is for ${missing.join(", ")}: every next-week recipe's ingredients must be on the list, each item naming its recipes`);
   }
   if (errors.length) throw new ShoppingListError(`Shopping list rejected:\n- ${errors.join("\n- ")}`);
 }
@@ -125,10 +126,10 @@ export function validateServings(servings, allowed, what) {
   if (errors.length) throw new ShoppingListError(`Servings rejected:\n- ${errors.join("\n- ")}`);
 }
 
-export function buildShoppingList(sections, currentSlugs, now = new Date(), servings = resolveServings(currentSlugs)) {
+export function buildShoppingList(sections, slugs, now = new Date(), servings = resolveServings(slugs)) {
   return {
     updated: now.toISOString().slice(0, 10),
-    recipes: [...currentSlugs].sort(),
+    recipes: [...slugs].sort(),
     servings,
     sections: sections.map((s) => ({
       name: s.name.trim(),
@@ -284,13 +285,15 @@ export function stocktakeLines(list) {
 }
 
 /**
- * "current" when the stored list covers exactly the recipes that are current now, "outdated" when the set has
- * changed since (the site keeps showing the old list until it is rewritten), "none" when there's no list.
+ * "current" when the stored list covers exactly next week's recipes, "outdated" when next week has changed since
+ * (the site keeps showing the old list until it is rewritten), "not planned" when next week is empty (e.g. just
+ * after start_next_week: the page keeps showing the last list, now for this week), "none" when there's no list.
  */
-export function shoppingListStatus(list, currentSlugs) {
+export function shoppingListStatus(list, nextSlugs) {
   if (!list || !Array.isArray(list.sections) || !list.sections.length) return "none";
+  if (!nextSlugs.length) return "not planned";
   const covered = [...(list.recipes || [])].sort().join("\n");
-  return covered === [...currentSlugs].sort().join("\n") ? "current" : "outdated";
+  return covered === [...nextSlugs].sort().join("\n") ? "current" : "outdated";
 }
 
 async function readStoredList(cs) {
@@ -305,8 +308,8 @@ async function readStoredList(cs) {
 
 export async function getShoppingList(cs = new ChangeSet()) {
   const [list, recipes] = await Promise.all([readStoredList(cs), listRecipes(cs)]);
-  const current = recipes.filter(isCurrent);
-  return { list, current, status: shoppingListStatus(list, current.map((r) => r.slug)) };
+  const next = recipes.filter(isNextWeek);
+  return { list, next, status: shoppingListStatus(list, next.map((r) => r.slug)) };
 }
 
 /**
@@ -317,21 +320,21 @@ export async function getShoppingList(cs = new ChangeSet()) {
 export async function updateShoppingList(sections, batch, servings = {}) {
   const cs = batch || new ChangeSet();
   validateSections(sections);
-  const current = (await listRecipes(cs)).filter(isCurrent);
-  if (!current.length) {
+  const next = (await listRecipes(cs)).filter(isNextWeek);
+  if (!next.length) {
     throw new ShoppingListError(
-      "There are no current recipes, so there is nothing to shop for. Add a draft, or mark recipes current with set_current_recipes. The shopping page stays blank until then."
+      'Next week has no recipes, so there is nothing to shop for. Plan it first: create_recipe with week: "next", or set_week_recipes with week: "next". The page keeps showing the last list until then.'
     );
   }
-  const slugs = current.map((r) => r.slug);
-  validateServings(servings, slugs, "a current recipe");
+  const slugs = next.map((r) => r.slug);
+  validateServings(servings, slugs, "a next-week recipe");
   validateItemRecipes(sections, slugs);
   const previous = await readStoredList(cs);
   const list = buildShoppingList(sections, slugs, new Date(), resolveServings(slugs, servings, previous?.servings));
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
-  const subject = `Update shopping list (${current.length} current recipe${current.length === 1 ? "" : "s"})`;
+  const subject = `Update shopping list (${next.length} next-week recipe${next.length === 1 ? "" : "s"})`;
   const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
-  return { list, current, commit, subject };
+  return { list, next, commit, subject };
 }
 
 /**

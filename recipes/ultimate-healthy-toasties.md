@@ -7,6 +7,7 @@ tags: [Vegetarian]
 total_mins: 15
 serves: 1
 calories: 480
+current: true
 draft: true
 ---
 

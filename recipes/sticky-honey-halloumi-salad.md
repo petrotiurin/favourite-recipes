@@ -7,6 +7,7 @@ tags: [Vegetarian, Meal Prep]
 total_mins: 30
 serves: 4
 calories: 400
+current: true
 draft: true
 ---
 

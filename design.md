@@ -23,8 +23,9 @@ photos. Photos lead every list, because that's how we pick what to cook next.
   names), not tinted cards or dashed borders.
 - **No emoji in the UI.** Meta reads as plain words ("20 min · 566 kcal"); icons are the stroke
   SVGs below.
-- **One accent.** Orange is the only accent colour. Purple is reserved for drafts. No green,
-  red or blue for state; error messages are the one exception (a muted red box).
+- **One accent.** Orange is the only accent colour, and also this week's colour. Two reserved
+  hues besides it: purple for drafts, teal (`--next`) for next week. No other colours for state
+  (no green, red or blue); error messages are the one exception (a muted red box).
 - **Calm states.** Highlight with low-opacity tints of the accent, not solid fills. A screen
   full of "done" rows should still look quiet.
 - **Batch writes.** Every save is a commit and a site deploy, so editing UIs collect changes
@@ -48,13 +49,14 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--line` | `#efedea` | Dividers between rows inside a card |
 | `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
 | `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers, "Step n", active wake lock |
+| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers and tab, "Step n", active wake lock |
 | `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
 | `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
-| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the "To try" kicker and filter |
+| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the italic "A draft: …" line under a draft's title |
+| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the home page's "Next week · n" link, the Next week page's kickers, the recipe-page kicker |
 
 ## Type
 
@@ -67,7 +69,8 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-draft` plum ("To try"), `.kicker-current` accent ink ("This week").
+  `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week"). Kickers name the week, never
+  the draft status.
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
@@ -96,19 +99,37 @@ The definitions are duplicated in `templates/shopping-list.js` (static page) and
 
 Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
 underneath. No headline: straight into a search field drawn as an underline with a search icon,
-and the filters as plain words (active one bold and underlined; "This week" in accent ink, "To
-try" in plum). On a phone the filters are one row that scrolls sideways.
+and the filters as plain words (active one bold and underlined): All (preselected) and the courses,
+nothing else, so the row fits a phone. Weeks are not filters.
+
+**Week heading** (`.week-head`), between the filters and the grid: "This week" on the left (accent
+ink, kicker style; only when this week has recipes) and, on the right, a teal **"Next week · n →"**
+link to the Next week page, or a quiet muted "Next week: not planned" when next week is empty. While a
+course is picked or a search is typed, the "This week" label hides (the grid isn't this week any
+more) but the link stays.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
-Every recipe is the same tile, with no feature slot: square photo (no radius), kicker ("To try",
-"This week", else the course), serif name, then "20 min · 412 kcal". A "The rest of the book"
-divider spans the grid where the non-current recipes start; it hides while a filter or a search
-is active.
+Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the week,
+else the course; never "draft" or "To try"), serif name, then "20 min · 412 kcal". This week's recipes come
+first; a "The rest of the book" divider spans the grid where the others start; it hides while a
+filter or a search is active.
+
+**Next week stays out of the way.** Home tiles never say "Next week": next week's recipes sit in
+the rest of the book like any other. A draft that's only in next week isn't on the home page at all
+(so search can't find it) until the switch makes it this week's.
+
+## Next week page
+
+`next-week.html` (`templates/next-week.js`), reached only from the home page's week link. Top bar
+as everywhere (the shopping list stays there: no button on this page), a back link (chevron +
+"This week"), a teal kicker "Planning · n recipes", the serif title "Next week" (`.page-title`), then
+next week's recipes in the same grid, alphabetical, every kicker "Next week" in teal. When nothing
+is planned it says so in one italic serif line. Always built, so the link never breaks.
 
 ## Recipe page
 
-Back link (chevron + "All recipes"), kicker (status, course and tags), serif title, and for
-drafts one italic serif line saying it's a draft. Then the photo: edge to edge at 4:5 on a phone,
+Back link (chevron + "All recipes"), kicker ("This week" and/or "Next week", then course and tags), serif title, and for
+drafts one italic serif line in plum saying it's a draft (the only place a draft is marked). Then the photo: edge to edge at 4:5 on a phone,
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
 each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
 the segmented control (1/2/4, the same `.seg` as the shopping page; it opens on 4, whatever
@@ -158,7 +179,7 @@ interactive part from the embedded JSON.
 
 Under the serif title, the list's recipes appear as **photo bubbles**: overlapping 36px circles
 (2px `--bg` ring) followed by "For N recipes · list made <date>". Opening that summary lists each
-recipe as a link with its round photo and serif name ("To try" kicker after drafts). Aisle
+recipe as a link with its round photo and serif name. Aisle
 section names are serif small caps, like a cookbook index.
 
 Each list row also shows **which recipes the item is for**, as the same photo bubbles in small:

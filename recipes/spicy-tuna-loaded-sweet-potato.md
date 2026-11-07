@@ -7,6 +7,7 @@ tags: [High Protein, Meal Prep]
 total_mins: 20
 serves: 1
 calories: 447
+current: true
 draft: true
 ---
 

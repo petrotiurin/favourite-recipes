@@ -7,6 +7,7 @@ tags: [High Protein, High Fibre]
 total_mins: 80
 serves: 2
 calories: 340
+current: true
 draft: true
 ---
 

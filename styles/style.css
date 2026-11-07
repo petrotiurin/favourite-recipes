@@ -14,6 +14,7 @@
   --shadow-hover: 0 8px 22px rgba(22, 21, 20, 0.12);
   --draft: #6e4d96;
   --draft-soft: #f4f0f8;
+  --next: #2b6c6e; /* next week only: the home page's next-week link, the Next week page, the kicker (this week is the orange accent) */
   --current-soft: #fbf1ea;
   /* See design.md: accent-ink is the accent for small text, accent-strong a filled button with on-accent text. */
   --accent-ink: #a44617;
@@ -41,6 +42,7 @@
     --shadow-hover: 0 8px 22px rgba(0, 0, 0, 0.5);
     --draft: #b49ae0;
     --draft-soft: #251f2e;
+    --next: #7fc4c1;
     --current-soft: #2e221a;
     --accent-ink: #eb9a6c;
     --accent-strong: #e0804c;
@@ -99,12 +101,12 @@ h3 {
   color: var(--text-muted);
 }
 
-.kicker-draft {
-  color: var(--draft);
-}
-
 .kicker-current {
   color: var(--accent-ink);
+}
+
+.kicker-next {
+  color: var(--next);
 }
 
 /* Top bar: the name in italic serif, the shopping list on the right */
@@ -231,28 +233,12 @@ main {
   color: var(--text);
 }
 
-.filter-label-current {
-  color: var(--accent-ink);
-}
-
-.filter-label-draft {
-  color: var(--draft);
-}
-
 .filter-input:checked + .filter-label {
   font-weight: 600;
   color: var(--text);
   text-decoration: underline;
   text-decoration-thickness: 1.5px;
   text-underline-offset: 6px;
-}
-
-.filter-input:checked + .filter-label-current {
-  color: var(--accent-ink);
-}
-
-.filter-input:checked + .filter-label-draft {
-  color: var(--draft);
 }
 
 .filter-input:focus-visible + .filter-label {
@@ -264,11 +250,88 @@ main:has(#filter-breakfast:checked) .tile-grid .tile:not(.course-breakfast),
 main:has(#filter-lunch:checked) .tile-grid .tile:not(.course-lunch),
 main:has(#filter-dinner:checked) .tile-grid .tile:not(.course-dinner),
 main:has(#filter-snack:checked) .tile-grid .tile:not(.course-snack),
-main:has(#filter-current:checked) .tile-grid .tile:not(.is-current),
-main:has(#filter-drafts:checked) .tile-grid .tile:not(.is-draft),
 main:has(.filter-input:not(#filter-all):checked) .tile-divider,
 .tile-grid.is-searching .tile-divider {
   display: none;
+}
+
+/* Week heading above the grid: "This week" on the left, the way to next week on the right */
+.week-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 2.75rem;
+  margin: -0.5rem 0 0.75rem;
+}
+
+.week-label {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+/* While a course is picked or a search is typed the grid isn't "this week" any more: keep only the link */
+main:has(.filter-input:not(#filter-all):checked) .week-label,
+main:has(.tile-grid.is-searching) .week-label {
+  visibility: hidden;
+}
+
+.week-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--next);
+}
+
+.week-link .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.week-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.week-link:focus-visible {
+  outline: 2px solid var(--next);
+  outline-offset: 2px;
+}
+
+.week-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* A plain list page (Next week): kicker + serif title, then the grid */
+.page-head {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem 0 1.75rem;
+}
+
+.page-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(2.1rem, 6vw, 3rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+
+.page-empty {
+  margin: 0 0 3rem;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.1rem;
+  color: var(--text-muted);
 }
 
 /* Recipe grid: two photos side by side on a phone, more columns as the screen widens */
@@ -402,7 +465,7 @@ main:has(.filter-input:not(#filter-all):checked) .tile-divider,
   font-family: var(--serif);
   font-style: italic;
   font-size: 1.05rem;
-  color: var(--text-muted);
+  color: var(--draft); /* only shown on drafts: the one place a draft is marked */
 }
 
 .recipe-hero {
@@ -737,17 +800,6 @@ footer.site-footer {
   object-fit: cover;
   flex: none;
   background: var(--track);
-}
-
-.shopping-recipes a.is-draft span::after {
-  content: "To try";
-  margin-left: 0.5rem;
-  font-family: var(--sans);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--draft);
 }
 
 .shopping-recipes a:hover {

@@ -1,83 +1,65 @@
 const { layout } = require("./layout");
-const { isDraft, isCurrent } = require("./status");
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+const { isThisWeek, isNextWeek, isHiddenUntilNextWeek } = require("./status");
+const { siteBar, tile, courseLabel } = require("./tiles");
 
 const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
-function courseClasses(r) {
-  return (r.course || [])
-    .map((c) => `course-${String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`)
-    .concat(isCurrent(r) ? ["is-current"] : [])
-    .concat(isDraft(r) ? ["is-draft"] : [])
-    .join(" ");
-}
-
-/** The small-caps line above a tile's name: its place in the rotation, else its course. */
-function kicker(r) {
-  if (isDraft(r)) return `<p class="kicker kicker-draft">To try</p>`;
-  if (isCurrent(r)) return `<p class="kicker kicker-current">This week</p>`;
-  return `<p class="kicker">${escapeHtml((r.course || []).join(" · "))}</p>`;
-}
-
 const ICON_SEARCH =
   '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
-const ICON_CART =
-  '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.4 11h10.2L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/></svg>';
+const ICON_ARROW =
+  '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
+
+const courseClasses = (r) => (r.course || []).map((c) => `course-${String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
+
+/**
+ * The week heading above the grid: "This week" on the left (when this week has recipes) and, on the right,
+ * a teal link to next-week.html with next week's count, or a quiet "not planned" when next week is empty.
+ */
+function weekHead(thisWeekCount, nextWeekCount) {
+  if (!thisWeekCount && !nextWeekCount) return "";
+  const label = thisWeekCount ? `<h2 class="week-label">This week</h2>` : "<span></span>";
+  const next = nextWeekCount
+    ? `<a class="week-link" href="next-week.html">Next week &middot; ${nextWeekCount}${ICON_ARROW}</a>`
+    : `<span class="week-empty">Next week: not planned</span>`;
+  return `    <div class="week-head">
+      ${label}
+      ${next}
+    </div>\n`;
+}
 
 function renderIndex(recipes) {
-  // Recipes arrive drafts first, then other current ones, then the rest; a divider
-  // marks where the rest begins (hidden by the CSS while filtering or searching).
-  const restStart = recipes.findIndex((r) => !isCurrent(r));
-  const tiles = recipes
+  // Drafts planned only for next week aren't on the home page at all (search can't find them either)
+  // until the switch: they live on the Next week page. Recipes arrive with this week first (drafts first),
+  // then the rest; a divider marks where the rest begins (hidden while filtering or searching). Next week's
+  // other recipes sit in the rest, unmarked.
+  const shown = recipes.filter((r) => !isHiddenUntilNextWeek(r));
+  const restStart = shown.findIndex((r) => !isThisWeek(r));
+  const tiles = shown
     .map((r, i) => {
       const divider = i === restStart && i > 0 ? `      <p class="tile-divider">The rest of the book</p>\n` : "";
-      return `${divider}      <a class="tile ${courseClasses(r)}" href="recipes/${r.slug}.html">
-        <img class="tile-image" src="${r.image.replace(/^\//, "")}" alt="" loading="lazy">
-        ${kicker(r)}
-        <h2 class="tile-title">${escapeHtml(r.title)}</h2>
-        <p class="tile-meta">${r.total_mins} min &middot; ${r.calories} kcal</p>
-      </a>`;
+      const kicker = isThisWeek(r) ? { cls: "kicker-current", label: "This week" } : { label: courseLabel(r) };
+      return divider + tile(r, { kicker, cls: courseClasses(r).concat(isThisWeek(r) ? ["is-current"] : []).join(" ") });
     })
     .join("\n");
 
-  // The Current tab (drafts + current recipes) only appears when some regular recipe
-  // is current, since otherwise it would be the same as the Drafts tab. Drafts likewise.
-  const filters = COURSES.concat(recipes.some((r) => r.current === true && !isDraft(r)) ? ["Current"] : []).concat(
-    recipes.some(isDraft) ? ["Drafts"] : []
-  );
-  const FILTER_NAMES = { Current: "This week", Drafts: "To try" };
-
   // Each input must sit directly before its label: the CSS highlights the
   // active filter with `.filter-input:checked + .filter-label`.
-  const filterControls = [`      <input type="radio" name="course-filter" id="filter-all" class="filter-input" checked>
-      <label for="filter-all" class="filter-label">All</label>`]
-    .concat(
-      filters.map((c) => {
-        const id = `filter-${c.toLowerCase()}`;
-        return `      <input type="radio" name="course-filter" id="${id}" class="filter-input">
-      <label for="${id}" class="filter-label${c === "Drafts" ? " filter-label-draft" : c === "Current" ? " filter-label-current" : ""}">${FILTER_NAMES[c] || c}</label>`;
-      })
-    )
+  const filterControls = ["All", ...COURSES]
+    .map((c) => {
+      const id = `filter-${c.toLowerCase()}`;
+      return `      <input type="radio" name="course-filter" id="${id}" class="filter-input"${c === "All" ? " checked" : ""}>
+      <label for="${id}" class="filter-label">${c}</label>`;
+    })
     .join("\n");
 
-  const content = `  <header class="site-bar">
-    <a class="brand" href="index.html">Our Favourite Recipes</a>
-    <a class="bar-link" href="shopping-list.html">${ICON_CART}<span>Shopping list</span></a>
-  </header>
+  const content = `${siteBar()}
   <main>
     <h1 class="sr-only">Our Favourite Recipes</h1>
     <label class="search">${ICON_SEARCH}<span class="sr-only">Search recipes</span><input type="search" id="recipe-search" class="search-input" placeholder="Search recipes" autocomplete="off"></label>
     <div class="filter-bar">
 ${filterControls}
     </div>
-    <div class="tile-grid">
+${weekHead(recipes.filter(isThisWeek).length, recipes.filter(isNextWeek).length)}    <div class="tile-grid">
 ${tiles}
     </div>
   </main>
