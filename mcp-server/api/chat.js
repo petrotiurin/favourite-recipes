@@ -8,7 +8,9 @@ import { startTrace } from "../lib/langfuse.js";
 // POST /chat: the site's chat widget (templates/chat.js) talks to this. Streams the answer as Server-Sent Events:
 //   event: text         data: { delta }
 //   event: status       data: { text }        what the bot is doing, in plain words
-//   event: suggestions  data: { replies }     tappable suggested replies
+//   event: suggestions  data: { replies }     tappable suggested replies: strings, or { label, url } chips that open a site page
+//   event: cards        data: { cards }       recipe cards built from our own data (show_recipes)
+//   event: navigation   data: { label, url }  a button that opens one site page (offer_navigation); never navigates by itself
 //   event: done         data: { suggestions }
 //   event: error        data: { message }     safe to show the visitor
 // Phase 1 is anonymous: the caller is always role "public" (read tools only). A bearer token, if sent, is checked

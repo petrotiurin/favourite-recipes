@@ -87,8 +87,11 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   assert.equal(names.at(-1), "done");
   const text = textOf(evs);
   assert.match(text, /Let me check our book\./);
-  assert.match(text, /\]\(https:\/\/site\.test\/favourite-recipes\/recipes\/[a-z0-9-]+\.html\)/, "links to recipe pages on the site origin");
-  assert.deepEqual(evs.find((e) => e.name === "suggestions").data.replies, ["Under 400 kcal", "Quick ones only", "What's on this week?"]);
+  const cards = evs.find((e) => e.name === "cards").data.cards;
+  assert.ok(cards.length >= 1 && cards.every((c) => c.url.startsWith("https://site.test/favourite-recipes/recipes/")), "cards link to recipe pages on the site origin");
+  const replies = evs.find((e) => e.name === "suggestions").data.replies;
+  assert.deepEqual(replies.slice(0, 2), ["Under 400 kcal", "Quick ones only"]);
+  assert.deepEqual(replies[2], { label: "Open the first one", url: cards[0].url });
 
   // What the server sent to OpenRouter.
   assert.equal(openrouter.requests.length, 3); // search, text + suggest_replies, closing
@@ -97,7 +100,7 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   assert.equal(first.model, "test/model");
   assert.equal(first.stream, true);
   const offered = first.tools.map((t) => t.function.name).sort();
-  assert.deepEqual(offered, ["get_recipe", "get_shopping_list", "list_recipes", "search_recipes", "suggest_replies"]);
+  assert.deepEqual(offered, ["get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "search_recipes", "show_recipes", "suggest_replies"]);
   assert.equal(first.messages[0].role, "system");
   assert.match(first.messages[0].content, /Catalogue of our recipe book/);
   assert.equal(openrouter.requests[1].messages.at(-1).role, "tool", "the tool result went back to the model");

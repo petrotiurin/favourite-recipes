@@ -84,6 +84,7 @@ async function loadRecipeIndex() {
         tags: data.tags || [],
         total_mins: data.total_mins,
         calories: data.calories,
+        image: typeof data.image === "string" ? data.image : "",
         draft: data.draft === true,
         current: isThisWeek(data),
         next: isNextWeek(data),
@@ -118,11 +119,16 @@ export async function searchRecipes({ text, include_ingredients = [], exclude_in
     (max_minutes === undefined || (r.total_mins !== undefined && r.total_mins <= max_minutes)) &&
     (draft === undefined || r.draft === draft) &&
     (week === undefined || (week === "this" ? r.current : week === "next" ? r.next : !r.current && !r.next));
-  return (await recipeIndex()).filter(matches).map(({ ingredients, text, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
+  return (await recipeIndex()).filter(matches).map(({ ingredients, text, image, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
 }
 
 // Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
 const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|vegetable oil|sunflower oil|cooking spray|butter|sugar|flour|garlic powder|paprika|cumin|soy sauce)\b|\b(salt|pepper)( and (black )?pepper)?$/i;
+
+/** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
+export async function recipeSummaries() {
+  return (await recipeIndex()).map(({ ingredients, text, ...row }) => row);
+}
 
 /**
  * A compact catalogue of the whole book for the chat prompt: one row per recipe with its key ingredients.

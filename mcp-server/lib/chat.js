@@ -6,14 +6,14 @@ import { z } from "zod";
 import { config, COURSES } from "./config.js";
 import { toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
-import { systemPrompt, SUGGEST_REPLIES_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { loadBook, buildCards, buildNavigation, cleanReplyList } from "./chat-ui.js";
 
 export const MAX_TURNS = 20; // messages kept from the client's history
 export const MAX_USER_CHARS = 2000;
 export const MAX_ASSISTANT_CHARS = 4000;
 export const MAX_TOOL_ROUNDS = 6;
 const MAX_TOOL_RESULT_CHARS = 12000;
-const MAX_REPLY_CHARS = 30;
 
 /** An error with a message that is safe to show the visitor. */
 export class ChatError extends Error {
@@ -190,38 +190,33 @@ const STATUS = {
   get_shopping_list: "Checking the shopping list…",
 };
 
-const repliesSchema = z.object({ replies: z.array(z.string()).min(1) });
+const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
 
-/** Cleans what the model passed to suggest_replies: short, single-line, no emoji, at most 4. */
-export function cleanReplies(args) {
+/**
+ * Cleans what the model passed to suggest_replies (see chat-ui.js cleanReplyList). `book` (slug -> recipe) is what an action
+ * reply's slug is checked against; without it only plain-string replies survive.
+ */
+export function cleanReplies(args, book) {
   const parsed = repliesSchema.safeParse(args);
-  if (!parsed.success) return [];
-  const seen = new Set();
-  const out = [];
-  for (const r of parsed.data.replies) {
-    const text = oneLine(r.replace(/\p{Extended_Pictographic}/gu, ""), MAX_REPLY_CHARS * 2).trim();
-    if (!text || text.length > MAX_REPLY_CHARS || seen.has(text.toLowerCase())) continue;
-    seen.add(text.toLowerCase());
-    out.push(text);
-    if (out.length === 4) break;
-  }
-  return out;
+  return parsed.success ? cleanReplyList(parsed.data.replies, book) : [];
 }
+
+const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation"]);
 
 const resultText = (result) => {
   const text = (result?.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
   return text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n… (cut: ${text.length - MAX_TOOL_RESULT_CHARS} more characters)` : text;
 };
 
-/** The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tool. */
+/** The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools. */
 export function offeredTools(role) {
-  return [...toolDefinitions(role).filter((t) => t.function.name !== "get_workflow_guide"), SUGGEST_REPLIES_TOOL];
+  return [...toolDefinitions(role).filter((t) => t.function.name !== "get_workflow_guide"), SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
 
 /**
- * Runs one user turn. Emits events through emit({ type: "text" | "status" | "suggestions" | "done", ... }); throws ChatError
+ * Runs one user turn. Emits events through emit({ type: "text" | "status" | "suggestions" | "cards" | "navigation" | "done", ... }); throws ChatError
  * for failures (the caller turns it into an `error` event).
  *   caller    frozen { role, ... } from makeCaller; decides what dispatch() allows
  *   messages  already sanitized (sanitizeMessages)
@@ -240,6 +235,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
     rows = "";
   }
   const note = await pageNote(page);
+  const book = await loadBook();
 
   // Stable prefix first (system prompt + catalogue, then the conversation); the volatile page note rides on the latest user message,
   // as plain text, so it works on every model (not all accept a system message mid-conversation) and doesn't break the cached prefix.
@@ -251,6 +247,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
   const thread = [{ role: "system", content: systemPrompt(rows) }, ...convo];
 
   let suggestions = false;
+  let navigationOffered = false;
   let reply = "";
   let finalRound = false;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -294,15 +291,28 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         thread.push({ role: "tool", tool_call_id: call.id, content: "Error: the arguments were not valid JSON." });
         continue;
       }
-      const span = trace.span({ name: `tool ${call.name}`, input: args, metadata: { access: call.name === "suggest_replies" ? "ui" : undefined } });
+      const span = trace.span({ name: `tool ${call.name}`, input: args, metadata: { access: UI_TOOLS.has(call.name) ? "ui" : undefined } });
       let content;
       if (call.name === "suggest_replies") {
-        const replies = cleanReplies(args);
+        const replies = cleanReplies(args, book);
         if (replies.length) {
           suggestions = true;
           emit({ type: "suggestions", replies });
         }
         content = JSON.stringify({ shown: replies.length > 0 });
+        span.end({ output: content });
+      } else if (call.name === "show_recipes") {
+        const { cards, dropped } = buildCards(book, args?.slugs);
+        if (cards.length) emit({ type: "cards", cards });
+        content = JSON.stringify(cards.length ? { shown: true, count: cards.length, ...(dropped.length ? { ignored_unknown_slugs: dropped } : {}) } : { shown: false, error: "None of those slugs are in our book." });
+        span.end({ output: content });
+      } else if (call.name === "offer_navigation") {
+        const nav = navigationOffered ? null : buildNavigation(book, args);
+        if (nav) {
+          navigationOffered = true;
+          emit({ type: "navigation", label: nav.label, url: nav.url });
+        }
+        content = JSON.stringify(nav ? { shown: true } : { shown: false, error: navigationOffered ? "One button per answer." : "Unknown recipe slug or page." });
         span.end({ output: content });
       } else if (!offered.has(call.name)) {
         // Layer 2 of the auth model: a tool the model wasn't offered is refused here, before dispatch is even asked.

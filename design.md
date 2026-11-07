@@ -257,4 +257,15 @@ On the **At home** tab every row is a fill bar:
   recipe" means.
 - **First run:** the empty chat says what it can do and that chats are stored in this browser for two weeks (history is in `localStorage`, last
   ~20 turns, dropped after two weeks).
+- **Recipe cards** (`.chat-cards` / `.chat-card`, from the `show_recipes` tool): the site's tile look (square photo, small-caps kicker, serif
+  title clamped to 2 lines, "20 min · 412 kcal") in a sideways scrolling row that runs to the panel's edges, 8.75rem wide, snapping at the
+  start. Kicker: "This week" (accent), "Next week" (teal), "Draft" (purple, only when it is in neither week), else the course in muted text.
+  Built by the server from our recipe files, never from model text; tapping one opens the recipe page (inert while a reply is streaming).
+- **Navigation button** (`.chat-nav`, `offer_navigation`): an outline pill in `--accent-ink` with a stroke arrow ("Open Steamed Rice"), shown
+  only once the reply is complete. It is a plain link the user must tap; the chat never navigates on its own. Only the last message's is live.
+- **Action chips** (`.chat-chip.is-nav`): a suggested reply that opens a page rather than sending text; same pill, accent outline plus the arrow.
+- **Starter chips** (`.chat-starters`): the empty chat's first suggestions, by page (recipe: "Swap an ingredient", "Scale it for 6", "Add to
+  next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
+- **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
+  tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
 - Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.

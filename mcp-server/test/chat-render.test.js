@@ -31,7 +31,7 @@ test("renders paragraphs, bold, lists and links to the site as DOM nodes", () =>
 test("links to other origins and non-http schemes are plain text", () => {
   const out = html(render("[evil](https://evil.test/x) [js](javascript:alert(1)) [data](data:text/html,hi) [rel](/favourite-recipes/recipes/a.html) [sub](https://site.test.evil.test/) [port](https://site.test:8080/)"));
   assert.doesNotMatch(out, /evil\.test\/|javascript:|data:/);
-  assert.equal(out, '<div><p>evil js) data <a href="https://site.test/favourite-recipes/recipes/a.html">rel</a> sub port</p></div>');
+  assert.equal(out, '<div><p>evil js data <a href="https://site.test/favourite-recipes/recipes/a.html">rel</a> sub port</p></div>');
 });
 
 test("markup in model text stays text", () => {
@@ -67,4 +67,71 @@ test("stored history: kept for two weeks, only plain user/assistant text, capped
   assert.equal(chat.cleanHistory(null, now), null);
   const many = chat.cleanHistory({ id: "c", updated: now, messages: Array.from({ length: 100 }, (_, i) => ({ role: "user", content: `m${i}` })) }, now);
   assert.equal(many.messages.length, 40);
+});
+
+// --- cards, navigation, action chips and starters (phase 2) ---------------------------------------------------------
+
+test("recipe cards keep only links and photos on the site's origin", () => {
+  const good = { title: "Steamed Rice", url: "https://site.test/favourite-recipes/recipes/steamed-rice.html", image: "https://site.test/favourite-recipes/images/recipes/steamed-rice.jpg", kicker: { kind: "this", label: "This week" }, meta: "20 min · 412 kcal" };
+  const out = chat.cleanCards(
+    [
+      good,
+      { ...good, title: "Evil link", url: "https://evil.test/x" },
+      { ...good, title: "Script link", url: "javascript:alert(1)" },
+      { ...good, title: "Evil photo", image: "https://evil.test/p.jpg", kicker: { kind: "<script>", label: "x" } },
+      { url: good.url },
+    ],
+    ORIGIN
+  );
+  assert.deepEqual(out.map((c) => c.title), ["Steamed Rice", "Evil photo"]);
+  assert.equal(out[1].image, "", "a photo from elsewhere is dropped, the card stays");
+  assert.equal(out[1].kicker.kind, "", "unknown kicker kinds fall back to plain");
+  assert.equal(chat.cleanCards(Array.from({ length: 20 }, () => good), ORIGIN).length, 8);
+});
+
+test("navigation buttons and action chips only resolve to this site", () => {
+  assert.deepEqual(chat.cleanNav({ label: "Open Steamed Rice", url: "https://site.test/favourite-recipes/recipes/steamed-rice.html" }, ORIGIN), { label: "Open Steamed Rice", url: "https://site.test/favourite-recipes/recipes/steamed-rice.html" });
+  assert.equal(chat.cleanNav({ label: "x", url: "https://evil.test/" }, ORIGIN), null);
+  assert.equal(chat.cleanNav({ label: "x", url: "javascript:alert(1)" }, ORIGIN), null);
+  assert.deepEqual(
+    chat.cleanReplyItems(["Plain", { label: "Open", url: "https://site.test/favourite-recipes/next-week.html" }, { label: "Evil", url: "https://evil.test/" }, { label: "Js", url: "javascript:1" }, 5, null], ORIGIN),
+    ["Plain", { label: "Open", url: "https://site.test/favourite-recipes/next-week.html" }]
+  );
+});
+
+test("stored history keeps cards, nav and action chips only when they point at this site", () => {
+  const stored = {
+    id: "c1",
+    updated: Date.now(),
+    messages: [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "", cards: [{ title: "A", url: "https://site.test/r/a.html", kicker: { kind: "", label: "Dinner" }, meta: "" }], nav: { label: "Go", url: "https://evil.test/" }, replies: ["ok", { label: "Open", url: "https://evil.test/" }] },
+    ],
+  };
+  const h = chat.cleanHistory(stored, Date.now(), ORIGIN);
+  assert.equal(h.messages.length, 2, "a message with only cards is kept");
+  assert.equal(h.messages[1].cards.length, 1);
+  assert.equal(h.messages[1].nav, undefined);
+  assert.deepEqual(h.messages[1].replies, ["ok"]);
+  assert.equal(chat.cleanHistory(stored, Date.now()).messages[1], undefined, "without an origin nothing but text survives");
+});
+
+test("starter chips depend on the page", () => {
+  assert.deepEqual(chat.startersFor("recipe"), ["Swap an ingredient", "Scale it for 6", "Add to next week"]);
+  assert.deepEqual(chat.startersFor("index"), ["Something quick tonight", "Light and healthy"]);
+  assert.deepEqual(chat.startersFor("next-week"), ["What's planned?"]);
+  assert.deepEqual(chat.startersFor("shopping"), ["What's left to buy?"]);
+  assert.deepEqual(chat.startersFor("other"), []);
+});
+
+test("links with balanced parentheses stay whole; an unsafe one is plain text without stray characters", () => {
+  assert.equal(html(render("[wiki](https://site.test/a_(b).html)")), '<div><p><a href="https://site.test/a_(b).html">wiki</a></p></div>');
+  assert.equal(html(render("[js](javascript:alert(1)) done")), "<div><p>js done</p></div>");
+});
+
+test("the history sent to the server is well formed after a failed turn", () => {
+  assert.deepEqual(
+    chat.wellFormed([{ role: "assistant", content: "x" }, { role: "user", content: "a" }, { role: "user", content: "b" }, { role: "assistant", content: "", cards: [] }, { role: "assistant", content: "c" }, { role: "user", content: "d" }]),
+    [{ role: "user", content: "a\n\nb" }, { role: "assistant", content: "c" }, { role: "user", content: "d" }]
+  );
 });

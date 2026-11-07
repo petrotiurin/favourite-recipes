@@ -22,7 +22,7 @@
     }
   }
 
-  var INLINE_SRC = "\\*\\*([^*]+?)\\*\\*|\\[([^\\]]+)\\]\\(([^)\\s]+)\\)";
+  var INLINE_SRC = "\\*\\*([^*]+?)\\*\\*|\\[([^\\]]+)\\]\\(((?:[^()\\s]|\\([^()\\s]*\\))+)\\)";
 
   /** Inline nodes: { t: "text", v } | { t: "bold", c: [nodes] } | { t: "link", href, label } | { t: "br" }. */
   function parseInline(text) {
@@ -144,23 +144,108 @@
   var MAX_SENT = 20; // messages sent to the server each turn
   var MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
-  function cleanHistory(raw, now) {
-    if (!raw || typeof raw !== "object" || !Array.isArray(raw.messages)) return null;
-    if (!(now - Number(raw.updated) < MAX_AGE_MS)) return null;
-    var messages = raw.messages
-      .filter(function (m) {
-        return m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content;
-      })
-      .map(function (m) {
-        var out = { role: m.role, content: m.content };
-        if (m.role === "assistant" && Array.isArray(m.replies)) out.replies = m.replies.filter(function (r) { return typeof r === "string"; }).slice(0, 4);
-        return out;
-      })
-      .slice(-MAX_STORED);
-    return { id: typeof raw.id === "string" ? raw.id : null, updated: raw.updated, messages: messages };
+  /**
+   * The history as the server wants it: text only, starting with a user turn, roles alternating. A user message whose reply failed
+   * stays visible in the panel, so two user turns can follow each other; they are merged into one here.
+   */
+  function wellFormed(messages) {
+    var out = [];
+    messages.forEach(function (m) {
+      if (!m.content) return;
+      var prev = out[out.length - 1];
+      if (prev && prev.role === m.role) prev.content += "\n\n" + m.content;
+      else if (prev || m.role === "user") out.push({ role: m.role, content: m.content });
+    });
+    return out;
   }
 
-  var api = { safeHref: safeHref, parseInline: parseInline, parseBlocks: parseBlocks, renderInto: renderInto, cleanHistory: cleanHistory };
+  /** Suggested replies: a string (sent as the next message) or { label, url } (opens a page on this site). Anything else is dropped. */
+  function cleanReplyItems(list, origin) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      if (out.length >= 4) return;
+      if (typeof r === "string") {
+        if (r) out.push(r);
+      } else if (r && typeof r === "object" && typeof r.label === "string" && r.label) {
+        var href = origin ? safeHref(r.url, origin) : null;
+        if (href) out.push({ label: r.label.slice(0, 60), url: href });
+      }
+    });
+    return out;
+  }
+
+  var KICKER_KINDS = { this: "kicker-current", next: "kicker-next", draft: "kicker-draft", "": "" };
+
+  /** Recipe cards from the server: strings only, links and photos only on this site's origin, at most 8. */
+  function cleanCards(list, origin) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (c) {
+      if (out.length >= 8 || !c || typeof c !== "object" || typeof c.title !== "string" || !c.title) return;
+      var url = safeHref(c.url, origin);
+      if (!url) return;
+      var kind = c.kicker && Object.prototype.hasOwnProperty.call(KICKER_KINDS, c.kicker.kind) ? c.kicker.kind : "";
+      out.push({
+        title: c.title.slice(0, 120),
+        url: url,
+        image: typeof c.image === "string" && c.image ? safeHref(c.image, origin) || "" : "",
+        kicker: { kind: kind, label: c.kicker && typeof c.kicker.label === "string" ? c.kicker.label.slice(0, 40) : "" },
+        meta: typeof c.meta === "string" ? c.meta.slice(0, 40) : "",
+      });
+    });
+    return out;
+  }
+
+  /** A navigation button from the server: { label, url } on this site's origin, or null. */
+  function cleanNav(nav, origin) {
+    if (!nav || typeof nav !== "object" || typeof nav.label !== "string" || !nav.label) return null;
+    var url = safeHref(nav.url, origin);
+    return url ? { label: nav.label.slice(0, 60), url: url } : null;
+  }
+
+  /** Starter chips for an empty chat, by page (they are sent as the user's first message). */
+  function startersFor(page) {
+    return (
+      {
+        recipe: ["Swap an ingredient", "Scale it for 6", "Add to next week"],
+        index: ["Something quick tonight", "Light and healthy"],
+        "next-week": ["What's planned?"],
+        shopping: ["What's left to buy?"],
+      }[page] || []
+    );
+  }
+
+  function cleanHistory(raw, now, origin) {
+    if (!raw || typeof raw !== "object" || !Array.isArray(raw.messages)) return null;
+    if (!(now - Number(raw.updated) < MAX_AGE_MS)) return null;
+    var messages = [];
+    raw.messages.forEach(function (m) {
+      if (!m || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") return;
+      var out = { role: m.role, content: m.content };
+      if (m.role === "assistant") {
+        var replies = cleanReplyItems(m.replies, origin);
+        if (replies.length) out.replies = replies;
+        var cards = origin ? cleanCards(m.cards, origin) : [];
+        if (cards.length) out.cards = cards;
+        var nav = origin ? cleanNav(m.nav, origin) : null;
+        if (nav) out.nav = nav;
+      }
+      if (out.content || out.cards) messages.push(out);
+    });
+    return { id: typeof raw.id === "string" ? raw.id : null, updated: raw.updated, messages: messages.slice(-MAX_STORED) };
+  }
+
+  var api = {
+    safeHref: safeHref,
+    parseInline: parseInline,
+    parseBlocks: parseBlocks,
+    renderInto: renderInto,
+    cleanHistory: cleanHistory,
+    cleanReplyItems: cleanReplyItems,
+    cleanCards: cleanCards,
+    cleanNav: cleanNav,
+    startersFor: startersFor,
+    wellFormed: wellFormed,
+  };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api; // node (tests)
     return;
@@ -187,6 +272,7 @@
   var ICON = {
     chat: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>',
     close: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    arrow: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>',
     send: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
   };
 
@@ -208,7 +294,7 @@
   }
   function loadChat() {
     try {
-      var h = cleanHistory(JSON.parse(localStorage.getItem(STORE_KEY)), Date.now());
+      var h = cleanHistory(JSON.parse(localStorage.getItem(STORE_KEY)), Date.now(), origin);
       if (h) return { id: h.id || newId(), messages: h.messages };
     } catch (e) {
       // no storage, or it holds something else: start fresh
@@ -221,6 +307,25 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({ id: chat.id, updated: Date.now(), messages: chat.messages.slice(-MAX_STORED) }));
     } catch (e) {
       // private mode or full: the chat still works, it just isn't remembered
+    }
+  }
+
+  // What belongs to this tab's visit, not to the conversation: whether the panel is open, which conversation, an unsent draft.
+  // It lives in sessionStorage, so a full page load (tapping a card or a button) reopens the panel where it was.
+  var UI_KEY = "recipes-chat-ui";
+  function loadUi() {
+    try {
+      var v = JSON.parse(sessionStorage.getItem(UI_KEY));
+      return v && typeof v === "object" ? v : {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveUi() {
+    try {
+      sessionStorage.setItem(UI_KEY, JSON.stringify({ open: !panel.hidden, id: chat.id, draft: input.value.slice(0, 2000) }));
+    } catch (e) {
+      // not remembered, the chat still works
     }
   }
 
@@ -283,36 +388,121 @@
     b.textContent = "Chats are stored in this browser for two weeks. I can look things up, but I can't change anything on the site.";
     p.appendChild(a);
     p.appendChild(b);
+    var starters = startersFor(CTX.page === "recipe" && contextDismissed ? "" : CTX.page);
+    if (starters.length) {
+      var row = chipsEl(starters);
+      row.classList.add("chat-starters");
+      p.appendChild(row);
+    }
     return p;
   }
 
-  function messageEl(m) {
+  /** Cards stay put while a reply is still streaming: a tap then would drop the answer on the floor. */
+  function guardWhileStreaming(a) {
+    a.addEventListener("click", function (e) {
+      if (streaming || a.getAttribute("aria-disabled") === "true") e.preventDefault();
+      else saveUi();
+    });
+  }
+
+  function cardsEl(cards) {
+    var row = el("div", "chat-cards", { role: "list", "aria-label": "Recipes" });
+    cards.forEach(function (c) {
+      var a = el("a", "tile chat-card", { href: c.url, role: "listitem" });
+      if (c.image) {
+        var img = el("img", "tile-image", { src: c.image, alt: "", loading: "lazy" });
+        a.appendChild(img);
+      } else a.appendChild(el("span", "tile-image"));
+      var k = el("p", "kicker" + (KICKER_KINDS[c.kicker.kind] ? " " + KICKER_KINDS[c.kicker.kind] : ""));
+      k.textContent = c.kicker.label;
+      var t = el("h3", "tile-title");
+      t.textContent = c.title;
+      var meta = el("p", "tile-meta");
+      meta.textContent = c.meta;
+      a.appendChild(k);
+      a.appendChild(t);
+      a.appendChild(meta);
+      guardWhileStreaming(a);
+      row.appendChild(a);
+    });
+    return row;
+  }
+
+  function setCards(wrap, cards) {
+    var old = wrap.querySelector(".chat-cards");
+    if (old) wrap.removeChild(old);
+    if (cards && cards.length) {
+      var nav0 = wrap.querySelector(".chat-nav");
+      var row = cardsEl(cards);
+      if (nav0) wrap.insertBefore(row, nav0);
+      else wrap.appendChild(row);
+    }
+  }
+
+  /** The "Open Steamed Rice" button: a plain link the user has to tap. Only shown once the reply is complete. */
+  function navEl(nav) {
+    var a = el("a", "chat-nav", { href: nav.url });
+    a.appendChild(doc.createTextNode(nav.label));
+    var arrow = el("span", "chat-nav-arrow");
+    arrow.innerHTML = ICON.arrow; // our own constant markup
+    a.appendChild(arrow);
+    guardWhileStreaming(a);
+    return a;
+  }
+
+  function messageEl(m, live) {
     var wrap = el("div", "chat-msg " + (m.role === "user" ? "is-user" : "is-bot"));
     var body = el("div", "chat-body");
     if (m.role === "user") body.textContent = m.content;
     else renderInto(doc, body, m.content, origin);
     wrap.appendChild(body);
+    if (m.role !== "user") {
+      if (m.cards && m.cards.length) setCards(wrap, m.cards);
+      if (live && m.nav) wrap.appendChild(navEl(m.nav));
+    }
     return wrap;
   }
 
+  /** Suggested replies: a plain string sends it as the next message, { label, url } is a link to a page on this site. */
   function chipsEl(replies) {
     var row = el("div", "chat-chips");
-    replies.forEach(function (text) {
-      var chip = el("button", "chat-chip", { type: "button" });
-      chip.textContent = text;
-      chip.addEventListener("click", function () {
-        if (!row.classList.contains("is-old")) send(text);
-      });
+    replies.forEach(function (r) {
+      var chip;
+      if (typeof r === "string") {
+        chip = el("button", "chat-chip", { type: "button" });
+        chip.textContent = r;
+        chip.addEventListener("click", function () {
+          if (!row.classList.contains("is-old")) send(r);
+        });
+      } else {
+        chip = el("a", "chat-chip is-nav", { href: r.url });
+        chip.appendChild(doc.createTextNode(r.label));
+        var arrow = el("span", "chat-nav-arrow");
+        arrow.innerHTML = ICON.arrow;
+        chip.appendChild(arrow);
+        chip.addEventListener("click", function (e) {
+          if (streaming || row.classList.contains("is-old")) e.preventDefault();
+          else saveUi();
+        });
+      }
       row.appendChild(chip);
     });
     return row;
   }
 
-  /** Only the last message's chips are live; older ones fade and stop responding. */
+  /** Only the last message's chips and button are live; older ones fade and stop responding. */
   function retireChips() {
-    Array.prototype.forEach.call(log.querySelectorAll(".chat-chips"), function (row) {
+    Array.prototype.forEach.call(log.querySelectorAll(".chat-chips, .chat-nav"), function (row) {
       row.classList.add("is-old");
-      Array.prototype.forEach.call(row.querySelectorAll("button"), function (b) { b.disabled = true; });
+      row.setAttribute("aria-disabled", "true");
+      Array.prototype.forEach.call(row.querySelectorAll("button, a"), function (b) {
+        if (b.tagName === "BUTTON") b.disabled = true;
+        else {
+          b.setAttribute("aria-disabled", "true");
+          b.setAttribute("tabindex", "-1");
+        }
+      });
+      if (row.tagName === "A") row.setAttribute("tabindex", "-1");
     });
   }
 
@@ -321,8 +511,9 @@
     statusEl = null;
     if (!chat.messages.length) log.appendChild(intro());
     chat.messages.forEach(function (m, i) {
-      log.appendChild(messageEl(m));
-      if (m.replies && m.replies.length && i === chat.messages.length - 1) log.appendChild(chipsEl(m.replies));
+      var last = i === chat.messages.length - 1;
+      log.appendChild(messageEl(m, last));
+      if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
     toBottom();
   }
@@ -413,6 +604,7 @@
     saveChat();
     input.value = "";
     autosize();
+    saveUi();
 
     var reply = { role: "assistant", content: "" };
     var botEl = messageEl(reply);
@@ -424,11 +616,14 @@
     setBusy(true);
     setStatus("Thinking…");
 
-    function onText(delta) {
+    function ensureAdded() {
       if (!added) {
         added = true;
         log.insertBefore(botEl, statusEl);
       }
+    }
+    function onText(delta) {
+      ensureAdded();
       if (statusEl) statusEl.hidden = true;
       var stick = atBottom();
       reply.content += delta;
@@ -440,9 +635,13 @@
       streaming = null;
       setBusy(false);
       clearStatus();
-      if (ok && reply.content.trim()) {
+      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length))) {
         chat.messages.push(reply);
         saveChat();
+        if (reply.nav) {
+          ensureAdded();
+          botEl.appendChild(navEl(reply.nav));
+        }
         if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
         if (panel.hidden) dot.hidden = false;
       } else if (added && botEl.parentNode) {
@@ -456,7 +655,7 @@
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversation_id: chat.id, messages: chat.messages.slice(-MAX_SENT).map(function (m) { return { role: m.role, content: m.content }; }), page: pageState() }),
+      body: JSON.stringify({ conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() }),
     })
       .then(function (res) {
         if (!res.ok) {
@@ -480,7 +679,17 @@
               if (!ev) continue;
               if (ev.name === "text") onText(String(ev.data.delta || ""));
               else if (ev.name === "status") setStatus(String(ev.data.text || ""));
-              else if (ev.name === "suggestions" && Array.isArray(ev.data.replies)) reply.replies = ev.data.replies.filter(function (x) { return typeof x === "string"; }).slice(0, 4);
+              else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
+              else if (ev.name === "cards") {
+                var more = cleanCards(ev.data.cards, origin);
+                if (more.length) {
+                  ensureAdded();
+                  reply.cards = (reply.cards || []).concat(more).slice(0, 8);
+                  setCards(botEl, reply.cards);
+                  if (statusEl) statusEl.hidden = true;
+                  toBottom();
+                }
+              } else if (ev.name === "navigation") reply.nav = cleanNav(ev.data, origin) || reply.nav;
               else if (ev.name === "error") failed = String(ev.data.message || "Something went wrong with the chat.");
             }
             return pump();
@@ -502,7 +711,7 @@
   }
 
   // --- panel open / close / new chat ------------------------------------------------------------------------------------------
-  function open() {
+  function open(opts) {
     if (!panel.hidden) return;
     panel.hidden = false;
     bubble.setAttribute("aria-expanded", "true");
@@ -511,7 +720,8 @@
     paintContext();
     layoutPanel();
     toBottom();
-    input.focus({ preventScroll: true });
+    if (!(opts && opts.restore)) input.focus({ preventScroll: true }); // a restored panel must not pop the keyboard up
+    saveUi();
   }
   function close() {
     if (panel.hidden) return;
@@ -519,6 +729,7 @@
     bubble.setAttribute("aria-expanded", "false");
     doc.body.classList.remove("chat-open");
     bubble.focus({ preventScroll: true });
+    saveUi();
   }
   function newChat() {
     if (streaming) streaming.abort();
@@ -526,11 +737,12 @@
     setBusy(false);
     chat = { id: newId(), messages: [] };
     saveChat();
+    saveUi();
     renderAll();
     input.focus({ preventScroll: true });
   }
 
-  bubble.addEventListener("click", function () { (panel.hidden ? open : close)(); });
+  bubble.addEventListener("click", function () { if (panel.hidden) open(); else close(); });
   closeBtn.addEventListener("click", close);
   newBtn.addEventListener("click", newChat);
   ctxClose.addEventListener("click", function () { contextDismissed = true; paintContext(); });
@@ -553,7 +765,11 @@
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 140) + "px";
   }
-  input.addEventListener("input", autosize);
+  input.addEventListener("input", function () {
+    autosize();
+    saveUi();
+  });
+  window.addEventListener("pagehide", saveUi);
 
   // --- layout: keyboard and sticky bars ----------------------------------------------------------------------------------------------
   // On phones the panel is as tall as the visual viewport, so the input stays above the on-screen keyboard.
@@ -578,7 +794,9 @@
       var pos = getComputedStyle(bar).position;
       if (pos !== "sticky" && pos !== "fixed") return;
       var r = bar.getBoundingClientRect();
-      if (r.height > 0 && r.top < window.innerHeight && r.bottom > window.innerHeight - 8) px = Math.max(px, window.innerHeight - r.top);
+      var b = bubble.getBoundingClientRect();
+      var overlapsBubble = r.left < b.right && r.right > b.left; // a bar that stops short of the bubble (desktop) needs no lift
+      if (overlapsBubble && r.height > 0 && r.top < window.innerHeight && r.bottom > window.innerHeight - 8) px = Math.max(px, window.innerHeight - r.top);
     });
     bubble.style.setProperty("--chat-lift", px ? px + "px" : "0px");
     panel.style.setProperty("--chat-lift", px ? px + "px" : "0px");
@@ -594,5 +812,17 @@
   if (window.MutationObserver) new MutationObserver(queueLift).observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "class"] });
   queueLift();
 
+  // A full page load (a tapped card, button or chip) comes back to the panel as it was: open, same conversation (its history is
+  // in localStorage), the unsent draft, scrolled to the end. The new page's context chip already shows this page; the next message
+  // carries it to the server.
+  var restored = loadUi();
   renderAll();
+  if (restored.id === chat.id && typeof restored.draft === "string" && restored.draft) {
+    input.value = restored.draft.slice(0, 2000);
+    autosize();
+  }
+  if (restored.open === true) {
+    open({ restore: true });
+    requestAnimationFrame(toBottom);
+  }
 })();

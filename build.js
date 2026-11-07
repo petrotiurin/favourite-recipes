@@ -95,7 +95,7 @@ function build() {
   fs.copyFileSync(SERVINGS_SCRIPT_FILE, path.join(DIST_DIR, "servings.js"));
   fs.copyFileSync(WAKELOCK_SCRIPT_FILE, path.join(DIST_DIR, "wakelock.js"));
   fs.copyFileSync(SHOPPING_SCRIPT_FILE, path.join(DIST_DIR, "shopping.js"));
-  fs.copyFileSync(CHAT_SCRIPT_FILE, path.join(DIST_DIR, "chat.js"));
+  if (process.env.CHAT_API_URL) fs.copyFileSync(CHAT_SCRIPT_FILE, path.join(DIST_DIR, "chat.js"));
   if (fs.existsSync(IMAGES_DIR)) {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }

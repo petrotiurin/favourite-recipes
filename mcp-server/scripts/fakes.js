@@ -97,11 +97,28 @@ function scriptedStream({ text = "", calls = [], delayMs = 12 }) {
 }
 
 const replies = (...r) => ({ name: "suggest_replies", arguments: { replies: r } });
+const showRecipes = (slugs) => ({ name: "show_recipes", arguments: { slugs, reason: "mock" } });
+const rowsOf = (toolMessage) => {
+  try {
+    const rows = JSON.parse(toolMessage.content);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    // "No recipes match", or a long result the server cut off: pull out the rows that are whole
+    return [...String(toolMessage.content).matchAll(/"slug":\s*"([^"]+)",\s*"title":\s*"((?:[^"\\]|\\.)+)"/g)].map((m) => ({ slug: m[1], title: m[2] }));
+  }
+};
+
 const userText = (m) => String(m.content).replace(/\n\n\[Note from the site[\s\S]*$/, "");
 
 /**
  * A scripted stand-in for OpenRouter's /chat/completions. Behaviour depends on the latest user message:
- *   "chicken"      -> search_recipes({ include_ingredients: ["chicken"] }), then a linked list of the results + suggest_replies
+ *   "chicken"      -> search_recipes({ include_ingredients: ["chicken"] }), then a short intro + show_recipes (cards) + suggest_replies
+ *                     with an action chip ("Open the first one" -> that recipe's page)
+ *   "quick"        -> search_recipes (max 25 min) -> cards;   "light" -> search_recipes (max 400 kcal) -> cards
+ *   "planned"      -> search_recipes({ week: "next" }) -> cards (the next-week starter chip)
+ *   "rice"         -> search_recipes({ text: "rice" }) -> offer_navigation (an "Open <recipe>" button) + replies
+ *   "add ... next week" -> a read-only answer with an action chip to the Next week page
+ *   "left to buy"  -> the shopping answer (as "shopping")
  *   "this recipe"  -> answers from the site note about the page the user is on (+ suggest_replies)
  *   "shopping"     -> get_shopping_list, then a one-line answer
  *   "mock-402"     -> HTTP 402 (out of credit);   "mock-500" -> HTTP 500;   "mock-stream-error" -> an error event mid-stream
@@ -133,19 +150,32 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
       if (!lastTool) return scriptedStream({ ...opts, text: "I'll add that.", calls: [{ name: "create_recipe", arguments: { title: "Mock Pie" } }] });
       return scriptedStream({ ...opts, text: "I can't change the site from here, but an editor can sign in to do that.", calls: [replies("How do editors sign in?", "Show me pies")] });
     }
-    if (user.includes("chicken")) {
-      if (!lastTool) return scriptedStream({ ...opts, text: "Let me check our book.", calls: [{ name: "search_recipes", arguments: { include_ingredients: ["chicken"] } }] });
-      let rows = [];
-      try {
-        rows = JSON.parse(lastTool.content);
-      } catch {
-        // "No recipes match" etc.
-      }
-      const top = Array.isArray(rows) ? rows.slice(0, 3) : [];
-      const text = top.length
-        ? `We have ${rows.length} with chicken. A few to start with:\n\n${top.map((r) => `- **[${r.title}](${r.url})**: ${r.total_mins} min, ${r.calories} kcal`).join("\n")}\n\nWant me to narrow it down?`
-        : "Nothing with chicken in our book yet.";
-      return scriptedStream({ ...opts, text, calls: [replies("Under 400 kcal", "Quick ones only", "What's on this week?")] });
+    const searchThenCards = (searchArgs, intro, none) => {
+      if (!lastTool) return scriptedStream({ ...opts, text: "Let me check our book.", calls: [{ name: "search_recipes", arguments: searchArgs }] });
+      const rows = rowsOf(lastTool);
+      const top = rows.slice(0, 3);
+      if (!top.length) return scriptedStream({ ...opts, text: none, calls: [replies("What's on this week?", "Show me everything")] });
+      return scriptedStream({
+        ...opts,
+        text: intro(rows.length),
+        calls: [
+          showRecipes(top.map((r) => r.slug)),
+          replies("Under 400 kcal", "Quick ones only", { label: "Open the first one", action: { navigate: top[0].slug } }),
+        ],
+      });
+    };
+    if (user.includes("chicken")) return searchThenCards({ include_ingredients: ["chicken"] }, (n) => `We have ${n} with chicken. A few to start with:`, "Nothing with chicken in our book yet.");
+    if (user.includes("quick")) return searchThenCards({ max_minutes: 25 }, () => "These are all quick:", "Nothing that quick in our book yet.");
+    if (user.includes("light") || user.includes("healthy")) return searchThenCards({ max_calories: 400 }, () => "These are light and still filling:", "Nothing that light in our book yet.");
+    if (user.includes("planned")) return searchThenCards({ week: "next" }, (n) => `${n} recipe${n === 1 ? " is" : "s are"} planned for next week:`, "Nothing is planned for next week yet.");
+    if (user.includes("rice")) {
+      if (!lastTool) return scriptedStream({ ...opts, calls: [{ name: "search_recipes", arguments: { text: "rice" } }] });
+      const first = rowsOf(lastTool)[0];
+      if (!first) return scriptedStream({ ...opts, text: "Nothing with rice in our book yet." });
+      return scriptedStream({ ...opts, text: `${first.title} is the best match.`, calls: [{ name: "offer_navigation", arguments: { slug: first.slug, label: `Open ${first.title}` } }, replies("Something quicker", "What's on this week?")] });
+    }
+    if (user.includes("add") && user.includes("next week")) {
+      return scriptedStream({ ...opts, text: "Planning is something only a signed-in editor can do, so I can't add it from here. You can see what's planned on the Next week page.", calls: [replies("What's planned?", { label: "Open next week", action: { navigate: "next-week" } })] });
     }
     if (user.includes("this recipe") || user.includes("this one")) {
       const text = note?.includes("is viewing") || note?.includes("viewing:")
@@ -153,7 +183,7 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
         : "I'm not sure which recipe you mean. Open one and ask again, or tell me its name.";
       return scriptedStream({ ...opts, text, calls: [replies("What can I swap?", "How long does it take?", "Something similar")] });
     }
-    if (user.includes("shopping")) {
+    if (user.includes("shopping") || user.includes("left to buy")) {
       if (!lastTool) return scriptedStream({ ...opts, calls: [{ name: "get_shopping_list", arguments: {} }] });
       return scriptedStream({ ...opts, text: "I've had a look at the shopping list for next week.", calls: [replies("What's left to buy?", "Which recipes?")] });
     }
