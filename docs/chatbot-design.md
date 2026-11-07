@@ -26,25 +26,48 @@ Must-haves from the brief:
 Non-goals (for now): shopping at Ocado/Sainsbury's from chat (those flows need Claude in Chrome on
 the user's machine), voice output, multi-household accounts.
 
-## 2. How it fits the site's constraints
+## 2. Reframing CLAUDE.md (lands in phase 0)
 
-CLAUDE.md's hard rule is "static first: no client-side data fetching", with the stocktake as the one
-deliberate network exception. **The chat is a second, much bigger exception** and needs to be
-written into CLAUDE.md before any code lands. Proposed wording of the exception:
+CLAUDE.md still describes the original idea, a lightweight Notion replacement ("Originally migrated
+from a Notion database", "Hard constraint: static first", exceptions bolted on one by one). The site
+has long outgrown that: an MCP server, an agent workflow, sign-in, a stocktake that writes from the
+browser, and now a chat. Rather than adding a third exception, **rewrite the framing** so the rules
+describe what the project is now. Proposed shape:
 
-- `templates/chat.js` is hand-written vanilla JS (no framework, no bundler, no npm in `dist/`),
-  copied verbatim like the others.
-- It talks to **one** endpoint, the MCP server's `/chat` (plus Supabase Auth, shared with the
-  shopping page). It never loads recipe data to render the site; pages stay fully static.
-- It is pure enhancement: with JS off there is no bubble and nothing else changes. If `/chat` is
-  down, the bubble shows an error state; the page is unaffected.
+> **Our Favourite Recipes** is the family's cooking app: the recipe book, this week's plan and the
+> shopping list. It has three parts:
+>
+> 1. **The site** (GitHub Pages): static HTML/CSS built from `recipes/*.md` and
+>    `shopping-list.json`. Every page is complete and readable with JS off.
+> 2. **Enhancements** (`templates/*.js`): hand-written vanilla JS, copied verbatim into `dist/`. No
+>    frameworks, no bundler, no npm packages in `dist/` (small pinned CDN libraries only if truly
+>    needed). They may call **our own backend** and Supabase Auth, never third-party APIs directly.
+>    Pages render from data baked in at build time; runtime calls are only for actions (saving a
+>    stocktake, chatting, signing in), never to load what the page shows.
+> 3. **The backend** (`mcp-server/` on Vercel): the only place with secrets and the only writer to
+>    the repo. It serves the MCP tools for agents, `/stocktake` and `/chat` for the site, and holds
+>    the validation rules. Every write is a commit to `main`, and every commit is a deploy, so
+>    writes are batched.
+
+The current "Hard constraint" section, its list of allowed scripts and the stocktake exception
+fold into points 2 and 3. Sections that stay as they are: recipe schema, shopping list format,
+stocktake details, deployment. New sections: "Chat" (a short summary pointing to this doc, later
+to the code) and the env vars it needs. The directory layout gains `templates/chat.js`,
+`templates/auth.js`, `mcp-server/api/chat.js` and `mcp-server/lib/tools.js`.
+
+What the chat must still respect under the new rules:
+
+- `templates/chat.js` is vanilla JS and talks only to `/chat` (and Supabase Auth via the shared
+  `auth.js`). With JS off there's no bubble and nothing else changes; if `/chat` is down, the
+  bubble shows an error and the page is unaffected.
 
 ## 3. Architecture
 
 ```
 GitHub Pages (static)                     Vercel (mcp-server/)                    External
 ┌──────────────────────┐   POST /chat    ┌───────────────────────────────┐
-│ every page           │ ─────────────▶  │ api/chat.js                   │ ───▶ Claude API (stream)
+│ every page           │ ─────────────▶  │ api/chat.js                   │ ───▶ OpenRouter (stream;
+│                      │                 │                               │      public or editor key)
 │  templates/chat.js   │ ◀── SSE stream ─│  - verify Supabase token       │
 │  + page context JSON │                 │  - load/save conversation      │ ───▶ Supabase Postgres
 │  + shared auth.js    │                 │  - agent loop over tool registry│     (chats, plan tray)
@@ -58,9 +81,9 @@ It already holds the GitHub token, the Supabase verification (`verifyEditor`), t
 (`api/stocktake.js`) and all the validated write logic (`lib/recipes.js`, `lib/shopping-list.js`).
 
 Alternatives considered:
-- *Claude API's MCP connector pointed at our own `/mcp`*: least code, but tools are then all-or-
+- *Letting a hosted model call our own `/mcp` directly*: least code, but tools are then all-or-
   nothing behind the shared `MCP_AUTH_TOKEN`, the server can't add browser-side tools (show card,
-  navigate, ask), and we can't gate tools per user. Rejected.
+  navigate, suggested replies), and we can't gate tools per user. Rejected.
 - *Separate Vercel project*: duplicates config and secrets for no gain.
 
 ### D2. One tool registry for MCP and chat (refactor first)
@@ -71,21 +94,40 @@ that both `server.js` (MCP) and `api/chat.js` (Claude tool definitions via zod �
 consume. Without this, the two tool sets will drift, the same way CLAUDE.md already warns about
 for `recipe-format.js` and the add-recipe skill.
 
-### D3. Model and cost
+### D3. Models and spend → **OpenRouter, two keys, two models** (decided)
 
-Current options (per million tokens, input / output): Opus 5.5 $4 / $20, Sonnet 5.5 $2 / $10,
-Haiku 5.5 $0.10 / $0.50. Prompt caching cuts the repeated prefix (system prompt + tools +
-catalogue, see D6) to roughly a tenth of the input price.
+The server already uses OpenRouter for photos (`lib/image-generation.js`), so the chat goes through
+it as well, via its OpenAI-compatible chat completions API with tool calling and streaming.
 
-The editor flow (reading screenshots, combining a shopping list, following the 190-line
-`plan-recipes` guide) is the work Claude does today through the MCP, so it needs a strong model:
-**Opus 5.5** (recommended). Anonymous Q&A is lighter. **To decide:** run it on the same model too
-(one prompt, one cache, simplest), or on a cheaper model to keep public traffic cheap. A rough
-plan-recipes run is ~10–20 model calls with a cached prefix: cents, not dollars, but with no limits
-public traffic has no upper bound (see §8).
+| | Public (not signed in) | Editors (signed in) |
+| --- | --- | --- |
+| Key | `OPENROUTER_CHAT_PUBLIC_KEY` | `OPENROUTER_CHAT_EDITOR_KEY` |
+| Spend cap | the key's own credit limit on OpenRouter | the key's own credit limit on OpenRouter |
+| Model (env var, swappable without a deploy of the site) | `CHAT_PUBLIC_MODEL`: a cheap, fast model good at tool calls | `CHAT_EDITOR_MODEL`: a strong model, since this is the plan-recipes work an agent does today through the MCP (reading screenshots, combining a shopping list) |
 
-Use streaming (needed for the chat UX anyway), adaptive thinking with effort set per mode, and the
-`web_fetch` server tool for recipe links in editor mode.
+The existing `OPENROUTER_API_KEY` stays for photos. Keeping the keys separate means public traffic
+can never spend the editors' budget, and the caps are enforced by OpenRouter, not by our code.
+
+Consequences of going through OpenRouter:
+
+- **The cap is a kill switch, not a limit.** When the public key runs dry, chat stops for every
+  visitor until it's topped up. We still need per-IP rate limits (§8) so one person can't burn it
+  in an afternoon, and `/chat` should turn OpenRouter's "out of credit" error into a friendly
+  "the chat is resting, try later" message.
+- **Prompt caching** depends on the model and provider. Anthropic models on OpenRouter take
+  `cache_control` breakpoints; others cache automatically or not at all. Keep the prompt
+  cache-friendly anyway (stable system prompt + tools + catalogue first, volatile page context
+  last).
+- **No provider-hosted web fetch.** Reading recipe links (editor mode) becomes our own
+  `fetch_url` tool on the server: allowlisted to http(s), size and time limits, HTML reduced to
+  text plus the page's `og:image` and any JSON-LD `Recipe` block (most recipe sites have one, which
+  also gives us the photo URL). Not offered to the public model.
+- **Model-agnostic tools.** No reliance on one provider's special tools or response shapes: tool
+  schemas are plain JSON Schema, UI tools (§6) are ordinary function calls.
+- **Images** (screenshots in editor mode) go as image content parts, so the editor model must
+  support vision.
+
+Streaming is needed for the chat UX anyway.
 
 ## 4. Modes and auth
 
@@ -94,9 +136,13 @@ Use streaming (needed for the chat UX anyway), adaptive thinking with effort set
 | Read tools (list, search, get recipe, shopping list) | ✓ | ✓ |
 | Navigate / show cards / quick replies | ✓ | ✓ |
 | Write tools (create, update, promote, remove draft, set current, shopping list) | – | ✓ |
-| Image attachments (recipe screenshots) | – (D9) | ✓ |
-| `web_fetch` of links | – | ✓ |
-| Chat history | this browser only | synced across devices |
+| Image attachments (recipe screenshots) | – | ✓ |
+| `fetch_url` of links | – | ✓ |
+| Model / OpenRouter key | public | editor |
+| Chat history | this browser only | per user, synced across that user's devices |
+| Plan tray | – | shared by the household |
+
+Anonymous visitors can chat (decided, Q1): read-only, rate-limited, on the public model.
 
 **Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback). Extract
 the sign-in sheet and session handling from `templates/shopping.js` into a shared
@@ -126,9 +172,14 @@ Git is out: every commit is a site deploy. We already have a Supabase project.
 UI: the panel header has a "Chats" list (title, last updated) and "New chat". The server titles a
 chat after its first exchange. A chat open in the panel stays open across page loads (see §7).
 
+**History is per user** (decided, Q4): each editor sees only their own chats, on any of their
+devices. The shared thing between editors is the plan tray (D5), not the conversations, so a tray
+item records who added it and shows a one-line reason ("added by Petro: from the chat about quick
+dinners") instead of linking into a chat the other person can't open.
+
 Gaps to settle: retention (suggest: auto-archive after 30 days idle, delete after 180); a very long
-chat (use server-side compaction instead of truncating); whether both editors see each other's
-chats (suggest **yes**: it's one family's kitchen, see D5).
+chat (summarise older turns on the server once a chat passes a size limit, instead of dropping
+them).
 
 ## 6. Tools
 
@@ -162,10 +213,37 @@ tray (§7). One `apply_plan` turns the tray into a single `batch_changes` commit
 | --- | --- |
 | `show_recipes({ slugs, reason? })` | A row of recipe cards (photo, kicker, name, "20 min · 412 kcal"), each linking to its page. |
 | `offer_navigation({ slug \| page, label })` | A button "Open Steamed rice". Never navigates by itself. |
-| `ask_user({ question, options[] })` | Quick-reply chips; the chat equivalent of `AskUserQuestion` the plan-recipes guide relies on ("Did you like the harissa pitta? Liked / Not for us / Not cooked yet"). |
+| `suggest_replies({ replies[] })` | Tappable suggested replies under the bot's message (see 6.1). |
+| `ask_user({ question, options[], multi? })` | A question that needs an answer before going on; the chat version of `AskUserQuestion`, which the plan-recipes guide relies on ("Did you like the harissa pitta? Liked / Not for us / Not cooked yet"). |
 
-These return immediately with `{ shown: true }` (or the chosen chip as the next user message), so
-the loop never waits on the browser in the middle of a turn.
+These return immediately with `{ shown: true }`, and the tapped reply arrives as the next user
+message, so the loop never waits on the browser in the middle of a turn.
+
+### 6.1 Suggested replies (on most turns)
+
+Tappable answers are the main way to drive the chat on a phone; typing is the fallback, always
+available.
+
+- **Almost every bot message ends with 2–4 suggested replies.** The system prompt asks for them
+  whenever there's a likely next step, and the server nudges with a reminder on turns that end
+  without any. They're skipped only when the reply is a plain fact with no obvious follow-up.
+- **Two kinds, drawn differently.** *Suggestions* (`suggest_replies`) are optional next steps,
+  shown as outline chips: "Show me more like this", "Under 20 minutes", "Add to this week".
+  *Questions* (`ask_user`) need an answer: solid chips, and the input placeholder reads "Or type
+  an answer". `multi: true` allows several choices plus "Done" (e.g. picking which of five
+  recommendations to add).
+- **A reply is short words, never a sentence**: at most ~30 characters, sentence case, no emoji
+  (design.md). The tapped text is sent as the user's message, so the transcript reads naturally.
+- **Chips that act** can carry a hidden action instead of text, for things the UI does itself:
+  `{ label: "Open Steamed rice", action: { navigate: "steamed-rice" } }`, `{ label: "Save to site",
+  action: "apply_plan" }`. Save is still a tap by a person (§7.1): the chip just puts the button
+  where the thumb is.
+- **Only the last message's chips are live.** Older ones fade and stop responding once the chat
+  moves on, so an old "Yes, remove it" can't be tapped by mistake.
+- **Empty chat:** page-aware starter chips (§11) use the same component.
+- **Repeated decisions** in plan-recipes (liked / not liked for each leftover draft) are one
+  `ask_user` per draft in sequence, each with the recipe's card above the chips, rather than a long
+  typed answer.
 
 ## 7. Advanced features
 
@@ -176,7 +254,7 @@ redeploys, so changes should be collected and saved once.
 
 - A **plan** is a list of staged changes: new recipe drafts (full structured fields), edits,
   promotions, removals, current/not-current, servings, and finally the shopping list.
-- **D5. One plan per household, not per chat** (recommended). "What have we added for next
+- **D5. One plan per household, not per chat** (decided, Q3). "What have we added for next
   week" is about the week, not about a conversation; both editors, on any device, any chat, see
   and add to the same tray. Stored in Supabase (`plans`: status `open | applied`, items JSON,
   updated by, updated at).
@@ -229,20 +307,22 @@ index: active filter and search text) and sends it with every message.
 
 ## 8. Safety, abuse and cost
 
-- **Rate limits** on `/chat`: per IP for anonymous (e.g. 20 messages/hour), per editor more
-  generous. Store counters in Supabase (no new service). A daily global spend cap on top, plus
-  the spend limit in the Anthropic console.
-- **Anonymous at all?** (open question Q1). The site is public; if visitors are only family, the
-  simplest safe option is "sign in to chat". Recommendation: allow anonymous read-only chat with
-  tight limits, since recommending recipes to guests is part of the charm, and close it if abuse
-  shows up.
+- **Spend caps** are the credit limits on the two OpenRouter keys (D3): public traffic can't touch
+  the editors' budget.
+- **Rate limits** on `/chat` on top, so the public cap isn't burned by one visitor: per IP for
+  anonymous (e.g. 20 messages/hour, 100/day), plus a cap on message length and turns per chat.
+  Editors get generous limits. Counters in Supabase (no new service).
+- **Public chat is read-only**: it gets the public key, the public model, the read and UI tools,
+  no attachments and no `fetch_url`.
 - **Prompt injection** from fetched recipe pages and screenshots: content is data; writes only
   stage; only a human tap on Save commits; regular recipes still can't be deleted (server rule).
 - **Rendering model output:** `chat.js` never puts model text into `innerHTML`. A tiny renderer
   supports paragraphs, bold, lists and links, and allows only links to the site's own origin
   (anything else is shown as plain text). Cards are built from server data, not model text.
-- **Secrets:** nothing secret in the prompt; the Supabase service key and Anthropic key live only
-  in Vercel env.
+- **Secrets:** nothing secret in the prompt; the Supabase service key and both OpenRouter keys live
+  only in Vercel env.
+- **`fetch_url`** only fetches public http(s) URLs (no private IPs or localhost), with size and
+  time limits, so it can't be used to probe Vercel's network.
 - **Privacy:** chats are stored. Say so in the panel's first-run line.
 
 ## 9. UI (to add to design.md when built)
@@ -264,7 +344,8 @@ draft kickers, calm states.
 
 ## 10. Gaps found in the brief
 
-1. **The static-site rule** needs an explicit exception for the chat (§2).
+1. **CLAUDE.md's framing** (Notion replacement, static-first with exceptions) no longer fits;
+   rewrite it (§2).
 2. **Tool drift** between MCP and chat unless they share one registry (D2).
 3. **Trusting client history** would let anyone forge tool results; editors' history must be
    server-owned (D4).
@@ -273,13 +354,16 @@ draft kickers, calm states.
 6. **Deploy lag**: saved recipes aren't on the site for a minute or two (§7.3).
 7. **Full page loads** on navigation close the chat unless it's restored (§7.3).
 8. **Inputs the editor flow depends on**: today you hand over screenshots and links. The chat needs
-   image attachments (camera / photo library) and `web_fetch`. The recipe's own photo
-   (source-link image, else generated, else the upload link) still needs to work from chat.
+   image attachments (camera / photo library) and our own `fetch_url` (D3: no hosted web fetch
+   through OpenRouter). The recipe's own photo (source-link image, else generated, else the upload
+   link) still needs to work from chat.
 9. **The plan-recipes guide assumes an MCP client** (`AskUserQuestion`, one `batch_changes`). In
    chat, `ask_user` chips and the tray replace those; the guide needs a short "in chat" section
-   or a chat-specific variant, kept in `mcp-server/workflows/`.
-10. **Two editors at once**: a shared tray (D5) needs "last updated by" and a conflict rule (the
-    server re-validates on Save; the second Save sees the first's result).
+   or a chat-specific variant, kept in `mcp-server/workflows/`. It was also written for a strong
+   Claude model: check that the editor model follows it, and tighten the guide where it doesn't.
+10. **Two editors at once**: a shared tray (D5) with per-user chats means each tray item records
+    who added it and why, and a conflict rule (the server re-validates on Save; the second Save
+    sees the first's result).
 11. **Undo after save**: today nothing reverts a commit. At least show what was committed with a
     link; a revert tool is a later phase.
 12. **Observability**: log tool calls, errors and token usage per chat (Vercel logs are enough for
@@ -291,7 +375,7 @@ Ranked roughly by value for effort:
 
 1. **Cooking help on recipe pages** (read-only, high value): substitutions, "what's step 4
    again?", unit conversions, scaling to 6, using the page context and the selected servings.
-2. **Page-aware starter prompts** as chips when a chat is empty: on a recipe page "Add to this
+2. **Page-aware starter prompts** as chips (the suggested-reply component, 6.1) when a chat is empty: on a recipe page "Add to this
    week", "Swap an ingredient"; on the index "Something quick tonight"; on the shopping page "What's
    left to buy?".
 3. **"What can I make with what's at home?"** using the stocktake on `shopping-list.json`.
@@ -311,22 +395,33 @@ Each phase ships and is useful on its own.
 
 | # | Phase | Contents | Depends on |
 | --- | --- | --- | --- |
-| 0 | Groundwork | CLAUDE.md exception, tool registry refactor (D2), `search_recipes`, page-context JSON in the build | – |
-| 1 | Read-only chat | Bubble + panel, `/chat` with streaming, catalogue prompt, anonymous mode, local history, rate limits, safe renderer | 0 |
-| 2 | Cards + navigation | `show_recipes`, `offer_navigation`, panel restore across page loads, starter chips | 1 |
-| 3 | Sign-in + synced chats | Shared `auth.js`, Supabase tables, chats list, server-owned history | 1 |
-| 4 | Editor writes via the tray | Staging, dry-run validation, tray UI, Save → one `batch_changes`, publishing state | 2, 3 |
-| 5 | Full plan-recipes in chat | Image attachments, `web_fetch`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
+| 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2), `search_recipes`, page-context JSON in the build | – |
+| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1) | 0 |
+| 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
+| 3 | Sign-in + per-user chats | Shared `auth.js`, editor key + model, Supabase tables, chats list, server-owned history | 1 |
+| 4 | Editor writes via the tray | Staging, dry-run validation, household tray UI ("added by"), Save → one `batch_changes`, publishing state | 2, 3 |
+| 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
 
-## 13. Open questions
+## 13. Decisions and open questions
 
-- **Q1.** Anonymous chat for anyone, or sign-in required? (rec: anonymous read-only, rate-limited)
-- **Q2.** Model for anonymous mode: the same as editors (Opus 5.5), or a cheaper one?
-- **Q3.** Plan tray per household (rec.) or per conversation?
-- **Q4.** Do both editors share chat history, or is each person's history their own?
+Decided:
+
+- **Q1.** Anyone can chat; visitors who aren't signed in get read-only chat.
+- **Q2.** Public and editor chats use different models, both through OpenRouter, each on its own
+  key with its own spend cap (D3).
+- **Q3.** One plan tray per household (D5).
+- **Q4.** Chat history is per user (§5).
+- Suggested replies on most turns (6.1).
+- CLAUDE.md gets reframed rather than patched (§2).
+
+Open:
+
 - **Q5.** Any single edits allowed to skip the tray? (rec: no, in v1)
+- **Q9.** Which models to start with for `CHAT_PUBLIC_MODEL` and `CHAT_EDITOR_MODEL`. Suggest a
+  short trial in phase 1/4: a handful of real questions and one full plan-recipes run, comparing
+  tool-calling reliability and cost per chat.
+- **Q10.** Credit limits for the two keys (sets how tight the public rate limits need to be).
 - **Q6.** Who's an editor: the existing `SHOPPING_EDITORS` list, or a separate list for recipe
   writes?
-- **Q7.** Monthly spend ceiling we're comfortable with (sets rate limits and the global cap).
 - **Q8.** Retention for stored chats.
