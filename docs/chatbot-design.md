@@ -533,7 +533,7 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 **Scores** (quality signals, per trace):
 
-- 👍 / 👎 on bot messages in the panel (a small, optional control; feedback goes through `/chat`).
+- Thumbs up / down on bot messages in the panel (two small stroke icons, no emoji; feedback goes through `/chat`).
 - Automatic: tool error, refused tool call, empty reply, the user dropping a tray item the bot just
   staged, a Finalise that ended in *Not yet*.
 
@@ -639,7 +639,7 @@ Each phase ships and is useful on its own.
 | # | Phase | Contents | Depends on |
 | --- | --- | --- | --- |
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
-| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing and 👍/👎 (8.1) | 0 |
+| 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing and thumbs up/down (8.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
 | 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history | 1 |
 | 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
@@ -681,7 +681,7 @@ Open:
 
 - **Q18.** Langfuse Cloud (EU region; the free tier is likely enough for a family) or self-hosted?
   Suggest Cloud: self-hosting needs Postgres, ClickHouse and storage, a lot to run for one site.
-- **Q19.** 👍/👎 on bot messages: in from phase 1, or only for editors?
+- **Q19.** thumbs up/down on bot messages: in from phase 1, or only for editors?
 
 Open (Petro will settle these):
 
