@@ -3,6 +3,7 @@ import { verifyUser } from "../lib/auth.js";
 import { makeCaller } from "../lib/tools.js";
 import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
+import { PROMPT_VERSION } from "../lib/chat-prompt.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
 import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
 import { chatEnabled, publicChatEnabled, DISABLED_BODY, SIGNIN_BODY } from "../lib/chat-switch.js";
@@ -453,6 +454,7 @@ export async function POST(request) {
   const lastText = isEditor ? storedUser.content || (attachments.length ? "[photo]" : "") : messages[messages.length - 1].content;
   const trace = startTrace({
     name: "chat",
+    version: PROMPT_VERSION,
     sessionId: isEditor ? convo.id : clientConversationId,
     userId: isEditor ? caller.userId : `public:${hashIp(ip)}`, // the Supabase user id, never the email or the IP
     tags: [isEditor ? "editor" : "public"],
@@ -486,6 +488,7 @@ export async function POST(request) {
         };
         const emit = ({ type, ...data }) => send(type, data);
         let output;
+        let shown; // cards, chips, a question: recorded on the trace next to the text
         try {
           if (isEditor) {
             send("meta", { conversation_id: convo.id, turn_id: turnId });
@@ -527,6 +530,7 @@ export async function POST(request) {
             conversation: isEditor ? { id: convo.id, title: convo.title || title } : undefined,
           });
           output = result.reply;
+          shown = result.shown;
           if (isEditor) {
             try {
               await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
@@ -553,7 +557,7 @@ export async function POST(request) {
             await settleFinalise(caller);
             trayEvent("tray-finalise", { trace, userId: caller.userId });
           }
-          trace.finish(output);
+          trace.finish(output, shown ? { shown } : undefined);
           closed = true;
           try {
             controller.close();

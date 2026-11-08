@@ -2,6 +2,7 @@
 // (streamed) with tool calling. Every tool call the model makes goes through dispatch() with the caller, which is what
 // enforces access; the model is only OFFERED what the role may call. The client's history is untrusted and is reduced
 // to plain user/assistant text before it gets here.
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { config, COURSES } from "./config.js";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
@@ -21,6 +22,26 @@ const RESULT_CAPS = { get_tray: 40000, get_shopping_list: 24000, fetch_url: 2400
 export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
 export const MAX_TOOL_CALLS_PER_TURN = 10; // data and write tool calls per user turn (UI tools like suggest_replies don't count)
 export const MAX_RESULT_CHARS_PER_TURN = 80_000; // total tool-result text added to the thread in one turn
+const TEMPERATURE = 0.4;
+
+// --- Langfuse (design 8.1): how a turn's steps show up in a trace ---------------------------------------------------------------
+const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
+// Read tools that only look something up are retrievers; everything else (stage tools, the tray, the UI tools, scaling) is a tool.
+const COMPUTED_READS = new Set(["scale_recipe"]);
+export function observationType(name) {
+  const tool = TOOL_BY_NAME.get(name);
+  return tool && accessOf(tool) === "read" && !COMPUTED_READS.has(name) ? "retriever" : "tool";
+}
+
+/** A model call's answer as an OpenAI-style assistant message, so Langfuse renders the text, the tool calls (as cards) and the thinking. */
+export function assistantOutput(result) {
+  return {
+    role: "assistant",
+    content: result.text || null,
+    ...(result.toolCalls?.length ? { tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) } : {}),
+    ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+  };
+}
 
 /** An error with a message that is safe to show the visitor. */
 export class ChatError extends Error {
@@ -175,7 +196,8 @@ export function createThinkFilter() {
 }
 
 /**
- * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason, cut, ms }.
+ * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason, cut, ms, reasoning,
+ * firstTokenAt }.
  * toolCalls: [{ id, name, arguments (string) }]. cut: "length" (stopped at max_tokens), "dropped" (the stream ended with no finish
  * reason: the provider gave up or timed out mid-answer) or null (a normal end). A tool call the provider hadn't finished is often not
  * passed on at all, so a cut answer can look like an empty one: `cut` is what tells them apart.
@@ -200,7 +222,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
         stream: true,
         stream_options: { include_usage: true },
         usage: { include: true },
-        temperature: 0.4,
+        temperature: TEMPERATURE,
         max_tokens: maxTokens,
       }),
     });
@@ -216,6 +238,8 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
   }
 
   let text = "";
+  let reasoning = ""; // the model's thinking: never shown to the user, kept for the trace
+  let firstTokenAt; // time to first token, for the trace
   let usage;
   let finishReason;
   const thinking = createThinkFilter();
@@ -231,6 +255,9 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
     if (choice.finish_reason) finishReason = choice.finish_reason;
     const delta = choice.delta || {};
     // delta.reasoning / reasoning_content / reasoning_details are the model's thinking: never shown. Some models inline it as <think>…</think>.
+    const thought = typeof delta.reasoning === "string" ? delta.reasoning : typeof delta.reasoning_content === "string" ? delta.reasoning_content : "";
+    if (!firstTokenAt && (thought || delta.content || delta.tool_calls?.length)) firstTokenAt = new Date();
+    if (thought) reasoning += thought;
     if (typeof delta.content === "string" && delta.content) {
       const visible = thinking.push(delta.content);
       if (visible) {
@@ -253,7 +280,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
   }
   const toolCalls = calls.filter((c) => c?.name).map((c, i) => ({ ...c, id: c.id || `call_${i}_${Math.random().toString(36).slice(2, 8)}` }));
   const cut = finishReason === "length" ? "length" : finishReason ? null : "dropped";
-  return { text, toolCalls, usage, finishReason, cut, ms: Date.now() - started };
+  return { text, toolCalls, usage, finishReason, cut, ms: Date.now() - started, reasoning, firstTokenAt };
 }
 
 /** One log line about a model call that was cut off or came back empty: enough to tell a timeout from the token cap. */
@@ -346,11 +373,6 @@ function withNote(content, note) {
   return parts;
 }
 
-/** Messages as a trace should show them: photos are named, never inlined (a data URL would bloat the trace). */
-export function redactImages(messages) {
-  return messages.map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.map((p) => (p.type === "image_url" ? { type: "text", text: "[photo attached]" } : p)) } : m));
-}
-
 /** Safe chips from the page, for when a model gave none (the same ideas as the panel's starters; never anything that changes the site). */
 export function defaultChips(page, editor) {
   const by = {
@@ -423,6 +445,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   };
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
+  const toolsVersion = createHash("sha256").update(JSON.stringify(tools)).digest("hex").slice(0, 10); // changes when a tool's definition does (Langfuse)
 
   let rows;
   try {
@@ -509,7 +532,13 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       break;
     }
     finalRound = round === MAX_TOOL_ROUNDS; // out of rounds: one last call without tools, so the user always gets an answer
-    const generation = trace.generation({ name: `chat round ${round + 1}`, model, input: redactImages(thread.slice(1)), metadata: { promptVersion: PROMPT_VERSION } });
+    const generation = trace.generation({
+      name: "generate-response",
+      model,
+      input: roundNote ? thread.map((m, i) => (i === thread.length - 1 && m.role === "tool" ? { ...m, content: m.content + roundNote } : m)) : thread,
+      modelParameters: { temperature: TEMPERATURE, max_tokens: maxTokens, tool_choice: finalRound ? "none" : "auto" },
+      metadata: { round: round + 1, promptVersion: PROMPT_VERSION, toolsVersion, tools: finalRound ? [] : [...offered] },
+    });
     let result;
     let separate = reply.trim() !== ""; // text from an earlier round: start this one in a new paragraph
     // A follow-up round must not say again what the user already has (some models restate their greeting or summary after every tool call):
@@ -572,7 +601,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     }
     if (guard === "check" && held && !repeats(held)) emitText(held);
     if (guard !== "pass" && !kept) result = { ...result, text: "" }; // what was swallowed isn't part of the turn's text
-    generation.end({ output: result.text || result.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: result.usage, finishReason: result.finishReason });
+    generation.end({ output: assistantOutput(result), usage: result.usage, finishReason: result.finishReason, completionStartTime: result.firstTokenAt, metadata: { cut: result.cut, ms: result.ms } });
     if (result.cut) lastCut = result.cut;
     if (result.cut || (!result.text.trim() && !result.toolCalls.length)) logRound(`Chat round ${round + 1} ${result.cut ? "was cut off" : "came back empty"}`, model, maxTokens, result);
 
@@ -612,7 +641,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         thread.push({ role: "tool", tool_call_id: call.id, content: "Error: the arguments were not valid JSON." });
         continue;
       }
-      const span = trace.span({ name: `tool ${call.name}`, input: args, metadata: { access: UI_TOOLS.has(call.name) ? "ui" : undefined } });
+      const span = trace.span({ name: call.name, type: observationType(call.name), input: args, metadata: { tool_call_id: call.id, access: UI_TOOLS.has(call.name) ? "ui" : accessOf(TOOL_BY_NAME.get(call.name)) } });
       let content;
       if (call.name === "suggest_replies") {
         let replies = askedUser ? [] : cleanReplies(args, book, { editor: caller.role === "editor" });
@@ -700,10 +729,17 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       { toolChoice: "auto", ask: "Call suggest_replies now with 2-4 short follow-ups to your last answer. Only call the tool; write no other text." },
     ];
     for (const [n, attempt] of attempts.entries()) {
-      const gen = trace.generation({ name: `chips nudge ${n + 1}`, model, input: "suggest_replies only", metadata: { promptVersion: PROMPT_VERSION } });
+      const nudgeMessages = [...thread, { role: "user", content: `[Note from the site, not from the user: ${attempt.ask}]` }];
+      const gen = trace.generation({
+        name: "suggest-replies",
+        model,
+        input: nudgeMessages,
+        modelParameters: { temperature: TEMPERATURE, max_tokens: 200, tool_choice: typeof attempt.toolChoice === "string" ? attempt.toolChoice : "suggest_replies" },
+        metadata: { attempt: n + 1, promptVersion: PROMPT_VERSION },
+      });
       try {
         const out = await streamCompletion({
-          messages: [...thread, { role: "user", content: `[Note from the site, not from the user: ${attempt.ask}]` }],
+          messages: nudgeMessages,
           tools: [SUGGEST_REPLIES_TOOL],
           toolChoice: attempt.toolChoice,
           model,
@@ -712,7 +748,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
           maxTokens: 200,
           onText: () => {},
         });
-        gen.end({ output: out.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n") || out.text, usage: out.usage, finishReason: out.finishReason });
+        gen.end({ output: assistantOutput(out), usage: out.usage, finishReason: out.finishReason, completionStartTime: out.firstTokenAt });
         const call = out.toolCalls.find((c) => c.name === "suggest_replies");
         if (call) {
           try {
@@ -754,5 +790,15 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   const produced = thread.slice(base);
   const lastAssistant = produced.findLastIndex((m) => m.role === "assistant");
   if (lastAssistant !== -1 && Object.keys(ui).length) produced[lastAssistant] = { ...produced[lastAssistant], ui };
-  return { reply, suggestions, produced };
+  return { reply, suggestions, produced, shown: shownFor(ui) };
+}
+
+/** What the panel showed besides the text, for the trace: card slugs, chip labels, the question, the button. */
+export function shownFor(ui) {
+  const shown = {};
+  if (ui.cards?.length) shown.cards = ui.cards.map((c) => c.slug);
+  if (ui.replies?.length) shown.replies = ui.replies.map((r) => (typeof r === "string" ? r : r.label));
+  if (ui.question) shown.question = { text: ui.question.question, options: ui.question.options };
+  if (ui.nav) shown.navigation = ui.nav.label;
+  return Object.keys(shown).length ? shown : undefined;
 }

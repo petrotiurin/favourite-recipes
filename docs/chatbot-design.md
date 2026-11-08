@@ -535,8 +535,9 @@ it went wrong, and so the model trial (Q9) has real numbers.
 | Session | the conversation id, so a whole chat reads as one session |
 | User | the Supabase user id for editors; `public` plus a hashed IP for visitors (never the raw IP or email) |
 | Tags / metadata | mode (`public` / `editor`), model, page context, tray state, prompt version (the git sha of the system prompt and workflow guide) |
-| Generations | each model call: input/output tokens, cost (OpenRouter returns it in `usage`), latency, finish reason |
-| Spans | each tool call: name, `access` level, arguments, result size, duration, and **refused** when 4.1's dispatcher blocks it |
+| Root | an `agent` observation named `chat`: the user's message in, the answer out (that is the trace's input and output) |
+| Generations | `generate-response`, one per model call, nested under the root: every message the model saw (system prompt included, photos as media), its answer as an assistant message with its tool calls and thinking, tokens (OpenAI usage schema, so cached and reasoning tokens are split out), cost (OpenRouter returns it in `usage`), time to first token, finish reason; `suggest-replies` for the chips follow-up |
+| Tool calls | one per call, named after the tool, a sibling of the generation that asked for it: `retriever` for lookups (the read tools), `tool` for everything else; arguments, result, the `tool_call_id`, `access` level, and **refused** (WARNING) when 4.1's dispatcher blocks it |
 | Events | tray changes (staged, dropped, Finalise, promote question answered, clash), Save / Save now with the commit link, rate-limit hits, OpenRouter out-of-credit |
 
 **Scores** (quality signals, per trace):
@@ -550,11 +551,16 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 **How it's wired.**
 
-- The Langfuse JS SDK in the Vercel functions (`/chat`, and `/mcp` through the shared tool
-  dispatcher, so agent writes through the MCP server are traced the same way).
-- Sending is asynchronous and flushed after the response with Vercel's `waitUntil`, so tracing
-  never adds latency. **If Langfuse is down or slow, the chat carries on**: tracing errors are
-  swallowed and logged once.
+- The Langfuse JS SDK v6 (`@langfuse/tracing` + `@langfuse/otel`, OpenTelemetry) in the Vercel
+  functions, on its own TracerProvider (never the global one). `lib/langfuse.js` wraps it in a small
+  `startTrace()` API (`generation`, `span`, `event`, `finish`) that the agent loop, Save and photo
+  generation use. Trace attributes (user, session, tags, trace name, prompt version) are propagated
+  to every observation; observation names are stable (no round numbers or models in them).
+  Environment and release come from the deployment. Scores go through `@langfuse/client`
+  (`POST /api/public/scores`). `/mcp` itself makes no model calls, so it isn't traced.
+- Spans are batched and flushed when a trace finishes, kept alive with Vercel's `waitUntil`, so
+  tracing never adds latency. **If Langfuse is down or slow, the chat carries on**: tracing errors
+  are swallowed and logged once.
 - Env vars on Vercel: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`. Without
   them tracing is off and nothing else changes.
 - OpenRouter can also forward its own request logs to Langfuse ("broadcast"); check whether that's
@@ -565,7 +571,9 @@ it went wrong, and so the model trial (Q9) has real numbers.
 
 **Privacy.** Traces contain what people typed, so:
 
-- Never in a trace: Supabase tokens, API keys, `Authorization` headers, raw IPs, emails.
+- Never in a trace: Supabase tokens, API keys, `Authorization` headers, raw IPs, emails. Callers
+  never record them, and a mask on the span processor redacts any that slip through (emails,
+  bearer tokens, JWTs, OpenRouter / Langfuse / GitHub keys).
 - Screenshots and photos sent in chat are uploaded with the trace (decided), so a bad recipe
   import can be checked against what the model actually saw. Generated dish photos are linked, not
   re-uploaded.

@@ -62,7 +62,9 @@ an OpenRouter model (`OPENROUTER_CHAT_PUBLIC_KEY`, `CHAT_PUBLIC_MODEL`) that may
 the caller is always a frozen `{ role: "public", ip }` (a bad token is a 401, a valid one is still public until phase 3; a role is never
 read from the body), client history is reduced to plain user/assistant text, the page is re-resolved server-side, and per-IP rate limits
 (hashed IP, counters in Supabase: `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing
-(`lib/langfuse.js`) apply. The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
+(`lib/langfuse.js`, Langfuse JS SDK v6 over OpenTelemetry: one `agent` trace per turn with a generation per model call and a
+`retriever` / `tool` observation per tool call; see design 8.1) apply (change tracing with the `langfuse` skill, `.claude/skills/langfuse/`, installed
+from github.com/langfuse/skills; `npx skills update` refreshes it). The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
 set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
 **Phase 3 (sign-in + per-user chats) is in:** `templates/auth.js` is the one sign-in (sheet, session in `localStorage`, token refresh,
 `window.RecipeAuth`) for the shopping page and the chat; it is added to every page (head, deferred) only when the build has `SUPABASE_URL` +
@@ -92,6 +94,13 @@ limit falls back to an in-memory limiter instead of failing open. **Phase 5 (the
 with sign-in accounts, site on :4000; test accounts and ports are at the top of `mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
 is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
 enforced on the server by the dispatcher, never by the prompt.
+
+## Debugging production
+
+For "why are we getting errors", "what happened in my last chat" and similar, **use the `debug` skill**
+(`.claude/skills/debug/`): it reads the stored chats and tray in Supabase, the chat traces in Langfuse and the Vercel runtime logs
+(kept only about an hour on the Hobby plan) through the connected MCP servers, read-only, with the project ids and the common
+symptoms mapped to their causes (`references/symptoms.md`). Add a symptom there when a new kind of failure turns up.
 
 ## Directory layout
 
