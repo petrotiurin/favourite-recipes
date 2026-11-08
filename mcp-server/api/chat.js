@@ -1,7 +1,7 @@
-import { config, assertChatConfigured } from "../lib/config.js";
+import { config, assertChatConfigured, warnSharedKeys } from "../lib/config.js";
 import { verifyUser } from "../lib/auth.js";
 import { makeCaller } from "../lib/tools.js";
-import { checkRateLimit, clientIp, hashIp } from "../lib/rate-limit.js";
+import { checkRateLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
 import {
@@ -93,8 +93,14 @@ function pageFrom(raw) {
 /** { user } (null for a visitor with no token; { email, userId, isEditor } for a valid token) or { refusal: { status, error } }. */
 async function whoIs(request) {
   if (!request.headers.get("authorization")) return { user: null };
+  const ip = clientIp(request);
+  // A visitor that keeps presenting bad tokens is stopped before we ask Supabase again (it counts failures per address).
+  if (authBlocked(ip)) return { refusal: { status: 429, error: "Too many failed sign-in attempts. Try again in a while." } };
   const user = await verifyUser(request);
-  if (user.error) return { refusal: { status: user.status, error: user.error } };
+  if (user.error) {
+    if (user.status === 401) await recordAuthFailure(ip);
+    return { refusal: { status: user.status, error: user.error } };
+  }
   return { user };
 }
 
@@ -202,6 +208,7 @@ export async function POST(request) {
   if (route === "feedback") return feedback(request, reply);
   if (route) return reply({ error: "Not found" }, 404);
 
+  warnSharedKeys();
   try {
     assertChatConfigured();
   } catch (err) {

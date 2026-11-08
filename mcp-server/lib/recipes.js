@@ -42,24 +42,32 @@ function assertSlug(slug) {
 // with one (batch_changes), the caller commits everything together.
 const via = (verb) => `\n\n${verb} via the recipes MCP server.`;
 
-export async function listRecipes(cs = new ChangeSet()) {
+const listRow = (data) => ({
+  slug: data.slug,
+  title: data.title,
+  course: data.course || [],
+  tags: data.tags || [],
+  total_mins: data.total_mins,
+  serves: data.serves,
+  calories: data.calories,
+  ...(data.scalable === false ? { scalable: false } : {}),
+  ...(data.draft === true ? { draft: true } : {}),
+  ...(isThisWeek(data) ? { current: true } : {}),
+  ...(isNextWeek(data) ? { next: true } : {}),
+});
+
+/**
+ * Every recipe's list row. Without a ChangeSet this is a READ: served from the shared, cached recipe index (one load per minute per
+ * instance, however many calls ask), so a flood of list_recipes calls can't turn into a flood of GitHub requests. With a ChangeSet (the
+ * write paths: batch_changes, the plan tray) it reads fresh from the branch, plus whatever the set has staged.
+ */
+export async function listRecipes(cs) {
+  if (!cs) return (await recipeIndex()).map((r) => listRow(r.data));
   const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const recipes = await Promise.all(
     files.map(async (f) => {
       const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
-      return {
-        slug: data.slug,
-        title: data.title,
-        course: data.course || [],
-        tags: data.tags || [],
-        total_mins: data.total_mins,
-        serves: data.serves,
-        calories: data.calories,
-        ...(data.scalable === false ? { scalable: false } : {}),
-        ...(data.draft === true ? { draft: true } : {}),
-        ...(isThisWeek(data) ? { current: true } : {}),
-        ...(isNextWeek(data) ? { next: true } : {}),
-      };
+      return listRow(data);
     })
   );
   // Same order as the site: this week (drafts first), then next week, then the rest; alphabetical within each.
@@ -75,9 +83,12 @@ async function loadRecipeIndex() {
   const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const rows = await Promise.all(
     files.map(async (f) => {
-      const { data, sections } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
+      const raw = (await cs.read(`recipes/${f}`)).toString("utf8");
+      const { data, sections } = parseRecipe(raw);
       const ingredients = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content).map((i) => i.name.trim());
       return {
+        data,
+        markdown: raw,
         slug: data.slug,
         title: data.title,
         course: data.course || [],
@@ -119,7 +130,7 @@ export async function searchRecipes({ text, include_ingredients = [], exclude_in
     (max_minutes === undefined || (r.total_mins !== undefined && r.total_mins <= max_minutes)) &&
     (draft === undefined || r.draft === draft) &&
     (week === undefined || (week === "this" ? r.current : week === "next" ? r.next : !r.current && !r.next));
-  return (await recipeIndex()).filter(matches).map(({ ingredients, text, image, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
+  return (await recipeIndex()).filter(matches).map(({ ingredients, text, image, data, markdown, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
 }
 
 // Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
@@ -127,7 +138,7 @@ const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|vegetab
 
 /** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
 export async function recipeSummaries() {
-  return (await recipeIndex()).map(({ ingredients, text, ...row }) => row);
+  return (await recipeIndex()).map(({ ingredients, text, data, markdown, ...row }) => row);
 }
 
 /**
@@ -158,11 +169,17 @@ export function catalogueText(rows) {
     .join("\n");
 }
 
-export async function getRecipe(slug, cs = new ChangeSet()) {
+/** One recipe's data and Markdown. Without a ChangeSet: a read, from the cached recipe index. With one: fresh from the branch (and its staged edits). */
+export async function getRecipe(slug, cs) {
   assertSlug(slug);
-  const raw = await cs.read(recipePath(slug));
-  if (!raw) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
-  const markdown = raw.toString("utf8");
+  let markdown;
+  if (cs) {
+    const raw = await cs.read(recipePath(slug));
+    if (raw) markdown = raw.toString("utf8");
+  } else {
+    markdown = (await recipeIndex()).find((r) => r.slug === slug)?.markdown;
+  }
+  if (!markdown) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
   const { data } = parseRecipe(markdown);
   return { data, markdown };
 }

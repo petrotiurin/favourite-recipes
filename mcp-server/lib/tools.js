@@ -235,9 +235,11 @@ function ok(text, extra = []) {
   return { content: [{ type: "text", text }, ...extra] };
 }
 
-function fail(err) {
+function fail(err, caller) {
   const expected = err instanceof UserError || err instanceof ShoppingListError;
-  const msg = expected ? err.message : `Server error: ${err.message}`;
+  // An unexpected error (GitHub, Supabase, a bug) can carry internal detail: it goes to the log, and only the MCP agent, who is
+  // trusted, sees it. Everyone else (a visitor in the chat) gets a generic line.
+  const msg = expected ? err.message : caller?.role === "agent" ? `Server error: ${err.message}` : "Something went wrong on the server. Try again in a moment.";
   if (!expected) console.error(err);
   return { content: [{ type: "text", text: msg }], isError: true };
 }
@@ -246,7 +248,7 @@ const safe = (fn) => async (args, ctx) => {
   try {
     return await fn(args, ctx);
   } catch (err) {
-    return fail(err);
+    return fail(err, ctx?.caller);
   }
 };
 

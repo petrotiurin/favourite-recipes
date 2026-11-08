@@ -1,6 +1,7 @@
 import { ChangeSet, assertCanCommit } from "./github.js";
 import { listRecipes, isNextWeek } from "./recipes.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
+import { cached } from "./cache.js";
 
 // The shopping list is for NEXT WEEK's recipes (`next: true`). The agent combines their
 // ingredients itself; this module only validates and stores the result as shopping-list.json
@@ -308,8 +309,12 @@ async function readStoredList(cs) {
   }
 }
 
-export async function getShoppingList(cs = new ChangeSet()) {
-  const [list, recipes] = await Promise.all([readStoredList(cs), listRecipes(cs)]);
+/** A read (no ChangeSet): the stored list comes from a short cache shared with the recipe index; with a ChangeSet it is fresh. */
+export async function getShoppingList(cs) {
+  const [list, recipes] = await Promise.all([
+    cs ? readStoredList(cs) : cached(`shopping-list:${config.repo}@${config.branch}`, () => readStoredList(new ChangeSet())),
+    listRecipes(cs),
+  ]);
   const next = recipes.filter(isNextWeek);
   return { list, next, status: shoppingListStatus(list, next.map((r) => r.slug)) };
 }

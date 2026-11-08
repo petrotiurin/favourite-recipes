@@ -20,6 +20,13 @@ export const config = {
   chatPublicModel: process.env.CHAT_PUBLIC_MODEL || "google/gemini-2.5-flash",
   chatPublicHourlyLimit: Number(process.env.CHAT_PUBLIC_HOURLY_LIMIT) || 20,
   chatPublicDailyLimit: Number(process.env.CHAT_PUBLIC_DAILY_LIMIT) || 100,
+  // One cap across ALL visitors together, so many IPs can't add up to a drained public key.
+  chatPublicTotalHourlyLimit: Number(process.env.CHAT_PUBLIC_TOTAL_HOURLY_LIMIT) || 300,
+  // Failed or repeated sign-in checks per visitor per hour before /chat stops asking Supabase.
+  authFailureHourlyLimit: Number(process.env.AUTH_FAILURE_HOURLY_LIMIT) || 20,
+  // Longest model reply (tokens) per request.
+  chatPublicMaxTokens: Number(process.env.CHAT_PUBLIC_MAX_TOKENS) || 1500,
+  chatEditorMaxTokens: Number(process.env.CHAT_EDITOR_MAX_TOKENS) || 4000,
   // Salt for hashing visitor IPs (rate limits, traces). Falls back to the service key, so no raw IP is ever stored either way.
   ipHashSalt: process.env.IP_HASH_SALT,
   // Signed-in editors (phase 3): their own OpenRouter key (falls back to OPENROUTER_API_KEY), model and generous limits, keyed by user id.
@@ -63,3 +70,18 @@ export const SHOPPING_LIST_PATH = "shopping-list.json";
 export const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack", "Drink"];
 export const MAX_IMAGE_EDGE = 1600;
 export const CARD_ASPECT = 4 / 3; // the index tiles crop to 4:3 (styles/style.css)
+
+let keyWarning = false;
+/** Warns once if the chat keys that are meant to be separate (and separately capped) are the same key. */
+export function warnSharedKeys() {
+  if (keyWarning) return;
+  const pairs = [["public chat key", config.chatPublicKey], ["editor chat key", config.chatEditorKey], ["image key", config.openrouterKey]];
+  for (let i = 0; i < pairs.length; i++) {
+    for (let j = i + 1; j < pairs.length; j++) {
+      if (pairs[i][1] && pairs[i][1] === pairs[j][1]) {
+        keyWarning = true;
+        console.warn(`The ${pairs[i][0]} and the ${pairs[j][0]} are the same OpenRouter key: public traffic can spend the other's budget. Give each its own key with its own credit limit.`);
+      }
+    }
+  }
+}

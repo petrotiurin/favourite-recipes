@@ -14,6 +14,10 @@ export const MAX_USER_CHARS = 2000;
 export const MAX_ASSISTANT_CHARS = 4000;
 export const MAX_TOOL_ROUNDS = 6;
 const MAX_TOOL_RESULT_CHARS = 12000;
+// Limits on what ONE model reply may ask for, so a single request can't fan out into thousands of GitHub calls or a huge prompt.
+export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
+export const MAX_TOOL_CALLS_PER_TURN = 10; // data and write tool calls per user turn (UI tools like suggest_replies don't count)
+export const MAX_RESULT_CHARS_PER_TURN = 60_000; // total tool-result text added to the thread in one turn
 
 /** An error with a message that is safe to show the visitor. */
 export class ChatError extends Error {
@@ -119,7 +123,7 @@ async function* sseEvents(body) {
  * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
  * toolCalls: [{ id, name, arguments (string) }].
  */
-async function streamCompletion({ messages, tools, model, apiKey, signal, onText }) {
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText, maxTokens }) {
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -139,6 +143,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
         stream_options: { include_usage: true },
         usage: { include: true },
         temperature: 0.4,
+        max_tokens: maxTokens,
       }),
     });
   } catch (err) {
@@ -232,7 +237,7 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin }) {
+export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
 
@@ -259,6 +264,9 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
 
   let suggestions = false;
   let navigationOffered = false;
+  const seenCalls = new Map(); // "name\nargs" -> the result already given this turn
+  let turnCalls = 0;
+  let resultChars = 0;
   let reply = "";
   let finalRound = false;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -273,6 +281,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         model,
         apiKey,
         signal,
+        maxTokens,
         onText: (delta) => {
           if (separate) {
             separate = false;
@@ -298,7 +307,25 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
       content: result.text || null,
       tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })),
     });
+    let roundCalls = 0;
     for (const call of result.toolCalls) {
+      if (++roundCalls > MAX_CALLS_PER_ROUND) {
+        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls at once (at most ${MAX_CALLS_PER_ROUND} per step). Ask for fewer.` });
+        continue;
+      }
+      const key = `${call.name}\n${call.arguments || "{}"}`;
+      if (seenCalls.has(key)) {
+        // the same call again: reuse its answer (it still counts toward the turn's size budget)
+        let again = seenCalls.get(key);
+        if (resultChars + again.length > MAX_RESULT_CHARS_PER_TURN) again = "Error: this turn has already read as much as it can. Answer with what you have.";
+        resultChars += again.length;
+        thread.push({ role: "tool", tool_call_id: call.id, content: again });
+        continue;
+      }
+      if (!UI_TOOLS.has(call.name) && ++turnCalls > MAX_TOOL_CALLS_PER_TURN) {
+        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls in one turn (at most ${MAX_TOOL_CALLS_PER_TURN}). Answer with what you have.` });
+        continue;
+      }
       let args;
       try {
         args = call.arguments ? JSON.parse(call.arguments) : {};
@@ -346,6 +373,9 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;
       }
+      if (resultChars + content.length > MAX_RESULT_CHARS_PER_TURN) content = "Error: this turn has already read as much as it can. Answer with what you have.";
+      resultChars += content.length;
+      seenCalls.set(key, content);
       thread.push({ role: "tool", tool_call_id: call.id, content });
     }
   }

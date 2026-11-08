@@ -28,6 +28,8 @@
   var SESSION_KEY = "shopping-editor-session"; // the shopping page's key, kept so existing sign-ins carry over
   var EMAIL_KEY = "shopping-editor-email";
   var HAS_PASSWORD_KEY = "shopping-editor-has-password"; // set once this browser has seen a password work
+  var LINK_PENDING_KEY = "recipes-auth-link-pending"; // when this browser last asked for an emailed code / magic link
+  var LINK_PENDING_MS = 60 * 60 * 1000; // a link that comes back later than this isn't ours
 
   // ---------------------------------------------------------------------------------------------------------------
   // Pure helpers (unit-tested in node)
@@ -343,6 +345,7 @@
       // The email carries both the code ({{ .Token }}) and the magic link ({{ .ConfirmationURL }}).
       authFetch("otp?redirect_to=" + encodeURIComponent(redirect), { email: state.email, create_user: false }).then(function (res) {
         if (res.ok) {
+          save(LINK_PENDING_KEY, Date.now());
           state.sheet = "code";
           state.code = "";
           return;
@@ -419,8 +422,35 @@
     if (location.hash.length < 2) return;
     var params = new URLSearchParams(location.hash.slice(1));
     if (params.get("access_token")) {
+      // Only take tokens from the URL if THIS browser asked for a link or code a moment ago: a crafted link carrying someone else's
+      // tokens (session fixation) is dropped.
+      var asked = Number(load(LINK_PENDING_KEY, 0));
+      save(LINK_PENDING_KEY, undefined);
+      if (!(asked && Date.now() - asked < LINK_PENDING_MS)) {
+        history.replaceState(null, "", location.pathname + location.search);
+        return;
+      }
       var session = sessionFrom(Object.fromEntries(params));
       setSession(session);
+      // The email shown comes from Supabase, not from the unverified token payload; a token Supabase doesn't accept ends the session.
+      fetch(supabaseUrl + "/auth/v1/user", { headers: { apikey: supabaseKey, Authorization: "Bearer " + session.access_token } })
+        .then(function (res) {
+          return res.ok ? res.json() : null;
+        })
+        .then(
+          function (user) {
+            if (!state.session || state.session.access_token !== session.access_token) return;
+            if (user && user.email) {
+              state.session.email = user.email;
+              setSession(state.session);
+            } else {
+              setSession(null);
+              emit("sign-out");
+            }
+            render();
+          },
+          function () {}
+        );
       initial = { type: "sign-in", via: "link" };
       // Offer a password so the next sign-in needs no email, unless this browser already used one.
       if (!load(HAS_PASSWORD_KEY, false)) {

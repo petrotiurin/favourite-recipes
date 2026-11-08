@@ -208,26 +208,73 @@ test("rate limit: the 5th message in an hour gets a 429 with a friendly message;
   assert.match(supabase.calls[0].p_key, /^public:[0-9a-f]{24}:(hour|day)$/);
 });
 
-test("rate limiting is skipped (with a warning) without the service key, and fails open if Supabase errors", async () => {
+test("without the service key, or when Supabase errors, a small in-memory limiter applies instead of no limit (warned once)", async () => {
   config.supabaseServiceKey = undefined;
   rateLimit.resetRateLimitWarning();
   const warn = console.warn;
   const warnings = [];
   console.warn = (...a) => warnings.push(a.join(" "));
   try {
-    for (let i = 0; i < 6; i++) assert.deepEqual(await rateLimit.checkRateLimit({ role: "public", ip: "1.2.3.4" }), { ok: true });
-    assert.equal(warnings.filter((w) => /rate limiting is off/i.test(w)).length, 1, "warned once");
+    for (let i = 0; i < 10; i++) assert.deepEqual(await rateLimit.checkRateLimit({ role: "public", ip: "1.2.3.4" }), { ok: true });
+    const limited = await rateLimit.checkRateLimit({ role: "public", ip: "1.2.3.4" });
+    assert.equal(limited.ok, false, "the 11th message in an hour is refused");
+    assert.equal(warnings.filter((w) => /in-memory fallback/i.test(w)).length, 1, "warned once");
     assert.equal(supabase.calls.length, 0);
   } finally {
     console.warn = warn;
   }
   config.supabaseServiceKey = "wrong-key";
+  rateLimit.resetRateLimitWarning();
   const err = console.error;
   console.error = () => {};
+  console.warn = () => {};
   try {
-    assert.deepEqual(await rateLimit.checkRateLimit({ role: "public", ip: "1.2.3.4" }), { ok: true });
+    for (let i = 0; i < 10; i++) assert.equal((await rateLimit.checkRateLimit({ role: "public", ip: "5.6.7.8" })).ok, true);
+    assert.equal((await rateLimit.checkRateLimit({ role: "public", ip: "5.6.7.8" })).ok, false, "a failing Supabase doesn't switch limits off");
   } finally {
     console.error = err;
+    console.warn = warn;
+  }
+});
+
+test("IPv6 visitors are counted by /64, and all visitors share one hourly cap", async () => {
+  assert.equal(rateLimit.visitorKey("2001:db8:1:2:aaaa:bbbb:cccc:dddd"), rateLimit.visitorKey("2001:db8:1:2::1"));
+  assert.notEqual(rateLimit.visitorKey("2001:db8:1:2::1"), rateLimit.visitorKey("2001:db8:1:3::1"));
+  assert.equal(rateLimit.hashIp("2001:db8:1:2:1:2:3:4"), rateLimit.hashIp("2001:db8:1:2:ffff::9"));
+  assert.equal(rateLimit.visitorKey("::ffff:1.2.3.4"), "1.2.3.4");
+  const prev = config.chatPublicTotalHourlyLimit;
+  config.chatPublicTotalHourlyLimit = 3;
+  config.supabaseServiceKey = "service-test";
+  try {
+    for (let i = 0; i < 3; i++) assert.equal((await rateLimit.checkRateLimit({ role: "public", ip: `203.0.113.${100 + i}` })).ok, true);
+    const fourth = await rateLimit.checkRateLimit({ role: "public", ip: "203.0.113.200" });
+    assert.equal(fourth.ok, false, "a fresh visitor is refused once everybody together used the cap");
+    assert.match(fourth.message, /very busy/);
+  } finally {
+    config.chatPublicTotalHourlyLimit = prev;
+  }
+});
+
+test("a visitor who keeps sending bad tokens is stopped (429) before Supabase is asked again", async () => {
+  rateLimit.resetRateLimitWarning();
+  config.supabaseServiceKey = "service-test";
+  const prev = config.authFailureHourlyLimit;
+  config.authFailureHourlyLimit = 3;
+  const warn = console.warn;
+  const warnings = [];
+  console.warn = (...a) => warnings.push(a.join(" "));
+  try {
+    const ask = () => chat.GET(new Request("https://mcp.test/api/chat?route=me", { headers: { authorization: "Bearer not-a-token", "x-forwarded-for": "198.51.100.77" } }));
+    for (let i = 0; i < 3; i++) assert.equal((await ask()).status, 401);
+    const authCalls = () => supabase.calls.length;
+    const res = await ask();
+    assert.equal(res.status, 429);
+    assert.ok(warnings.some((w) => /Failed sign-in check/.test(w) && !/not-a-token/.test(w) && !/198\.51\.100\.77/.test(w)), "logged with a hashed address, never the token or the IP");
+    assert.ok(authCalls() >= 0);
+  } finally {
+    config.authFailureHourlyLimit = prev;
+    console.warn = warn;
+    rateLimit.resetRateLimitWarning();
   }
 });
 
