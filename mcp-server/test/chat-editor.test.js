@@ -2,6 +2,7 @@
 // feedback, retention, and the registry-wide check that no write or stage tool can run for anyone through /chat.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
@@ -21,7 +22,8 @@ const { createFakeGitHub, createMockOpenRouter, createFakeSupabase } = await imp
 const github = createFakeGitHub({ clean: true });
 let openrouter;
 let supabase;
-let langfuseCalls = [];
+let langfuseCalls = []; // the score API (fetch)
+const spans = new InMemorySpanExporter(); // the traces (the SDK's exporter)
 const realFetch = globalThis.fetch;
 
 let chat, config, langfuse, store, tools;
@@ -32,14 +34,16 @@ before(async () => {
     if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
     if (s.startsWith("https://langfuse.test/")) {
-      langfuseCalls.push({ url: s, method: init.method, body: init.body ? JSON.parse(init.body) : null });
-      return Response.json({ successes: [], errors: [] }, { status: 207 });
+      const raw = init?.body ?? (url instanceof Request ? await url.clone().text() : undefined);
+      langfuseCalls.push({ url: s, method: init?.method || (url instanceof Request ? url.method : "GET"), body: raw ? JSON.parse(raw) : null });
+      return init?.method === "DELETE" ? Response.json({ message: "deleted" }) : Response.json({ accepted: 1, rejected: 0, errors: [] });
     }
     return realFetch(url, init);
   };
   chat = await import("../api/chat.js");
   ({ config } = await import("../lib/config.js"));
   langfuse = await import("../lib/langfuse.js");
+  langfuse.useTestExporter(spans);
   store = await import("../lib/chat-store.js");
   tools = await import("../lib/tools.js");
 });
@@ -64,6 +68,7 @@ beforeEach(() => {
     },
   });
   langfuseCalls = [];
+  spans.reset();
   github.commitLog.length = 0;
   config.langfusePublicKey = config.langfuseSecretKey = undefined;
   config.langfuseBaseUrl = "";
@@ -395,30 +400,32 @@ test("feedback goes to Langfuse as the score user-feedback on that turn's trace;
   config.langfuseBaseUrl = "https://langfuse.test";
   const meta = await startedTurn();
   await langfuse.idle();
-  const trace = langfuseCalls.find((c) => c.body?.batch?.some((e) => e.type === "trace-create")).body.batch.find((e) => e.type === "trace-create").body;
-  assert.equal(trace.userId, OWNER, "the Supabase user id, not the email");
-  assert.deepEqual(trace.tags, ["editor"]);
-  assert.equal(trace.sessionId, meta.conversation_id);
-  assert.equal(trace.metadata.model, "test/editor-model");
-  assert.ok(!JSON.stringify(langfuseCalls).includes("owner@example.com"));
-  assert.equal(feedbackRow().trace_id, trace.id, "the trace id is stored per assistant turn");
+  const exported = spans.getFinishedSpans();
+  const root = exported.find((sp) => !sp.parentSpanContext?.spanId);
+  assert.equal(root.attributes["user.id"], OWNER, "the Supabase user id, not the email");
+  assert.deepEqual(root.attributes["langfuse.trace.tags"], ["editor"]);
+  assert.equal(root.attributes["session.id"], meta.conversation_id);
+  assert.equal(JSON.parse(root.attributes["langfuse.observation.metadata.model"]), "test/editor-model");
+  assert.ok(!JSON.stringify(exported.map((sp) => sp.attributes)).includes("owner@example.com"));
+  const traceId = root.spanContext().traceId;
+  assert.equal(feedbackRow().trace_id, traceId, "the trace id is stored per assistant turn");
 
   langfuseCalls.length = 0;
   const post = (body) => call("POST", "/chat/feedback", { token: "owner-token", body: { conversation_id: meta.conversation_id, turn_id: meta.turn_id, ...body } });
   await post({ value: 0, reasons: ["Wrong recipe"], note: "pasta, not chicken" });
-  const score = langfuseCalls[0].body.batch[0];
-  assert.equal(score.type, "score-create");
-  assert.equal(score.body.name, "user-feedback");
-  assert.equal(score.body.value, 0);
-  assert.equal(score.body.traceId, trace.id);
-  assert.match(score.body.comment, /Wrong recipe/);
-  assert.match(score.body.comment, /pasta, not chicken/);
+  assert.equal(langfuseCalls[0].url, "https://langfuse.test/api/public/scores", "the scores API, not the legacy ingestion endpoint");
+  const score = langfuseCalls[0].body[0];
+  assert.equal(score.name, "user-feedback");
+  assert.equal(score.value, 0);
+  assert.equal(score.traceId, traceId);
+  assert.match(score.comment, /Wrong recipe/);
+  assert.match(score.comment, /pasta, not chicken/);
   await post({ value: 1 });
-  assert.equal(langfuseCalls[1].body.batch[0].body.id, score.body.id, "same score id, so it replaces the earlier one");
-  assert.equal(langfuseCalls[1].body.batch[0].body.value, 1);
+  assert.equal(langfuseCalls[1].body[0].id, score.id, "same score id, so it replaces the earlier one");
+  assert.equal(langfuseCalls[1].body[0].value, 1);
   await post({ value: null });
   assert.equal(langfuseCalls[2].method, "DELETE");
-  assert.ok(langfuseCalls[2].url.endsWith(`/scores/${encodeURIComponent(score.body.id)}`));
+  assert.ok(langfuseCalls[2].url.endsWith(`/scores/${encodeURIComponent(score.id)}`));
 
   config.langfusePublicKey = undefined;
   langfuseCalls.length = 0;

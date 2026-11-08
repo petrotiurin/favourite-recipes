@@ -298,10 +298,12 @@ test("a later turn in the same chat replays the earlier photo for the model", as
   assert.ok(!openrouter.requests[0].messages.some((m) => "images" in m));
 });
 
-test("traces never inline photos", () => {
-  const out = chatMod.redactImages([{ role: "user", content: [{ type: "text", text: "hi" }, { type: "image_url", image_url: { url: "data:image/jpeg;base64,AAAA" } }] }, { role: "assistant", content: "ok" }]);
-  assert.ok(!JSON.stringify(out).includes("base64"));
-  assert.equal(out[0].content[1].text, "[photo attached]");
+test("traces keep photos whole (Langfuse uploads data URIs as media) but still clip long text", async () => {
+  const { clip } = await import("../lib/langfuse.js");
+  const photoUrl = `data:image/jpeg;base64,${"A".repeat(60_000)}`;
+  const out = clip([{ role: "user", content: [{ type: "text", text: "x".repeat(60_000) }, { type: "image_url", image_url: { url: photoUrl } }] }]);
+  assert.equal(out[0].content[1].image_url.url, photoUrl);
+  assert.ok(out[0].content[0].text.length < 41_000);
 });
 
 test("photos of chats that no longer exist are swept", async () => {

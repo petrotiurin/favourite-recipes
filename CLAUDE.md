@@ -62,7 +62,9 @@ an OpenRouter model (`OPENROUTER_CHAT_PUBLIC_KEY`, `CHAT_PUBLIC_MODEL`) that may
 the caller is always a frozen `{ role: "public", ip }` (a bad token is a 401, a valid one is still public until phase 3; a role is never
 read from the body), client history is reduced to plain user/assistant text, the page is re-resolved server-side, and per-IP rate limits
 (hashed IP, counters in Supabase: `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing
-(`lib/langfuse.js`) apply. The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
+(`lib/langfuse.js`, Langfuse JS SDK v6 over OpenTelemetry: one `agent` trace per turn with a generation per model call and a
+`retriever` / `tool` observation per tool call; see design 8.1) apply (change tracing with the `langfuse` skill, `.claude/skills/langfuse/`, installed
+from github.com/langfuse/skills; `npx skills update` refreshes it). The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
 set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
 **Phase 3 (sign-in + per-user chats) is in:** `templates/auth.js` is the one sign-in (sheet, session in `localStorage`, token refresh,
 `window.RecipeAuth`) for the shopping page and the chat; it is added to every page (head, deferred) only when the build has `SUPABASE_URL` +

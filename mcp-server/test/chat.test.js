@@ -1,7 +1,8 @@
 // The chat endpoint end to end: real api/chat.js handler -> real agent loop and tool dispatcher -> fake GitHub, fake OpenRouter
-// (scripted, streaming), fake Supabase and fake Langfuse. No real network.
+// (scripted, streaming), fake Supabase, and Langfuse's SDK exporting to memory. No real network.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
@@ -19,7 +20,7 @@ const { createFakeGitHub, createMockOpenRouter, createFakeSupabase } = await imp
 const github = createFakeGitHub({ clean: true });
 let openrouter;
 let supabase;
-let langfuseCalls = [];
+const spans = new InMemorySpanExporter(); // what the Langfuse SDK would export
 const realFetch = globalThis.fetch;
 
 let chat, config, rateLimit, langfuse, chatLib;
@@ -29,23 +30,20 @@ before(async () => {
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
-    if (s.startsWith("https://langfuse.test/")) {
-      langfuseCalls.push({ url: s, init, body: JSON.parse(init.body) });
-      return Response.json({ successes: [], errors: [] }, { status: 207 });
-    }
     return realFetch(url, init);
   };
   chat = await import("../api/chat.js");
   ({ config } = await import("../lib/config.js"));
   rateLimit = await import("../lib/rate-limit.js");
   langfuse = await import("../lib/langfuse.js");
+  langfuse.useTestExporter(spans);
   chatLib = await import("../lib/chat.js");
 });
 
 beforeEach(() => {
   openrouter = createMockOpenRouter({ delayMs: 0 });
   supabase = createFakeSupabase({ url: "https://sb.test", anonKey: "anon-test", serviceKey: "service-test", users: { "good-token": { id: "u1", email: "owner@example.com" }, "stranger-token": { id: "u2", email: "stranger@example.com" } } });
-  langfuseCalls = [];
+  spans.reset();
   github.commitLog.length = 0;
   config.langfusePublicKey = config.langfuseSecretKey = undefined;
   config.langfuseBaseUrl = "";
@@ -315,10 +313,47 @@ test("suggested replies are cleaned: short, no emoji, at most four", () => {
   assert.deepEqual(chatLib.cleanReplies({ replies: "nope" }), []);
 });
 
-test("Langfuse: off by default; with keys, one trace per request with generations and tool spans, and no IP, token or email in it", async () => {
+/** The exported observations, by name, with their Langfuse attributes decoded. */
+function observations() {
+  const decode = (v) => {
+    if (typeof v !== "string") return v;
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v;
+    }
+  };
+  return spans.getFinishedSpans().map((s) => {
+    const a = s.attributes;
+    const meta = Object.fromEntries(Object.entries(a).filter(([k]) => k.startsWith("langfuse.observation.metadata.")).map(([k, v]) => [k.slice(30), decode(v)]));
+    return {
+      name: s.name,
+      traceId: s.spanContext().traceId,
+      id: s.spanContext().spanId,
+      parentId: s.parentSpanContext?.spanId,
+      type: a["langfuse.observation.type"],
+      level: a["langfuse.observation.level"],
+      input: decode(a["langfuse.observation.input"]),
+      output: decode(a["langfuse.observation.output"]),
+      model: a["langfuse.observation.model.name"],
+      usage: decode(a["langfuse.observation.usage_details"]),
+      cost: decode(a["langfuse.observation.cost_details"]),
+      userId: a["user.id"],
+      sessionId: a["session.id"],
+      traceName: a["langfuse.trace.name"],
+      tags: a["langfuse.trace.tags"],
+      version: a["langfuse.version"],
+      environment: a["langfuse.environment"],
+      meta,
+      raw: JSON.stringify(a),
+    };
+  });
+}
+
+test("Langfuse: off by default; with keys, one nested trace per request (agent > generations, tools), and no IP, token or email in it", async () => {
   await events(await post({ messages: [{ role: "user", content: "chicken please" }] }));
   await langfuse.idle();
-  assert.equal(langfuseCalls.length, 0, "tracing is off without the keys");
+  assert.equal(spans.getFinishedSpans().length, 0, "tracing is off without the keys");
 
   config.langfusePublicKey = "pk-lf-test";
   config.langfuseSecretKey = "sk-lf-test";
@@ -326,41 +361,75 @@ test("Langfuse: off by default; with keys, one trace per request with generation
   const ip = "198.51.100.77";
   await events(await post({ conversation_id: "conv-1", messages: [{ role: "user", content: "mock-add a pie" }], page: { page: "recipe", slug: "avocado-toast" } }, { ip, headers: { authorization: "Bearer stranger-token" } }));
   await langfuse.idle();
-  assert.equal(langfuseCalls.length, 1, "one ingestion request per chat request");
-  const call = langfuseCalls[0];
-  assert.equal(call.url, "https://langfuse.test/api/public/ingestion");
-  assert.equal(call.init.headers.Authorization, `Basic ${Buffer.from("pk-lf-test:sk-lf-test").toString("base64")}`);
-  const batch = call.body.batch;
-  const trace = batch.find((e) => e.type === "trace-create").body;
-  assert.equal(trace.sessionId, "conv-1");
-  assert.match(trace.userId, /^public:[0-9a-f]{24}$/);
-  assert.equal(trace.metadata.mode, "public");
-  assert.equal(trace.metadata.model, "test/model");
-  assert.deepEqual(trace.metadata.page, { page: "recipe", slug: "avocado-toast" });
-  const generations = batch.filter((e) => e.type === "generation-create").map((e) => e.body);
+  const obs = observations();
+  assert.equal(new Set(obs.map((o) => o.traceId)).size, 1, "one trace per chat request");
+  const root = obs.find((o) => !o.parentId);
+  assert.equal(root.name, "chat");
+  assert.equal(root.type, "agent");
+  assert.equal(root.input, "mock-add a pie", "the trace input is the user's message");
+  assert.equal(typeof root.output, "string");
+  assert.equal(root.meta.mode, "public");
+  assert.equal(root.meta.model, "test/model");
+  assert.deepEqual(root.meta.page, { page: "recipe", slug: "avocado-toast" });
+  for (const o of obs) {
+    assert.equal(o.sessionId, "conv-1", `${o.name} carries the session`);
+    assert.match(o.userId, /^public:[0-9a-f]{24}$/);
+    assert.equal(o.traceName, "chat");
+    assert.deepEqual(o.tags, ["public"]);
+    assert.match(o.version, /^[0-9a-f]{10}$/, "the prompt version");
+    assert.equal(o.environment, "development");
+    if (o !== root) assert.equal(o.parentId, root.id, `${o.name} is nested under the turn`);
+  }
+  const generations = obs.filter((o) => o.type === "generation");
   assert.ok(generations.length >= 2);
-  assert.equal(generations[0].usageDetails.total, 1280);
-  assert.equal(generations[0].costDetails.total, 0.0004);
-  const spans = batch.filter((e) => e.type === "span-create").map((e) => e.body);
-  const refused = spans.find((s) => s.name === "tool create_recipe");
-  assert.ok(refused, "the refused tool call has a span");
-  assert.equal(refused.metadata.refused, true);
+  assert.ok(generations.every((g) => g.name === "generate-response" || g.name === "suggest-replies"), "stable names, no round numbers");
+  const first = generations.find((g) => g.meta.round === 1);
+  assert.equal(first.model, "test/model");
+  assert.equal(first.usage.total_tokens, 1280);
+  assert.ok(!("cost" in first.usage), "only OpenAI usage keys, so Langfuse maps them");
+  assert.equal(first.cost.total, 0.0004);
+  assert.equal(first.input[0].role, "system", "the generation shows everything the model saw, system prompt included");
+  assert.equal(first.output.role, "assistant");
+  const refused = obs.find((o) => o.name === "create_recipe");
+  assert.ok(refused, "the refused tool call has an observation, named after the tool");
+  assert.equal(refused.type, "tool");
+  assert.equal(refused.meta.refused, true);
   assert.equal(refused.level, "WARNING");
-  const raw = JSON.stringify(call.body);
+  const call = first.output.tool_calls?.find((c) => c.function.name === "create_recipe");
+  if (call) assert.equal(refused.meta.tool_call_id, call.id, "the tool observation names the call it answers");
+  const raw = obs.map((o) => o.raw).join("\n");
   assert.ok(!raw.includes(ip) && !raw.includes("stranger-token") && !raw.includes("stranger@example.com") && !raw.includes("or-public-test"));
+});
+
+test("Langfuse: lookups are retrievers, other tools are tools", () => {
+  assert.equal(chatLib.observationType("search_recipes"), "retriever");
+  assert.equal(chatLib.observationType("get_recipe"), "retriever");
+  assert.equal(chatLib.observationType("scale_recipe"), "tool");
+  assert.equal(chatLib.observationType("stage_create_recipe"), "tool");
+  assert.equal(chatLib.observationType("suggest_replies"), "tool");
+});
+
+test("Langfuse: the mask strips emails, tokens and keys from anything that gets past the callers", () => {
+  assert.equal(langfuse.maskText("mail me@example.com, Bearer abcdefghijklmnop, key sk-or-v1-0123456789abcdef0123"), "mail [email], Bearer [token], key [key]");
+  assert.deepEqual(langfuse.mask({ data: { note: "from a@b.co" } }), { note: "from [email]" });
+  assert.equal(langfuse.mask({ data: 5 }), 5);
 });
 
 test("Langfuse failures never break the chat", async () => {
   config.langfusePublicKey = "pk";
   config.langfuseSecretKey = "sk";
   config.langfuseBaseUrl = "https://langfuse-down.test";
+  langfuse.useTestExporter({ export: (_spans, done) => done({ code: 1, error: new Error("Langfuse is down") }), shutdown: async () => {}, forceFlush: async () => {} });
   const warn = console.warn;
-  console.warn = () => {};
+  const error = console.error;
+  console.warn = console.error = () => {};
   try {
     const evs = await events(await post({ messages: [{ role: "user", content: "hi" }] }));
     assert.equal(evs.at(-1).name, "done");
     await langfuse.idle();
   } finally {
     console.warn = warn;
+    console.error = error;
+    langfuse.useTestExporter(spans);
   }
 });
