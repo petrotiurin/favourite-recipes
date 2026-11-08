@@ -175,10 +175,13 @@ export function createThinkFilter() {
 }
 
 /**
- * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
- * toolCalls: [{ id, name, arguments (string) }].
+ * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason, cut, ms }.
+ * toolCalls: [{ id, name, arguments (string) }]. cut: "length" (stopped at max_tokens), "dropped" (the stream ended with no finish
+ * reason: the provider gave up or timed out mid-answer) or null (a normal end). A tool call the provider hadn't finished is often not
+ * passed on at all, so a cut answer can look like an empty one: `cut` is what tells them apart.
  */
 async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }) {
+  const started = Date.now();
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -249,7 +252,24 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
     onText(tail);
   }
   const toolCalls = calls.filter((c) => c?.name).map((c, i) => ({ ...c, id: c.id || `call_${i}_${Math.random().toString(36).slice(2, 8)}` }));
-  return { text, toolCalls, usage, finishReason };
+  const cut = finishReason === "length" ? "length" : finishReason ? null : "dropped";
+  return { text, toolCalls, usage, finishReason, cut, ms: Date.now() - started };
+}
+
+/** One log line about a model call that was cut off or came back empty: enough to tell a timeout from the token cap. */
+function logRound(label, model, maxTokens, result) {
+  const u = result.usage;
+  console.warn(
+    `${label} (model ${model}): finish ${result.finishReason || "none"}${result.cut ? `, cut off (${result.cut})` : ""}, ${Math.round(result.ms / 1000)}s, ` +
+      `tokens ${u ? `${u.prompt_tokens ?? "?"} in / ${u.completion_tokens ?? "?"} out${u.completion_tokens_details?.reasoning_tokens ? ` (${u.completion_tokens_details.reasoning_tokens} reasoning)` : ""}` : "unknown"} of max ${maxTokens}, ` +
+      `text ${result.text.length} chars, calls ${result.toolCalls.map((c) => c.name).join(",") || "none"}`
+  );
+}
+
+/** What the user is told when the model was cut off before it could answer. */
+export function cutOffLine(cut, { photo } = {}) {
+  const why = cut === "length" ? "it ran out of room for its answer" : "the connection to it ended early (most likely it took too long)";
+  return `Sorry, the model stopped before it finished: ${why}. Nothing was added. ${photo ? "Try again, or send a tighter crop of just the recipe, or paste the link if it's from a website." : "Try again in a moment, or ask for a bit less at once."}`;
 }
 
 // --- tools ----------------------------------------------------------------------------------------------------
@@ -476,6 +496,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   let roundNote = ""; // told to the model on its next call, not stored
   const startedAt = Date.now();
   let stoppedLong = false;
+  let lastCut = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // A turn that has been going too long (a slow model looping through tools) stops with a clear line instead of running on in silence.
     if (round > 0 && Date.now() - startedAt > config.chatTurnBudgetMs) {
@@ -541,6 +562,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     if (guard === "check" && held && !repeats(held)) emitText(held);
     if (guard !== "pass" && !kept) result = { ...result, text: "" }; // what was swallowed isn't part of the turn's text
     generation.end({ output: result.text || result.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: result.usage, finishReason: result.finishReason });
+    if (result.cut) lastCut = result.cut;
+    if (result.cut || (!result.text.trim() && !result.toolCalls.length)) logRound(`Chat round ${round + 1} ${result.cut ? "was cut off" : "came back empty"}`, model, maxTokens, result);
 
     if (!result.toolCalls.length || finalRound) {
       thread.push({ role: "assistant", content: kept || "" });
@@ -706,8 +729,10 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   }
   if (!reply.trim() && !shownUi) {
     // never end a turn in silence
-    console.warn("Chat turn ended with no text and nothing shown: sending the fallback line");
-    reply = "Sorry, I didn't manage to answer that. Could you try again?";
+    // A cut-off answer says so (a photo turn writing a whole recipe is the usual one); only a model that really said nothing gets the generic line.
+    const photo = attachments.length > 0 || (Array.isArray(lastMsg?.content) && lastMsg.content.some((p) => p.type === "image_url"));
+    console.warn(`Chat turn ended with no text and nothing shown${lastCut ? ` (cut off: ${lastCut})` : ""}: sending the fallback line`);
+    reply = lastCut ? cutOffLine(lastCut, { photo }) : "Sorry, I didn't manage to answer that. Could you try again?";
     emit({ type: "text", delta: reply });
     thread.push({ role: "assistant", content: reply });
   }

@@ -10,13 +10,15 @@ let requests;
 let failWith;
 let rejectForced = false; // the provider refuses a forced tool_choice
 const sse = (events) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
-const modelTurn = ({ text = "", chunks, reasoning, calls = [] }) => {
+const modelTurn = ({ text = "", chunks, reasoning, calls = [], finish, usage }) => {
   const chunk = (delta, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
   const ev = [];
   if (reasoning) ev.push(chunk({ role: "assistant", content: "", reasoning }), chunk({ reasoning_content: reasoning }));
   for (const c of chunks || [text]) ev.push(chunk({ content: c }));
   calls.forEach((c, index) => ev.push(chunk({ tool_calls: [{ index, id: `c${index}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } }] })));
-  ev.push(chunk({}, calls.length ? "tool_calls" : "stop"), "[DONE]");
+  if (finish !== false) ev.push(chunk({}, finish || (calls.length ? "tool_calls" : "stop"))); // finish: false = the stream just stops (a timeout)
+  if (usage) ev.push({ choices: [], usage });
+  if (finish !== false) ev.push("[DONE]");
   return sse(ev);
 };
 const realFetch = globalThis.fetch;
@@ -106,6 +108,37 @@ test("a turn with no text and nothing shown ends with a short message, never sil
   // UI alone is an answer
   const cards = await turn([{ calls: [{ name: "show_recipes", arguments: { slugs: ["nope"] } }] }, {}]);
   assert.ok(cards.some((e) => e.name === "text"), "nothing shown (unknown slug) still gets the line");
+});
+
+test("a cut-off answer says so and is logged: the token cap and a stream that just stops", async () => {
+  const warn = console.warn;
+  const logged = [];
+  console.warn = (...a) => logged.push(a.join(" "));
+  try {
+    const capped = await turn([{ finish: "length", usage: { prompt_tokens: 9000, completion_tokens: 4000, completion_tokens_details: { reasoning_tokens: 3100 } } }]);
+    assert.match(textOf(capped), /stopped before it finished: it ran out of room/);
+    assert.doesNotMatch(textOf(capped), /didn't manage to answer/);
+    assert.equal(capped.at(-1).name, "done");
+    assert.ok(logged.some((l) => /round 1 was cut off .*finish length, cut off \(length\).*4000 out \(3100 reasoning\) of max/.test(l)), logged.join("\n"));
+
+    logged.length = 0;
+    const dropped = await turn([{ finish: false }]);
+    assert.match(textOf(dropped), /connection to it ended early/);
+    assert.ok(logged.some((l) => /finish none, cut off \(dropped\).*tokens unknown/.test(l)), logged.join("\n"));
+
+    // an empty answer that ended normally keeps the generic line, and is logged too
+    logged.length = 0;
+    assert.match(textOf(await turn([{}])), /didn't manage to answer/);
+    assert.ok(logged.some((l) => /round 1 came back empty .*finish stop/.test(l)), logged.join("\n"));
+  } finally {
+    console.warn = warn;
+  }
+});
+
+test("the cut-off line suggests a tighter crop when a photo was attached", async () => {
+  const { cutOffLine } = await import("../lib/chat.js");
+  assert.match(cutOffLine("dropped", { photo: true }), /tighter crop/);
+  assert.doesNotMatch(cutOffLine("length"), /crop/);
 });
 
 test("provider errors: out of credit, a text-only model asked to read a photo, anything else", async () => {
