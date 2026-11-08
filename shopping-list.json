@@ -31,7 +31,8 @@
           "quantity": "160g",
           "recipes": [
             "cba-sandwich-chicken-basil-avocado"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Spinach",
@@ -162,7 +163,8 @@
           "amounts": {
             "meatball-and-ricotta-al-forno": 1,
             "skin-glow-omega-bowl": 2
-          }
+          },
+          "have": true
         },
         {
           "name": "Lemons",
@@ -223,7 +225,8 @@
           "amounts": {
             "cba-sandwich-chicken-basil-avocado": 160,
             "toasted-sesame-and-ginger-chicken-salad": 200
-          }
+          },
+          "have": true
         },
         {
           "name": "Minced beef (5% fat)",
@@ -270,7 +273,8 @@
             "cheats-morning-shakshuka": 4,
             "meatball-and-ricotta-al-forno": 1,
             "tiramisu-french-toast": 2
-          }
+          },
+          "have": 5
         },
         {
           "name": "Feta cheese",
@@ -312,21 +316,24 @@
           "quantity": "25g",
           "recipes": [
             "meatball-and-ricotta-al-forno"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Thick natural yogurt",
           "quantity": "30ml",
           "recipes": [
             "skin-glow-omega-bowl"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Semi-skimmed milk",
           "quantity": "120ml",
           "recipes": [
             "tiramisu-french-toast"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -343,7 +350,8 @@
           "amounts": {
             "cba-sandwich-chicken-basil-avocado": 140,
             "tiramisu-french-toast": 160
-          }
+          },
+          "have": true
         }
       ]
     },
@@ -369,14 +377,16 @@
           "quantity": "250g",
           "recipes": [
             "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Dried pasta",
           "quantity": "125g",
           "recipes": [
             "oven-baked-feta-and-pepper-pasta"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Butter beans",
@@ -404,7 +414,8 @@
           "quantity": "100g",
           "recipes": [
             "toasted-sesame-and-ginger-chicken-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Cooked quinoa",
@@ -430,7 +441,8 @@
             "meatball-and-ricotta-al-forno": 10,
             "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 10,
             "oven-baked-feta-and-pepper-pasta": 5
-          }
+          },
+          "have": true
         },
         {
           "name": "Honey",
@@ -448,7 +460,8 @@
             "satay-salmon-with-smacked-cucumber-salad": 5,
             "tiramisu-french-toast": 10,
             "toasted-sesame-and-ginger-chicken-salad": 11
-          }
+          },
+          "have": true
         },
         {
           "name": "Dijon mustard",
@@ -460,7 +473,8 @@
           "amounts": {
             "cba-sandwich-chicken-basil-avocado": 10,
             "oven-baked-feta-and-pepper-pasta": 5
-          }
+          },
+          "have": true
         },
         {
           "name": "Garlic granules",
@@ -474,21 +488,24 @@
             "cba-sandwich-chicken-basil-avocado": 1,
             "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 2,
             "satay-salmon-with-smacked-cucumber-salad": 3
-          }
+          },
+          "have": true
         },
         {
           "name": "Middle Eastern spice blend",
           "quantity": "15ml",
           "recipes": [
             "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "White wine vinegar",
           "quantity": "8ml",
           "recipes": [
             "oven-baked-feta-and-pepper-pasta"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Caster sugar",
@@ -500,42 +517,48 @@
           "amounts": {
             "satay-salmon-with-smacked-cucumber-salad": 2,
             "toasted-sesame-and-ginger-chicken-salad": 10
-          }
+          },
+          "have": true
         },
         {
           "name": "Crispy chilli oil",
           "quantity": "5ml",
           "recipes": [
             "satay-salmon-with-smacked-cucumber-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Salt",
           "quantity": "6g",
           "recipes": [
             "satay-salmon-with-smacked-cucumber-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Instant coffee granules",
           "quantity": "4g",
           "recipes": [
             "tiramisu-french-toast"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Vanilla extract",
           "quantity": "5ml",
           "recipes": [
             "tiramisu-french-toast"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Cocoa powder",
           "quantity": "2g",
           "recipes": [
             "tiramisu-french-toast"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Rice vinegar",
@@ -547,7 +570,8 @@
           "amounts": {
             "satay-salmon-with-smacked-cucumber-salad": 25,
             "toasted-sesame-and-ginger-chicken-salad": 200
-          }
+          },
+          "have": 150
         },
         {
           "name": "Light soy sauce",
@@ -559,7 +583,8 @@
           "amounts": {
             "satay-salmon-with-smacked-cucumber-salad": 50,
             "toasted-sesame-and-ginger-chicken-salad": 40
-          }
+          },
+          "have": 50
         },
         {
           "name": "Ginger paste",
@@ -571,21 +596,24 @@
           "amounts": {
             "satay-salmon-with-smacked-cucumber-salad": 5,
             "toasted-sesame-and-ginger-chicken-salad": 10
-          }
+          },
+          "have": true
         },
         {
           "name": "Mild curry powder",
           "quantity": "1g",
           "recipes": [
             "satay-salmon-with-smacked-cucumber-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Peanut butter",
           "quantity": "15ml",
           "recipes": [
             "satay-salmon-with-smacked-cucumber-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tahini",
@@ -597,21 +625,24 @@
           "amounts": {
             "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 10,
             "toasted-sesame-and-ginger-chicken-salad": 15
-          }
+          },
+          "have": true
         },
         {
           "name": "Toasted sesame oil",
           "quantity": "15ml",
           "recipes": [
             "toasted-sesame-and-ginger-chicken-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Cornflour",
           "quantity": "3g",
           "recipes": [
             "toasted-sesame-and-ginger-chicken-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sun-dried tomato paste",
@@ -625,14 +656,16 @@
           "quantity": "8ml",
           "recipes": [
             "meatball-and-ricotta-al-forno"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Smoked paprika",
           "quantity": "1g",
           "recipes": [
             "meatball-and-ricotta-al-forno"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chicken stock cube",
@@ -646,21 +679,24 @@
           "quantity": "15ml",
           "recipes": [
             "meatball-and-ricotta-al-forno"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Dried oregano",
           "quantity": "1g",
           "recipes": [
             "oven-baked-feta-and-pepper-pasta"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Capers",
           "quantity": "15ml",
           "recipes": [
             "oven-baked-feta-and-pepper-pasta"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Green olives",
@@ -674,7 +710,8 @@
           "quantity": "3g",
           "recipes": [
             "oven-baked-feta-and-pepper-pasta"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Mild mustard",
@@ -685,5 +722,6 @@
         }
       ]
     }
-  ]
+  ],
+  "stocktake": "2026-11-08T21:33:02.828Z"
 }
