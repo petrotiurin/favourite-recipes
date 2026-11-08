@@ -224,6 +224,7 @@
     edit: { label: "Edit", cls: "" },
     list: { label: "List", cls: "" },
     servings: { label: "Servings", cls: "" },
+    stocktake: { label: "At home", cls: "" },
   };
   function str(v, max) {
     return typeof v === "string" ? v.slice(0, max) : "";

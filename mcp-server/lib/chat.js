@@ -197,6 +197,7 @@ const STATUS = {
   stage_start_next_week: "Adding the switch to the tray…",
   stage_update_shopping_list: "Building the list…",
   stage_set_shopping_servings: "Adding that to the tray…",
+  stage_stocktake: "Adding what's at home to the tray…",
   get_tray: "Reading next week's recipes…",
   resolve_clash: "Sorting that out…",
   drop_tray_item: "Taking that out of the tray…",

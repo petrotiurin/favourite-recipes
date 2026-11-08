@@ -3,26 +3,9 @@
 // (salt, oil, flour... see STAPLES in lib/recipes.js) are assumed to be there and don't count either way. No model involved.
 import { getShoppingList } from "./shopping-list.js";
 import { recipeIngredients, STAPLES } from "./recipes.js";
+import { sameIngredient } from "./ingredient-match.js";
 
-const norm = (name) =>
-  String(name || "")
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[^a-z\s]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => (w.length > 3 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 3 && w.endsWith("oes") ? w.slice(0, -2) : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
-    .join(" ");
-
-/** Does the at-home item cover the recipe ingredient? Same words, or one name contains the other as whole words ("cherry tomatoes" ~ "tomatoes"). */
-export function sameIngredient(a, b) {
-  const x = norm(a);
-  const y = norm(b);
-  if (!x || !y) return false;
-  if (x === y) return true;
-  const has = (long, short) => ` ${long} `.includes(` ${short} `);
-  return has(x, y) || has(y, x);
-}
+export { sameIngredient };
 
 /** The names of the items the stocktake says are at home (all or some of them). */
 export function atHomeNames(list) {

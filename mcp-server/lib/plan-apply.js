@@ -73,7 +73,7 @@ export async function applyPlan({ caller, itemId, trace }) {
     try {
       results.push({ item, r: await runOperation(applicableOp(item, cs, bytes.get(item.id)), cs, caller) });
     } catch (err) {
-      if (err instanceof UserError || err.name === "ShoppingListError" || err.constructor?.name === "ShoppingListError") throw new PlanError(`Nothing was saved: ${err.message.split("\n")[0]}`, 409);
+      if (err instanceof UserError || err.name === "ShoppingListError" || err.constructor?.name === "ShoppingListError" || err.constructor?.name === "StocktakeError") throw new PlanError(`Nothing was saved: ${err.message.split("\n")[0]}`, 409);
       throw err;
     }
   }

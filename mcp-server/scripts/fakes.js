@@ -155,6 +155,25 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   const ask = (question, options, text = "") => scriptedStream({ ...opts, text, calls: [{ name: "ask_user", arguments: { question, options } }] });
   const done = (text, ...chips) => scriptedStream({ ...opts, text, calls: [replies(...(chips.length ? chips : ["Anything else?"]))] });
 
+  // "we've got 6 eggs and plenty of rice": read the list, stage what is at home
+  const haveLine = user.match(/we(?:'ve| have)(?: got)? (.+)/);
+  if (haveLine) {
+    if (!lastCall) return tray("get_shopping_list", {}, "Let me check the list.");
+    if (lastCall.name === "get_shopping_list") {
+      let stored = [];
+      try { stored = JSON.parse(String(lastResult.content).match(/```json\n([\s\S]*?)\n```/)[1]).sections.flatMap((x) => x.items); } catch { /* no list */ }
+      const items = [];
+      for (const phrase of haveLine[1].replace(/[.!]$/, "").split(/,| and /)) {
+        const m = phrase.trim().match(/^(?:(\d+(?:\.\d+)?)\s*(?:g|ml)?\s+)?(?:plenty of |loads of |lots of )?(.+)$/);
+        const word = m?.[2]?.replace(/s$/, "");
+        const hit = word && stored.find((i) => i.name.toLowerCase().includes(word));
+        if (hit) items.push({ name: hit.name, have: m[1] && /\d/.test(hit.quantity || "") ? Number(m[1]) : true });
+      }
+      if (!items.length) return done("None of that is on the shopping list, so there's nothing to record.", "What's left to buy?");
+      return tray("stage_stocktake", { items }, "I'll note that in the tray.");
+    }
+    if (lastCall.name === "stage_stocktake") return done("It's in the tray as an At home card. Tap Save now on it when you're ready; it doesn't touch next week.", "What's left to buy?");
+  }
   // a photo the user attached: "read" it (a mock: always the same soup) and stage the recipe; "use this as the photo" keeps their photo
   const photos = imagesIn(msgs[lastUserIdx]);
   if (photos) {

@@ -10,7 +10,7 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
-import { updateShoppingList, setShoppingServings } from "./shopping-list.js";
+import { updateShoppingList, setShoppingServings, updateStocktake } from "./shopping-list.js";
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
 export async function runOperation(op, cs, caller) {
@@ -52,6 +52,11 @@ export async function runOperation(op, cs, caller) {
     case "set_shopping_servings": {
       const r = await setShoppingServings(args.servings, cs, caller);
       return { ...r, lines: [r.changed.length ? `Planned servings: ${r.changed.map(([slug, n]) => `${slug} x${n}`).join(", ")}` : "set_shopping_servings: already planned like that"] };
+    }
+    case "update_stocktake": {
+      // chat only (the tray's "At home" card); not a batch_changes operation
+      const r = await updateStocktake(args.items, cs, caller, { signature: args.list_sig });
+      return { ...r, lines: [`At home: ${r.changed.map((c) => `${c.name} ${c.have === true ? "(enough)" : c.have ? c.have : "(none)"}`).join(", ")}`] };
     }
     default:
       throw new UserError(`Unknown action "${action}"`);

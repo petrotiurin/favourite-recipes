@@ -31,6 +31,9 @@ import {
 } from "./recipes.js";
 import {
   getShoppingList,
+  listSignature,
+  mergeStocktake,
+  applyStocktake,
   updateShoppingList,
   setShoppingServings,
   shoppingPageUrl,
@@ -353,6 +356,29 @@ const STAGE_TOOLS = [
     inputSchema: { servings: servingsSchema, reason: reasonSchema },
     access: "stage",
     handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
+  },
+  {
+    name: "stage_stocktake",
+    title: "Stage what's at home",
+    description:
+      "Stage a stocktake update: what the family has at home, for items on the shopping list (\"we've got 6 eggs and plenty of rice\"). Goes into the tray as one \"At home\" card that a person saves (it doesn't touch next week, so Save now works). " +
+      "Call get_shopping_list first and use the items' exact names. have: true = enough at home (\"plenty\", \"loads\", \"all we need\"), a number = the amount at home in the item's own unit as written on the list (an item with no amount can only be true), false = none. " +
+      "Only items on the saved list; say so if something they mention isn't on it. Several calls merge into the same card.",
+    inputSchema: {
+      items: z.array(z.object({ name: z.string().min(1).describe("The list item's name"), have: z.union([z.literal(true), z.literal(false), z.number().min(0)]).describe("true = enough, a number = amount at home in the item's unit, false/0 = none") })).min(1).max(40),
+      reason: reasonSchema,
+    },
+    access: "stage",
+    handler: safe(async ({ items, reason }, ctx) => {
+      needChat(ctx);
+      // What the update is made against: the list as the tray would leave it (a staged new list counts), so Save can tell if it changed since.
+      const tray = await loadTray();
+      const { cs } = await replay((tray?.items || []).filter((i) => i.kind !== "stocktake"), ctx.caller, await warmReads());
+      const { list } = await getShoppingList(cs);
+      // refuse bad input up front (unknown names, amounts the list can't take) with the page's own rules, rather than staging a card with a problem
+      applyStocktake(list, mergeStocktake(list, items).items);
+      return staged({ op: { action: "update_stocktake", items, list_sig: listSignature(list) }, reason }, ctx);
+    }),
   },
   {
     name: "resolve_clash",

@@ -35,8 +35,8 @@ export function assertCanStage(caller) {
 // --- items -----------------------------------------------------------------------------------------------------------------
 
 /** The card kinds, in Save order (design Q16): switch, this week's drafts, new recipes, added to next week, edits, the list, servings. */
-const KIND_GROUP = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, list: 5, servings: 6 };
-const ACTION_KIND = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_shopping_list: "list", set_shopping_servings: "servings" };
+const KIND_GROUP = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, list: 5, servings: 6, stocktake: 7 };
+const ACTION_KIND = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_shopping_list: "list", set_shopping_servings: "servings", update_stocktake: "stocktake" };
 export const kindOf = (op) => ACTION_KIND[op?.action];
 
 const byCreated = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -47,7 +47,7 @@ export const displayOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.ki
 
 /** A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. */
 export function itemsHash(items) {
-  const parts = saveOrder(items).filter((i) => i.kind !== "list").map((i) => [i.id, i.op]);
+  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake").map((i) => [i.id, i.op]);
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
 }
 
@@ -295,6 +295,18 @@ function planChange(items, op, { caller, reason, base, photo }) {
       const item = make(op);
       return { items: [...without(...(old ? [old] : [])), item], item, message: "Staged the shopping list" };
     }
+    case "update_stocktake": {
+      // one "At home" card: later updates merge into it (the newest word on an item wins)
+      const old = items.find((i) => i.kind === "stocktake");
+      if (old) {
+        const byName = new Map(old.op.items.map((u) => [u.name.toLowerCase(), u]));
+        for (const u of op.items) byName.set(u.name.toLowerCase(), u);
+        const merged = { ...old, op: { ...op, items: [...byName.values()] }, error: null };
+        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: "Updated what's at home in the tray" };
+      }
+      const item = make(op);
+      return { items: [...items, item], item, message: "Staged what's at home" };
+    }
     case "set_shopping_servings": {
       const old = items.find((i) => i.kind === "servings");
       if (old) {
@@ -484,7 +496,7 @@ export async function regeneratePhoto(id, caller) {
  * ingredient edits to a next-week recipe wait for Finalise. `inNext`: slugs that are (or will be, through the tray) in next week.
  */
 export function saveNowRule(item, inNext) {
-  if (item.kind === "promote") return true;
+  if (item.kind === "promote" || item.kind === "stocktake") return true; // neither changes next week
   if (item.kind !== "edit") return false;
   const changesIngredients = item.op.ingredients !== undefined || item.op.serves !== undefined;
   return !(changesIngredients && inNext.has(item.op.slug));
@@ -566,12 +578,19 @@ export async function trayView(tray, caller) {
         card.preview = sections.map((s) => ({ name: s.name, items: s.items.map((i) => (i.quantity ? `${i.name} (${i.quantity})` : i.name)) }));
         break;
       }
+      case "stocktake": {
+        const ups = item.op.items || [];
+        card.title = `At home: ${ups.length} item${ups.length === 1 ? "" : "s"}`;
+        card.sub = ups.slice(0, 3).map((u) => `${u.name}${u.have === true ? "" : u.have ? ` ${u.have}` : ": none"}`).join(", ") + (ups.length > 3 ? ", …" : "");
+        card.preview = [{ name: "At home", items: ups.map((u) => (u.have === true ? `${u.name}: enough` : u.have ? `${u.name}: ${u.have}` : `${u.name}: none`)) }];
+        break;
+      }
       case "servings":
         card.title = "Planned servings";
         card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || s}: ${n}`).join(", ");
         break;
     }
-    if (recipe && item.kind !== "new" && item.kind !== "list" && item.kind !== "switch" && item.kind !== "servings") {
+    if (recipe && item.kind !== "new" && item.kind !== "list" && item.kind !== "switch" && item.kind !== "servings" && item.kind !== "stocktake") {
       card.recipe = { url: siteUrl(`recipes/${slug}.html`), image: typeof recipe.image === "string" && recipe.image.startsWith("/images/") ? new URL(`${config.siteUrl}${recipe.image}`).href : "" };
     }
     cards.push(card);

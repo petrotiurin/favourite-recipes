@@ -156,3 +156,84 @@ test("the shopping page's starter and the chat flow: ask what can be made, get c
   assert.ok(evs.some((e) => e.name === "cards" && e.data.cards.some((c) => c.slug === target.slug)));
   assert.ok(openrouter.requests[0].tools.some((t) => t.function.name === "recipes_from_home"));
 });
+
+// --- 3. stocktake by chat -----------------------------------------------------------------------------------------------------
+
+const STOCK_LIST = { updated: "2026-11-01", recipes: [], servings: {}, sections: [{ name: "Pantry", items: [{ name: "Eggs", quantity: "12", recipes: [] }, { name: "Basmati rice", quantity: "500g", recipes: [] }, { name: "Parsley", recipes: [] }] }] };
+const putList = (list) => { github.files.set("shopping-list.json", Buffer.from(JSON.stringify(list))); clearCache(); };
+const say = async (message, conversation_id) => {
+  const res = await post({ message, conversation_id, page: { page: "shopping" } }, "owner-token");
+  assert.equal(res.status, 200);
+  const evs = await events(res);
+  await background.backgroundIdle();
+  return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id };
+};
+const planGet = async () => (await (await chat.GET(new Request("https://mcp.test/api/chat?route=plan", { headers: { authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.77" } }))).json()).tray;
+const apply = (body) => chat.POST(new Request("https://mcp.test/api/chat?route=plan/apply", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.78" }, body: JSON.stringify(body) }));
+
+test("stocktake by chat: 'we've got 6 eggs and plenty of rice' becomes one At home card that Save now commits with the page's validation", async () => {
+  putList(STOCK_LIST);
+  await say("we've got 6 eggs and plenty of rice");
+  let t = await planGet();
+  assert.equal(t.count, 1);
+  const card = t.items[0];
+  assert.equal(card.kind, "stocktake");
+  assert.equal(card.title, "At home: 2 items");
+  assert.deepEqual(card.preview[0].items, ["Eggs: 6", "Basmati rice: enough"]);
+  assert.equal(card.error, null);
+  assert.equal(t.needs_list, false, "it doesn't change next week");
+  assert.equal(t.can_save, true);
+  assert.equal(card.save_now, true);
+  assert.equal(github.commitLog.length, 0, "staging commits nothing");
+  const res = await apply({ item_id: card.id });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal(github.commitLog.length, 1);
+  assert.deepEqual(github.commitLog[0].paths, ["shopping-list.json"]);
+  const saved = JSON.parse(github.files.get("shopping-list.json").toString());
+  assert.ok(saved.stocktake);
+  const by = Object.fromEntries(saved.sections[0].items.map((i) => [i.name, i.have]));
+  assert.deepEqual(by, { Eggs: 6, "Basmati rice": true, Parsley: undefined });
+  assert.equal((await planGet())?.count ?? 0, 0, "the card is gone after Save");
+});
+
+test("a second 'we've got' merges into the same card; items not on the list are said so and nothing is staged for them", async () => {
+  putList(STOCK_LIST);
+  const { conversation_id } = await say("we've got 6 eggs");
+  await say("we have plenty of parsley", conversation_id);
+  const t = await planGet();
+  assert.equal(t.count, 1);
+  assert.equal(t.items[0].preview[0].items.length, 2);
+  const none = await say("we've got caviar", conversation_id);
+  assert.match(textOf(none.evs), /None of that is on the shopping list/);
+  assert.equal((await planGet()).count, 1);
+});
+
+test("the stocktake rules of the shopping page apply: an amount on an item with no amount, or a list that changed since, is refused", async () => {
+  putList(STOCK_LIST);
+  const r = await tools.dispatch("stage_stocktake", { items: [{ name: "Parsley", have: 3 }] }, editor(), { chat: { emit() {} } });
+  assert.equal(r.isError, true);
+  assert.match(r.content[0].text, /can only be marked as at home/);
+  assert.equal(await planGet(), null, "nothing was staged");
+  // unknown names are refused with the list's names for the model
+  const bad = await tools.dispatch("stage_stocktake", { items: [{ name: "Caviar", have: true }] }, editor(), { chat: { emit() {} } });
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /Not on the shopping list: "Caviar"\. The list's items are: Eggs, Basmati rice, Parsley/);
+  // the list changes on the site after staging: Save refuses (nothing committed) and the card says why
+  const ok1 = await tools.dispatch("stage_stocktake", { items: [{ name: "Eggs", have: 6 }, { name: "Parsley", have: true }] }, editor(), { chat: { emit() {} } });
+  assert.doesNotMatch(ok1.content[0].text, /PROBLEM/);
+  putList({ ...STOCK_LIST, sections: [{ name: "Pantry", items: [{ name: "Eggs", quantity: "6", recipes: [] }] }] });
+  const saved = await apply({});
+  assert.equal(saved.status, 409);
+  assert.match((await saved.json()).error, /shopping list changed/);
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("stage_stocktake is a stage tool: refused for the public and for the agent role's /mcp surface", async () => {
+  const warn = console.warn; console.warn = () => {};
+  try {
+    const res = await tools.dispatch("stage_stocktake", { items: [{ name: "Eggs", have: true }] }, tools.makeCaller({ role: "public" }), { chat: { emit() {} } });
+    assert.equal(res.isError, true);
+    assert.match(res.content[0].text, /Not allowed/);
+  } finally { console.warn = warn; }
+  assert.equal(tools.accessOf(tools.TOOLS.find((t) => t.name === "stage_stocktake")), "stage");
+});
