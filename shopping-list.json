@@ -1,40 +1,48 @@
 {
   "updated": "2026-11-08",
   "recipes": [
-    "broccoli-carbonara"
+    "lemon-garlic-pasta",
+    "spicy-tomato-gnocchi-bake"
   ],
   "servings": {
-    "broccoli-carbonara": 4
+    "lemon-garlic-pasta": 4,
+    "spicy-tomato-gnocchi-bake": 4
   },
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Broccoli florets",
-          "quantity": "200g",
+          "name": "Garlic cloves",
+          "quantity": "2",
           "recipes": [
-            "broccoli-carbonara"
+            "lemon-garlic-pasta"
           ]
         },
         {
-          "name": "Garlic cloves",
+          "name": "Lemon",
           "quantity": "1",
           "recipes": [
-            "broccoli-carbonara"
+            "lemon-garlic-pasta"
           ]
         }
       ]
     },
     {
-      "name": "Meat & fish",
+      "name": "Pasta & grains",
       "items": [
         {
-          "name": "Parma ham",
-          "quantity": "4",
-          "note": "sliced",
+          "name": "Spaghetti",
+          "quantity": "200g",
           "recipes": [
-            "broccoli-carbonara"
+            "lemon-garlic-pasta"
+          ]
+        },
+        {
+          "name": "Gnocchi",
+          "quantity": "333g",
+          "recipes": [
+            "spicy-tomato-gnocchi-bake"
           ]
         }
       ]
@@ -43,19 +51,29 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Large eggs",
-          "quantity": "2",
+          "name": "Parmesan",
+          "quantity": "30g",
           "recipes": [
-            "broccoli-carbonara"
-          ],
-          "have": true
+            "lemon-garlic-pasta"
+          ]
         },
         {
-          "name": "Parmesan cheese",
-          "quantity": "50g",
-          "note": "finely grated",
+          "name": "Mozzarella",
+          "quantity": "83g",
           "recipes": [
-            "broccoli-carbonara"
+            "spicy-tomato-gnocchi-bake"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tins & jars",
+      "items": [
+        {
+          "name": "Chopped tomatoes",
+          "quantity": "267g",
+          "recipes": [
+            "spicy-tomato-gnocchi-bake"
           ]
         }
       ]
@@ -64,23 +82,25 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Dried pasta",
-          "quantity": "150g",
-          "note": "spaghetti or short",
+          "name": "Chilli flakes",
+          "quantity": "2g",
           "recipes": [
-            "broccoli-carbonara"
-          ],
-          "have": true
+            "spicy-tomato-gnocchi-bake"
+          ]
         },
         {
-          "name": "Salt and black pepper",
-          "note": "to taste",
+          "name": "Olive oil",
+          "quantity": "50ml",
           "recipes": [
-            "broccoli-carbonara"
-          ]
+            "lemon-garlic-pasta",
+            "spicy-tomato-gnocchi-bake"
+          ],
+          "amounts": {
+            "lemon-garlic-pasta": 30,
+            "spicy-tomato-gnocchi-bake": 20
+          }
         }
       ]
     }
-  ],
-  "stocktake": "2026-11-08T08:54:59.881Z"
+  ]
 }

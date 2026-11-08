@@ -7,8 +7,6 @@ tags: [Vegetarian]
 total_mins: 10
 serves: 1
 calories: 355
-current: true
-draft: true
 ---
 
 ## Ingredients
