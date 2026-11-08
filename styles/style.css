@@ -2870,6 +2870,10 @@ body.chat-open {
   color: var(--text-muted);
 }
 
+.tray-why {
+  margin-top: 0.1rem;
+}
+
 .tray-who {
   display: -webkit-box;
   -webkit-line-clamp: 2;

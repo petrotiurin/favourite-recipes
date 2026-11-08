@@ -152,3 +152,51 @@ test("status lines say what is happening: the recipe being read, being added, th
   const evs = await turn([{ text: "", calls: [{ name: "get_recipe", arguments: { slug } }] }, { text: "Done.", calls: [REPLIES] }]);
   assert.ok(evs.some((e) => e.name === "status" && /^Reading /.test(e.data.text)));
 });
+
+test("an answer without chips gets ONE cheap follow-up that offers only suggest_replies; if that fails, safe chips from the page; errors cost nothing extra", async () => {
+  let evs = await turn([{ text: "Chicken is great here." }, { calls: [{ name: "suggest_replies", arguments: { replies: ["Under 20 minutes", "Without thighs"] } }] }]);
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].tools.map((t) => t.function.name), ["suggest_replies"]);
+  assert.deepEqual(requests[1].tool_choice, { type: "function", function: { name: "suggest_replies" } });
+  assert.equal(requests[1].max_tokens, 200);
+  assert.deepEqual(evs.find((e) => e.name === "suggestions").data.replies, ["Under 20 minutes", "Without thighs"]);
+  assert.equal(evs.at(-1).data.suggestions, true);
+  assert.equal(textOf(evs), "Chicken is great here.", "the nudge adds no text");
+  // the nudge fails (the model gives nothing usable): safe defaults, no second try
+  requests.length = 0;
+  evs = await turn([{ text: "Hello." }, {}]);
+  assert.equal(requests.length, 2);
+  assert.ok(evs.find((e) => e.name === "suggestions").data.replies.length >= 2);
+  // a model that already gave chips isn't nudged
+  requests.length = 0;
+  await turn([{ text: "Hi.", calls: [REPLIES] }]);
+  assert.equal(requests.length, 1);
+  // an error doesn't trigger another billable call
+  requests.length = 0;
+  failWith = { status: 500, body: "" };
+  const err = console.error;
+  console.error = () => {};
+  try {
+    await turn([]);
+  } finally {
+    console.error = err;
+  }
+  assert.equal(requests.length, 1);
+});
+
+test("a turn over its time budget stops between model calls with a clear line", async () => {
+  const { config } = await import("../lib/config.js");
+  const saved = config.chatTurnBudgetMs;
+  config.chatTurnBudgetMs = -1;
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const evs = await turn([{ calls: [{ name: "search_recipes", arguments: { text: "x" } }] }, { text: "never" }]);
+    assert.match(textOf(evs), /taking longer than expected, so I've stopped/);
+    assert.equal(requests.length, 1, "no further model calls");
+    assert.equal(evs.at(-1).name, "done");
+  } finally {
+    config.chatTurnBudgetMs = saved;
+    console.warn = warn;
+  }
+});

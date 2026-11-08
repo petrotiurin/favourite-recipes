@@ -765,7 +765,7 @@
           if (!row.classList.contains("is-old")) send(r);
         });
       } else if (r.action) {
-        chip = el("button", "chat-chip is-action", { type: "button" }); // presses the tray's own button: still a tap by a person
+        chip = el("button", "chat-chip is-action", { type: "button", "data-action": r.action }); // presses the tray's own button: still a tap by a person
         chip.textContent = PLAN_LABELS[r.action] + (r.action === "apply_plan" && trayData && trayData.count ? " (" + trayData.count + ")" : ""); // fixed text, never the model's
         chip.addEventListener("click", function () {
           if (!row.classList.contains("is-old")) pressTray(r.action);
@@ -961,6 +961,8 @@
     saveChat();
     if (photos.length) pending = [];
     paintShelf();
+    autoFoldSuppressed = false;
+    setAutoFold(true); // the reply is coming: give the conversation the room
     input.value = "";
     autosize();
     saveUi();
@@ -994,7 +996,9 @@
       streaming = null;
       setBusy(false);
       clearStatus();
+      autoFold = false; // the turn is over: the tray opens again (loadTray below redraws it)
       if (editorTurn) loadTray({ highlight: true });
+      else if (trayData) renderTray();
       if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question)) {
         chat.messages.push(reply);
         saveChat();
@@ -1535,8 +1539,20 @@
   var traySeq = 0;
   var trayBusy = false;
 
+  // On a phone the tray is a big strip. It folds itself to its header line while a reply streams and when the reader scrolls up in the
+  // conversation, and opens again on a tap, when something new lands in it, or when the turn ends. (Wide screens have the room.)
+  var autoFold = false;
+  var autoFoldSuppressed = false; // the reader tapped it open: leave it until the next message
+  function narrowScreen() {
+    return !!(window.matchMedia && window.matchMedia("(max-width: 719px)").matches);
+  }
+  function setAutoFold(on) {
+    if (autoFold === on) return;
+    autoFold = on;
+    if (trayData) renderTray();
+  }
   function trayFolded() {
-    return trayManualFold || (keyboardOpen && !keyboardForcedOpen);
+    return trayManualFold || (keyboardOpen && !keyboardForcedOpen) || (autoFold && !autoFoldSuppressed && narrowScreen());
   }
   function keyboardUnfold() {
     if (keyboardOpen) keyboardForcedOpen = true;
@@ -1547,7 +1563,11 @@
   function trayThumb(item) {
     var wrap = el("div", "tray-thumb");
     var src = item.photo && item.photo.url ? item.photo.url : item.recipe && item.recipe.image;
-    if (src) wrap.appendChild(el("img", "", { src: src, alt: "", loading: "lazy" }));
+    if (src) {
+      var thumb = el("img", "", { src: src, alt: "", loading: "lazy" });
+      thumb.addEventListener("error", function () { if (thumb.parentNode) thumb.parentNode.removeChild(thumb); }); // gone or not deployed yet: the placeholder shows
+      wrap.appendChild(thumb);
+    }
     var status = item.photo && item.photo.status;
     if (status === "pending" || (status === "failed" && !src)) {
       var label = el("span", "tray-thumb-note");
@@ -1573,8 +1593,13 @@
     main.appendChild(t);
     if (item.sub) main.appendChild(sub);
     var who = el("p", "tray-who");
-    who.textContent = "Added by " + item.added_by + (item.reason ? ": " + item.reason : "");
+    who.textContent = "Added by " + item.added_by;
     main.appendChild(who);
+    if (item.reason) {
+      var why = el("p", "tray-who tray-why"); // its own line, so a longer reason wraps instead of cutting the name off
+      why.textContent = item.reason;
+      main.appendChild(why);
+    }
     if (item.clash) {
       var c = el("p", "tray-problem");
       c.textContent = item.clash.reason;
@@ -1670,7 +1695,15 @@
     return box;
   }
 
+  /** The Save chip's count follows the tray as it is now, whatever it was when the chip was drawn. */
+  function refreshActionChips() {
+    Array.prototype.forEach.call(log.querySelectorAll('.chat-chip.is-action[data-action="apply_plan"]'), function (chip) {
+      chip.textContent = PLAN_LABELS.apply_plan + (trayData && trayData.count ? " (" + trayData.count + ")" : "");
+    });
+  }
+
   function renderTray(opts) {
+    refreshActionChips();
     while (tray.firstChild) tray.removeChild(tray.firstChild);
     if (!trayData || mode !== "editor" || !trayData.count) {
       tray.hidden = true;
@@ -1689,8 +1722,13 @@
     head.appendChild(label);
     head.appendChild(chev);
     head.addEventListener("click", function () {
-      if (keyboardOpen) keyboardForcedOpen = folded ? true : false;
-      trayManualFold = keyboardOpen ? false : !trayManualFold;
+      if (autoFold && folded) {
+        autoFoldSuppressed = true; // tapped open while it was folded on its own
+        trayManualFold = false;
+      } else {
+        if (keyboardOpen) keyboardForcedOpen = folded ? true : false;
+        trayManualFold = keyboardOpen ? false : !trayManualFold;
+      }
       renderTray();
     });
     tray.appendChild(head);
@@ -1791,6 +1829,7 @@
       if (next) next.items.forEach(function (i) { traySeen[i.id] = true; });
       if (!wasSeen && opts && opts.highlight === undefined) opts = {};
       trayData = next;
+      if (wasSeen && next && next.items.some(function (i) { return !wasSeen[i.id]; })) autoFold = false; // something new landed: show it
       if (trayDetail && (!next || !next.items.some(function (i) { return i.id === trayDetail; }))) trayDetail = null;
       renderTray(opts && opts.highlight && wasSeen ? { highlight: true, seen: wasSeen } : null); // compared with what was shown BEFORE this load
       scheduleTrayPoll();
@@ -2054,6 +2093,20 @@
     saveUi();
   });
   window.addEventListener("pagehide", saveUi);
+
+  // Scrolling up in the conversation folds the tray (phones), so the older messages get the room. It opens again on a tap, a new card or the end of a turn.
+  var lastLogTop = 0;
+  var foldLockUntil = 0;
+  log.addEventListener("scroll", function () {
+    var top = log.scrollTop;
+    var up = top < lastLogTop - 4;
+    lastLogTop = top;
+    if (!up || Date.now() < foldLockUntil || !narrowScreen() || !trayData || autoFold) return;
+    if (log.scrollHeight - top - log.clientHeight > 120) {
+      foldLockUntil = Date.now() + 500; // folding resizes the log: ignore the scroll events that causes
+      setAutoFold(true);
+    }
+  }, { passive: true });
 
   // --- layout: keyboard and sticky bars ----------------------------------------------------------------------------------------------
   // On phones the panel is as tall as the visual viewport, so the input stays above the on-screen keyboard.

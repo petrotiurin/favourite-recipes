@@ -178,7 +178,7 @@ export function createThinkFilter() {
  * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
  * toolCalls: [{ id, name, arguments (string) }].
  */
-async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens }) {
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }) {
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -193,7 +193,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
       body: JSON.stringify({
         model,
         messages,
-        ...(tools?.length ? { tools, tool_choice: "auto" } : {}),
+        ...(tools?.length ? { tools, tool_choice: toolChoice } : {}),
         stream: true,
         stream_options: { include_usage: true },
         usage: { include: true },
@@ -331,6 +331,17 @@ export function redactImages(messages) {
   return messages.map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.map((p) => (p.type === "image_url" ? { type: "text", text: "[photo attached]" } : p)) } : m));
 }
 
+/** Safe chips from the page, for when a model gave none (the same ideas as the panel's starters; never anything that changes the site). */
+export function defaultChips(page, editor) {
+  const by = {
+    recipe: editor ? ["Swap an ingredient", "What goes with it?"] : ["Swap an ingredient", "What goes with it?", "Something similar"],
+    index: ["Something quick tonight", "Light and healthy"],
+    "next-week": ["What's planned?", "What's on this week?"],
+    shopping: ["What's left to buy?", "What can I make from what's at home?"],
+  };
+  return by[page?.page] || ["Something quick tonight", "What's on this week?"];
+}
+
 const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
@@ -448,7 +459,14 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   let lastStatus = "";
   const titles = new Map([...book].map(([slug, r]) => [slug, r.title]));
   let roundNote = ""; // told to the model on its next call, not stored
+  const startedAt = Date.now();
+  let stoppedLong = false;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    // A turn that has been going too long (a slow model looping through tools) stops with a clear line instead of running on in silence.
+    if (round > 0 && Date.now() - startedAt > config.chatTurnBudgetMs) {
+      stoppedLong = true;
+      break;
+    }
     finalRound = round === MAX_TOOL_ROUNDS; // out of rounds: one last call without tools, so the user always gets an answer
     const generation = trace.generation({ name: `chat round ${round + 1}`, model, input: redactImages(thread.slice(1)), metadata: { promptVersion: PROMPT_VERSION } });
     let result;
@@ -608,6 +626,44 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     // tool results would break the pairing some providers require).
     // (Only the copy sent to the model carries the note; it is never stored.)
     roundNote = kept.trim() ? `\n\n[Note from the site, not a tool result: you already told the user: "${oneLine(kept, 600)}". Continue from there; don't repeat it.]` : "";
+  }
+  if (stoppedLong) {
+    console.warn(`Chat turn stopped after ${Math.round((Date.now() - startedAt) / 1000)}s (budget ${config.chatTurnBudgetMs}ms)`);
+    const line = `${reply.trim() ? "\n\n" : ""}That is taking longer than expected, so I've stopped here. Anything already in the tray is still there: tell me to carry on if you want.`;
+    reply += line;
+    emit({ type: "text", delta: line });
+    thread.push({ role: "assistant", content: line.trim() });
+  }
+  // Chips on (almost) every answer (design 6.1): a model that forgot them gets ONE cheap nudge that offers nothing but suggest_replies; if even
+  // that fails, safe chips from the page. No retries, and never after an error (errors leave runChat before this point).
+  if (!suggestions && !askedUser && reply.trim() && !stoppedLong) {
+    let nudged = [];
+    const gen = trace.generation({ name: "chips nudge", model, input: "suggest_replies only", metadata: { promptVersion: PROMPT_VERSION } });
+    try {
+      const out = await streamCompletion({
+        messages: [...thread, { role: "user", content: "[Note from the site, not from the user: your answer is done. Call suggest_replies now with 2-4 short replies the user might want to say next, based on what you just said. Do not write any text.]" }],
+        tools: [SUGGEST_REPLIES_TOOL],
+        toolChoice: { type: "function", function: { name: "suggest_replies" } },
+        model,
+        apiKey,
+        signal,
+        maxTokens: 200,
+        onText: () => {},
+      });
+      gen.end({ output: out.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: out.usage, finishReason: out.finishReason });
+      const call = out.toolCalls.find((c) => c.name === "suggest_replies");
+      if (call) nudged = cleanReplies(JSON.parse(call.arguments || "{}"), book, { editor: caller.role === "editor" });
+      if (nudged.length) nudged = await fixReplies(nudged);
+    } catch (err) {
+      gen.end({ error: err.message });
+      if (err?.name === "AbortError") throw err;
+    }
+    if (!nudged.length) nudged = defaultChips(page, caller.role === "editor");
+    if (nudged.length) {
+      suggestions = true;
+      ui.replies = nudged;
+      emit({ type: "suggestions", replies: nudged });
+    }
   }
   if (!reply.trim() && !shownUi) {
     // never end a turn in silence

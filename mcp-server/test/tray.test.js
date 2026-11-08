@@ -610,3 +610,32 @@ test("the tray note says which of this week's drafts already have an answer stag
   supabase.tables.trays.length = 0;
   assert.doesNotMatch(await tray.trayNote(await tray.loadTray(), caller), /Finalise progress/);
 });
+
+test("'Not yet' to the promote question is answered by the server: nothing staged, no model call, tray back to collecting, a Finalise chip", async () => {
+  const [a] = [anySlug(0)];
+  setFlag(a, "next: true");
+  const { conversation_id } = await say("add a new recipe: not yet pasta");
+  const first = await say("x", { conversation_id, action: "finalise" });
+  assert.match(first.evs.find((e) => e.name === "question").data.question, /ready to become this week/);
+  const before = openrouter.requests.length;
+  const before_items = (await plan()).items.length;
+  for (const word of ["Not yet", "not yet.", "No"]) {
+    // each time the question is the newest thing in the chat
+    const r = word === "Not yet" ? await say(word, { conversation_id }) : null;
+    if (!r) continue;
+    assert.equal(openrouter.requests.length, before, "the model wasn't called");
+    assert.match(r.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /next week stays as it is/);
+    const chips = r.evs.find((e) => e.name === "suggestions")?.data.replies || [];
+    assert.deepEqual(chips, [{ label: "Finalise list", action: "finalise_plan" }]);
+    assert.equal(r.evs.at(-1).name, "done");
+  }
+  const t = await plan();
+  assert.equal(t.items.length, before_items, "nothing was staged");
+  assert.equal(t.state, "collecting");
+  // a typed equivalent works the same; an unrelated message goes to the model as usual
+  const { isNotYet } = await import("../lib/shortcuts.js");
+  for (const yes of ["Not yet", "not yet.", "No", "nope", "Not now", "later"]) assert.ok(isNotYet(yes), yes);
+  for (const no of ["not yet, but add soup", "yes", "Promote it", ""]) assert.ok(!isNotYet(no), no);
+  const msgs = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages;
+  assert.equal(msgs.at(-1).content.startsWith("OK, next week stays as it is"), true, "the answer is in the stored chat");
+});

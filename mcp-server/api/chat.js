@@ -4,7 +4,8 @@ import { makeCaller } from "../lib/tools.js";
 import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
-import { loadTray, trayView, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
+import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
+import { isNotYet, promoteQuestionOpen, NOT_YET_REPLY } from "../lib/shortcuts.js";
 import { applyPlan, pagesLive, PlanError } from "../lib/plan-apply.js";
 import { sanitizeUploads, storeUploads, downloadUpload, signedUploadUrl, removeConversationUploads, sweepOrphans, dataUrl, UploadError, MAX_IMAGES } from "../lib/chat-uploads.js";
 import { background } from "../lib/background.js";
@@ -408,6 +409,7 @@ export async function POST(request) {
     }
   }
 
+  const notYet = isEditor && !finalise && !images.length && promoteQuestionOpen(history) && isNotYet(storedUser.content);
   const turnId = newId();
   let title;
   let attachments = []; // [{ path, width, height }] stored for this message
@@ -480,6 +482,26 @@ export async function POST(request) {
           if (title) send("title", { conversation_id: convo.id, title });
         }
         const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+        if (notYet) {
+          // "Not yet" to the promote question: nothing is staged, the tray goes back to collecting, no model call (design 7.1)
+          await settleFinalise(caller);
+          let chips = [];
+          try {
+            if (trayAction(await trayView(await loadTray(), caller)) === "finalise_plan") chips = [{ label: "Finalise list", action: "finalise_plan" }];
+          } catch {
+            // no chip
+          }
+          emit({ type: "text", delta: NOT_YET_REPLY });
+          if (chips.length) emit({ type: "suggestions", replies: chips });
+          emit({ type: "done", suggestions: chips.length > 0 });
+          output = NOT_YET_REPLY;
+          try {
+            await appendMessages(convo.id, [{ role: "assistant", content: NOT_YET_REPLY, ...(chips.length ? { ui: { replies: chips } } : {}) }], { turnId, traceId: trace.traceId });
+          } catch (err) {
+            console.error("Saving the answer failed:", err.message);
+          }
+          return;
+        }
         const result = await runChat({
           caller,
           messages,
