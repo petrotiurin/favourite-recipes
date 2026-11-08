@@ -166,3 +166,45 @@ test("chat list labels: updated today / yesterday / date, expiry as a weekday", 
   assert.equal(chat.feedbackNote({ value: 0, reasons: [] }, true), "Sent");
   assert.equal(chat.feedbackNote({ value: 0, reasons: [] }, false), "");
 });
+
+// --- phase 4: the tray, questions, action chips ------------------------------------------------------------------------------
+
+test("ask_user questions: 2-6 short distinct options; anything else is dropped", () => {
+  assert.deepEqual(chat.cleanQuestion({ question: " Ready? ", options: ["Promote it", "Not yet", "Not yet"], multi: true }), { question: "Ready?", options: ["Promote it", "Not yet"], multi: true });
+  assert.equal(chat.cleanQuestion({ question: "x", options: ["only one"] }), null);
+  assert.equal(chat.cleanQuestion({ question: "", options: ["a", "b"] }), null);
+  assert.equal(chat.cleanQuestion({ question: "x", options: "ab" }), null);
+});
+
+test("action chips only for the tray's two buttons; cards keep their publishing state", () => {
+  assert.deepEqual(chat.cleanReplyItems([{ label: "Save to site", action: "apply_plan" }, { label: "Bad", action: "delete_all" }, "Ok"], ORIGIN), [{ label: "Save to site", action: "apply_plan" }, "Ok"]);
+  const [card] = chat.cleanCards([{ slug: "test-pasta", publishing: true, title: "Test Pasta", url: `${ORIGIN}/favourite-recipes/recipes/test-pasta.html`, kicker: { kind: "draft", label: "Draft" }, meta: "" }], ORIGIN);
+  assert.equal(card.publishing, true);
+  assert.equal(card.slug, "test-pasta");
+});
+
+test("the tray from the server is reduced to plain values: photos only from Supabase's signed-URL path, links only on the site", () => {
+  const raw = {
+    id: "t1", state: "ready", needs_list: true, list_current: true, can_save: true, expires_at: new Date(Date.now() + 3600_000).toISOString(), expires_day: "Fri",
+    items: [
+      { id: "abcdef12", kind: "new", title: "Test Pasta", sub: "Draft", added_by: "Petro", photo: { status: "ready", url: "https://sb.test/storage/v1/object/sign/tray-photos/x/test-pasta.jpg?token=1" }, detail: { ingredients: ["200g pasta"], steps: ["Boil"] } },
+      { id: "abcdef13", kind: "edit", title: "Eggs", photo: { status: "ready", url: "https://evil.test/x.jpg" }, recipe: { url: "https://evil.test/", image: "https://site.test/i.jpg" } },
+      { id: "nope", kind: "new", title: "bad id" },
+      { id: "abcdef14", kind: "hack", title: "bad kind" },
+    ],
+  };
+  const t = chat.cleanTray(raw, ORIGIN, "https://sb.test");
+  assert.equal(t.count, 2);
+  assert.match(t.items[0].photo.url, /^https:\/\/sb\.test\/storage\/v1\/object\/sign\//);
+  assert.equal(t.items[1].photo.url, "", "a photo from anywhere else is dropped");
+  assert.equal(t.items[1].recipe.url, "");
+  assert.equal(chat.cleanTray(null, ORIGIN, ""), null);
+  assert.equal(chat.trayLine(t, true), "Tray · 2 changes");
+  assert.equal(chat.trayLine(t, false), "Tray · 2 changes · until Fri");
+  assert.equal(chat.trayButton(t).kind, "save");
+  assert.deepEqual(chat.trayButton({ ...t, can_save: false, list_current: false, items: t.items }), { kind: "finalise", label: "Finalise list" });
+  assert.equal(chat.trayButton({ ...t, can_save: false, state: "finalising" }).label, "Building the list…");
+  assert.equal(chat.trayButton({ ...t, can_save: false, list_current: false, items: [{ error: "x" }] }).kind, "blocked");
+  assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 20 * 3600_000).toISOString() }, Date.now()).startsWith("The tray expires"), true);
+  assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 3 * 86400_000).toISOString() }, Date.now()), "");
+});

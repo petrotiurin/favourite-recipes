@@ -282,3 +282,21 @@ On the **At home** tab every row is a fill bar:
 - **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
   tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
 - Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.
+- **Questions** (`.chat-question`, `ask_user`): the question in bold, then **solid** chips (`--accent-strong`, `--on-accent`; a suggestion is an
+  outline chip). The input's placeholder reads "Or type an answer" while one is live. `multi` chips toggle (`--current-soft` with an accent
+  inset border) and a solid "Done" sends them together. Only the last message's question is live.
+- **Plan tray** (`.chat-tray`, editors only, between the log and the input): a hairline-topped strip. A small-caps head line "Tray · 8 changes ·
+  until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
+  week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button
+  (`.save-button` look): **Finalise list** while the tray changes next week or the servings and no current list exists, "Building the list…"
+  while the agent works, **Save to site (n)** when ready. While the on-screen keyboard is open the strip folds to the head line and opens again
+  when it closes or a message is sent. A card has the kind as a kicker (New in the draft purple, Next week teal, Switch accent, the rest muted),
+  a serif title, a muted sub line, "Added by Name: reason", × to drop (a round button on the corner), and quiet text buttons: **Save now** (quick
+  fixes only) and **New photo**. A newly added card gets the accent border on `--current-soft` for a few seconds and the row scrolls to it. A
+  new recipe shows "Making the photo…" on its photo until ready; tapping it opens its staged ingredients and steps, tapping the list card
+  previews it by aisle. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
+  the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
+  button that applies.
+- **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
+  "Publishing…" until the server sees their page, then they turn into normal cards.
+- **Action chips** (`.chat-chip.is-action`): accent-ink outline chips that press the tray's own button ("Finalise list", "Save to site"): still a tap by a person.

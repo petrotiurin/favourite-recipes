@@ -2548,3 +2548,339 @@ body.chat-open {
   font-weight: 600;
   cursor: pointer;
 }
+
+/* Recipe chat, phase 4 (templates/chat.js): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
+.chat-question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chat-q {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* A question needs an answer: solid chips (a suggestion is an outline chip). */
+.chat-chip.is-solid,
+.chat-chip.is-done {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.chat-chip.is-solid:hover:not(:disabled),
+.chat-chip.is-done:hover:not(:disabled) {
+  background: var(--accent-strong);
+  filter: brightness(1.08);
+}
+
+.chat-chip.is-solid[aria-pressed="true"] {
+  background: var(--current-soft);
+  color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-strong);
+}
+
+.chat-chip.is-done:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A chip that presses one of the tray's buttons (Finalise list, Save to site). */
+.chat-chip.is-action {
+  border-color: var(--accent-ink);
+  color: var(--accent-ink);
+}
+
+.chat-question.is-old {
+  opacity: 0.4;
+}
+
+.chat-card.is-publishing {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The plan tray: between the log and the input, a sideways row of small cards; folds to one line while the keyboard is up. */
+.chat-tray {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0 0 0.6rem;
+  max-height: 55%;
+  overflow-y: auto;
+}
+
+.chat-tray[hidden],
+.chat-panel.is-listing .chat-tray {
+  display: none;
+}
+
+.tray-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tray-chev .icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--icon-muted);
+  transition: transform 0.15s;
+}
+
+.chat-tray.is-folded .tray-chev .icon {
+  transform: rotate(-90deg);
+}
+
+.chat-tray.is-folded {
+  padding-bottom: 0;
+}
+
+.tray-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.75rem;
+  border-radius: 10px;
+  background: var(--current-soft);
+  font-size: 0.9rem;
+}
+
+.tray-notice .chat-chip {
+  min-height: 2.25rem;
+}
+
+.tray-cards {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0 1rem 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+}
+
+.tray-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.tray-card {
+  position: relative;
+  flex: 0 0 9.5rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  scroll-snap-align: start;
+}
+
+.tray-card.is-new {
+  border-color: var(--accent);
+  background: var(--current-soft);
+}
+
+.tray-card.has-error,
+.tray-card.has-clash {
+  border-color: #b42318;
+}
+
+.tray-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tray-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 0.25rem;
+  border-radius: 8px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.tray-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tray-thumb-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.25rem;
+  font-size: 0.72rem;
+  font-style: italic;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.tray-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-sub,
+.tray-who {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.tray-who {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-problem {
+  margin: 0.15rem 0 0;
+  font-size: 0.74rem;
+  color: #b42318;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-drop {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.tray-drop .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.tray-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.6rem;
+  padding: 0 0.55rem 0.45rem;
+}
+
+.tray-link {
+  min-height: 1.75rem;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.tray-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tray-detail {
+  margin: 0.5rem 1rem 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.tray-detail-title {
+  margin: 0 0 0.3rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+
+.tray-detail-h {
+  margin: 0.5rem 0 0.15rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tray-detail ul,
+.tray-detail ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.tray-detail-notes {
+  margin: 0.4rem 0;
+  color: var(--text-muted);
+}
+
+.tray-msg {
+  margin: 0.4rem 1rem 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.tray-go {
+  width: calc(100% - 2rem);
+  margin: 0.55rem 1rem 0;
+  height: 2.9rem;
+  font-size: 0.95rem;
+  border: 0;
+}
+
+.tray-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tray-card.has-error,
+  .tray-card.has-clash {
+    border-color: #f6a29b;
+  }
+
+  .tray-problem {
+    color: #f6a29b;
+  }
+}

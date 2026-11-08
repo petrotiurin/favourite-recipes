@@ -73,8 +73,22 @@ valid but not an editor = `public` (the panel says the account can't edit); bad 
 `{ conversation_id?, message, page }`, never history; another user's conversation is a 404; chats are deleted 2 weeks after the last
 message (`purge_old_chats()`, run when the chats list is opened, plus pg_cron where available). Editor-only routes under `/chat`:
 `GET /chat/me`, `GET /chat/conversations`, `GET|DELETE /chat/conversations/:id`, `POST /chat/feedback` (thumbs up / down become the
-Langfuse score `user-feedback`). In this phase editors are still offered only read + UI tools (TODO in `offeredTools`: phase 4 adds the
-stage tools; the write tools never go into chat). Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase
+Langfuse score `user-feedback`).
+**Phase 4 (editor writes through the household plan tray) is in:** in chat an editor's writes never commit. `offeredTools` gives editors the
+`stage_*` tools (registry entries with `access: "stage"`, not registered on `/mcp`, which keeps its committing write tools unchanged), `get_tray`,
+`drop_tray_item`, `resolve_clash` and the UI tool `ask_user`; the write tools never go into chat. Staging validates by a dry run of the real write
+logic (`lib/operations.js` `runOperation`, shared with `batch_changes`) over a throwaway `ChangeSet` of the repo plus the tray's earlier items
+(`lib/tray.js` `replay`), so problems show on the card at once; it never commits. The tray is ONE row in Supabase `trays` (items jsonb, 7-day
+expiry, optimistic `version`) with staged photos in the private `tray-photos` bucket (`lib/tray-store.js`), RLS on with no policies. A new
+recipe's photo is made in the background (`lib/tray-photos.js`: the source page's og:image / JSON-LD image, fetched with an SSRF guard, else
+generated). Finalise list (`POST /chat { action: "finalise" }`) has the agent build the shopping list; any later change makes it out of date (hash
+of the other items). **Save is `POST /chat/plan/apply`, never a model tool**: fresh token + `EDITORS`, re-validation, clash detection, ONE commit
+(`lib/plan-apply.js`) with the photos, then the tray is emptied and a summary is posted into the chat (new recipes "Publishing…" until
+`GET /chat/status` sees their page). "Save now" (`{ item_id }`) is for quick fixes only (`saveNowRule`). Other routes: `GET /chat/plan`,
+`DELETE /chat/plan/items/:id`, `POST /chat/plan/items/:id/photo`. Migrations: `20261108000000_trays.sql`, `20261108000100_tray_photos_bucket.sql`.
+Hardening: the chat loop caps tool calls (4 per reply, 10 per turn, 80k result characters) and sets `max_tokens`; read tools are served from the
+cached recipe index (`listRecipes()` / `getRecipe()` / `getShoppingList()` without a ChangeSet are reads; with one they read fresh), and the rate
+limit falls back to an in-memory limiter instead of failing open. Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase
 with sign-in accounts, site on :4000; test accounts and ports are at the top of `mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
 is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
 enforced on the server by the dispatcher, never by the prompt.

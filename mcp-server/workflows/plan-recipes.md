@@ -202,3 +202,12 @@ Keep it factual and short; don't repeat the recipe steps.
 - `remove_draft` is permanent on the site, only works on drafts, and refuses a draft planned for next week. Only call it after an explicit "didn't like it"; never use it to tidy up a draft the user hasn't answered about.
 - Upload links expire after an hour; if the user comes back later, create a fresh link for the recipes still missing a photo.
 - `batch_changes` with `dry_run: true` doesn't generate photos (it only checks the operations), so dry runs cost nothing.
+
+## In chat (the site's chat assistant)
+
+The same flow runs in the site's chat for signed-in editors, with different plumbing. This section only says what differs; the MCP flow above is unchanged.
+
+- Nothing commits. The `stage_*` tools (`stage_create_recipe`, `stage_update_recipe`, `stage_promote_recipe`, `stage_remove_draft`, `stage_set_week_recipes`, `stage_start_next_week`, `stage_update_shopping_list`, `stage_set_shopping_servings`) put changes into the household **plan tray**, one card each, validated by a dry run of the real tools. A person taps **Save to site**, which commits everything in one commit (replacing `batch_changes`). Never say you saved: say you added it to the tray.
+- `ask_user` chips replace `AskUserQuestion`: one question per turn, the tapped answer is the next message.
+- Planning always targets next week. Adding to the tray never asks about switching: that question comes at **Finalise list**, when next week already has recipes ("Next week has N recipes. Is it ready to become this week?": *Promote it* stages `stage_start_next_week` first, then one question per draft of this week; *Not yet* stages nothing and stops). The shopping list (`stage_update_shopping_list`, built from `get_tray`, which shows next week as it will be after Save) is staged last; any later change to the tray makes it out of date.
+- Photos are made when a recipe is staged (`image_url` for a link, else generated), so there is no photo step.

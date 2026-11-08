@@ -161,7 +161,9 @@
     return out;
   }
 
-  /** Suggested replies: a string (sent as the next message) or { label, url } (opens a page on this site). Anything else is dropped. */
+  var PLAN_ACTIONS = { apply_plan: true, finalise_plan: true }; // chips that press the tray's own button (a human tap)
+
+  /** Suggested replies: a string (sent as the next message), { label, url } (opens a page on this site) or { label, action } (presses a tray button). Anything else is dropped. */
   function cleanReplyItems(list, origin) {
     var out = [];
     (Array.isArray(list) ? list : []).forEach(function (r) {
@@ -169,8 +171,9 @@
       if (typeof r === "string") {
         if (r) out.push(r);
       } else if (r && typeof r === "object" && typeof r.label === "string" && r.label) {
-        var href = origin ? safeHref(r.url, origin) : null;
+        var href = origin && typeof r.url === "string" ? safeHref(r.url, origin) : null;
         if (href) out.push({ label: r.label.slice(0, 60), url: href });
+        else if (typeof r.action === "string" && PLAN_ACTIONS[r.action] === true) out.push({ label: r.label.slice(0, 60), action: r.action });
       }
     });
     return out;
@@ -187,6 +190,8 @@
       if (!url) return;
       var kind = c.kicker && Object.prototype.hasOwnProperty.call(KICKER_KINDS, c.kicker.kind) ? c.kicker.kind : "";
       out.push({
+        slug: typeof c.slug === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(c.slug) ? c.slug : "",
+        publishing: c.publishing === true,
         title: c.title.slice(0, 120),
         url: url,
         image: typeof c.image === "string" && c.image ? safeHref(c.image, origin) || "" : "",
@@ -195,6 +200,107 @@
       });
     });
     return out;
+  }
+
+  /** A question from ask_user: { question, options (2-6 short strings), multi }, or null. */
+  function cleanQuestion(q) {
+    if (!q || typeof q !== "object" || typeof q.question !== "string" || !q.question.trim() || !Array.isArray(q.options)) return null;
+    var options = [];
+    q.options.forEach(function (o) {
+      if (typeof o === "string" && o.trim() && options.length < 6 && options.indexOf(o.trim().slice(0, 40)) === -1) options.push(o.trim().slice(0, 40));
+    });
+    return options.length >= 2 ? { question: q.question.trim().slice(0, 240), options: options, multi: q.multi === true } : null;
+  }
+
+  var TRAY_KINDS = {
+    switch: { label: "Switch", cls: "kicker-current" },
+    promote: { label: "Promote", cls: "" },
+    remove: { label: "Remove", cls: "" },
+    new: { label: "New", cls: "kicker-draft" },
+    next: { label: "Next week", cls: "kicker-next" },
+    edit: { label: "Edit", cls: "" },
+    list: { label: "List", cls: "" },
+    servings: { label: "Servings", cls: "" },
+  };
+  function str(v, max) {
+    return typeof v === "string" ? v.slice(0, max) : "";
+  }
+
+  /**
+   * The plan tray as GET /chat/plan returns it, reduced to plain values: strings cut, links only on this site's origin, staged photos only from
+   * the Supabase signed-URL path (photoBase). null when there is no tray.
+   */
+  function cleanTray(raw, origin, photoBase) {
+    if (!raw || typeof raw !== "object" || !Array.isArray(raw.items)) return null;
+    var items = [];
+    raw.items.forEach(function (i) {
+      if (!i || typeof i !== "object" || !/^[a-f0-9]{8}$/.test(String(i.id)) || !TRAY_KINDS[i.kind]) return;
+      var photo = null;
+      if (i.photo && typeof i.photo === "object") {
+        var url = typeof i.photo.url === "string" && photoBase && i.photo.url.indexOf(photoBase + "/storage/v1/object/sign/") === 0 ? i.photo.url : "";
+        photo = { status: ["pending", "ready", "failed"].indexOf(i.photo.status) !== -1 ? i.photo.status : "failed", url: url, error: str(i.photo.error, 160) };
+      }
+      var recipe = i.recipe && typeof i.recipe === "object" ? { url: safeHref(i.recipe.url, origin) || "", image: i.recipe.image ? safeHref(i.recipe.image, origin) || "" : "" } : null;
+      var item = {
+        id: i.id,
+        kind: i.kind,
+        title: str(i.title, 120),
+        sub: str(i.sub, 160),
+        added_by: str(i.added_by, 40),
+        reason: str(i.reason, 100),
+        error: i.error ? str(i.error, 300) : "",
+        clash: i.clash && typeof i.clash === "object" ? { reason: str(i.clash.reason, 200) } : null,
+        save_now: i.save_now === true,
+        draft: i.draft === true,
+        add: i.add !== false,
+        current: i.current === true,
+        photo: photo,
+        recipe: recipe,
+      };
+      if (i.detail && typeof i.detail === "object") {
+        item.detail = {
+          ingredients: (Array.isArray(i.detail.ingredients) ? i.detail.ingredients : []).slice(0, 60).map(function (x) { return str(x, 160); }),
+          steps: (Array.isArray(i.detail.steps) ? i.detail.steps : []).slice(0, 60).map(function (x) { return str(x, 400); }),
+          notes: str(i.detail.notes, 800),
+        };
+      }
+      if (Array.isArray(i.preview)) {
+        item.preview = i.preview.slice(0, 20).map(function (sec) {
+          return { name: str(sec && sec.name, 60), items: (Array.isArray(sec && sec.items) ? sec.items : []).slice(0, 80).map(function (x) { return str(x, 100); }) };
+        });
+      }
+      items.push(item);
+    });
+    return {
+      id: str(raw.id, 64),
+      state: ["collecting", "finalising", "ready"].indexOf(raw.state) !== -1 ? raw.state : "collecting",
+      count: items.length,
+      needs_list: raw.needs_list === true,
+      list_current: raw.list_current === true,
+      can_save: raw.can_save === true,
+      blocked: str(raw.blocked, 120),
+      expires_at: str(raw.expires_at, 40),
+      expires_day: str(raw.expires_day, 12),
+      items: items,
+    };
+  }
+
+  /** "Tray · 8 changes" (the folded line), with "until Fri" when it's open. */
+  function trayLine(tray, folded) {
+    return "Tray · " + tray.count + " change" + (tray.count === 1 ? "" : "s") + (!folded && tray.expires_day ? " · until " + tray.expires_day : "");
+  }
+  /** "The tray expires tomorrow" within the last day before it goes (and "today" in the last hours), else "". */
+  function trayExpiryNotice(tray, now) {
+    var left = Date.parse(tray.expires_at) - now;
+    if (!(left > 0) || left > DAY) return "";
+    return dayStart(new Date(tray.expires_at)) === dayStart(new Date(now)) ? "The tray expires today" : "The tray expires tomorrow";
+  }
+  /** What the tray's one button is: "finalise" | "finalising" | "save" | "blocked", with its label. */
+  function trayButton(tray) {
+    if (tray.can_save) return { kind: "save", label: "Save to site (" + tray.count + ")" };
+    if (tray.state === "finalising") return { kind: "finalising", label: "Building the list…" };
+    if (tray.needs_list && !tray.list_current && !tray.items.some(function (i) { return i.error || i.clash; })) return { kind: "finalise", label: "Finalise list" };
+    return { kind: "blocked", label: "Save to site (" + tray.count + ")" };
   }
 
   /** A navigation button from the server: { label, url } on this site's origin, or null. */
@@ -248,6 +354,8 @@
       if (m.role === "assistant") {
         var replies = cleanReplyItems(m.replies, origin);
         if (replies.length) msg.replies = replies;
+        var question = cleanQuestion(m.question);
+        if (question) msg.question = question;
         var cards = cleanCards(m.cards, origin);
         if (cards.length) msg.cards = cards;
         var nav = cleanNav(m.nav, origin);
@@ -261,7 +369,7 @@
           };
         }
       }
-      if (msg.content || msg.cards) out.push(msg);
+      if (msg.content || msg.cards || msg.question) out.push(msg);
     });
     return out;
   }
@@ -313,6 +421,11 @@
     cleanReplyItems: cleanReplyItems,
     cleanCards: cleanCards,
     cleanNav: cleanNav,
+    cleanQuestion: cleanQuestion,
+    cleanTray: cleanTray,
+    trayLine: trayLine,
+    trayExpiryNotice: trayExpiryNotice,
+    trayButton: trayButton,
     startersFor: startersFor,
     wellFormed: wellFormed,
   };
@@ -347,6 +460,7 @@
     list: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>',
     up: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9z"/><path d="M7 11l4-7c1.7 0 2.5 1.2 2.2 2.8L12.6 10H19a1.8 1.8 0 0 1 1.8 2.1l-1.3 6.4A2 2 0 0 1 17.5 20H7"/></svg>',
     down: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V4H4v9z"/><path d="M7 13l4 7c1.7 0 2.5-1.2 2.2-2.8L12.6 14H19a1.8 1.8 0 0 0 1.8-2.1l-1.3-6.4A2 2 0 0 0 17.5 4H7"/></svg>',
+    chevron: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
     trash: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>',
   };
 
@@ -483,7 +597,10 @@
   panel.appendChild(head);
   panel.appendChild(banner);
   panel.appendChild(chatsView);
+  var tray = el("section", "chat-tray", { "aria-label": "Plan tray" }); // editors only: what's been staged, not yet saved to the site
+  tray.hidden = true;
   panel.appendChild(log);
+  panel.appendChild(tray);
   panel.appendChild(foot);
   doc.body.appendChild(panel);
   doc.body.appendChild(bubble);
@@ -504,7 +621,7 @@
     var b = el("p", "chat-note");
     b.textContent =
       mode === "editor"
-        ? "Your chats are saved to your account for two weeks after the last message, on any of your devices. I can look things up, but I can't change anything on the site yet."
+        ? "Your chats are saved to your account for two weeks after the last message, on any of your devices. I can add changes to the plan tray, but nothing reaches the site until you tap Save to site."
         : "Chats are stored in this browser for two weeks. I can look things up, but I can't change anything on the site.";
     p.appendChild(a);
     p.appendChild(b);
@@ -528,13 +645,13 @@
   function cardsEl(cards) {
     var row = el("div", "chat-cards", { role: "list", "aria-label": "Recipes" });
     cards.forEach(function (c) {
-      var a = el("a", "tile chat-card", { href: c.url, role: "listitem" });
-      if (c.image) {
+      var a = c.publishing ? el("span", "tile chat-card is-publishing", { role: "listitem", "aria-disabled": "true" }) : el("a", "tile chat-card", { href: c.url, role: "listitem" });
+      if (c.image && !c.publishing) {
         var img = el("img", "tile-image", { src: c.image, alt: "", loading: "lazy" });
         a.appendChild(img);
       } else a.appendChild(el("span", "tile-image"));
       var k = el("p", "kicker" + (KICKER_KINDS[c.kicker.kind] ? " " + KICKER_KINDS[c.kicker.kind] : ""));
-      k.textContent = c.kicker.label;
+      k.textContent = c.publishing ? "Publishing…" : c.kicker.label;
       var t = el("h3", "tile-title");
       t.textContent = c.title;
       var meta = el("p", "tile-meta");
@@ -542,7 +659,7 @@
       a.appendChild(k);
       a.appendChild(t);
       a.appendChild(meta);
-      guardWhileStreaming(a);
+      if (!c.publishing) guardWhileStreaming(a);
       row.appendChild(a);
     });
     return row;
@@ -594,6 +711,12 @@
         chip.addEventListener("click", function () {
           if (!row.classList.contains("is-old")) send(r);
         });
+      } else if (r.action) {
+        chip = el("button", "chat-chip is-action", { type: "button" }); // presses the tray's own button: still a tap by a person
+        chip.textContent = r.label;
+        chip.addEventListener("click", function () {
+          if (!row.classList.contains("is-old")) pressTray(r.action);
+        });
       } else {
         chip = el("a", "chat-chip is-nav", { href: r.url });
         chip.appendChild(doc.createTextNode(r.label));
@@ -610,9 +733,52 @@
     return row;
   }
 
+  /** An ask_user question: the question and solid answer chips; with multi, chips toggle and Done sends them together. */
+  function questionEl(q) {
+    var box = el("div", "chat-question", { role: "group", "aria-label": q.question });
+    var text = el("p", "chat-q");
+    text.textContent = q.question;
+    box.appendChild(text);
+    var row = el("div", "chat-chips");
+    var picked = [];
+    var done = null;
+    q.options.forEach(function (o) {
+      var chip = el("button", "chat-chip is-solid", { type: "button" });
+      chip.textContent = o;
+      if (q.multi) chip.setAttribute("aria-pressed", "false");
+      chip.addEventListener("click", function () {
+        if (box.classList.contains("is-old")) return;
+        if (!q.multi) return send(o);
+        var at = picked.indexOf(o);
+        if (at === -1) picked.push(o);
+        else picked.splice(at, 1);
+        chip.setAttribute("aria-pressed", at === -1 ? "true" : "false");
+        done.disabled = !picked.length;
+      });
+      row.appendChild(chip);
+    });
+    box.appendChild(row);
+    if (q.multi) {
+      done = el("button", "chat-chip is-done", { type: "button" });
+      done.textContent = "Done";
+      done.disabled = true;
+      done.addEventListener("click", function () {
+        if (!box.classList.contains("is-old") && picked.length) send(picked.join(", "));
+      });
+      row.appendChild(done);
+    }
+    return box;
+  }
+
+  /** The input invites a typed answer while a question is live. */
+  function paintPlaceholder() {
+    var live = log.querySelector(".chat-question:not(.is-old)");
+    input.setAttribute("placeholder", live ? "Or type an answer" : "Ask about our recipes");
+  }
+
   /** Only the last message's chips and button are live; older ones fade and stop responding. */
   function retireChips() {
-    Array.prototype.forEach.call(log.querySelectorAll(".chat-chips, .chat-nav"), function (row) {
+    Array.prototype.forEach.call(log.querySelectorAll(".chat-chips, .chat-nav, .chat-question"), function (row) {
       row.classList.add("is-old");
       row.setAttribute("aria-disabled", "true");
       Array.prototype.forEach.call(row.querySelectorAll("button, a"), function (b) {
@@ -624,6 +790,7 @@
       });
       if (row.tagName === "A") row.setAttribute("tabindex", "-1");
     });
+    paintPlaceholder();
   }
 
   function renderAll() {
@@ -640,9 +807,12 @@
       var last = i === chat.messages.length - 1;
       log.appendChild(messageEl(m, last));
       if (mode === "editor" && chat.server && m.role === "assistant" && m.turn_id) log.appendChild(feedbackEl(m, !last));
+      if (m.question && last) log.appendChild(questionEl(m.question));
       if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
+    paintPlaceholder();
     toBottom();
+    watchPublishing();
   }
 
   function setStatus(text) {
@@ -717,8 +887,10 @@
     }
   }
 
-  function send(text) {
+  function send(text, opts) {
     text = String(text || "").trim();
+    var action = opts && opts.action;
+    keyboardUnfold();
     if (!text || streaming || checkingMe) return;
     retireChips();
     Array.prototype.forEach.call(log.querySelectorAll(".chat-feedback"), function (f) { f.classList.add("is-old"); }); // earlier turns keep their thumbs, dimmed
@@ -764,7 +936,8 @@
       streaming = null;
       setBusy(false);
       clearStatus();
-      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length))) {
+      if (editorTurn) loadTray({ highlight: true });
+      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question)) {
         chat.messages.push(reply);
         saveChat();
         if (reply.nav) {
@@ -772,7 +945,10 @@
           botEl.appendChild(navEl(reply.nav));
         }
         if (editorTurn && reply.turn_id) log.appendChild(feedbackEl(reply, false));
-        if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
+        if (reply.question) log.appendChild(questionEl(reply.question));
+        else if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
+        paintPlaceholder();
+        watchPublishing();
         if (panel.hidden) dot.hidden = false;
       } else if (added && botEl.parentNode) {
         // a partial answer that errored out is not kept in the history
@@ -783,7 +959,7 @@
 
     // An editor sends only the new message and the conversation id (the server owns the history); a visitor sends their own.
     var payload = editorTurn
-      ? { conversation_id: chat.id || undefined, message: text, page: pageState() }
+      ? { conversation_id: chat.id || undefined, message: text, page: pageState(), action: action || undefined }
       : { conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() };
     (editorTurn ? authedFetch : fetch)(apiUrl, {
       method: "POST",
@@ -832,6 +1008,8 @@
                 }
               }
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
+              else if (ev.name === "question") reply.question = cleanQuestion(ev.data) || reply.question;
+              else if (ev.name === "tray") loadTray({ highlight: true });
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
                 if (more.length) {
@@ -1041,6 +1219,7 @@
       setBusy(false);
     }
     mode = "public";
+    clearTray();
     chat = anonChat;
     // An expired session keeps the open conversation's id, so signing in again comes back to it; only an explicit sign-out forgets it.
     writeJson(localStorage, EDITOR_KEY, keepId);
@@ -1065,6 +1244,7 @@
     chat = { server: true, id: null, title: "", messages: [] };
     paintHeader();
     renderAll();
+    loadTray();
     if (wantId) loadConversation(wantId);
   }
 
@@ -1270,6 +1450,367 @@
   }
   chatsBtn.addEventListener("click", function () { setListing(!listing); });
 
+  // --- the plan tray (editors): what the chat has staged for the site, shared by the household ----------------------------------
+  // Nothing here is saved until a person taps Save to site. The server draws the tray (GET /plan); the buttons call it. See design.md.
+  var photoBase = (function () {
+    var tag = doc.querySelector("script[data-supabase-url]");
+    return tag ? (tag.getAttribute("data-supabase-url") || "").replace(/\/$/, "") : "";
+  })();
+  var trayData = null;
+  var trayMsg = ""; // one muted line under the cards ("Saved", why Save is blocked, ...)
+  var trayDetail = null; // id of the card whose staged recipe / list is open
+  var traySeen = null; // ids already shown, to highlight what's new
+  var trayManualFold = false;
+  var keyboardOpen = false;
+  var keyboardForcedOpen = false; // unfolded by a tap or a sent message while the keyboard is up, until it closes
+  var trayTimer = null;
+  var traySeq = 0;
+  var trayBusy = false;
+
+  function trayFolded() {
+    return trayManualFold || (keyboardOpen && !keyboardForcedOpen);
+  }
+  function keyboardUnfold() {
+    if (keyboardOpen) keyboardForcedOpen = true;
+    trayManualFold = false;
+    if (trayData) renderTray();
+  }
+
+  function trayThumb(item) {
+    var wrap = el("div", "tray-thumb");
+    var src = item.photo && item.photo.url ? item.photo.url : item.recipe && item.recipe.image;
+    if (src) wrap.appendChild(el("img", "", { src: src, alt: "", loading: "lazy" }));
+    var status = item.photo && item.photo.status;
+    if (status === "pending" || (status === "failed" && !src)) {
+      var label = el("span", "tray-thumb-note");
+      label.textContent = status === "pending" ? "Making the photo…" : "No photo yet";
+      wrap.appendChild(label);
+    }
+    return wrap;
+  }
+
+  function trayCard(item, isNew) {
+    var kind = TRAY_KINDS[item.kind];
+    var card = el("div", "tray-card" + (isNew ? " is-new" : "") + (item.error ? " has-error" : "") + (item.clash ? " has-clash" : ""), { role: "listitem", "data-id": item.id });
+    var main = el("button", "tray-card-main", { type: "button" });
+    if (item.kind !== "switch" && item.kind !== "list" && item.kind !== "servings") main.appendChild(trayThumb(item));
+    var cls = item.kind === "new" ? (item.draft ? "kicker-draft" : "") : item.kind === "next" ? (item.add ? "kicker-next" : "") : kind.cls;
+    var k = el("p", "kicker" + (cls ? " " + cls : ""));
+    k.textContent = item.kind === "next" && !item.add ? "Off next week" : kind.label;
+    var t = el("h3", "tray-title");
+    t.textContent = item.title;
+    var sub = el("p", "tray-sub");
+    sub.textContent = item.sub;
+    main.appendChild(k);
+    main.appendChild(t);
+    if (item.sub) main.appendChild(sub);
+    var who = el("p", "tray-who");
+    who.textContent = "Added by " + item.added_by + (item.reason ? ": " + item.reason : "");
+    main.appendChild(who);
+    if (item.clash) {
+      var c = el("p", "tray-problem");
+      c.textContent = item.clash.reason;
+      main.appendChild(c);
+    } else if (item.error) {
+      var e = el("p", "tray-problem");
+      e.textContent = item.error;
+      main.appendChild(e);
+    } else if (item.photo && item.photo.status === "failed") {
+      var pf = el("p", "tray-problem");
+      pf.textContent = "The photo didn't work: " + (item.photo.error || "try again");
+      main.appendChild(pf);
+    }
+    main.addEventListener("click", function () {
+      if (item.clash) {
+        // the bot resolves clashes: tapping the flagged card asks it
+        send("Saving hit a clash on " + item.title + ": " + item.clash.reason + ". Help me resolve it.");
+      } else {
+        trayDetail = trayDetail === item.id ? null : item.id;
+        renderTray();
+      }
+    });
+    card.appendChild(main);
+    var drop = iconButton("tray-drop", "Drop from the tray: " + item.title, ICON.close);
+    drop.addEventListener("click", function () {
+      drop.disabled = true;
+      trayCall("DELETE", "/plan/items/" + item.id).then(function () { if (trayDetail === item.id) trayDetail = null; loadTray(); });
+    });
+    card.appendChild(drop);
+    var acts = el("div", "tray-card-actions");
+    if (item.photo) {
+      var np = el("button", "text-button tray-link", { type: "button" });
+      np.textContent = "New photo";
+      np.disabled = item.photo.status === "pending";
+      np.addEventListener("click", function () {
+        np.disabled = true;
+        trayCall("POST", "/plan/items/" + item.id + "/photo").then(function () { loadTray(); });
+      });
+      acts.appendChild(np);
+    }
+    if (item.save_now) {
+      var sn = el("button", "text-button tray-link", { type: "button" });
+      sn.textContent = "Save now";
+      sn.addEventListener("click", function () { saveTray(item.id); });
+      acts.appendChild(sn);
+    }
+    if (acts.children.length) card.appendChild(acts);
+    return card;
+  }
+
+  function trayDetailEl(item) {
+    var box = el("div", "tray-detail");
+    var h = el("h3", "tray-detail-title");
+    h.textContent = item.title;
+    box.appendChild(h);
+    if (item.detail) {
+      var hi = el("h4", "tray-detail-h");
+      hi.textContent = "Ingredients";
+      var ul = el("ul");
+      item.detail.ingredients.forEach(function (x) { var li = el("li"); li.textContent = x; ul.appendChild(li); });
+      var hs = el("h4", "tray-detail-h");
+      hs.textContent = "Instructions";
+      var ol = el("ol");
+      item.detail.steps.forEach(function (x) { var li = el("li"); li.textContent = x; ol.appendChild(li); });
+      box.appendChild(hi);
+      box.appendChild(ul);
+      box.appendChild(hs);
+      box.appendChild(ol);
+      if (item.detail.notes) {
+        var n = el("p", "tray-detail-notes");
+        n.textContent = item.detail.notes;
+        box.appendChild(n);
+      }
+    } else if (item.preview) {
+      item.preview.forEach(function (sec) {
+        var hh = el("h4", "tray-detail-h");
+        hh.textContent = sec.name;
+        var l = el("ul");
+        sec.items.forEach(function (x) { var li = el("li"); li.textContent = x; l.appendChild(li); });
+        box.appendChild(hh);
+        box.appendChild(l);
+      });
+    } else {
+      var p = el("p", "tray-detail-notes");
+      p.textContent = item.sub || "";
+      box.appendChild(p);
+    }
+    var close = el("button", "text-button is-quiet", { type: "button" });
+    close.textContent = "Close";
+    close.addEventListener("click", function () { trayDetail = null; renderTray(); });
+    box.appendChild(close);
+    return box;
+  }
+
+  function renderTray(opts) {
+    while (tray.firstChild) tray.removeChild(tray.firstChild);
+    if (!trayData || mode !== "editor" || !trayData.count) {
+      tray.hidden = true;
+      panel.classList.remove("has-tray");
+      return;
+    }
+    tray.hidden = false;
+    panel.classList.add("has-tray");
+    var folded = trayFolded();
+    tray.classList.toggle("is-folded", folded);
+    var head = el("button", "tray-head", { type: "button", "aria-expanded": folded ? "false" : "true" });
+    var label = el("span", "tray-head-label");
+    label.textContent = trayLine(trayData, folded);
+    var chev = el("span", "tray-chev");
+    chev.innerHTML = ICON.chevron; // our own constant markup
+    head.appendChild(label);
+    head.appendChild(chev);
+    head.addEventListener("click", function () {
+      if (keyboardOpen) keyboardForcedOpen = folded ? true : false;
+      trayManualFold = keyboardOpen ? false : !trayManualFold;
+      renderTray();
+    });
+    tray.appendChild(head);
+    if (folded) return;
+
+    var notice = trayExpiryNotice(trayData, Date.now());
+    var btn = trayButton(trayData);
+    if (notice) {
+      var nb = el("div", "tray-notice");
+      var nt = el("span");
+      nt.textContent = notice;
+      nb.appendChild(nt);
+      if (btn.kind === "finalise" || btn.kind === "save") {
+        var nbtn = el("button", "chat-chip", { type: "button" });
+        nbtn.textContent = btn.kind === "save" ? "Save to site" : "Finalise list";
+        nbtn.addEventListener("click", function () { pressTray(btn.kind === "save" ? "apply_plan" : "finalise_plan"); });
+        nb.appendChild(nbtn);
+      }
+      tray.appendChild(nb);
+    }
+    var row = el("div", "tray-cards", { role: "list", "aria-label": "Changes in the tray" });
+    var fresh = [];
+    trayData.items.forEach(function (item) {
+      var isNew = !!(opts && opts.highlight && traySeen && !traySeen[item.id]);
+      if (isNew) fresh.push(item.id);
+      row.appendChild(trayCard(item, isNew));
+    });
+    tray.appendChild(row);
+    var open = trayDetail && trayData.items.filter(function (i) { return i.id === trayDetail; })[0];
+    if (open) tray.appendChild(trayDetailEl(open));
+    if (trayMsg) {
+      var m = el("p", "tray-msg", { role: "status" });
+      m.textContent = trayMsg;
+      tray.appendChild(m);
+    } else if (btn.kind === "blocked" && trayData.blocked) {
+      var bm = el("p", "tray-msg");
+      bm.textContent = trayData.blocked;
+      tray.appendChild(bm);
+    }
+    var go = el("button", "save-button tray-go", { type: "button" });
+    go.textContent = btn.label;
+    go.disabled = btn.kind === "finalising" || btn.kind === "blocked" || trayBusy;
+    go.addEventListener("click", function () { pressTray(btn.kind === "save" ? "apply_plan" : "finalise_plan"); });
+    tray.appendChild(go);
+    if (fresh.length) {
+      var target = row.querySelector('[data-id="' + fresh[0] + '"]');
+      if (target && target.scrollIntoView) target.scrollIntoView({ inline: "start", block: "nearest" });
+      setTimeout(function () { Array.prototype.forEach.call(row.querySelectorAll(".is-new"), function (c) { c.classList.remove("is-new"); }); }, 4000);
+    }
+  }
+
+  function trayCall(method, path, body) {
+    return authedFetch(apiBase + path, { method: method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  }
+
+  function scheduleTrayPoll() {
+    clearTimeout(trayTimer);
+    if (!trayData || panel.hidden || mode !== "editor") return;
+    var waiting = trayData.state === "finalising" || trayData.items.some(function (i) { return i.photo && i.photo.status === "pending"; });
+    if (waiting) trayTimer = setTimeout(function () { loadTray({ highlight: true }); }, 3000);
+  }
+
+  /** Fetches the household's tray and draws it. highlight: cards that weren't there before get the new-card treatment and the row scrolls to them. */
+  function loadTray(opts) {
+    if (mode !== "editor" || !RA || !RA.getSession()) return Promise.resolve();
+    var seq = ++traySeq;
+    return trayCall("GET", "/plan").then(
+      function (res) { return res.ok ? res.json() : null; },
+      function () { return null; }
+    ).then(function (j) {
+      if (seq !== traySeq || mode !== "editor" || !j) return;
+      var next = cleanTray(j.tray, origin, photoBase);
+      var wasSeen = traySeen;
+      traySeen = {};
+      if (next) next.items.forEach(function (i) { traySeen[i.id] = true; });
+      if (!wasSeen && opts && opts.highlight === undefined) opts = {};
+      trayData = next;
+      if (trayDetail && (!next || !next.items.some(function (i) { return i.id === trayDetail; }))) trayDetail = null;
+      renderTray(opts && opts.highlight && wasSeen ? { highlight: true } : null);
+      scheduleTrayPoll();
+    });
+  }
+
+  function clearTray() {
+    traySeq++;
+    trayData = null;
+    traySeen = null;
+    trayMsg = "";
+    trayDetail = null;
+    clearTimeout(trayTimer);
+    renderTray();
+  }
+
+  /** The two buttons the tray has (and the chips that press them): Finalise list, and Save to site. Always a tap by a person. */
+  function pressTray(action) {
+    if (streaming || !trayData) return;
+    if (action === "finalise_plan") {
+      if (trayData.state === "finalising") return;
+      trayData.state = "finalising";
+      renderTray();
+      send("Finalise list", { action: "finalise" });
+    } else if (action === "apply_plan") {
+      var b = trayButton(trayData);
+      if (b.kind === "save") saveTray();
+      else if (b.kind === "finalise") pressTray("finalise_plan");
+    }
+  }
+
+  /** Save to site (or Save now on one card): POST /plan/apply. One commit; the summary lands in the chat, new recipes as "Publishing…" cards. */
+  function saveTray(itemId) {
+    if (trayBusy || streaming) return;
+    trayBusy = true;
+    trayMsg = itemId ? "Saving that change…" : "Saving…";
+    renderTray();
+    trayCall("POST", "/plan/apply", { item_id: itemId, conversation_id: chat.server && chat.id ? chat.id : undefined })
+      .then(function (res) {
+        return res.json().then(function (j) { return { status: res.status, body: j || {} }; }, function () { return { status: res.status, body: {} }; });
+      })
+      .then(
+        function (r) {
+          trayBusy = false;
+          if (r.status === 200) {
+            trayMsg = "";
+            var msg = { role: "assistant", content: String(r.body.summary || "Saved."), cards: cleanCards(r.body.cards, origin) };
+            chat.messages.push(msg);
+            retireChips();
+            log.appendChild(messageEl(msg, true));
+            toBottom();
+            watchPublishing();
+            loadTray();
+          } else if (r.status === 409 && r.body.clash) {
+            trayMsg = "";
+            loadTray().then(function () {
+              send("Saving hit a clash: " + String((r.body.clash[0] && r.body.clash[0].reason) || "a recipe changed on the site") + ". Help me resolve it.");
+            });
+          } else {
+            trayMsg = String(r.body.error || "Couldn't save just now.").slice(0, 200);
+            loadTray();
+          }
+        },
+        function (err) {
+          trayBusy = false;
+          trayMsg = err && err.name === "AuthExpired" ? "" : "Couldn't save just now. Nothing was changed.";
+          renderTray();
+        }
+      );
+  }
+
+  // --- "Publishing…": a saved recipe's page isn't live for a minute or two; its card stays inert until the server sees the page ---
+  var publishTimer = null;
+  var publishTries = 0;
+  function watchPublishing() {
+    clearTimeout(publishTimer);
+    if (mode !== "editor" || !RA) return;
+    var slugs = [];
+    chat.messages.forEach(function (m) {
+      (m.cards || []).forEach(function (c) { if (c.publishing && c.slug && slugs.indexOf(c.slug) === -1) slugs.push(c.slug); });
+    });
+    if (!slugs.length || publishTries > 60) return;
+    publishTimer = setTimeout(function () {
+      publishTries++;
+      authedFetch(apiBase + "/status?slugs=" + encodeURIComponent(slugs.slice(0, 8).join(","))).then(
+        function (res) { return res.ok ? res.json() : null; },
+        function () { return null; }
+      ).then(function (j) {
+        var live = (j && j.live) || {};
+        var changed = false;
+        chat.messages.forEach(function (m) {
+          (m.cards || []).forEach(function (c) { if (c.publishing && live[c.slug] === true) { c.publishing = false; changed = true; } });
+        });
+        if (changed && !streaming) renderAll();
+        else watchPublishing();
+      });
+    }, publishTries ? 6000 : 3000);
+  }
+
+  // The tray folds to one line while the on-screen keyboard is up, and opens again when it closes or a message is sent.
+  function checkKeyboard() {
+    var vv = window.visualViewport;
+    var open = !!vv && window.innerHeight - vv.height > 120 && doc.activeElement === input;
+    if (open === keyboardOpen) return;
+    keyboardOpen = open;
+    if (!open) keyboardForcedOpen = false;
+    if (trayData) renderTray();
+  }
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", checkKeyboard);
+  input.addEventListener("focus", checkKeyboard);
+  input.addEventListener("blur", function () { setTimeout(checkKeyboard, 50); });
+
   // --- panel open / close / new chat ------------------------------------------------------------------------------------------
   function open(opts) {
     if (!panel.hidden) return;
@@ -1280,6 +1821,7 @@
     paintContext();
     layoutPanel();
     toBottom();
+    if (mode === "editor") loadTray();
     if (!(opts && opts.restore)) input.focus({ preventScroll: true }); // a restored panel must not pop the keyboard up
     saveUi();
   }
