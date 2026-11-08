@@ -1948,11 +1948,6 @@ body.chat-open {
   margin: 0 0 0.5rem;
 }
 
-.chat-note {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
 .chat-msg {
   display: flex;
   max-width: 100%;
