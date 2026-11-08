@@ -488,6 +488,7 @@ export async function POST(request) {
         };
         const emit = ({ type, ...data }) => send(type, data);
         let output;
+        let shown; // cards, chips, a question: recorded on the trace next to the text
         try {
           if (isEditor) {
             send("meta", { conversation_id: convo.id, turn_id: turnId });
@@ -529,6 +530,7 @@ export async function POST(request) {
             conversation: isEditor ? { id: convo.id, title: convo.title || title } : undefined,
           });
           output = result.reply;
+          shown = result.shown;
           if (isEditor) {
             try {
               await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
@@ -555,7 +557,7 @@ export async function POST(request) {
             await settleFinalise(caller);
             trayEvent("tray-finalise", { trace, userId: caller.userId });
           }
-          trace.finish(output);
+          trace.finish(output, shown ? { shown } : undefined);
           closed = true;
           try {
             controller.close();

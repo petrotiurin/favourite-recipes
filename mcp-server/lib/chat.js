@@ -2,6 +2,7 @@
 // (streamed) with tool calling. Every tool call the model makes goes through dispatch() with the caller, which is what
 // enforces access; the model is only OFFERED what the role may call. The client's history is untrusted and is reduced
 // to plain user/assistant text before it gets here.
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { config, COURSES } from "./config.js";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
@@ -444,6 +445,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   };
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
+  const toolsVersion = createHash("sha256").update(JSON.stringify(tools)).digest("hex").slice(0, 10); // changes when a tool's definition does (Langfuse)
 
   let rows;
   try {
@@ -535,7 +537,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       model,
       input: roundNote ? thread.map((m, i) => (i === thread.length - 1 && m.role === "tool" ? { ...m, content: m.content + roundNote } : m)) : thread,
       modelParameters: { temperature: TEMPERATURE, max_tokens: maxTokens, tool_choice: finalRound ? "none" : "auto" },
-      metadata: { round: round + 1, promptVersion: PROMPT_VERSION, tools: finalRound ? [] : [...offered] },
+      metadata: { round: round + 1, promptVersion: PROMPT_VERSION, toolsVersion, tools: finalRound ? [] : [...offered] },
     });
     let result;
     let separate = reply.trim() !== ""; // text from an earlier round: start this one in a new paragraph
@@ -788,5 +790,15 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   const produced = thread.slice(base);
   const lastAssistant = produced.findLastIndex((m) => m.role === "assistant");
   if (lastAssistant !== -1 && Object.keys(ui).length) produced[lastAssistant] = { ...produced[lastAssistant], ui };
-  return { reply, suggestions, produced };
+  return { reply, suggestions, produced, shown: shownFor(ui) };
+}
+
+/** What the panel showed besides the text, for the trace: card slugs, chip labels, the question, the button. */
+export function shownFor(ui) {
+  const shown = {};
+  if (ui.cards?.length) shown.cards = ui.cards.map((c) => c.slug);
+  if (ui.replies?.length) shown.replies = ui.replies.map((r) => (typeof r === "string" ? r : r.label));
+  if (ui.question) shown.question = { text: ui.question.question, options: ui.question.options };
+  if (ui.nav) shown.navigation = ui.nav.label;
+  return Object.keys(shown).length ? shown : undefined;
 }

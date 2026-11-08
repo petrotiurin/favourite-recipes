@@ -368,6 +368,7 @@ test("Langfuse: off by default; with keys, one nested trace per request (agent >
   assert.equal(root.type, "agent");
   assert.equal(root.input, "mock-add a pie", "the trace input is the user's message");
   assert.equal(typeof root.output, "string");
+  assert.ok(Array.isArray(root.meta.shown?.replies) && root.meta.shown.replies.length, "the root records the chips the user was shown");
   assert.equal(root.meta.mode, "public");
   assert.equal(root.meta.model, "test/model");
   assert.deepEqual(root.meta.page, { page: "recipe", slug: "avocado-toast" });
@@ -390,6 +391,7 @@ test("Langfuse: off by default; with keys, one nested trace per request (agent >
   assert.equal(first.cost.total, 0.0004);
   assert.equal(first.input[0].role, "system", "the generation shows everything the model saw, system prompt included");
   assert.equal(first.output.role, "assistant");
+  assert.match(first.meta.toolsVersion, /^[0-9a-f]{10}$/, "a hash of the tool definitions the model was offered");
   const refused = obs.find((o) => o.name === "create_recipe");
   assert.ok(refused, "the refused tool call has an observation, named after the tool");
   assert.equal(refused.type, "tool");

@@ -18,6 +18,7 @@
 import { context } from "@opentelemetry/api";
 import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { propagateAttributes, setLangfuseTracerProvider, startObservation } from "@langfuse/tracing";
 import { LangfuseClient } from "@langfuse/client";
@@ -100,7 +101,7 @@ function sdk() {
     // so a bad recipe import can be checked against what the model saw (design 8.1). The default, spelled out.
     mediaUploadEnabled: true,
   });
-  const provider = new BasicTracerProvider({ spanProcessors: [processor] });
+  const provider = new BasicTracerProvider({ resource: resourceFromAttributes({ "service.name": "favourite-recipes-mcp" }), spanProcessors: [processor] });
   setLangfuseTracerProvider(provider); // isolated: never the global provider
   const old = state;
   state = { key, processor, client: new LangfuseClient(credentials) };
@@ -249,10 +250,11 @@ export function startTrace(opts = {}) {
       event({ name: eventName, metadata, level = "DEFAULT" }) {
         safe(() => child(eventName, { metadata: clip(metadata), level }, "event"));
       },
-      finish(output) {
+      /** Ends the trace. metadata: what else the user was shown (cards, chips, a question), next to the text output. */
+      finish(output, metadata) {
         if (finished) return;
         finished = true;
-        safe(() => root.update({ output: clip(output) }).end());
+        safe(() => root.update({ output: clip(output), ...(metadata ? { metadata: clip(metadata) } : {}) }).end());
         flushSoon();
       },
     };
