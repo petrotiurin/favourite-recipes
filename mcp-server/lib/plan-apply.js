@@ -108,12 +108,51 @@ export async function applyPlan({ caller, itemId, trace }) {
   const newSlugs = results.filter(({ item }) => item.kind === "new").map(({ item }) => slugOfItem(item));
   const book = await loadBook();
   const cards = buildCards(book, newSlugs).cards.map((c) => ({ ...c, publishing: true }));
-  const lines = results.flatMap(({ r }) => r.lines.slice(0, 1));
+  const titles = new Map((await listRecipes()).map((x) => [x.slug, x.title]));
+  const recipeTitle = (slug) => titles.get(slug) || all.find((i) => i.base?.slug === slug)?.base?.data?.title || String(slug).replace(/-/g, " ");
+  const lines = results.map(({ item, r }) => chatLine(item, r, recipeTitle)).filter(Boolean);
   const title = (n) => `${n} change${n === 1 ? "" : "s"}`;
   const summary = commit
     ? `Saved ${title(picked.length)} to the site in one commit. It will be live in about a minute.${lines.length ? `\n\n${lines.map((l) => `- ${l.replace(/: https?:\/\/\S+$/, "")}`).join("\n")}` : ""}`
     : `Nothing needed changing: every change already matched the site.`;
   return { saved: picked.length, commit: commit ? { url: commit.url, sha: commit.sha } : null, summary, cards, newSlugs, lines, left: remaining.length };
+}
+
+/**
+ * One plain-words line per saved item for the chat's summary (recipe titles, no slugs, no tool jargon). `title(slug)` gives a recipe's title.
+ * Separate from the operations' own report lines, which /mcp's batch_changes keeps using.
+ */
+export function chatLine(item, r, title) {
+  const op = item.op;
+  const names = (slugs) => slugs.map(title).join(", ");
+  switch (item.kind) {
+    case "switch":
+      return `Started the new week: next week's recipes are now this week${op.carry_over?.length ? `; kept in this week: ${names(op.carry_over)}` : ""}`;
+    case "promote":
+      return `${title(op.slug)} is now a regular recipe`;
+    case "remove":
+      return `Removed the draft ${title(op.slug)}`;
+    case "new":
+      return `New: ${op.title}${op.draft === false ? "" : " (draft)"}${op.week === "next" ? ", planned for next week" : ""}`;
+    case "next": {
+      const slugs = op.slugs || [];
+      return `${names(slugs)} ${op.add ? "added to" : "taken out of"} next week`;
+    }
+    case "edit": {
+      const fields = Object.keys(op).filter((k) => !["action", "slug", "image"].includes(k)).map((k) => ({ total_mins: "time", instructions: "steps", course: "course" })[k] || k.replace(/_/g, " "));
+      return `Updated ${title(op.slug)}${fields.length ? ` (${fields.join(", ")})` : item.photo ? " (photo)" : ""}`;
+    }
+    case "list": {
+      const items = (r.list?.sections || []).reduce((n, sec) => n + sec.items.length, 0);
+      return `Shopping list: ${items} item${items === 1 ? "" : "s"} for ${r.next?.length ?? 0} recipe${r.next?.length === 1 ? "" : "s"}`;
+    }
+    case "servings":
+      return "Planned servings updated";
+    case "stocktake":
+      return `What's at home updated (${r.changed?.length ?? 0} item${r.changed?.length === 1 ? "" : "s"})`;
+    default:
+      return null;
+  }
 }
 
 /** Which of these recipe pages are live yet? A HEAD to the Pages URL, server-side; slugs are validated, so the URL is always on our own site. */

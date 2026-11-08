@@ -336,3 +336,55 @@ test("build.js can write to another folder (BUILD_OUT_DIR), leaving ../dist alon
     rmSync(out, { recursive: true, force: true });
   }
 });
+
+// --- chat summary wording, chips -----------------------------------------------------------------------------------------------
+
+test("the Save summary speaks in titles and plain words, not slugs and tool jargon", async () => {
+  const { chatLine } = await import("../lib/plan-apply.js");
+  const title = (s) => ({ "almond-croissant-oats": "Almond Croissant Oats", soup: "Soup", "avocado-toast": "Avocado Toast" }[s] || s);
+  assert.equal(chatLine({ kind: "switch", op: { carry_over: ["soup"] } }, {}, title), "Started the new week: next week's recipes are now this week; kept in this week: Soup");
+  assert.equal(chatLine({ kind: "promote", op: { slug: "almond-croissant-oats" } }, {}, title), "Almond Croissant Oats is now a regular recipe");
+  assert.equal(chatLine({ kind: "new", op: { title: "Lemon Garlic Pasta", week: "next" } }, {}, title), "New: Lemon Garlic Pasta (draft), planned for next week");
+  assert.equal(chatLine({ kind: "next", op: { slugs: ["soup"], add: true } }, {}, title), "Soup added to next week");
+  assert.equal(chatLine({ kind: "list" }, { list: { sections: [{ items: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ name: `x${n}` })) }] }, next: [1, 2] }, title), "Shopping list: 9 items for 2 recipes");
+  assert.equal(chatLine({ kind: "edit", op: { slug: "avocado-toast", total_mins: 35 } }, {}, title), "Updated Avocado Toast (time)");
+  for (const line of [chatLine({ kind: "promote", op: { slug: "soup" } }, {}, title), chatLine({ kind: "list" }, { list: { sections: [] }, next: [] }, title)]) assert.doesNotMatch(line, /draft ->|weeks unchanged|covering| x\d/);
+});
+
+test("chips: a plain 'Save to site' becomes the real button when the tray allows it and is dropped otherwise; an earlier question's answers aren't suggestions", async () => {
+  const slug = slugs()[0];
+  await tools.dispatch("stage_update_recipe", { slug, total_mins: 41 }, editor(), { chat: { emit() {} } });
+  const ask = async (replies, history = []) => {
+    // a scripted editor turn: the mock model isn't used, so run the loop through a tiny fake
+    const { runChat } = await import("../lib/chat.js");
+    const emitted = [];
+    let round = 0;
+    const saved = globalThis.fetch;
+    globalThis.fetch = async (url, init) => {
+      if (String(url).includes("/chat/completions")) {
+        const events = round++ === 0
+          ? [{ choices: [{ delta: { content: "Done." } }] }, { choices: [{ delta: { tool_calls: [{ index: 0, id: "c", type: "function", function: { name: "suggest_replies", arguments: JSON.stringify({ replies }) } }] } }] }, { choices: [{ delta: {}, finish_reason: "tool_calls" }] }]
+          : [{ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] }];
+        return new Response(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+      }
+      return saved(url, init);
+    };
+    try {
+      await runChat({ caller: editor(), messages: [...history, { role: "user", content: "ok" }], page: {}, emit: (e) => emitted.push(e), trace: { generation: () => ({ end() {} }), span: () => ({ end() {} }), event() {}, finish() {} }, apiKey: "k", model: "m" });
+    } finally {
+      globalThis.fetch = saved;
+    }
+    return emitted.find((e) => e.type === "suggestions")?.replies || [];
+  };
+  // a quick fix is ready to save at once
+  assert.deepEqual(await ask(["Save to site", "Under 20 minutes"]), [{ label: "Save to site", action: "apply_plan" }, "Under 20 minutes"]);
+  // a tray that needs its list built offers Finalise instead
+  await tools.dispatch("stage_set_week_recipes", { slugs: [slugs()[1]], add: true }, editor(), { chat: { emit() {} } });
+  assert.deepEqual(await ask(["Save to site", "Finalise list"]), [{ label: "Finalise list", action: "finalise_plan" }]);
+  // an empty tray: the chips go
+  supabase.tables.trays.length = 0;
+  assert.deepEqual(await ask(["Save to site", "Finalise list", "Something else"]), ["Something else"]);
+  // answers of an earlier ask_user are not suggestions
+  const history = [{ role: "user", content: "finalise" }, { role: "assistant", content: "", tool_calls: [{ id: "q", type: "function", function: { name: "ask_user", arguments: JSON.stringify({ question: "Liked?", options: ["Liked", "Not for us", "Not tried yet"] }) } }] }, { role: "tool", tool_call_id: "q", content: "{}" }, { role: "user", content: "Liked" }];
+  assert.deepEqual(await ask(["Liked", "Not for us", "Show me soups"], history), ["Show me soups"]);
+});

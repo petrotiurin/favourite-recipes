@@ -261,6 +261,7 @@ async function staged(spec, ctx) {
   if (out.item?.photo) lines.push("Its photo is being made in the background; the card shows it when ready.");
   if (out.error) lines.push(`PROBLEM on the card: ${out.error}`, "Stage it again with the problem fixed (the same title or slug replaces it), or drop it with drop_tray_item.");
   for (const w of out.warnings || []) lines.push(`warning: ${w}`);
+  for (const note of spec.notes || []) lines.push(`note: ${note}`);
   if (out.needs) lines.push("This tray changes next week or the servings, so a shopping list is needed before Save: it is built by Finalise list.");
   return ok(lines.join("\n"));
 }
@@ -274,11 +275,30 @@ const attachmentSchema = z
   .describe("Use the photo the user attached to THIS message as the recipe's photo: its number (1 = the first attached photo). Only when the user said to use their photo for this recipe; it wins over image_url.");
 
 /** The stored path of attached photo `n` (1-based) of the current message, or a UserError the model can read. */
+export const asksToUsePhoto = (text) =>
+  /\b(use|keep|take|set|make|put|have|want)\b[^.!?\n]{0,40}\b(this|that|these|my|the|attached|it)\b[^.!?\n]{0,30}\b(photos?|pictures?|pics?|images?)\b/i.test(text || "") ||
+  /\bas (?:the |its |a )?(?:recipe'?s? |main |hero |card )?(?:photo|picture|pic|image)\b/i.test(text || "") ||
+  /\b(use|keep) (?:it|this|that) as (?:the |its )?(?:photo|picture|pic|image)\b/i.test(text || "");
+
+/**
+ * The stored path of attached photo `n` (1-based) of the current message. The photo only becomes a recipe's card photo when the user's
+ * message asks for that ("use this as the photo"): a model passing it unasked (a screenshot of a recipe's text is not its photo) is ignored,
+ * logged, and told so. Returns { path } or { ignored: "..." }.
+ */
 const attachedPath = (n, ctx) => {
-  if (n === undefined) return undefined;
+  if (n === undefined) return {};
   const path = ctx.chat?.attachments?.[n - 1]?.path;
   if (!path) throw new UserError(`There is no attached photo ${n} in the user's latest message.`);
-  return path;
+  if (!asksToUsePhoto(ctx.chat?.userText)) {
+    console.warn("Ignored photo_from_attachment: the user's message didn't ask to use their photo as the recipe's photo");
+    return { ignored: "photo_from_attachment was ignored: the user didn't ask to use their photo as this recipe's photo, so its photo is made (or taken from image_url) instead. Don't tell them their photo is used." };
+  }
+  return { path };
+};
+
+const asAttachment = (n, ctx) => {
+  const { path, ignored } = attachedPath(n, ctx);
+  return { uploadPath: path, ...(ignored ? { notes: [ignored] } : {}) };
 };
 
 const stageCreateShape = {
@@ -306,7 +326,7 @@ const STAGE_TOOLS = [
       "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
     inputSchema: stageCreateShape,
     access: "stage",
-    handler: safe(async ({ image_url, photo_from_attachment, next_week, reason, ...fields }, ctx) => staged({ op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, uploadPath: attachedPath(photo_from_attachment, ctx), reason }, ctx)),
+    handler: safe(async ({ image_url, photo_from_attachment, next_week, reason, ...fields }, ctx) => staged({ op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, ...asAttachment(photo_from_attachment, ctx), reason }, ctx)),
   },
   {
     name: "stage_update_recipe",
@@ -314,7 +334,7 @@ const STAGE_TOOLS = [
     description: "Stage an edit of an existing recipe (only the fields you pass change; ingredients and instructions replace the whole list). Call get_recipe first so you edit the current version. A second edit of the same recipe merges into the first card; editing a recipe that is new in the tray edits that card.",
     inputSchema: stageUpdateShape,
     access: "stage",
-    handler: safe(async ({ image_url, new_photo, photo_from_attachment, reason, ...fields }, ctx) => staged({ op: { action: "update_recipe", ...fields }, imageUrl: image_url, newPhoto: new_photo, uploadPath: attachedPath(photo_from_attachment, ctx), reason }, ctx)),
+    handler: safe(async ({ image_url, new_photo, photo_from_attachment, reason, ...fields }, ctx) => staged({ op: { action: "update_recipe", ...fields }, imageUrl: image_url, newPhoto: new_photo, ...asAttachment(photo_from_attachment, ctx), reason }, ctx)),
   },
   {
     name: "stage_promote_recipe",

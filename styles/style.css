@@ -2701,7 +2701,7 @@ body.chat-open {
   border-top: 1px solid var(--border);
   background: var(--surface);
   padding: 0;
-  max-height: min(50%, 21rem); /* the cards and any open detail scroll inside .tray-scroll; the button is its own row below */
+  max-height: min(63%, 26rem); /* room for a full card row (about 16rem) + head + button; anything taller scrolls inside .tray-scroll, the button is its own row below */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2972,6 +2972,9 @@ body.chat-open {
 
 /* Next week as it will be after Save, in numbers (from the server's recipe data). */
 .tray-balance {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin: 0 1rem 0.35rem;
   color: var(--text-muted);
   font-size: 0.82rem;

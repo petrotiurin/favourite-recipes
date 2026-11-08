@@ -183,7 +183,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
         title: "Screenshot Tomato Soup", course: ["Lunch"], tags: ["Soup"], total_mins: 30, serves: 4, calories: 210,
         ingredients: [{ quantity: "800g", name: "tinned tomatoes" }, { quantity: "1", name: "onion" }, { quantity: "500ml", name: "vegetable stock" }],
         instructions: ["Soften the **onion** in a pan.", "Add the **tinned tomatoes** and **vegetable stock** and simmer for 15 minutes.", "Blend until smooth."],
-        ...(/use (this|that|it|my|the)\b.*photo|as the photo/.test(user) ? { photo_from_attachment: 1 } : {}),
+        ...(/use (this|that|it|my|the)\b.*photo|as the photo/.test(user) || user.includes("mock-unasked") ? { photo_from_attachment: 1 } : {}),
         reason: "read from the screenshot",
       }, "I read the recipe off your photo and will put it in the tray.");
     }

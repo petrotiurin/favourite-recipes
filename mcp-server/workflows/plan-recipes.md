@@ -221,7 +221,7 @@ The same flow runs in the site's chat for signed-in editors, with different plum
 
 **Photos**
 - Photos are made when a recipe is staged, so there is no photo step and no upload link. For a link, pass the page's link (or the photo link `fetch_url` gave) as `image_url`: its own photo is used. For a screenshot, text or memory, leave `image_url` out and a photo is generated.
-- If the user attaches a photo of the dish and says to use it for a recipe, pass `photo_from_attachment` (its number among the photos on their latest message) to the stage tool: it becomes that recipe's photo.
+- A screenshot of a recipe's text is never its photo. Only if the user attaches a photo of the dish and says to use it as the recipe's photo ("use this as the photo"), pass `photo_from_attachment` (its number among the photos on their latest message) to the stage tool: it becomes that recipe's photo.
 - A card's **New photo** button remakes the photo (generated). Don't wait for approval of photos.
 
 **The flow, end to end**

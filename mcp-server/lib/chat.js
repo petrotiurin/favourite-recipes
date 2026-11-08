@@ -7,6 +7,7 @@ import { config, COURSES } from "./config.js";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
 import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, ASK_USER_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { trayAction, trayView, loadTray } from "./tray.js";
 import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion } from "./chat-ui.js";
 
 export const MAX_TURNS = 20; // messages kept from the client's history
@@ -177,7 +178,7 @@ export function createThinkFilter() {
  * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
  * toolCalls: [{ id, name, arguments (string) }].
  */
-async function streamCompletion({ messages, tools, model, apiKey, signal, onText, maxTokens }) {
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens }) {
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -239,6 +240,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
       if (tc.id) call.id = tc.id;
       if (tc.function?.name) call.name += tc.function.name;
       if (tc.function?.arguments) call.arguments += tc.function.arguments;
+      if (onToolProgress && call.name) onToolProgress(call);
     }
   }
   const tail = thinking.flush();
@@ -253,13 +255,12 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
 // --- tools ----------------------------------------------------------------------------------------------------
 
 const STATUS = {
-  stage_create_recipe: "Adding it to the tray…",
   stage_update_recipe: "Adding the edit to the tray…",
   stage_promote_recipe: "Adding that to the tray…",
   stage_remove_draft: "Adding that to the tray…",
-  stage_set_week_recipes: "Adding that to the tray…",
+  stage_set_week_recipes: "Adding that to next week in the tray…",
   stage_start_next_week: "Adding the switch to the tray…",
-  stage_update_shopping_list: "Building the list…",
+  stage_update_shopping_list: "Building the shopping list…",
   stage_set_shopping_servings: "Adding that to the tray…",
   stage_stocktake: "Adding what's at home to the tray…",
   get_tray: "Reading next week's recipes…",
@@ -273,6 +274,35 @@ const STATUS = {
   recipes_from_home: "Checking what's at home…",
   get_shopping_list: "Checking the shopping list…",
 };
+
+/**
+ * What to tell the user while a tool runs (or while the model is still writing its arguments): specific where the arguments say what it is
+ * ("Adding Lemon Garlic Pasta to the tray…", "Reading Pancakes…", "Building the shopping list: 9 items so far…"). `args` is the parsed
+ * arguments, `raw` the argument text streamed so far (it may be incomplete JSON); `titles` maps slug -> recipe title.
+ */
+export function statusFor(name, { args, raw = "", titles } = {}) {
+  const title = args?.title || raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)+)"/)?.[1];
+  const slug = args?.slug || raw.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)?.[1];
+  const named = slug && titles?.get(slug);
+  switch (name) {
+    case "stage_create_recipe":
+      return title ? `Adding ${title} to the tray…` : "Adding the recipe to the tray…";
+    case "get_recipe":
+      return named ? `Reading ${named}…` : STATUS.get_recipe;
+    case "stage_update_recipe":
+      return named ? `Adding the edit to ${named} to the tray…` : STATUS.stage_update_recipe;
+    case "stage_promote_recipe":
+      return named ? `Promoting ${named} in the tray…` : STATUS.stage_promote_recipe;
+    case "stage_remove_draft":
+      return named ? `Adding the removal of ${named} to the tray…` : STATUS.stage_remove_draft;
+    case "stage_update_shopping_list": {
+      const items = (raw.match(/"recipes"\s*:/g) || []).length;
+      return items ? `Building the shopping list: ${items} item${items === 1 ? "" : "s"} so far…` : STATUS.stage_update_shopping_list;
+    }
+    default:
+      return STATUS[name] || "Working on it…";
+  }
+}
 
 const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
 
@@ -355,6 +385,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     console.error("Couldn't load the catalogue:", err.message);
     rows = "";
   }
+  const lastMsg = messages[messages.length - 1];
+  const userText = Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(lastMsg?.content ?? "");
   const note = [await pageNote(page), extraNote].filter(Boolean).join("\n");
   const book = await loadBook();
 
@@ -376,7 +408,45 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   let turnCalls = 0;
   let resultChars = 0;
   let reply = "";
+  // Chips of this turn only: answers of an EARLIER ask_user are not suggestions now, and "Save to site" / "Finalise list" typed as plain text
+  // become the real buttons (when the tray allows them) or go.
+  const oldOptions = new Set(
+    messages.flatMap((m) => (m.role === "assistant" ? (m.tool_calls || []) : [])).filter((c) => c.function?.name === "ask_user").flatMap((c) => {
+      try {
+        return JSON.parse(c.function.arguments).options || [];
+      } catch {
+        return [];
+      }
+    }).map((o) => normText(o))
+  );
+  let trayChoice; // "apply_plan" | "finalise_plan" | null, looked up once when a plain chip asks for it
+  const PLAN_WORDS = /^(save to site|save|save it|finalise list|finalize list|finalise|finalize|finalise the list)(\s*\(\d+\))?$/i;
+  const fixReplies = async (replies) => {
+    const out = [];
+    for (const r of replies) {
+      if (typeof r !== "string") {
+        out.push(r);
+        continue;
+      }
+      if (caller.role === "editor" && PLAN_WORDS.test(r.trim())) {
+        if (trayChoice === undefined) {
+          try {
+            trayChoice = trayAction(await trayView(await loadTray(), caller));
+          } catch {
+            trayChoice = null;
+          }
+        }
+        if (trayChoice && !out.some((x) => x.action === trayChoice)) out.push({ label: trayChoice === "apply_plan" ? "Save to site" : "Finalise list", action: trayChoice });
+        continue;
+      }
+      if (oldOptions.has(normText(r))) continue; // a leftover answer of an earlier question
+      out.push(r);
+    }
+    return out;
+  };
   let finalRound = false;
+  let lastStatus = "";
+  const titles = new Map([...book].map(([slug, r]) => [slug, r.title]));
   let roundNote = ""; // told to the model on its next call, not stored
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     finalRound = round === MAX_TOOL_ROUNDS; // out of rounds: one last call without tools, so the user always gets an answer
@@ -410,6 +480,14 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         apiKey,
         signal,
         maxTokens,
+        onToolProgress: (call) => {
+          // the model is still writing a tool call (a recipe, the shopping list can take a while): say what it is, as it grows
+          const text = statusFor(call.name, { raw: call.arguments, titles });
+          if (text !== lastStatus) {
+            lastStatus = text;
+            emit({ type: "status", text });
+          }
+        },
         onText: (delta) => {
           if (guard === "pass") return emitText(delta);
           if (guard === "drop") return;
@@ -470,7 +548,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       const span = trace.span({ name: `tool ${call.name}`, input: args, metadata: { access: UI_TOOLS.has(call.name) ? "ui" : undefined } });
       let content;
       if (call.name === "suggest_replies") {
-        const replies = askedUser ? [] : cleanReplies(args, book, { editor: caller.role === "editor" });
+        let replies = askedUser ? [] : cleanReplies(args, book, { editor: caller.role === "editor" });
+        if (replies.length) replies = await fixReplies(replies);
         if (replies.length) {
           suggestions = true;
           ui.replies = replies;
@@ -511,8 +590,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         content = `Error: "${call.name}" is not available here.`;
         span.end({ output: content, refused: true });
       } else {
-        emit({ type: "status", text: STATUS[call.name] || "Working on it…" });
-        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, attachments } });
+        emit({ type: "status", text: statusFor(call.name, { args, titles }) });
+        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, attachments, userText } });
         content = resultText(out, RESULT_CAPS[call.name] || MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;

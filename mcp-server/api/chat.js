@@ -65,6 +65,7 @@ import {
 //   event: done         data: { suggestions }
 //   event: error        data: { message }     safe to show the visitor
 
+export const STILL_WORKING_MS = 15_000;
 const MAX_BODY_BYTES = 100_000;
 const MAX_EDITOR_BODY_BYTES = 4_300_000; // an editor's message may carry photos (Vercel allows 4.5 MB bodies)
 const FEEDBACK_REASONS = ["Wrong recipe", "Didn't do what I asked", "Wrong amounts", "Too slow", "Something else"];
@@ -456,8 +457,14 @@ export async function POST(request) {
     async start(controller) {
       let closed = false;
       let content = false; // something the user can see (or an error) went out
+      let lastEvent = Date.now();
+      // Long tool-heavy turns can be quiet for a while: say we're still on it instead of leaving "Thinking…" up
+      const heartbeat = setInterval(() => {
+        if (!closed && Date.now() - lastEvent > STILL_WORKING_MS) send("status", { text: "Still working on it…" });
+      }, 5000);
       const send = (event, data) => {
         if (closed) return;
+        lastEvent = Date.now();
         if (!["meta", "title", "done", "status"].includes(event)) content = true;
         try {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
@@ -504,6 +511,7 @@ export async function POST(request) {
           output = `error: ${message}`;
         }
       } finally {
+        clearInterval(heartbeat);
         if (!content && !closed) send("error", { message: "The chat didn't answer. Try again in a moment." }); // a stream is never empty
         if (finalise) {
           await settleFinalise(caller);

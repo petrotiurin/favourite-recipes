@@ -313,3 +313,25 @@ test("photos of chats that no longer exist are swept", async () => {
   assert.equal(await uploads.sweepOrphans({ force: true }), 1);
   assert.deepEqual(chatObjects().map((k) => k.split("/")[1]), [conversation_id]);
 });
+
+test("photo_from_attachment is honoured only when the user's message asks for their photo to be the recipe's photo", async () => {
+  const { asksToUsePhoto } = await import("../lib/tools.js");
+  for (const yes of ["use this as the photo", "Use my photo for it", "keep the attached picture", "take this image as its photo", "make this the photo", "add it, with this as the photo"]) assert.ok(asksToUsePhoto(yes), yes);
+  for (const no of ["add this recipe", "here is a recipe screenshot", "add these two", "what's in this photo?", ""]) assert.ok(!asksToUsePhoto(no), no);
+  // a model that passes it anyway (mock-unasked): ignored, a photo is generated, the model is told
+  const warn = console.warn;
+  const warned = [];
+  console.warn = (...a) => warned.push(a.join(" "));
+  try {
+    await say("add this recipe mock-unasked", { images: [asUrl(photo)] });
+  } finally {
+    console.warn = warn;
+  }
+  const item = trayItems()[0];
+  assert.equal(item.photo.source, "generated");
+  assert.equal(item.photo.upload, undefined);
+  assert.equal(images.requests.length, 1);
+  assert.ok(warned.some((w) => /Ignored photo_from_attachment/.test(w)), "logged");
+  const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool").content;
+  assert.match(toolMsg, /note: photo_from_attachment was ignored/);
+});

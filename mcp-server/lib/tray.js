@@ -630,6 +630,15 @@ export async function trayView(tray, caller) {
   };
 }
 
+/** Which button the tray offers right now, as the panel decides it: "apply_plan" (Save to site), "finalise_plan" (Finalise list) or null (building, blocked, empty). */
+export function trayAction(view) {
+  if (!view?.count) return null;
+  if (view.can_save) return "apply_plan";
+  if (view.state === "finalising") return null;
+  if (view.needs_list && !view.list_current && !view.items.some((i) => i.error || i.clash)) return "finalise_plan";
+  return null;
+}
+
 /** A few lines for the model about the tray and next week on the site, added to its note each turn. */
 export async function trayNote(tray, caller) {
   const book = await recipeSummaries().catch(() => []);

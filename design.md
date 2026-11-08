@@ -296,7 +296,7 @@ On the **At home** tab every row is a fill bar:
   until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
   week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button
   (`.save-button` look): **Finalise list** while the tray changes next week or the servings and no current list exists, "Building the list…"
-  while the agent works, **Save to site (n)** when ready. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most half the panel) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
+  while the agent works, **Save to site (n)** when ready. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most 63% of the panel / 26rem: enough for a full row of cards, ~16rem, so no card is ever clipped by the button) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
   when it closes or a message is sent. A card has the kind as a kicker (New in the draft purple, Next week teal, Switch accent, the rest muted),
   a serif title, a muted sub line, "Added by Name: reason", × to drop (a round button on the corner), and quiet text buttons: **Save now** (quick
   fixes only) and **New photo**. A newly added card gets the accent border on `--current-soft` for a few seconds and the row scrolls to it. A
