@@ -40,7 +40,8 @@
 //   CHAT_ENABLED=false npm run dev                         every /chat route answers 503 { disabled: true }: the panel says it is switched off
 //   CHAT_PUBLIC_ENABLED=false CHAT_PUBLIC=false npm run dev  editors only: no bubble for visitors (CHAT_PUBLIC), 403 { signin: true } if one asks anyway
 //
-// Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000), SUPABASE_PORT (54321), FAKE_TOKEN_TTL. Later phases extend this file.
+// Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000), SUPABASE_PORT (54321), FAKE_TOKEN_TTL, FAKE_MODEL_DELAY_MS (12; try 300 and
+// switch the browser offline mid-answer: the editor panel waits and shows the stored answer once it is back). Later phases extend this file.
 import http from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -71,7 +72,7 @@ const env = {
 for (const [k, v] of Object.entries(env)) process.env[k] ??= v;
 
 const github = createFakeGitHub();
-const openrouter = createMockOpenRouter();
+const openrouter = createMockOpenRouter({ delayMs: Number(process.env.FAKE_MODEL_DELAY_MS) || 12 }); // FAKE_MODEL_DELAY_MS=300: a slow model (e.g. to drop the connection mid-turn)
 const images = createFakeImageApi();
 const supabase = createFakeSupabase({
   url: process.env.SUPABASE_URL,

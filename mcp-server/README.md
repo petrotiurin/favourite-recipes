@@ -116,6 +116,7 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `BUILD_OUT_DIR` (build.js) / `DEV_DIST` (dev harness) | Optional; build or serve the site somewhere other than `../dist`, so tests and one-off builds leave a running dev site alone |
 | `CHAT_PANEL_HOURLY_LIMIT` | Optional; the panel's own requests (plan tray, publishing status, dropping an item, new photo) per editor per hour, default 600 |
 | `CHAT_TURN_BUDGET_MS` | Optional; a chat turn that has run this long (ms) stops between model calls with a clear message, default 200000 (Vercel `maxDuration` is 300s) |
+| `CHAT_TURN_DEADLINE_MS` | Optional; a model call still running this long (ms) into a turn is cut short and the turn ends with the same message, so it finishes (saved, tray settled) before Vercel's 300s `maxDuration` kills it mid-stream. Default 250000 |
 | `CHAT_ENABLED` | Optional, default on. `false` / `0` / `off` / `no` switches the whole chat off: every `/chat` route answers 503 `{ error: "The chat is switched off.", disabled: true }` before any auth, model, GitHub or Supabase work. `/mcp` and `/stocktake` are unaffected |
 | `CHAT_PUBLIC_ENABLED` | Optional, default on. When off the chat is for signed-in editors only: a visitor or a non-editor account gets 403 `{ error: "The chat is only for signed-in editors.", signin: true }` on `POST /chat`, before rate limiting and any model call. `GET /chat/me` reports `public_enabled` |
 | `OPENROUTER_BASE_URL` | Optional; defaults to `https://openrouter.ai/api/v1` (the local dev harness points it at a mock) |

@@ -31,7 +31,15 @@ before(async () => {
       requests.push(JSON.parse(init.body));
       if (rejectForced && typeof requests.at(-1).tool_choice === "object") return new Response('{"error":{"message":"tool_choice is not supported with thinking mode"}}', { status: 400 });
       if (failWith) return new Response(failWith.body, { status: failWith.status });
-      return modelTurn(scripted.shift() || {});
+      const next = scripted.shift() || {};
+      if (next.hang) {
+        // a model call that never finishes (a slow thinking model): it only ends when its signal aborts, as a real fetch body does
+        return new Response(new ReadableStream({ start(c) {
+          c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: next.hang }, finish_reason: null }] })}\n\n`));
+          init.signal?.addEventListener("abort", () => c.error(init.signal.reason));
+        } }), { headers: { "content-type": "text/event-stream" } });
+      }
+      return modelTurn(next);
     }
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
     return realFetch(url, init);
@@ -233,6 +241,25 @@ test("a turn over its time budget stops between model calls with a clear line", 
     assert.equal(evs.at(-1).name, "done");
   } finally {
     config.chatTurnBudgetMs = saved;
+    console.warn = warn;
+  }
+});
+
+test("a model call still running at the turn's deadline is cut short: the turn ends with the clear line instead of being killed mid-stream", async () => {
+  const { config } = await import("../lib/config.js");
+  const saved = config.chatTurnDeadlineMs;
+  config.chatTurnDeadlineMs = 150;
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const evs = await turn([{ calls: [{ name: "search_recipes", arguments: { text: "x" } }] }, { hang: "Building the list for you now, one moment please. " }]);
+    assert.match(textOf(evs), /Building the list for you now/, "what it had already said stays");
+    assert.match(textOf(evs), /taking longer than expected, so I've stopped/);
+    assert.equal(requests.length, 2, "no chips nudge after the deadline");
+    assert.equal(evs.at(-1).name, "done");
+    assert.ok(!evs.some((e) => e.name === "error"));
+  } finally {
+    config.chatTurnDeadlineMs = saved;
     console.warn = warn;
   }
 });

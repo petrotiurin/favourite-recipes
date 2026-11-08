@@ -392,6 +392,12 @@ plain button with no model in it. So the list is built **before** Save becomes a
 ```
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
+- **Finalising** lasts only as long as the Finalise turn: the turn settles it when it ends. Every model call
+  of a turn is cut short at `CHAT_TURN_DEADLINE_MS` (250s, under Vercel's 300s `maxDuration`), so a slow
+  list build ends with the "taking longer than expected" line instead of the function being killed
+  mid-stream (which the browser only reports as "network error"). A "finalising" flag older than
+  6 minutes (`FINALISE_STALE_MS`) counts as collecting again, so a turn that died anyway never leaves
+  the tray without its button.
 - **Finalise list** sends a fixed request to the agent, which first says what it's doing ("Next week
   already has 4 recipes, so first: is it ready to become this week? Then I'll build the shopping
   list"), then:
@@ -612,6 +618,16 @@ draft kickers, calm states.
 - **Mobile keyboard:** size the panel with `visualViewport`, so the input stays above the keyboard.
 - **Streaming:** text streams in; tool activity shows as one quiet status line ("Looking through
   the recipes…"), not raw tool names.
+- **A dropped stream doesn't lose an editor's turn:** a phone that switches to another app or tab
+  (or a page change) drops the stream, which the browser reports only as "network error". An
+  editor's turn is not tied to the connection: it runs to the end on the server (kept alive with
+  Vercel's `waitUntil`), its answer and tray changes are stored, and a turn that fails stores a
+  marker row (no content, `ui.error`, never shown to the model). `GET /chat/conversations/:id`
+  returns `ended_turns` (`{ turnId: null | "error" }`). The panel, having had the turn id from
+  the stream's `meta`, says "Still working on it… The answer will show here when it's ready",
+  checks every 4s while the page is visible (and at once when it comes back), then shows the
+  conversation as stored. It gives up after 6 minutes. A visitor's turn, stored nowhere, still
+  stops with the connection, and a stream that ends without `done` counts as dropped.
 - **Wake lock:** the recipe page's "Keep screen on" keeps working while the panel is open.
 
 ## 10. Gaps found in the brief
