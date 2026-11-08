@@ -1,45 +1,27 @@
 {
   "updated": "2026-11-08",
   "recipes": [
-    "easy-chicken-curry",
-    "pancakes"
+    "broccoli-carbonara"
   ],
   "servings": {
-    "easy-chicken-curry": 4,
-    "pancakes": 4
+    "broccoli-carbonara": 4
   },
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Onion",
-          "quantity": "1",
+          "name": "Broccoli florets",
+          "quantity": "200g",
           "recipes": [
-            "easy-chicken-curry"
+            "broccoli-carbonara"
           ]
         },
         {
           "name": "Garlic cloves",
           "quantity": "1",
           "recipes": [
-            "easy-chicken-curry"
-          ]
-        },
-        {
-          "name": "Fresh ginger",
-          "quantity": "Half thumb-sized piece",
-          "note": "grated",
-          "recipes": [
-            "easy-chicken-curry"
-          ]
-        },
-        {
-          "name": "Coriander",
-          "quantity": "Half small bunch",
-          "note": "leaves chopped",
-          "recipes": [
-            "easy-chicken-curry"
+            "broccoli-carbonara"
           ]
         }
       ]
@@ -48,11 +30,11 @@
       "name": "Meat & fish",
       "items": [
         {
-          "name": "Chicken thighs",
-          "quantity": "3",
-          "note": "boneless and skinless",
+          "name": "Parma ham",
+          "quantity": "4",
+          "note": "sliced",
           "recipes": [
-            "easy-chicken-curry"
+            "broccoli-carbonara"
           ]
         }
       ]
@@ -61,57 +43,18 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Eggs",
-          "quantity": "1",
+          "name": "Large eggs",
+          "quantity": "2",
           "recipes": [
-            "pancakes"
+            "broccoli-carbonara"
           ]
         },
         {
-          "name": "Milk",
-          "quantity": "200ml",
-          "recipes": [
-            "pancakes"
-          ]
-        },
-        {
-          "name": "Greek yogurt",
+          "name": "Parmesan cheese",
           "quantity": "50g",
+          "note": "finely grated",
           "recipes": [
-            "easy-chicken-curry"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Bakery",
-      "items": [
-        {
-          "name": "Naan breads or cooked basmati rice",
-          "note": "to serve",
-          "recipes": [
-            "easy-chicken-curry"
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Tins & jars",
-      "items": [
-        {
-          "name": "Chopped tomatoes",
-          "quantity": "200g",
-          "note": "canned",
-          "recipes": [
-            "easy-chicken-curry"
-          ]
-        },
-        {
-          "name": "Medium spice paste",
-          "quantity": "23ml",
-          "note": "tikka works well",
-          "recipes": [
-            "easy-chicken-curry"
+            "broccoli-carbonara"
           ]
         }
       ]
@@ -120,44 +63,18 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Sunflower oil",
-          "quantity": "30ml",
+          "name": "Dried pasta",
+          "quantity": "150g",
+          "note": "spaghetti or short",
           "recipes": [
-            "easy-chicken-curry",
-            "pancakes"
-          ],
-          "amounts": {
-            "easy-chicken-curry": 15,
-            "pancakes": 15
-          }
-        },
-        {
-          "name": "All-purpose flour",
-          "quantity": "65g",
-          "recipes": [
-            "pancakes"
+            "broccoli-carbonara"
           ]
         },
         {
-          "name": "Sugar",
-          "quantity": "15ml",
-          "recipes": [
-            "pancakes"
-          ]
-        },
-        {
-          "name": "Ground almonds",
-          "quantity": "25g",
-          "recipes": [
-            "easy-chicken-curry"
-          ]
-        },
-        {
-          "name": "Salt",
+          "name": "Salt and black pepper",
           "note": "to taste",
           "recipes": [
-            "easy-chicken-curry",
-            "pancakes"
+            "broccoli-carbonara"
           ]
         }
       ]
