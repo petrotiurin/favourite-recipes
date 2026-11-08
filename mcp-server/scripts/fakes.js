@@ -396,6 +396,12 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
         : "I'm not sure which recipe you mean. Open one and ask again, or tell me its name.";
       return scriptedStream({ ...opts, text, calls: [replies("What can I swap?", "How long does it take?", "Something similar")] });
     }
+    if (/what can i make|at home\?|what.s in the (cupboard|fridge)/.test(user)) {
+      if (!lastTool) return scriptedStream({ ...opts, text: "Let me see what's at home.", calls: [{ name: "recipes_from_home", arguments: {} }] });
+      const rows = String(lastTool.content).split("\n").filter((l) => /^[a-z0-9-]+ \| /.test(l)).map((l) => l.split(" | ")[0]);
+      if (!rows.length) return scriptedStream({ ...opts, text: String(lastTool.content).slice(0, 200), calls: [replies("What's left to buy?")] });
+      return scriptedStream({ ...opts, text: "These use the most of what you have at home:", calls: [showRecipes(rows.slice(0, 3)), replies("Which is quickest?", "What's missing?")] });
+    }
     if (user.includes("shopping") || user.includes("left to buy")) {
       if (!lastTool) return scriptedStream({ ...opts, calls: [{ name: "get_shopping_list", arguments: {} }] });
       return scriptedStream({ ...opts, text: "I've had a look at the shopping list for next week.", calls: [replies("What's left to buy?", "Which recipes?")] });

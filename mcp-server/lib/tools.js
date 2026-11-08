@@ -10,6 +10,7 @@ import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
 import { scaleLine, ingredientLines } from "./scaling.js";
+import { recipesFromHome } from "./at-home.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
 import {
@@ -436,6 +437,31 @@ export const TOOLS = [
       }
       const factor = servings / base;
       return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...lines.map((l) => scaleLine(l, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
+    }),
+  },
+  {
+    name: "recipes_from_home",
+    title: "What can we make from what's at home",
+    description:
+      "Rank our recipes by how much of their ingredients are already at home, from the stocktake the family saved on the shopping page (what they marked as at home). " +
+      "Use it for \"what can I make with what we've got?\". Returns recipes with the ingredients still missing, fewest missing first (pantry staples like salt and oil are assumed). " +
+      "If no stocktake is saved it says so: then ask the user what they have, or suggest they mark it on the shopping page.",
+    inputSchema: {
+      limit: z.number().int().min(1).max(12).optional().describe("How many recipes (default 8)"),
+      max_missing: z.number().int().min(0).max(20).optional().describe("Only recipes missing at most this many ingredients"),
+    },
+    access: "read",
+    chatOnly: true,
+    handler: safe(async ({ limit, max_missing }) => {
+      const out = await recipesFromHome({ limit, maxMissing: max_missing });
+      if (!out.stocktake) return ok("No stocktake is saved, so nothing is known to be at home. Ask the user what they have (or suggest marking it on the shopping page).");
+      if (!out.home.length) return ok(`The stocktake (${out.stocktake}) has nothing marked as at home.`);
+      if (!out.rows.length) return ok(`At home: ${out.home.join(", ")}. No recipe in the book uses any of it${max_missing !== undefined ? ` with at most ${max_missing} missing` : ""}.`);
+      return ok([
+        `At home (stocktake ${out.stocktake}): ${out.home.join(", ")}.`,
+        "Best matches (slug | title | have/total | missing):",
+        ...out.rows.map((r) => `${r.slug} | ${r.title}${r.draft ? " [draft]" : ""} | ${r.have}/${r.total} | ${r.missing.length ? r.missing.join(", ") : "nothing"}`),
+      ].join("\n"));
     }),
   },
   {

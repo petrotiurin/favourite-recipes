@@ -52,7 +52,7 @@ const slugs = async (filters) => (await searchRecipes(filters)).map((r) => r.slu
 
 test("every registry entry declares an access level, reads are the known four plus search", () => {
   const reads = TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name).sort();
-  assert.deepEqual(reads, ["fetch_url", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "scale_recipe", "search_recipes"]);
+  assert.deepEqual(reads, ["fetch_url", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "recipes_from_home", "scale_recipe", "search_recipes"]);
   assert.deepEqual(TOOLS.filter((t) => t.editorOnly).map((t) => t.name), ["fetch_url"], "fetch_url is the one editor-only read tool");
   for (const t of TOOLS) assert.ok(["read", "stage", "write"].includes(t.access), `${t.name} has an access level`);
 });
@@ -131,7 +131,7 @@ test("dispatch validates arguments and runs reads for a public caller", async ()
 
 test("toolDefinitions: plain JSON Schema, filtered by role", () => {
   const names = (role) => toolDefinitions(role).map((d) => d.function.name);
-  assert.deepEqual(names("public").sort(), ["get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "scale_recipe", "search_recipes"]);
+  assert.deepEqual(names("public").sort(), ["get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "recipes_from_home", "scale_recipe", "search_recipes"]);
   assert.equal(names("editor").length, TOOLS.length);
   assert.equal(names("agent").length, TOOLS.length - 1, "the MCP agent gets no editor-only tool");
   assert.ok(!names("public").includes("fetch_url") && names("editor").includes("fetch_url"));

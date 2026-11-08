@@ -134,9 +134,14 @@ export async function searchRecipes({ text, include_ingredients = [], exclude_in
 }
 
 // Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
-const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|vegetable oil|sunflower oil|cooking spray|butter|sugar|flour|garlic powder|paprika|cumin|soy sauce)\b|\b(salt|pepper)( and (black )?pepper)?$/i;
+export const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|vegetable oil|sunflower oil|cooking spray|butter|sugar|flour|garlic powder|paprika|cumin|soy sauce)\b|\b(salt|pepper)( and (black )?pepper)?$/i;
 
 /** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
+/** Every recipe's ingredient names with its list row, from the cached index (for matching against what's at home). */
+export async function recipeIngredients() {
+  return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n) => n.trim()) }));
+}
+
 export async function recipeSummaries() {
   return (await recipeIndex()).map(({ ingredients, text, data, markdown, ...row }) => row);
 }

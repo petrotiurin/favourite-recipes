@@ -121,7 +121,7 @@ test("starter chips depend on the page", () => {
   assert.deepEqual(chat.startersFor("recipe", true), ["Swap an ingredient", "Scale it for 6", "Add to next week"], "an editor is");
   assert.deepEqual(chat.startersFor("index"), ["Something quick tonight", "Light and healthy"]);
   assert.deepEqual(chat.startersFor("next-week"), ["What's planned?"]);
-  assert.deepEqual(chat.startersFor("shopping"), ["What's left to buy?"]);
+  assert.deepEqual(chat.startersFor("shopping"), ["What's left to buy?", "What can I make from what's at home?"]);
   assert.deepEqual(chat.startersFor("other"), []);
 });
 

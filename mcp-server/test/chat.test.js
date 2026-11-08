@@ -100,7 +100,7 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   assert.equal(first.model, "test/model");
   assert.equal(first.stream, true);
   const offered = first.tools.map((t) => t.function.name).sort();
-  assert.deepEqual(offered, ["get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "scale_recipe", "search_recipes", "show_recipes", "suggest_replies"]);
+  assert.deepEqual(offered, ["get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "recipes_from_home", "scale_recipe", "search_recipes", "show_recipes", "suggest_replies"]);
   assert.equal(first.messages[0].role, "system");
   assert.match(first.messages[0].content, /Catalogue of our recipe book/);
   assert.equal(openrouter.requests[1].messages.at(-1).role, "tool", "the tool result went back to the model");

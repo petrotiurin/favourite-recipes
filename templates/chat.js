@@ -321,7 +321,7 @@
         recipe: editor ? ["Swap an ingredient", "Scale it for 6", "Add to next week"] : ["Swap an ingredient", "Scale it for 6", "What goes with it?"],
         index: ["Something quick tonight", "Light and healthy"],
         "next-week": ["What's planned?"],
-        shopping: ["What's left to buy?"],
+        shopping: ["What's left to buy?", "What can I make from what's at home?"],
       }[page] || []
     );
   }

@@ -103,3 +103,56 @@ test("cooking help on a recipe page: swap, scale and 'what's step 2' read the re
   assert.match(openrouter.requests[0].messages.at(-1).content, /4 servings selected/);
   assert.match(openrouter.requests[0].messages[0].content, /Cooking help/);
 });
+
+// --- 2. what's at home ------------------------------------------------------------------------------------------------------
+
+const putStocktake = async (haveNames, extra = []) => {
+  const list = { updated: "2026-11-01", recipes: [], servings: {}, stocktake: "2026-11-02T10:00:00.000Z", sections: [{ name: "Everything", items: [...haveNames.map((name) => ({ name, quantity: "1", have: true, recipes: [] })), ...extra] }] };
+  github.files.set("shopping-list.json", Buffer.from(JSON.stringify(list)));
+  clearCache();
+};
+
+test("ingredient matching: same words or whole-word containment, plurals folded, nothing looser", async () => {
+  const { sameIngredient } = await import("../lib/at-home.js");
+  assert.ok(sameIngredient("Eggs", "egg"));
+  assert.ok(sameIngredient("cherry tomatoes", "Tomatoes"));
+  assert.ok(sameIngredient("Basmati rice", "rice"));
+  assert.ok(!sameIngredient("rice", "licorice"), "whole words only");
+  assert.ok(!sameIngredient("pea", "peanut butter"));
+  assert.ok(!sameIngredient("", "rice"));
+});
+
+test("recipes_from_home ranks the book by what the stocktake says is at home, and says so when there is no stocktake", async () => {
+  github.files.set("shopping-list.json", Buffer.from(JSON.stringify({ updated: "2026-11-01", recipes: [], servings: {}, sections: [{ name: "x", items: [{ name: "Milk", quantity: "1", recipes: [] }] }] })));
+  clearCache();
+  const none = await tools.dispatch("recipes_from_home", {}, tools.makeCaller({ role: "public" }));
+  assert.match(none.content[0].text, /No stocktake is saved/);
+  const { recipeIngredients } = await import("../lib/recipes.js");
+  const { STAPLES } = await import("../lib/recipes.js");
+  const book = await recipeIngredients();
+  const target = book.find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
+  const names = [...new Set(target.ingredients.filter((n) => !STAPLES.test(n)).map((n) => n.toLowerCase()))];
+  await putStocktake(names);
+  const out = await tools.dispatch("recipes_from_home", { limit: 5 }, tools.makeCaller({ role: "public" }));
+  const rows = out.content[0].text.split("\n").filter((l) => / \| \d+\/\d+ \| /.test(l));
+  assert.ok(rows.length >= 1 && rows.length <= 5);
+  assert.match(rows[0], new RegExp(`^${target.slug} \\| .* \\| ${names.length}/${names.length} \\| nothing$`) , "a recipe with everything at home comes first with nothing missing");
+  // partly at home counts; an item marked 0 or not at home doesn't
+  await putStocktake([names[0]], [{ name: names[1], quantity: "4", have: 0, recipes: [] }]);
+  const part = (await tools.dispatch("recipes_from_home", { limit: 12 }, editor())).content[0].text;
+  assert.match(part, new RegExp(`At home \\(stocktake .*\\): ${names[0].replace(/[()]/g, ".")}\\.`, "i"));
+  // no stocktake at all vs. a stocktake with nothing at home
+  github.files.set("shopping-list.json", Buffer.from(JSON.stringify({ updated: "2026-11-01", recipes: [], servings: {}, stocktake: "2026-11-02T10:00:00.000Z", sections: [{ name: "x", items: [{ name: "Milk", quantity: "1", recipes: [] }] }] })));
+  clearCache();
+  assert.match((await tools.dispatch("recipes_from_home", {}, editor())).content[0].text, /nothing marked as at home/);
+});
+
+test("the shopping page's starter and the chat flow: ask what can be made, get cards", async () => {
+  const { recipeIngredients, STAPLES } = await import("../lib/recipes.js");
+  const target = (await recipeIngredients()).find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
+  await putStocktake(target.ingredients.filter((n) => !STAPLES.test(n)));
+  const res = await post({ messages: [{ role: "user", content: "What can I make from what's at home?" }], page: { page: "shopping" } });
+  const evs = await events(res);
+  assert.ok(evs.some((e) => e.name === "cards" && e.data.cards.some((c) => c.slug === target.slug)));
+  assert.ok(openrouter.requests[0].tools.some((t) => t.function.name === "recipes_from_home"));
+});
