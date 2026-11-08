@@ -497,6 +497,11 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   const startedAt = Date.now();
   let stoppedLong = false;
   let lastCut = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
+  // The hard stop: the budget above is only checked between model calls, and one call (a thinking model writing the whole shopping list) can
+  // run for minutes, past Vercel's maxDuration. Every model call of the turn is aborted at the deadline instead; `signal` is still the client's.
+  const deadline = AbortSignal.timeout(Math.max(1, config.chatTurnDeadlineMs));
+  const callSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  const pastDeadline = (err) => deadline.aborted && !signal?.aborted && (err?.name === "TimeoutError" || err?.name === "AbortError");
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // A turn that has been going too long (a slow model looping through tools) stops with a clear line instead of running on in silence.
     if (round > 0 && Date.now() - startedAt > config.chatTurnBudgetMs) {
@@ -532,7 +537,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         tools: finalRound ? [] : tools,
         model,
         apiKey,
-        signal,
+        signal: callSignal,
         maxTokens,
         onToolProgress: (call) => {
           // the model is still writing a tool call (a recipe, the shopping list can take a while): say what it is, as it grows
@@ -557,7 +562,13 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       });
     } catch (err) {
       generation.end({ error: err.message });
-      throw err;
+      if (!pastDeadline(err)) throw err;
+      // Out of time mid-call: whatever it was writing is dropped (a half-written tool call is never run); the turn ends with the clear line.
+      if (guard === "check" && held && !repeats(held)) emitText(held);
+      if (kept) thread.push({ role: "assistant", content: kept });
+      lastCut = "dropped";
+      stoppedLong = true;
+      break;
     }
     if (guard === "check" && held && !repeats(held)) emitText(held);
     if (guard !== "pass" && !kept) result = { ...result, text: "" }; // what was swallowed isn't part of the turn's text
@@ -697,7 +708,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
           toolChoice: attempt.toolChoice,
           model,
           apiKey,
-          signal,
+          signal: callSignal,
           maxTokens: 200,
           onText: () => {},
         });
@@ -715,6 +726,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         console.warn(`Chips nudge ${n + 1} (model ${model}) gave no usable chips: finish ${out.finishReason || "?"}, calls ${out.toolCalls.map((c) => c.name).join(",") || "none"}, text ${JSON.stringify(String(out.text).slice(0, 300))}${call ? `, arguments ${String(call.arguments).slice(0, 300)}` : ""}`);
       } catch (err) {
         gen.end({ error: err.message });
+        if (pastDeadline(err)) break; // out of time: page chips below
         if (err?.name === "AbortError") throw err;
         console.warn(`Chips nudge ${n + 1} (model ${model}) failed: ${err.status || ""} ${err.kind || ""} ${String(err.message).slice(0, 300)}`);
         if (!(err instanceof ChatError) || err.kind !== "upstream") break; // out of credit, busy, no vision...: a second try would only cost more

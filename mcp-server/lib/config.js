@@ -35,6 +35,9 @@ export const config = {
   chatEditorHourlyLimit: Number(process.env.CHAT_EDITOR_HOURLY_LIMIT) || 200,
   // A chat turn that has run this long (ms) stops between model calls with a clear line, however many tool rounds are left.
   chatTurnBudgetMs: Number(process.env.CHAT_TURN_BUDGET_MS) || 200_000,
+  // A model call still running this long (ms) into the turn is cut short, so the turn ends cleanly (saved, tray settled) before Vercel's
+  // maxDuration (300s) kills the function mid-stream, which the browser only sees as a bare "network error".
+  chatTurnDeadlineMs: Number(process.env.CHAT_TURN_DEADLINE_MS) || 250_000,
   chatPanelHourlyLimit: Number(process.env.CHAT_PANEL_HOURLY_LIMIT) || 600, // the panel's plan / status requests per editor
   chatEditorDailyLimit: Number(process.env.CHAT_EDITOR_DAILY_LIMIT) || 1000,
   // Langfuse tracing: off unless all three are set.

@@ -392,6 +392,12 @@ plain button with no model in it. So the list is built **before** Save becomes a
 ```
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
+- **Finalising** lasts only as long as the Finalise turn: the turn settles it when it ends. Every model call
+  of a turn is cut short at `CHAT_TURN_DEADLINE_MS` (250s, under Vercel's 300s `maxDuration`), so a slow
+  list build ends with the "taking longer than expected" line instead of the function being killed
+  mid-stream (which the browser only reports as "network error"). A "finalising" flag older than
+  6 minutes (`FINALISE_STALE_MS`) counts as collecting again, so a turn that died anyway never leaves
+  the tray without its button.
 - **Finalise list** sends a fixed request to the agent, which first says what it's doing ("Next week
   already has 4 recipes, so first: is it ready to become this week? Then I'll build the shopping
   list"), then:

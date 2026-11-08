@@ -158,7 +158,11 @@ export const listCurrent = (tray, items) => {
   return !!list && !list.error && tray.list_hash === itemsHash(items);
 };
 
-const statusFor = (tray, items, needs) => (needs && !listCurrent(tray, items) ? (tray.status === "finalising" ? "finalising" : "collecting") : "ready");
+// A Finalise turn sets "finalising" and settles it when it ends. One that never ended (its function was killed) must not leave the tray without
+// its button for good: past any turn's lifetime (Vercel's maxDuration is 300s) the flag no longer counts.
+export const FINALISE_STALE_MS = 6 * 60 * 1000;
+const finalising = (tray) => tray.status === "finalising" && !(Date.parse(tray.updated_at) <= clock.now() - FINALISE_STALE_MS);
+const statusFor = (tray, items, needs) => (needs && !listCurrent(tray, items) ? (finalising(tray) ? "finalising" : "collecting") : "ready");
 
 // --- storage with retries --------------------------------------------------------------------------------------------------
 

@@ -356,6 +356,19 @@ test("a clash resolved with Keep theirs / Drop it removes the item", async () =>
   assert.equal(github.commitLog.length, 0);
 });
 
+test("a Finalise turn that never ended (its function was killed) doesn't leave the tray without its button for good", async () => {
+  await say("add a new recipe: test pasta");
+  assert.equal((await plan()).state, "collecting");
+  const row = trayRow();
+  row.status = "finalising"; // what a killed Finalise turn leaves behind: startFinalise ran, settleFinalise never did
+  row.updated_at = new Date(clock).toISOString();
+  assert.equal((await plan()).state, "finalising", "while a turn could still be running, the button waits");
+  clock += tray.FINALISE_STALE_MS + 1000;
+  const t = await plan();
+  assert.equal(t.state, "collecting", "past any turn's lifetime the flag no longer counts");
+  assert.equal(tray.trayAction(t), "finalise_plan", "Finalise list is offered again");
+});
+
 // --- Finalise: asks to promote when next week has recipes ----------------------------------------------------------------------------
 
 test("Finalise asks 'Is it ready to become this week?' when next week has recipes; 'Not yet' stages nothing and leaves the tray as it was", async () => {

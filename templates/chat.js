@@ -1181,7 +1181,9 @@
           var stillMine = streaming === mine;
           finish(false);
           if (!stillMine || (err && err.name === "AbortError")) return;
-          showError(err && err.message ? err.message : "Something went wrong with the chat.");
+          // A dropped connection is a bare TypeError from the browser ("network error", "Load failed", "Failed to fetch"): say it in words.
+          if (err && err.name === "TypeError") showError("The connection to the chat dropped before the answer finished. Anything already in the tray is still there: try again in a moment.");
+          else showError(err && err.message ? err.message : "Something went wrong with the chat.");
         }
       );
   }
