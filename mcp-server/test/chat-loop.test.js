@@ -8,6 +8,7 @@ const github = createFakeGitHub({ clean: true });
 let scripted;
 let requests;
 let failWith;
+let rejectForced = false; // the provider refuses a forced tool_choice
 const sse = (events) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
 const modelTurn = ({ text = "", chunks, reasoning, calls = [] }) => {
   const chunk = (delta, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
@@ -26,6 +27,7 @@ before(async () => {
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") {
       requests.push(JSON.parse(init.body));
+      if (rejectForced && typeof requests.at(-1).tool_choice === "object") return new Response('{"error":{"message":"tool_choice is not supported with thinking mode"}}', { status: 400 });
       if (failWith) return new Response(failWith.body, { status: failWith.status });
       return modelTurn(scripted.shift() || {});
     }
@@ -38,6 +40,7 @@ beforeEach(() => {
   supabase = createFakeSupabase({ url: "https://sb.test", anonKey: "anon-test", serviceKey: "service-test" });
   requests = [];
   failWith = null;
+  rejectForced = false;
 });
 let n = 0;
 async function turn(turns, content = "hi") {
@@ -164,8 +167,8 @@ test("an answer without chips gets ONE cheap follow-up that offers only suggest_
   assert.equal(textOf(evs), "Chicken is great here.", "the nudge adds no text");
   // the nudge fails (the model gives nothing usable): safe defaults, no second try
   requests.length = 0;
-  evs = await turn([{ text: "Hello." }, {}]);
-  assert.equal(requests.length, 2);
+  evs = await turn([{ text: "Hello." }, {}, {}]);
+  assert.equal(requests.length, 3, "two nudge attempts, no more");
   assert.ok(evs.find((e) => e.name === "suggestions").data.replies.length >= 2);
   // a model that already gave chips isn't nudged
   requests.length = 0;
@@ -197,6 +200,38 @@ test("a turn over its time budget stops between model calls with a clear line", 
     assert.equal(evs.at(-1).name, "done");
   } finally {
     config.chatTurnBudgetMs = saved;
+    console.warn = warn;
+  }
+});
+
+test("the chips nudge retries once WITHOUT a forced tool_choice when the provider refuses it, and logs why when it gets nothing", async () => {
+  rejectForced = true;
+  const err = console.error;
+  const warn = console.warn;
+  const logged = [];
+  console.error = (...a) => logged.push(a.join(" "));
+  console.warn = (...a) => logged.push(a.join(" "));
+  try {
+    let evs = await turn([{ text: "Sure." }, { calls: [{ name: "suggest_replies", arguments: { replies: ["Another one", "Something lighter"] } }] }]);
+    assert.equal(requests.length, 3, "answer, the refused forced nudge, the unforced nudge");
+    assert.equal(requests[2].tool_choice, "auto");
+    assert.deepEqual(requests[2].tools.map((t) => t.function.name), ["suggest_replies"]);
+    assert.match(requests[2].messages.at(-1).content, /Call suggest_replies now with 2-4 short follow-ups to your last answer/);
+    assert.deepEqual(evs.find((e) => e.name === "suggestions").data.replies, ["Another one", "Something lighter"]);
+    assert.ok(logged.some((l) => /OpenRouter answered 400/.test(l) && /thinking mode/.test(l)), "the provider's reason is logged");
+    // nothing usable twice: logged with what came back, then chips tied to the turn
+    logged.length = 0;
+    requests.length = 0;
+    rejectForced = false;
+    evs = await turn([{ calls: [{ name: "show_recipes", arguments: { slugs: ["avocado-toast"] } }], text: "Try this." }, { text: "no tool here" }, { text: "still no tool" }]);
+    const chips = evs.find((e) => e.name === "suggestions")?.data.replies;
+    assert.ok(logged.some((l) => /Chips nudge 2 .* gave no usable chips/.test(l) && /still no tool/.test(l)));
+    assert.equal(chips?.length, 3);
+    assert.equal(chips[0].label, "Open the first one");
+    assert.match(chips[0].url, /recipes\/.+\.html$/);
+    assert.deepEqual(chips.slice(1), ["Under 20 minutes", "Something lighter"]);
+  } finally {
+    console.error = err;
     console.warn = warn;
   }
 });

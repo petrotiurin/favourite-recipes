@@ -210,6 +210,11 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     }
     if (lastCall.name === "stage_create_recipe") return done("It's in the tray as a draft for next week, with the page's own photo. It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
   }
+  // a model that stages an edit and then says nothing at all (the server adds the confirmation line and chips)
+  if (user.includes("mock-silent-edit") && pageSlug) {
+    if (!lastCall) return tray("stage_update_recipe", { slug: pageSlug, total_mins: 33 }, "");
+    return scriptedStream({ ...opts });
+  }
   // a new recipe
   const created = user.match(/add a new recipe:\s*(.+)$/);
   if (created) {

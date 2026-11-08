@@ -15,6 +15,7 @@ import { runOperation, weekLines, switchLines } from "./operations.js";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
 import {
   listRecipes,
+  recipeSummaries,
   searchRecipes,
   getRecipe,
   createRecipe,
@@ -252,10 +253,42 @@ const needChat = (ctx) => {
 };
 
 /** Runs one staging call and says what happened, for the model. */
+/** What a staged item is, in a few plain words, for the confirmation line ("Avocado Toast — new time"). */
+export async function stagedLabel(item) {
+  if (!item) return "";
+  const op = item.op || {};
+  const titles = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r.title]));
+  const name = (slug) => titles.get(slug) || String(slug).replace(/-/g, " ");
+  switch (item.kind) {
+    case "new":
+      return op.title;
+    case "edit": {
+      const fields = Object.keys(op).filter((k) => !["action", "slug", "image"].includes(k)).map((k) => ({ total_mins: "time", instructions: "steps", course: "course" })[k] || k.replace(/_/g, " "));
+      return `${name(op.slug)} — new ${fields.length ? fields.join(", ") : "photo"}`;
+    }
+    case "promote":
+      return `${name(op.slug)} becomes a regular recipe`;
+    case "remove":
+      return `${name(op.slug)} removed`;
+    case "next":
+      return `${(op.slugs || []).map(name).join(", ")} ${op.add ? "in" : "out of"} next week`;
+    case "switch":
+      return "the switch to a new week";
+    case "list":
+      return "the shopping list";
+    case "servings":
+      return "planned servings";
+    case "stocktake":
+      return "what's at home";
+    default:
+      return "";
+  }
+}
+
 async function staged(spec, ctx) {
   needChat(ctx);
   const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
-  ctx.chat.emit?.({ type: "tray", added: out.item ? [out.item.id] : [] });
+  ctx.chat.emit?.({ type: "tray", added: out.item ? [out.item.id] : [], label: await stagedLabel(out.item).catch(() => "") });
   const n = out.tray?.items?.length ?? 0;
   const lines = [`${out.message}. The tray (not the site yet) now has ${n} change${n === 1 ? "" : "s"}.`];
   if (out.item?.photo) lines.push("Its photo is being made in the background; the card shows it when ready.");

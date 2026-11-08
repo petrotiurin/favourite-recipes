@@ -342,6 +342,19 @@ export function defaultChips(page, editor) {
   return by[page?.page] || ["Something quick tonight", "What's on this week?"];
 }
 
+/**
+ * Chips for a turn whose model gave none and whose nudge gave none: tied to what the turn did where possible (cards were shown, something was staged),
+ * else the page's safe starters.
+ */
+export async function turnChips({ page, editor, ui, fixReplies, staged }) {
+  if (ui.cards?.length) return [{ label: "Open the first one", url: ui.cards[0].url }, "Under 20 minutes", "Something lighter"];
+  if (editor && staged) {
+    const chips = await fixReplies(["Finalise list", "Save to site"]); // become real buttons only when the tray allows them
+    return [...chips, "Add another"].slice(0, 3);
+  }
+  return defaultChips(page, editor);
+}
+
 const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
@@ -381,9 +394,11 @@ export function offeredTools(role) {
  *   trace     a Langfuse trace (or a no-op)
  */
 export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+  const stagedLabels = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
   const emit = (event) => {
     if (["cards", "question", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
+    if (event.type === "tray" && event.label && !stagedLabels.includes(event.label)) stagedLabels.push(event.label);
     rawEmit(event);
   };
   const tools = offeredTools(caller.role);
@@ -634,31 +649,55 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     emit({ type: "text", delta: line });
     thread.push({ role: "assistant", content: line.trim() });
   }
+  // A turn that staged something but said nothing gets a fixed one-line confirmation built from what was staged (some models stop after the tool).
+  if (!reply.trim() && stagedLabels.length) {
+    reply = `Added to the tray: ${stagedLabels.join("; ")}.`;
+    emit({ type: "text", delta: reply });
+    thread.push({ role: "assistant", content: reply });
+  }
   // Chips on (almost) every answer (design 6.1): a model that forgot them gets ONE cheap nudge that offers nothing but suggest_replies; if even
   // that fails, safe chips from the page. No retries, and never after an error (errors leave runChat before this point).
   if (!suggestions && !askedUser && reply.trim() && !stoppedLong) {
     let nudged = [];
-    const gen = trace.generation({ name: "chips nudge", model, input: "suggest_replies only", metadata: { promptVersion: PROMPT_VERSION } });
-    try {
-      const out = await streamCompletion({
-        messages: [...thread, { role: "user", content: "[Note from the site, not from the user: your answer is done. Call suggest_replies now with 2-4 short replies the user might want to say next, based on what you just said. Do not write any text.]" }],
-        tools: [SUGGEST_REPLIES_TOOL],
-        toolChoice: { type: "function", function: { name: "suggest_replies" } },
-        model,
-        apiKey,
-        signal,
-        maxTokens: 200,
-        onText: () => {},
-      });
-      gen.end({ output: out.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: out.usage, finishReason: out.finishReason });
-      const call = out.toolCalls.find((c) => c.name === "suggest_replies");
-      if (call) nudged = cleanReplies(JSON.parse(call.arguments || "{}"), book, { editor: caller.role === "editor" });
-      if (nudged.length) nudged = await fixReplies(nudged);
-    } catch (err) {
-      gen.end({ error: err.message });
-      if (err?.name === "AbortError") throw err;
+    // Try 1 forces the tool. Some providers/models refuse a forced tool_choice (Qwen's thinking mode, for one): then try 2 offers the same single
+    // tool without forcing it and asks in words. Whatever goes wrong is logged with the provider's reason, so it shows in the logs.
+    const attempts = [
+      { toolChoice: { type: "function", function: { name: "suggest_replies" } }, ask: "your answer is done. Call suggest_replies now with 2-4 short replies the user might want to say next, based on what you just said. Do not write any text." },
+      { toolChoice: "auto", ask: "Call suggest_replies now with 2-4 short follow-ups to your last answer. Only call the tool; write no other text." },
+    ];
+    for (const [n, attempt] of attempts.entries()) {
+      const gen = trace.generation({ name: `chips nudge ${n + 1}`, model, input: "suggest_replies only", metadata: { promptVersion: PROMPT_VERSION } });
+      try {
+        const out = await streamCompletion({
+          messages: [...thread, { role: "user", content: `[Note from the site, not from the user: ${attempt.ask}]` }],
+          tools: [SUGGEST_REPLIES_TOOL],
+          toolChoice: attempt.toolChoice,
+          model,
+          apiKey,
+          signal,
+          maxTokens: 200,
+          onText: () => {},
+        });
+        gen.end({ output: out.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n") || out.text, usage: out.usage, finishReason: out.finishReason });
+        const call = out.toolCalls.find((c) => c.name === "suggest_replies");
+        if (call) {
+          try {
+            nudged = cleanReplies(JSON.parse(call.arguments || "{}"), book, { editor: caller.role === "editor" });
+          } catch {
+            nudged = [];
+          }
+        }
+        if (nudged.length) nudged = await fixReplies(nudged);
+        if (nudged.length) break;
+        console.warn(`Chips nudge ${n + 1} (model ${model}) gave no usable chips: finish ${out.finishReason || "?"}, calls ${out.toolCalls.map((c) => c.name).join(",") || "none"}, text ${JSON.stringify(String(out.text).slice(0, 300))}${call ? `, arguments ${String(call.arguments).slice(0, 300)}` : ""}`);
+      } catch (err) {
+        gen.end({ error: err.message });
+        if (err?.name === "AbortError") throw err;
+        console.warn(`Chips nudge ${n + 1} (model ${model}) failed: ${err.status || ""} ${err.kind || ""} ${String(err.message).slice(0, 300)}`);
+        if (!(err instanceof ChatError) || err.kind !== "upstream") break; // out of credit, busy, no vision...: a second try would only cost more
+      }
     }
-    if (!nudged.length) nudged = defaultChips(page, caller.role === "editor");
+    if (!nudged.length) nudged = await turnChips({ page, editor: caller.role === "editor", ui, fixReplies, staged: stagedLabels.length > 0 });
     if (nudged.length) {
       suggestions = true;
       ui.replies = nudged;

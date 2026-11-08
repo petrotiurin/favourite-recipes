@@ -62,7 +62,7 @@ test("a model asking for 25 reads per reply, round after round, costs a small bo
   assert.equal(res.status, 200);
   const recipes = [...github.files.keys()].filter((p) => p.startsWith("recipes/")).length;
   assert.ok(ghCalls <= recipes + 8, `${ghCalls} GitHub calls for ${recipes} recipes: one cached index load (+ the list file), not one per call`);
-  assert.ok(requests.length <= 8, `model calls bounded (${requests.length})`);
+  assert.ok(requests.length <= 9, `model calls bounded (${requests.length}: at most 7 loop calls and 2 chip-nudge attempts)`);
   const last = requests.at(-1).messages;
   const toolMsgs = last.filter((m) => m.role === "tool");
   assert.ok(toolMsgs.some((m) => /too many tool calls at once/.test(m.content)), "calls past the per-reply cap get an error result");

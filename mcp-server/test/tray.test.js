@@ -639,3 +639,14 @@ test("'Not yet' to the promote question is answered by the server: nothing stage
   const msgs = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages;
   assert.equal(msgs.at(-1).content.startsWith("OK, next week stays as it is"), true, "the answer is in the stored chat");
 });
+
+test("a turn that staged something but said nothing gets a one-line confirmation built from the staged item, and chips", async () => {
+  const slug = anySlug(1);
+  const { evs } = await say("mock-silent-edit", { page: pageOf(slug) });
+  const text = evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+  const { data } = await (await import("../lib/recipes.js")).getRecipe(slug);
+  assert.equal(text, `Added to the tray: ${data.title} — new time.`);
+  const chips = evs.find((e) => e.name === "suggestions")?.data.replies;
+  assert.ok(chips?.length >= 1, "chips follow");
+  assert.equal(evs.at(-1).name, "done");
+});
