@@ -608,8 +608,14 @@ draft kickers, calm states.
 - **Changing it:** tapping the other thumb switches the score (thumbs down opens the box again);
   tapping the chosen thumb clears it (the score is deleted).
 
-- **Bubble:** 56px round, `--accent-strong`, bottom-right with 16px + safe-area inset. Unread dot
-  when a reply finished while the panel was closed.
+- **Bubble:** 56px round, `--accent-strong`, bottom-right with 16px + safe-area inset. Closing the
+  panel never stops an answer. While one is on its way (a message, Finalise list, Save to site) the
+  bubble has a turning ring; when it arrives (or fails) the ring becomes the unread dot, until the
+  panel is opened. Both are kept in `sessionStorage` (`recipes-chat-ui`: `unread`, `pending`), so they
+  follow you to other pages of the tab: an editor's turn left mid-answer is picked up on the next page
+  (`resumePending`: it waits on `ended_turns` like a dropped stream does) and the panel there shows
+  "Still working on it…" with the input held until it ends. A visitor's turn can't follow (it ends
+  with the page), but on the same page it gets the ring and the dot too.
 - **Panel:** on a phone, a full-height bottom sheet (reusing `.sheet`); from 720px, a 400×640
   floating panel anchored to the bubble. Header: chat title, Chats list, New chat, close.
 - **Collisions:** the shopping page has a sticky Save bar and its own bottom sheets; the recipe
