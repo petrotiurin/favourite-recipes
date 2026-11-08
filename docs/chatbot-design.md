@@ -715,3 +715,8 @@ Open (Petro will settle these):
   tool-calling reliability and cost per chat.
 - **Q10.** Credit limits for the two keys (sets how tight the public rate limits need to be).
 
+
+
+## 14. Switches
+
+Three levels, from small to complete: `CHAT_PUBLIC_ENABLED=false` on Vercel (editors only, server-enforced) with `CHAT_PUBLIC=false` in the site build (the bubble hides for visitors); `CHAT_ENABLED=false` on Vercel (every `/chat` route answers 503 `{ disabled: true }` before any other work; `/mcp` and `/stocktake` carry on); and no `CHAT_API_URL` in the site build (no chat code at all). The server variables are read per request; Vercel applies a changed value on the next deployment (Redeploy). The panel shows a locked state for each case (design.md).

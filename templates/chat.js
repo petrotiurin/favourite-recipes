@@ -472,6 +472,15 @@
   var apiUrl = script && script.getAttribute("data-api");
   if (!apiUrl) return;
 
+  var publicOff = script.getAttribute("data-public") === "false"; // build var CHAT_PUBLIC=false: the bubble is for signed-in visitors only
+  var OFF_KEY = "recipes-chat-off"; // sessionStorage: the server said the chat is switched off; later pages in this tab don't show the bubble
+  var switchedOffEarlier = false;
+  try {
+    switchedOffEarlier = sessionStorage.getItem(OFF_KEY) === "1";
+  } catch (e) {
+    // not remembered
+  }
+
   var doc = document;
   var origin = location.origin;
   var CTX = (function () {
@@ -545,6 +554,7 @@
   var mode = "public"; // "public" | "editor" (decided by the server from the token: GET /chat/me)
   var me = { signedIn: false, email: "" };
   var checkingMe = !!(RA && RA.getSession()); // until /chat/me has answered we don't know which chat to show
+  var locked = switchedOffEarlier ? "off" : null; // null | "off" (switched off on the server) | "signin" (editors only) | "account" (signed in, but can't use it)
   var listing = false; // the chats list is open
   var EDITOR_KEY = "recipes-chat-editor"; // { email, id }: the editor's open conversation (an id only; the messages live on the server)
   var PENDING_KEY = "recipes-chat-signin"; // set when the sign-in sheet is opened from the chat: { t, open, draft }
@@ -846,9 +856,66 @@
     paintPlaceholder();
   }
 
+  /** The panel when the chat can't be used: switched off, editors only, or an account that isn't an editor. No input (CSS hides the footer). */
+  function lockedEl() {
+    var box = el("div", "chat-locked", { role: "status" });
+    var h = el("h3", "chat-locked-title");
+    var p = el("p", "chat-locked-text");
+    if (locked === "off") {
+      h.textContent = "The chat is switched off for now.";
+      p.textContent = "The recipes and the shopping list work as usual. Check back later.";
+    } else if (locked === "signin") {
+      h.textContent = "Chat is for signed-in editors";
+      p.textContent = "Sign in with your family account to ask about the recipes.";
+    } else {
+      h.textContent = "This account can't use the chat";
+      p.textContent = me.email ? "Signed in as " + me.email + ". Only family editors can use the chat right now." : "Only family editors can use the chat right now.";
+    }
+    box.appendChild(h);
+    box.appendChild(p);
+    if (locked === "signin" && RA) {
+      var btn = el("button", "save-button chat-locked-signin", { type: "button" });
+      btn.textContent = "Sign in";
+      btn.addEventListener("click", function () {
+        markSigninPending();
+        RA.openSignIn({ title: "Sign in to the chat", lede: "Family editors can sign in to ask about the recipes." });
+      });
+      box.appendChild(btn);
+    }
+    return box;
+  }
+
+  /** Whether the bubble shows: not on pages loaded after the server said the chat is off (this page keeps it, with the message), and with CHAT_PUBLIC=false only for a signed-in visitor. */
+  function paintBubble() {
+    var hidden = (locked === "off" && switchedOffEarlier) || (publicOff && !(RA && RA.getSession()));
+    bubble.hidden = hidden;
+    if (hidden && !panel.hidden) close();
+  }
+
+  /** Switch the panel into a locked state (from a server answer) and remember "off" for the rest of this tab session. */
+  function lock(kind) {
+    locked = kind;
+    if (kind === "off") {
+      try {
+        sessionStorage.setItem(OFF_KEY, "1");
+      } catch (e) {
+        // not remembered
+      }
+    }
+    streaming = null;
+    setBusy(false);
+    renderAll();
+    paintBubble();
+  }
+
   function renderAll() {
     while (log.firstChild) log.removeChild(log.firstChild);
     statusEl = null;
+    panel.classList.toggle("is-locked", !!locked);
+    if (locked) {
+      log.appendChild(lockedEl());
+      return;
+    }
     if (checkingMe) {
       var wait = el("p", "chat-status", { role: "status" });
       wait.textContent = "Checking your sign-in…";
@@ -1037,7 +1104,16 @@
         }
         if (!res.ok) {
           return res.json().then(
-            function (j) { throw new Error((j && j.error) || "The chat isn't available right now."); },
+            function (j) {
+              var kind = j && j.disabled === true ? "off" : j && j.signin === true ? (me.signedIn ? "account" : "signin") : null;
+              if (kind) {
+                var stop = new Error("locked");
+                stop.name = "Locked";
+                stop.kind = kind;
+                throw stop;
+              }
+              throw new Error((j && j.error) || "The chat isn't available right now.");
+            },
             function () { throw new Error("The chat isn't available right now."); }
           );
         }
@@ -1101,6 +1177,12 @@
             paintShelf();
             autosize();
             saveUi();
+          }
+          if (err && err.name === "Locked") {
+            if (streaming === mine) streaming = null;
+            setBusy(false);
+            lock(err.kind);
+            return;
           }
           var stillMine = streaming === mine;
           finish(false);
@@ -1365,18 +1447,35 @@
     renderAll();
     return authedFetch(apiBase + "/me")
       .then(function (res) {
-        if (!res.ok) throw new Error("me");
+        if (!res.ok) {
+          return res.json().then(
+            function (j) {
+              if (j && j.disabled === true) {
+                var stop = new Error("locked");
+                stop.name = "Locked";
+                throw stop;
+              }
+              throw new Error("me");
+            },
+            function () { throw new Error("me"); }
+          );
+        }
         return res.json();
       })
       .then(
         function (j) {
           me = { signedIn: !!j.signedIn, email: String(j.email || "") };
           checkingMe = false;
-          if (j.role === "editor") enterEditor();
-          else goPublic();
+          if (j.role === "editor") {
+            locked = locked === "off" ? null : locked;
+            enterEditor();
+          } else if (j.public_enabled === false) {
+            lock(j.signedIn ? "account" : "signin"); // editors only: this account (or no account) can't use it
+          } else goPublic();
         },
         function (err) {
           checkingMe = false;
+          if (err && err.name === "Locked") return lock("off");
           if (err && err.name === "AuthExpired") return; // the sign-out event has taken the panel back to the visitor chat
           me = { signedIn: false, email: "" };
           goPublic(); // couldn't reach the server: stay a visitor
@@ -1508,7 +1607,9 @@
       true
     );
     RA.onChange(function (session, info) {
+      paintBubble();
       if (info.type === "sign-in") {
+        if (locked === "signin" || locked === "account") locked = null; // the server decides again for the new account
         handlePending();
         refreshMe();
       } else if (info.type === "sign-out") {
@@ -2153,6 +2254,7 @@
   // in localStorage), the unsent draft, scrolled to the end. The new page's context chip already shows this page; the next message
   // carries it to the server.
   var restored = loadUi();
+  paintBubble();
   renderAll();
   paintHeader();
   if (checkingMe) refreshMe();

@@ -15,7 +15,9 @@ function chatScript(rootPrefix) {
   const api = process.env.CHAT_API_URL;
   if (!api) return "";
   const attr = String(api).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  return `\n  <script src="${rootPrefix}chat.js" data-api="${attr}" defer></script>`;
+  // CHAT_PUBLIC=false (another Actions variable): the bubble is only shown to signed-in visitors (the server's CHAT_PUBLIC_ENABLED is what enforces it)
+  const publicOff = /^(false|0|off|no)$/i.test(String(process.env.CHAT_PUBLIC ?? "true").trim());
+  return `\n  <script src="${rootPrefix}chat.js" data-api="${attr}"${publicOff ? ' data-public="false"' : ""} defer></script>`;
 }
 
 // Sign-in (templates/auth.js): on every page of a build that has the Supabase values (SUPABASE_URL and SUPABASE_ANON_KEY, both

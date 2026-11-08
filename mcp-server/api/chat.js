@@ -5,6 +5,7 @@ import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordA
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
 import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
+import { chatEnabled, publicChatEnabled, DISABLED_BODY, SIGNIN_BODY } from "../lib/chat-switch.js";
 import { isNotYet, promoteQuestionOpen, NOT_YET_REPLY } from "../lib/shortcuts.js";
 import { applyPlan, pagesLive, PlanError } from "../lib/plan-apply.js";
 import { sanitizeUploads, storeUploads, downloadUpload, signedUploadUrl, removeConversationUploads, sweepOrphans, dataUrl, UploadError, MAX_IMAGES } from "../lib/chat-uploads.js";
@@ -127,11 +128,12 @@ export async function GET(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
   const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
+  if (!chatEnabled()) return reply(DISABLED_BODY, 503); // switched off: before any auth, model, GitHub or Supabase work
 
   if (route === "me") {
     const { user, refusal } = await whoIs(request);
     if (refusal) return reply({ error: refusal.error }, refusal.status);
-    return reply({ role: user?.isEditor ? "editor" : "public", signedIn: !!user, ...(user ? { email: user.email } : {}) });
+    return reply({ role: user?.isEditor ? "editor" : "public", signedIn: !!user, public_enabled: publicChatEnabled(), ...(user ? { email: user.email } : {}) });
   }
   if (route === "conversations" || route.startsWith("conversations/")) {
     const editor = await requireEditor(request, reply);
@@ -182,6 +184,7 @@ export async function DELETE(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
   const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
+  if (!chatEnabled()) return reply(DISABLED_BODY, 503);
   const planItem = route.match(/^plan\/items\/([^/]+)$/);
   if (planItem) {
     const editor = await requireEditor(request, reply, { limited: true });
@@ -313,6 +316,7 @@ export async function POST(request) {
   const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
 
   const route = routeOf(request);
+  if (!chatEnabled()) return reply(DISABLED_BODY, 503);
   if (route === "feedback") return feedback(request, reply);
   if (route === "plan/apply") return planApply(request, reply);
   const photo = route.match(/^plan\/items\/([^/]+)\/photo$/);
@@ -332,6 +336,7 @@ export async function POST(request) {
   if (refusal) return reply({ error: refusal.error }, refusal.status);
   const ip = clientIp(request);
   const isEditor = !!user?.isEditor;
+  if (!isEditor && !publicChatEnabled()) return reply(SIGNIN_BODY, 403); // editors only: before the rate limit and any model call
   if (isEditor && (!config.chatEditorKey || !storeConfigured())) {
     console.error("Editor chat is not set up: OPENROUTER_CHAT_EDITOR_KEY (or OPENROUTER_API_KEY) and SUPABASE_SERVICE_ROLE_KEY are needed");
     return reply({ error: "The chat isn't available right now." }, 503);

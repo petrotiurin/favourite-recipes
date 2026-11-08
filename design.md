@@ -307,6 +307,10 @@ On the **At home** tab every row is a fill bar:
 - **Week balance** (`.tray-balance`): one muted 0.82rem line under the tray's head, "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each ·
   2 h 15 min in all", from numbers the server computed; hidden while the tray is folded. **At home card**: kicker "At home" (muted, like Edit), title
   "At home: 2 items", sub "Eggs 6, Basmati rice"; tapping opens the list of what was recorded; **Save now** works on it.
+- **Locked panel** (`.chat-locked`, no input, no tray, no "New chat"): a serif title and a muted line, shown in place of the conversation when the chat
+  can't be used: "The chat is switched off for now." (server `disabled`; the bubble is then gone on later pages of the tab session), "Chat is for
+  signed-in editors" with a solid Sign in button (server `signin`), or "This account can't use the chat" for a signed-in account that isn't an editor.
+  With the build variable `CHAT_PUBLIC=false` the bubble itself is only shown to a signed-in visitor.
 - **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
   "Publishing…" until the server sees their page, then they turn into normal cards.
 - **Action chips** (`.chat-chip.is-action`): solid chips that press the tray's own button ("Finalise list", "Save to site (n)"), with fixed text: still a tap by a person (see "Action chips that commit" above).

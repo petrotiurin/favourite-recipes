@@ -98,9 +98,9 @@ const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.d
 // --- who is calling ---------------------------------------------------------------------------------------------
 
 test("/chat/me: no token is a visitor, an editor's email in EDITORS is an editor, a stranger is a signed-in visitor, a bad token is 401", async () => {
-  assert.deepEqual(await (await call("GET", "/chat/me")).json(), { role: "public", signedIn: false });
-  assert.deepEqual(await (await call("GET", "/chat/me", { token: "owner-token" })).json(), { role: "editor", signedIn: true, email: "owner@example.com" });
-  assert.deepEqual(await (await call("GET", "/chat/me", { token: "stranger-token" })).json(), { role: "public", signedIn: true, email: "stranger@example.com" });
+  assert.deepEqual(await (await call("GET", "/chat/me")).json(), { role: "public", signedIn: false, public_enabled: true });
+  assert.deepEqual(await (await call("GET", "/chat/me", { token: "owner-token" })).json(), { role: "editor", signedIn: true, public_enabled: true, email: "owner@example.com" });
+  assert.deepEqual(await (await call("GET", "/chat/me", { token: "stranger-token" })).json(), { role: "public", signedIn: true, public_enabled: true, email: "stranger@example.com" });
   assert.equal((await call("GET", "/chat/me", { token: "nope" })).status, 401);
 });
 

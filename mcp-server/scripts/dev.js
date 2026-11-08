@@ -36,6 +36,10 @@
 //              prompt-injection line in its text) and stage it with the page's photo. Attach any photo (paperclip) to have the mock "read" it as a
 //              soup recipe; say "use this as the photo" with it to keep your own photo on the card. Photos are stored in the fake private bucket chat-uploads.
 //
+// Switches (try them: they are read per request, the site build var CHAT_PUBLIC is read when the site is built, so restart the harness):
+//   CHAT_ENABLED=false npm run dev                         every /chat route answers 503 { disabled: true }: the panel says it is switched off
+//   CHAT_PUBLIC_ENABLED=false CHAT_PUBLIC=false npm run dev  editors only: no bubble for visitors (CHAT_PUBLIC), 403 { signin: true } if one asks anyway
+//
 // Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000), SUPABASE_PORT (54321), FAKE_TOKEN_TTL. Later phases extend this file.
 import http from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
