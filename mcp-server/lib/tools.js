@@ -8,6 +8,8 @@ import { createUploadToken } from "./auth.js";
 import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
+import { runOperation, weekLines, switchLines } from "./operations.js";
+import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage } from "./tray.js";
 import {
   listRecipes,
   searchRecipes,
@@ -164,73 +166,6 @@ const operationSchema = z.discriminatedUnion("action", [
     .describe("Same as the set_shopping_servings tool."),
 ]);
 
-/** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
-async function runOperation(op, cs, caller) {
-  const { action, ...args } = op;
-  const warn = (warnings) => (warnings?.length ? warnings.map((w) => `  warning: ${w}`) : []);
-  switch (action) {
-    case "create_recipe": {
-      const r = await createRecipe(args, cs, caller);
-      const tags = [r.draft ? "draft" : null, r.week ? `${r.week} week` : null].filter(Boolean).join(", ");
-      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
-    }
-    case "update_recipe": {
-      const r = await updateRecipe(args, cs, caller);
-      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.subject ? warn(r.warnings) : [])] };
-    }
-    case "promote_recipe": {
-      const r = await promoteRecipe(args.slug, cs, caller);
-      return { ...r, lines: [`Promoted "${r.slug}" (draft -> regular, its weeks unchanged)`] };
-    }
-    case "remove_draft": {
-      const r = await removeDraft(args.slug, cs, caller);
-      return { ...r, lines: [`Removed draft "${r.slug}" (recipe${r.removedImages.length ? " and photo" : ""} deleted)`] };
-    }
-    case "set_week_recipes": {
-      const r = await setWeekRecipes(args.slugs, args.week, args.add, cs, caller);
-      return { ...r, nextChanged: args.week === "next" && r.changed.length > 0, lines: weekLines(r) };
-    }
-    case "start_next_week": {
-      const r = await startNextWeek(args.carry_over, cs, caller);
-      // Only empties next week, which leaves the saved list showing as it is: nothing to refresh.
-      return { ...r, lines: switchLines(r) };
-    }
-    case "update_shopping_list": {
-      const r = await updateShoppingList(args.sections, cs, args.servings, caller);
-      const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
-      const plan = Object.entries(r.list.servings).map(([slug, n]) => `${slug} x${n}`).join(", ");
-      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`] };
-    }
-    case "set_shopping_servings": {
-      const r = await setShoppingServings(args.servings, cs, caller);
-      return { ...r, lines: [r.changed.length ? `Planned servings: ${r.changed.map(([slug, n]) => `${slug} x${n}`).join(", ")}` : "set_shopping_servings: already planned like that"] };
-    }
-    default:
-      throw new UserError(`Unknown action "${action}"`);
-  }
-}
-
-const WEEK_NAME = { this: "this week", next: "next week" };
-
-function weekLines({ changed, unchanged, week, add }) {
-  const lines = [changed.length ? `${add ? "Added to" : "Taken out of"} ${WEEK_NAME[week]}: ${changed.join(", ")}` : "set_week_recipes: nothing changed"];
-  if (unchanged.length) lines.push(`  already ${add ? "in" : "not in"} ${WEEK_NAME[week]}: ${unchanged.join(", ")}`);
-  return lines;
-}
-
-function switchLines({ started, stayed, carried, left, droppedDrafts, subject }) {
-  const list = (xs) => (xs.length ? xs.join(", ") : "none");
-  return [
-    subject ? "Started next week: next week's recipes are now this week, and next week is empty." : "start_next_week: nothing to change (both weeks were already empty).",
-    `  this week now: ${list([...started, ...stayed, ...carried])}`,
-    ...(stayed.length ? [`  (already in this week too: ${stayed.join(", ")})`] : []),
-    ...(carried.length ? [`  carried over from last week: ${carried.join(", ")}`] : []),
-    ...(left.length ? [`  left this week: ${left.join(", ")}`] : []),
-    ...(droppedDrafts.length ? [`  drafts back in the book (still drafts, in no week): ${droppedDrafts.join(", ")}`] : []),
-    "  the shopping list is unchanged: the page keeps showing it until next week is planned and a new list saved",
-  ];
-}
-
 function ok(text, extra = []) {
   return { content: [{ type: "text", text }, ...extra] };
 }
@@ -283,6 +218,166 @@ function resultText(verb, { slug, markdown, commit, draft, week, warnings }) {
   return lines.join("\n");
 }
 
+
+// --- chat-only tools that stage into the plan tray (access: "stage") ---------------------------------------------------------------
+// In the chat an editor's writes never commit: they go into the household tray (lib/tray.js) and a person saves them with one tap
+// (POST /chat/plan/apply). These mirror the write tools' inputs, validate by a dry run of the real write logic, and are NOT registered on
+// /mcp (lib/server.js skips stage tools), where the write tools keep committing as before. Planning always targets NEXT week.
+const reasonSchema = z.string().max(120).optional().describe('One short line for the card: why this change, e.g. "from the quick dinners chat". Plain text, no emoji.');
+
+const needChat = (ctx) => {
+  if (!ctx?.chat) throw new UserError("That tool only works inside the chat.");
+  assertCanStage(ctx.caller);
+};
+
+/** Runs one staging call and says what happened, for the model. */
+async function staged(spec, ctx) {
+  needChat(ctx);
+  const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
+  ctx.chat.emit?.({ type: "tray", added: out.item ? [out.item.id] : [] });
+  const n = out.tray?.items?.length ?? 0;
+  const lines = [`${out.message}. The tray (not the site yet) now has ${n} change${n === 1 ? "" : "s"}.`];
+  if (out.item?.photo) lines.push("Its photo is being made in the background; the card shows it when ready.");
+  if (out.error) lines.push(`PROBLEM on the card: ${out.error}`, "Stage it again with the problem fixed (the same title or slug replaces it), or drop it with drop_tray_item.");
+  for (const w of out.warnings || []) lines.push(`warning: ${w}`);
+  if (out.needs) lines.push("This tray changes next week or the servings, so a shopping list is needed before Save: it is built by Finalise list.");
+  return ok(lines.join("\n"));
+}
+
+const stageCreateShape = {
+  ...Object.fromEntries(Object.entries(createShape).filter(([k]) => !["image", "week"].includes(k))),
+  image_url: z.string().url().optional().describe("A link to the recipe's page or straight to its photo (http/https). Its photo (og:image) is used; leave out to have a photo generated."),
+  next_week: z.boolean().optional().describe("Default true: the recipe is planned for next week. false only to add it to the book without planning it."),
+  reason: reasonSchema,
+};
+const stageUpdateShape = {
+  ...updateShape,
+  image_url: z.string().url().optional().describe("A link to a page or photo to take a new photo from."),
+  new_photo: z.boolean().optional().describe("true: make a new generated photo for it."),
+  reason: reasonSchema,
+};
+delete stageUpdateShape.image;
+
+const STAGE_TOOLS = [
+  {
+    name: "stage_create_recipe",
+    title: "Stage a new recipe",
+    description:
+      "Add a NEW recipe to the plan tray (not to the site: a person saves it). Same fields and rules as create_recipe (structured ingredients with quantities, bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
+      "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
+    inputSchema: stageCreateShape,
+    access: "stage",
+    handler: safe(async ({ image_url, next_week, reason, ...fields }, ctx) => staged({ op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, reason }, ctx)),
+  },
+  {
+    name: "stage_update_recipe",
+    title: "Stage an edit",
+    description: "Stage an edit of an existing recipe (only the fields you pass change; ingredients and instructions replace the whole list). Call get_recipe first so you edit the current version. A second edit of the same recipe merges into the first card; editing a recipe that is new in the tray edits that card.",
+    inputSchema: stageUpdateShape,
+    access: "stage",
+    handler: safe(async ({ image_url, new_photo, reason, ...fields }, ctx) => staged({ op: { action: "update_recipe", ...fields }, imageUrl: image_url, newPhoto: new_photo, reason }, ctx)),
+  },
+  {
+    name: "stage_promote_recipe",
+    title: "Stage promoting a draft",
+    description: "Stage turning a draft into a regular recipe (the family cooked it and keeps it). Its weeks don't change.",
+    inputSchema: { slug: z.string().describe("Slug of the draft"), reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ slug, reason }, ctx) => staged({ op: { action: "promote_recipe", slug }, reason }, ctx)),
+  },
+  {
+    name: "stage_remove_draft",
+    title: "Stage removing a draft",
+    description: "Stage deleting a draft the family tried and did NOT like (the recipe and its photo). Only drafts; refused for a draft planned for next week (the family keeps those: tell the user instead).",
+    inputSchema: { slug: z.string().describe("Slug of the draft"), reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ slug, reason }, ctx) => staged({ op: { action: "remove_draft", slug }, reason }, ctx)),
+  },
+  {
+    name: "stage_set_week_recipes",
+    title: "Stage next week's recipes",
+    description: "Stage adding existing recipes to NEXT week (add: true) or taking them out (add: false). Planning always targets next week; this week only changes through stage_start_next_week. Each recipe is its own card; adding and then taking out the same recipe cancels out.",
+    inputSchema: { slugs: z.array(z.string()).min(1).describe("Recipe slugs"), add: z.boolean().describe("true = into next week, false = out of it"), reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ slugs, add, reason }, ctx) => {
+      let last;
+      const seen = [];
+      for (const slug of [...new Set(slugs)]) {
+        last = await staged({ op: { action: "set_week_recipes", week: "next", slugs: [slug], add }, reason }, ctx);
+        seen.push(last.content[0].text.split("\n")[0]);
+      }
+      return ok(seen.join("\n"));
+    }),
+  },
+  {
+    name: "stage_start_next_week",
+    title: "Stage the switch",
+    description: "Stage the switch to a new week: next week's recipes become this week and next week is emptied. Stage it only when the user says next week is ready to become this week (asked at Finalise). carry_over: this week's recipes that stay in this week (untried drafts the user wants to keep cooking). Staging it again replaces it.",
+    inputSchema: { carry_over: z.array(z.string()).optional().describe("Slugs in this week now that stay in this week"), reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ carry_over, reason }, ctx) => staged({ op: { action: "start_next_week", ...(carry_over?.length ? { carry_over } : {}) }, reason }, ctx)),
+  },
+  {
+    name: "stage_update_shopping_list",
+    title: "Stage the shopping list",
+    description: "Stage the combined shopping list for ALL the recipes that will be in next week after Save (read them with get_tray). Same rules and fields as update_shopping_list. Stage it LAST: any later change to the tray marks it out of date. Staging it again replaces it.",
+    inputSchema: { sections: sectionsSchema, servings: servingsSchema.optional(), reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ sections, servings, reason }, ctx) => staged({ op: { action: "update_shopping_list", sections, ...(servings ? { servings } : {}) }, reason }, ctx)),
+  },
+  {
+    name: "stage_set_shopping_servings",
+    title: "Stage planned servings",
+    description: "Stage a change to how many people individual recipes on the saved shopping list are planned for. Only recipes on the saved list.",
+    inputSchema: { servings: servingsSchema, reason: reasonSchema },
+    access: "stage",
+    handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
+  },
+  {
+    name: "resolve_clash",
+    title: "Resolve a clash",
+    description: 'Settle a tray item flagged as a clash (its recipe changed on the site since it was staged). "keep_mine" keeps the staged change and overwrites what changed; "keep_theirs" and "drop" remove the item. Ask the user first with ask_user.',
+    inputSchema: { id: z.string().describe("The item id from the tray note"), resolution: z.enum(["keep_mine", "keep_theirs", "drop"]) },
+    access: "stage",
+    handler: safe(async ({ id, resolution }, ctx) => {
+      needChat(ctx);
+      const out = await resolveClash(id, resolution, ctx.caller, { trace: ctx.chat.trace });
+      ctx.chat.emit?.({ type: "tray" });
+      return ok(`${out.message}.`);
+    }),
+  },
+  {
+    name: "drop_tray_item",
+    title: "Drop a tray item",
+    description: "Take one item out of the plan tray (by its id from the tray note). Use when the user asks to remove something they had added.",
+    inputSchema: { id: z.string().describe("The item id from the tray note") },
+    access: "stage",
+    handler: safe(async ({ id }, ctx) => {
+      needChat(ctx);
+      const dropped = await dropItem(id, ctx.caller, { trace: ctx.chat.trace });
+      ctx.chat.emit?.({ type: "tray" });
+      return ok(dropped ? `Dropped the ${dropped.kind} item from the tray.` : "That item isn't in the tray.");
+    }),
+  },
+  {
+    name: "get_tray",
+    title: "Read the plan tray",
+    description:
+      "Read the plan tray and the recipes that will be in next week AFTER Save (the tray's changes applied on top of the site, new recipes included), each as its full Markdown, plus the planned servings. " +
+      "Use it for the Finalise step that builds the shopping list. It reads only; it changes nothing.",
+    inputSchema: { include_recipes: z.boolean().optional().describe("Include each next-week recipe's Markdown (default true)") },
+    access: "stage",
+    handler: safe(async ({ include_recipes }, ctx) => {
+      needChat(ctx);
+      const tray = await loadTray();
+      const note = await trayNote(tray, ctx.caller);
+      const { cs, nextSlugs } = await replay(tray?.items || [], ctx.caller);
+      const recipes = [];
+      if (include_recipes !== false) for (const slug of nextSlugs) recipes.push({ slug, ...(await (async () => { const { data, markdown } = await getRecipe(slug, cs); return { title: data.title, serves: data.serves, markdown }; })()) });
+      return ok([note, "", `Recipes that will be in next week after Save (${nextSlugs.length}):`, JSON.stringify(include_recipes === false ? nextSlugs : recipes, null, 2)].join("\n"));
+    }),
+  },
+];
 
 export const TOOLS = [
   {
@@ -651,6 +746,7 @@ export const TOOLS = [
       );
     }),
   },
+  ...STAGE_TOOLS,
 ];
 
 // --- dispatch ------------------------------------------------------------------------------------------

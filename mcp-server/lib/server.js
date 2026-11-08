@@ -147,7 +147,8 @@ export function buildServer({ origin }) {
     );
   }
 
-  for (const tool of TOOLS) {
+  // Stage tools are the chat's (they fill the plan tray); /mcp keeps the write tools that commit.
+  for (const tool of TOOLS.filter((t) => accessOf(t) !== "stage")) {
     server.registerTool(
       tool.name,
       {

@@ -4,7 +4,10 @@ import { makeCaller } from "../lib/tools.js";
 import { checkRateLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
+import { loadTray, trayView, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
+import { applyPlan, pagesLive, PlanError } from "../lib/plan-apply.js";
 import {
+  postAssistantMessage,
   storeConfigured,
   isUuid,
   newId,
@@ -29,6 +32,13 @@ import {
 //   GET    /chat/conversations/:id    one of them, as the panel shows it
 //   DELETE /chat/conversations/:id    delete one
 //   POST   /chat/feedback             an editor's thumbs up / down on a turn (a Langfuse score)
+//   GET    /chat/plan                 the household's plan tray as the panel draws it (editors only, household-wide)
+//   DELETE /chat/plan/items/:id       drop one tray item (and its staged photo)
+//   POST   /chat/plan/items/:id/photo "New photo": remake a staged item's photo
+//   POST   /chat/plan/apply           Save: commit the whole tray (or one item: { item_id }, "Save now") in ONE commit. A button a person taps,
+//                                     never a model tool: the token and EDITORS are checked afresh on this request
+//   GET    /chat/status?slugs=a,b     which of these recipe pages are live yet (a HEAD to the Pages URL, server-side), for "Publishing…"
+//   POST   /chat { action: "finalise" } the Finalise list button: a fixed request to the agent (editors only)
 // Who the caller is is decided once from a verified Supabase token (design 4.1), never from the body:
 //   no Authorization header                       -> a visitor ("public")
 //   valid token, email in EDITORS                 -> an editor
@@ -43,6 +53,8 @@ import {
 //   event: text         data: { delta }
 //   event: status       data: { text }        what the bot is doing, in plain words
 //   event: suggestions  data: { replies }     tappable suggested replies: strings, or { label, url } chips that open a site page
+//   event: question     data: { question, options, multi }   ask_user: solid answer chips; the tapped answer is the next message
+//   event: tray         data: { added }                       the plan tray changed: the panel reloads it
 //   event: cards        data: { cards }       recipe cards built from our own data (show_recipes)
 //   event: navigation   data: { label, url }  a button that opens one site page (offer_navigation); never navigates by itself
 //   event: title        data: { conversation_id, title }     editors only, when a new chat got its title
@@ -131,13 +143,47 @@ export async function GET(request) {
       return reply({ error: "Couldn't load your chats. Try again in a moment." }, 502);
     }
   }
+  if (route === "plan") {
+    const editor = await requireEditor(request, reply);
+    if (editor.response) return editor.response;
+    try {
+      const caller = editorCaller(editor, request);
+      const tray = await loadTray();
+      return reply({ tray: await trayView(tray, caller) });
+    } catch (err) {
+      console.error("Loading the tray failed:", err.message);
+      return reply({ error: "Couldn't load the tray. Try again in a moment." }, 502);
+    }
+  }
+  if (route === "status") {
+    const editor = await requireEditor(request, reply);
+    if (editor.response) return editor.response;
+    const slugs = (new URL(request.url).searchParams.get("slugs") || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 8);
+    return reply({ live: await pagesLive(slugs) });
+  }
   return reply({ error: "Not found" }, 404);
 }
+
+const editorCaller = (editor, request) => makeCaller({ role: "editor", email: editor.email, userId: editor.userId, ip: clientIp(request) });
+const ITEM_ID = /^[a-f0-9]{8}$/;
 
 export async function DELETE(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
   const reply = (body, status = 200) => Response.json(body, { status, headers });
   const route = routeOf(request);
+  const planItem = route.match(/^plan\/items\/([^/]+)$/);
+  if (planItem) {
+    const editor = await requireEditor(request, reply);
+    if (editor.response) return editor.response;
+    if (!ITEM_ID.test(planItem[1])) return reply({ error: "That item isn't in the tray." }, 404);
+    try {
+      const dropped = await dropItem(planItem[1], editorCaller(editor, request), { userId: editor.userId });
+      return dropped ? reply({ ok: true }) : reply({ error: "That item isn't in the tray any more." }, 404);
+    } catch (err) {
+      console.error("Dropping a tray item failed:", err.message);
+      return reply({ error: "Couldn't drop that. Try again in a moment." }, 502);
+    }
+  }
   if (!route.startsWith("conversations/")) return reply({ error: "Not found" }, 404);
   const editor = await requireEditor(request, reply);
   if (editor.response) return editor.response;
@@ -200,12 +246,61 @@ async function feedback(request, reply) {
   }
 }
 
+/** Save, or Save now ({ item_id }): the human tap. The token is verified on THIS request (requireEditor), so a removed editor is refused at once. */
+async function planApply(request, reply) {
+  const editor = await requireEditor(request, reply);
+  if (editor.response) return editor.response;
+  let body = {};
+  try {
+    body = JSON.parse((await request.text()) || "{}") || {};
+  } catch {
+    return reply({ error: "Send JSON: { item_id?, conversation_id? }" }, 400);
+  }
+  if (body.item_id !== undefined && !(typeof body.item_id === "string" && ITEM_ID.test(body.item_id))) return reply({ error: "That item isn't in the tray." }, 404);
+  const caller = editorCaller(editor, request);
+  const trace = startTrace({ name: "tray-save", sessionId: isUuid(body.conversation_id) ? body.conversation_id : undefined, userId: caller.userId, tags: ["editor", "tray"], metadata: { mode: body.item_id ? "save-now" : "save" }, input: body.item_id ? "save now" : "save" });
+  try {
+    const out = await applyPlan({ caller, itemId: body.item_id, trace });
+    let posted = false;
+    if (isUuid(body.conversation_id)) {
+      try {
+        posted = !!(await postAssistantMessage(body.conversation_id, caller.userId, out.summary, out.cards.length ? { cards: out.cards } : undefined));
+      } catch (err) {
+        console.error("Posting the save summary failed:", err.message);
+      }
+    }
+    trace.finish(`saved ${out.saved}`);
+    return reply({ ok: true, saved: out.saved, left: out.left, commit: out.commit, summary: out.summary, cards: out.cards, posted });
+  } catch (err) {
+    trace.finish(`refused: ${err.message}`.slice(0, 200));
+    if (err instanceof PlanError) return reply({ error: err.message, ...err.extra }, err.status);
+    console.error("Saving the tray failed:", err.message);
+    return reply({ error: "Couldn't save just now, and nothing was committed. Try again in a moment." }, 502);
+  }
+}
+
+async function planPhoto(request, reply, id) {
+  const editor = await requireEditor(request, reply);
+  if (editor.response) return editor.response;
+  if (!ITEM_ID.test(id)) return reply({ error: "That item isn't in the tray." }, 404);
+  try {
+    const item = await regeneratePhoto(id, editorCaller(editor, request));
+    return item ? reply({ ok: true }) : reply({ error: "That item has no photo to remake." }, 404);
+  } catch (err) {
+    console.error("Remaking a photo failed:", err.message);
+    return reply({ error: "Couldn't do that. Try again in a moment." }, 502);
+  }
+}
+
 export async function POST(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
   const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
 
   const route = routeOf(request);
   if (route === "feedback") return feedback(request, reply);
+  if (route === "plan/apply") return planApply(request, reply);
+  const photo = route.match(/^plan\/items\/([^/]+)\/photo$/);
+  if (photo) return planPhoto(request, reply, photo[1]);
   if (route) return reply({ error: "Not found" }, 404);
 
   warnSharedKeys();
@@ -240,10 +335,23 @@ export async function POST(request) {
   let messages; // what the loop starts from
   let convo = null; // an editor's conversation (existing, or null until created below)
   let storedUser; // the editor's new user message, as stored
+  let finalise = false;
   let history = [];
   if (isEditor) {
-    const text = typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
+    finalise = body?.action === "finalise";
+    const text = finalise ? "Finalise list" : typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
     if (!text) return reply({ error: "Send a message to start the chat." }, 400);
+    if (finalise) {
+      try {
+        const view = await trayView(await loadTray(), caller);
+        if (!view?.count) return reply({ error: "The tray is empty." }, 400);
+        if (!view.needs_list) return reply({ error: "No shopping list is needed: the tray can be saved as it is." }, 409);
+        await startFinalise(caller);
+      } catch (err) {
+        console.error("Starting Finalise failed:", err.message);
+        return reply({ error: "The tray isn't available right now." }, 502);
+      }
+    }
     storedUser = { role: "user", content: text };
     if (body?.conversation_id !== undefined && body?.conversation_id !== null) {
       try {
@@ -279,6 +387,15 @@ export async function POST(request) {
     }
   }
 
+  let extraNote = "";
+  if (isEditor) {
+    try {
+      extraNote = await trayNote(await loadTray(), caller);
+      if (finalise) extraNote += '\nThe user tapped "Finalise list": run the Finalise steps now.';
+    } catch (err) {
+      console.error("Reading the tray for the note failed:", err.message);
+    }
+  }
   const model = isEditor ? config.chatEditorModel : config.chatPublicModel;
   const clientConversationId = typeof body?.conversation_id === "string" ? body.conversation_id.replace(/[^\w-]/g, "").slice(0, 64) : undefined;
   const lastText = isEditor ? storedUser.content : messages[messages.length - 1].content;
@@ -321,6 +438,8 @@ export async function POST(request) {
           model,
           apiKey: isEditor ? config.chatEditorKey : config.chatPublicKey,
           origin: host ? `https://${host}` : new URL(request.url).origin,
+          extraNote,
+          conversation: isEditor ? { id: convo.id, title: convo.title || title } : undefined,
         });
         output = result.reply;
         if (isEditor) {
@@ -339,6 +458,10 @@ export async function POST(request) {
           output = `error: ${message}`;
         }
       } finally {
+        if (finalise) {
+          await settleFinalise(caller);
+          trayEvent("tray-finalise", { trace, userId: caller.userId });
+        }
         trace.finish(output);
         closed = true;
         try {

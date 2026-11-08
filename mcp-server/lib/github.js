@@ -122,8 +122,29 @@ export async function commitChanges(changes, message, caller) {
  * GitHub until commit(). Lets several tool operations land in one commit (= one site deploy).
  */
 export class ChangeSet {
-  constructor() {
+  /**
+   * `reads` (optional): a Map shared between ChangeSets that caches what was read from the branch (path -> Promise<Buffer | null>, and
+   * "dir:<path>" -> Promise<names>), so a dry run that replays the plan tray several times doesn't read every recipe from GitHub each time.
+   * Only for short-lived, throwaway sets that never commit.
+   */
+  constructor({ reads } = {}) {
     this.staged = new Map(); // path -> Buffer, or null for a deletion
+    this.reads = reads || null;
+  }
+
+  /** The staged edits as they are now, to put back with restore() if an operation fails half way. */
+  snapshot() {
+    return new Map(this.staged);
+  }
+
+  restore(snapshot) {
+    this.staged = new Map(snapshot);
+  }
+
+  #fromBranch(key, load) {
+    if (!this.reads) return load();
+    if (!this.reads.has(key)) this.reads.set(key, load());
+    return this.reads.get(key);
   }
 
   get size() {
@@ -131,11 +152,11 @@ export class ChangeSet {
   }
 
   async read(path) {
-    return this.staged.has(path) ? this.staged.get(path) : readFile(path);
+    return this.staged.has(path) ? this.staged.get(path) : this.#fromBranch(path, () => readFile(path));
   }
 
   async list(dir) {
-    const names = new Set(await listDir(dir));
+    const names = new Set(await this.#fromBranch(`dir:${dir}`, () => listDir(dir)));
     for (const [path, content] of this.staged) {
       if (!path.startsWith(`${dir}/`) || path.slice(dir.length + 1).includes("/")) continue;
       const name = path.slice(dir.length + 1);

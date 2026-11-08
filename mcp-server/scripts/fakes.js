@@ -109,6 +109,141 @@ const rowsOf = (toolMessage) => {
   }
 };
 
+
+// --- the editor's scripted flows (stage tools, ask_user, Finalise) ------------------------------------------------------------------
+const titleCase = (t) => t.replace(/\b\w/g, (c) => c.toUpperCase());
+const parseNoteDrafts = (note) => {
+  const line = String(note || "").match(/This week's drafts on the site: (.*)\./)?.[1] || "";
+  return line === "none" ? [] : [...line.matchAll(/([^,(]+?) \(([a-z0-9-]+)\)/g)].map((m) => ({ title: m[1].trim(), slug: m[2] }));
+};
+const callsOf = (m) => (m.tool_calls || []).map((c) => ({ name: c.function.name, args: (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })(), id: c.id }));
+
+/** Ingredient lines of a recipe's Markdown: [{ name, quantity }]. */
+const ingredientsOf = (markdown) => {
+  const section = String(markdown).split(/^## /m).find((x) => /^Ingredients/i.test(x)) || "";
+  return section.split("\n").filter((l) => l.startsWith("- ")).map((l) => {
+    const m = l.match(/^- (?:(.+?) )?\*\*(.+?)\*\*/);
+    return m ? { name: m[2], quantity: m[1] || "" } : null;
+  }).filter(Boolean);
+};
+
+/** A shopping list from get_tray's answer: one line per ingredient, tagged with its recipes (a mock: not scaled, quantities only when plain). */
+function listFromTray(content) {
+  const json = String(content).split(/Recipes that will be in next week after Save \(\d+\):\n/)[1];
+  let recipes = [];
+  try { recipes = JSON.parse(json); } catch { /* none */ }
+  const byName = new Map();
+  for (const r of recipes) for (const i of ingredientsOf(r.markdown)) {
+    const key = i.name.toLowerCase();
+    const row = byName.get(key) || { name: i.name, quantity: i.quantity, recipes: [] };
+    if (row.recipes.length) row.quantity = "";
+    if (!row.recipes.includes(r.slug)) row.recipes.push(r.slug);
+    byName.set(key, row);
+  }
+  const items = [...byName.values()].map((r) => ({ name: r.name, ...(/^\d+(g|ml)?$/.test(r.quantity) ? { quantity: r.quantity } : {}), recipes: r.recipes }));
+  return { sections: [{ name: "Everything", items }] };
+}
+
+/** The editor's flows. Returns a scripted response, or null when the message is not one of them. */
+function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
+  const after = msgs.slice(lastUserIdx + 1);
+  const turnCalls = after.filter((m) => m.role === "assistant").flatMap(callsOf);
+  const lastCall = turnCalls[turnCalls.length - 1];
+  const lastResult = after.filter((m) => m.role === "tool").at(-1);
+  const pageSlug = String(note || "").match(/viewing: .+? \(([a-z0-9-]+)\)/)?.[1];
+  const tray = (name, args, text) => scriptedStream({ ...opts, text, calls: [{ name, arguments: args }] });
+  const ask = (question, options, text = "") => scriptedStream({ ...opts, text, calls: [{ name: "ask_user", arguments: { question, options } }] });
+  const done = (text, ...chips) => scriptedStream({ ...opts, text, calls: [replies(...(chips.length ? chips : ["Anything else?"]))] });
+
+  // a new recipe
+  const created = user.match(/add a new recipe:\s*(.+)$/);
+  if (created) {
+    if (!lastResult) {
+      const title = titleCase(created[1].trim());
+      return tray("stage_create_recipe", {
+        title, course: ["Dinner"], tags: ["Quick"], total_mins: 20, serves: 2, calories: 450,
+        ingredients: [{ quantity: "200g", name: "pasta" }, { quantity: "2", name: "garlic cloves" }, { quantity: "2 tbsp", name: "olive oil" }, { name: "parmesan", note: "to serve" }],
+        instructions: ["Boil the **pasta** until al dente.", "Fry the **garlic cloves** in the **olive oil** for a minute.", "Toss the **pasta** in the pan and top with **parmesan**."],
+        reason: "from this chat",
+      }, `I'll put ${title} in the tray.`);
+    }
+    return done("It's in the tray as a draft for next week, and its photo is being made. It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
+  }
+  // "add this to next week" on a recipe page
+  if (/\badd\b/.test(user) && user.includes("next week") && pageSlug) {
+    if (!lastResult) return tray("stage_set_week_recipes", { slugs: [pageSlug], add: true, reason: "from the recipe page" }, "I'll add it to next week in the tray.");
+    return done("Added to next week in the tray. It's not saved to the site yet.", { label: "Finalise list", action: "finalise_plan" }, "Not yet");
+  }
+  // a quick fix
+  const mins = user.match(/(\d+)\s*minutes?/);
+  if (mins && /it's|its|actually|not/.test(user) && pageSlug) {
+    if (!lastResult) return tray("stage_update_recipe", { slug: pageSlug, total_mins: Number(mins[1]), reason: "quick fix from the recipe page" }, "I'll stage that fix.");
+    return done("Staged. Its card in the tray has a Save now button for a small fix like this.");
+  }
+  // asking to save
+  if (/\bsave\b/.test(user) && !user.includes("finalise")) {
+    return done("Nothing is saved until you tap Save to site, and because this changes next week, the shopping list has to be made first.", { label: "Finalise list", action: "finalise_plan" }, "Not yet");
+  }
+  // clashes
+  const clash = String(note || "").match(/\[([a-f0-9]{8})\][^\n]*CLASH/)?.[1];
+  if (clash && /clash|changed|resolve/.test(user) && !lastResult) return ask("That recipe changed on the site since you staged this. What now?", ["Keep yours", "Keep theirs", "Drop it"]);
+  if (clash && /^(keep yours|keep theirs|drop it)$/.test(user)) {
+    if (!lastResult) return tray("resolve_clash", { id: clash, resolution: { "keep yours": "keep_mine", "keep theirs": "keep_theirs", "drop it": "drop" }[user] }, "");
+    return done("Done.", { label: "Finalise list", action: "finalise_plan" });
+  }
+
+  // Finalise list, and the answers it asks for
+  const prev = msgs.slice(0, lastUserIdx).reverse().find((m) => m.role === "assistant" && m.tool_calls);
+  const prevAsk = prev ? callsOf(prev).find((c) => c.name === "ask_user")?.args : null;
+  const finaliseTap = user === "finalise list" || /tapped "finalise list"/i.test(String(note || ""));
+  const asked = msgs.filter((m) => m.role === "assistant" && m.tool_calls).flatMap(callsOf).filter((c) => c.name === "ask_user").map((c) => c.args.question);
+  const drafts = parseNoteDrafts(note);
+  const nextN = Number(String(note || "").match(/Next week on the site now: (\d+) recipe/)?.[1] || 0);
+  const carried = [];
+  msgs.forEach((m, i) => {
+    if (m.role !== "user" || String(m.content).toLowerCase().trim() !== "keep it this week") return;
+    const q = msgs.slice(0, i).reverse().find((x) => x.role === "assistant" && x.tool_calls && callsOf(x).some((c) => c.name === "ask_user" && /Keep .* this week/.test(c.args.question)));
+    const title = q && callsOf(q).find((c) => c.name === "ask_user").args.question.match(/Keep (.+?) this week/)?.[1];
+    const d = drafts.find((x) => x.title === title);
+    if (d) carried.push(d.slug);
+  });
+  const nextStep = () => {
+    const left = drafts.find((d) => !asked.some((q) => q.includes(`Did you like ${d.title}?`)));
+    if (left) return ask(`Did you like ${left.title}?`, ["Liked", "Not for us", "Not tried yet"]);
+    if (!lastCall || lastCall.name !== "get_tray") return tray("get_tray", {}, "Now I'll read next week's recipes and build the list.");
+    return null;
+  };
+  const buildStep = () => {
+    if (lastCall?.name === "get_tray") return tray("stage_update_shopping_list", listFromTray(lastResult.content), "");
+    if (lastCall?.name === "stage_update_shopping_list") return done("The shopping list is in the tray. Check it, then tap Save to site.", "Open the shopping page");
+    return null;
+  };
+  if (lastCall && ["get_tray", "stage_update_shopping_list"].includes(lastCall.name)) return buildStep();
+  const answer = user;
+  if (finaliseTap && !lastCall) {
+    if (nextN > 0) return ask(`Next week has ${nextN} recipe${nextN === 1 ? "" : "s"}. Is it ready to become this week?`, ["Promote it", "Not yet"], "Next week already has recipes, so first: is it ready to become this week?");
+    return nextStep();
+  }
+  if (prevAsk && /ready to become this week/.test(prevAsk.question)) {
+    if (answer === "not yet") return done("Okay: nothing changes, and next week and its list stay as they are. Say the word when you want to finalise.", { label: "Finalise list", action: "finalise_plan" });
+    if (answer === "promote it") {
+      if (!lastCall) return tray("stage_start_next_week", {}, "I'll stage the switch first.");
+      return nextStep();
+    }
+  }
+  if (prevAsk && /^Did you like /.test(prevAsk.question)) {
+    const d = drafts.find((x) => prevAsk.question.includes(`Did you like ${x.title}?`));
+    if (d && answer === "liked") return !lastCall ? tray("stage_promote_recipe", { slug: d.slug }, "") : nextStep();
+    if (d && answer === "not for us") return !lastCall ? tray("stage_remove_draft", { slug: d.slug }, "") : nextStep();
+    if (d && answer === "not tried yet") return ask(`Keep ${d.title} this week or put it back in the book?`.replace("Keep ", "Keep "), ["Keep it this week", "Back to the book"]);
+  }
+  if (prevAsk && /Keep .* this week/.test(prevAsk.question)) {
+    if (answer === "keep it this week") return !lastCall ? tray("stage_start_next_week", { carry_over: carried }, "") : nextStep();
+    if (answer === "back to the book") return nextStep();
+  }
+  return null;
+}
+
 const userText = (m) => String(m.content).replace(/\n\n\[Note from the site[\s\S]*$/, "");
 
 /**
@@ -126,6 +261,14 @@ const userText = (m) => String(m.content).replace(/\n\n\[Note from the site[\s\S
  *   "mock-add"     -> asks for create_recipe, which the public caller must be refused (shows the refusal path)
  *   "mock-call:x"  -> asks for the tool x with no arguments (the auth tests walk the whole registry with it)
  *   anything else  -> a plain reply + suggest_replies
+ * An editor's turn (the stage tools are offered) also knows:
+ *   "add a new recipe: test pasta"     -> stage_create_recipe (a draft for next week, photo generated), then a short answer
+ *   "add this to next week" on a recipe page -> stage_set_week_recipes for that page's recipe
+ *   "it's 35 minutes" on a recipe page -> stage_update_recipe (a quick fix, eligible for Save now)
+ *   "save it"                          -> explains and offers the chips Finalise list / Not yet
+ *   "Finalise list" (the button)       -> asks "Next week has N recipes. Is it ready to become this week?" when it has, then the
+ *                                         switch and one question per draft of this week (Liked / Not for us / Not tried yet), then
+ *                                         get_tray and stage_update_shopping_list; answers: "Promote it", "Not yet", "Liked", ...
  * `requests` records every request body, so tests can assert on what the server sent.
  */
 export function createMockOpenRouter({ delayMs = 12 } = {}) {
@@ -147,6 +290,11 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
     if (user.includes("mock-500")) return new Response("boom", { status: 500 });
     if (user.includes("mock-stream-error")) return sse([chunk({ role: "assistant", content: "Let me" }), { error: { code: 500, message: "upstream died" } }], delayMs);
     if (calledShown) return scriptedStream({ ...opts }); // nothing more to say after the replies were shown
+    if (after.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "ask_user"))) return scriptedStream({ ...opts }); // the question is on screen: the answer comes next
+    if (body.tools?.some((t) => t.function.name === "stage_create_recipe")) {
+      const flow = editorFlow({ msgs, lastUserIdx, user, note, opts });
+      if (flow) return flow;
+    }
 
     // "mock-call:<tool>" asks for that tool with no arguments (the registry-wide auth test uses it), then closes with a line of text.
     const forced = user.match(/mock-call:([a-z_]+)/)?.[1];
@@ -223,7 +371,9 @@ const HOUR = 3600;
 export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {}, accounts = [], tokenTtlSeconds = HOUR, now = () => Date.now() } = {}) {
   const counters = new Map();
   const calls = [];
-  const tables = { conversations: [], messages: [] };
+  const tables = { conversations: [], messages: [], trays: [] };
+  const objects = new Map(); // storage: "<bucket>/<path>" -> { bytes, type }
+  const signed = new Map(); // token -> { key, exp }
   let seq = 0;
   let issued = 0;
   const tokens = new Map(); // access token -> { id, email, exp (ms, or Infinity) }
@@ -303,6 +453,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
   const COLUMNS = {
     conversations: () => ({ id: UUID_V4(), title: null, created_at: new Date(now()).toISOString(), updated_at: new Date(now()).toISOString(), archived: false }),
     messages: () => ({ id: UUID_V4(), seq: ++seq, turn_id: null, trace_id: null, feedback: null, created_at: new Date(now()).toISOString() }),
+    trays: () => ({ id: UUID_V4(), status: "collecting", items: [], list_hash: null, version: 0, created_at: new Date(now()).toISOString(), expires_at: new Date(now() + 7 * 24 * HOUR * 1000).toISOString(), updated_at: new Date(now()).toISOString(), updated_by: null }),
   };
   function matches(row, params) {
     for (const [k, v] of params) {
@@ -355,6 +506,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     if (method === "POST") {
       const inserted = (Array.isArray(body) ? body : [body]).map((r) => ({ ...COLUMNS[name](), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) }));
       if (name === "messages" && inserted.some((m) => !tables.conversations.some((c) => c.id === m.conversation_id))) return json({ message: "foreign key violation", code: "23503" }, 409);
+      if (name === "trays" && tables.trays.length) return json({ message: "duplicate key value violates unique constraint trays_one_per_household", code: "23505" }, 409);
       tables[name].push(...inserted);
       return wantRows ? json(inserted, 201) : new Response(null, { status: 201 });
     }
@@ -372,12 +524,77 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     return json({ message: "unsupported" }, 405);
   }
 
+  // ----- Storage (the private bucket tray-photos): upload, download, delete (one or many), list, signed URLs
+  async function storage(u, init, headers) {
+    const method = init.method || "GET";
+    const route = u.pathname.replace("/storage/v1/", "");
+    const isService = headers.apikey === serviceKey && bearer(headers) === serviceKey;
+    const bytes = (body) => (typeof body === "string" ? Buffer.from(body) : Buffer.from(body || []));
+    let m;
+    if ((m = route.match(/^object\/sign\/([^/]+)\/(.+)$/)) && method === "GET") {
+      const t = signed.get(u.searchParams.get("token"));
+      const key = `${m[1]}/${decodeURIComponent(m[2])}`;
+      if (!t || t.key !== key || t.exp < now()) return json({ message: "Invalid token" }, 400);
+      const o = objects.get(key);
+      return o ? new Response(o.bytes, { headers: { "content-type": o.type } }) : json({ message: "Object not found" }, 404);
+    }
+    if (!isService) return json({ message: "permission denied" }, 401);
+    if ((m = route.match(/^object\/sign\/([^/]+)\/(.+)$/)) && method === "POST") {
+      const key = `${m[1]}/${decodeURIComponent(m[2])}`;
+      if (!objects.has(key)) return json({ message: "Object not found" }, 400);
+      const token = `tok-${UUID_V4()}`;
+      signed.set(token, { key, exp: now() + (JSON.parse(init.body).expiresIn || 60) * 1000 });
+      return json({ signedURL: `/object/sign/${m[1]}/${m[2]}?token=${token}` });
+    }
+    if ((m = route.match(/^object\/list\/([^/]+)$/)) && method === "POST") {
+      const { prefix = "" } = JSON.parse(init.body);
+      return json([...objects.keys()].filter((k) => k.startsWith(`${m[1]}/${prefix}/`)).map((k) => ({ name: k.slice(`${m[1]}/${prefix}/`.length) })));
+    }
+    if ((m = route.match(/^object\/([^/]+)$/)) && method === "DELETE") {
+      for (const p of JSON.parse(init.body).prefixes || []) objects.delete(`${m[1]}/${p}`);
+      return json([]);
+    }
+    if ((m = route.match(/^object\/([^/]+)\/(.+)$/))) {
+      const key = `${m[1]}/${decodeURIComponent(m[2])}`;
+      if (method === "POST") {
+        if (objects.has(key) && headers["x-upsert"] !== "true") return json({ message: "The resource already exists" }, 409);
+        objects.set(key, { bytes: bytes(init.body), type: headers["Content-Type"] || "application/octet-stream" });
+        return json({ Key: key });
+      }
+      if (method === "GET") {
+        const o = objects.get(key);
+        return o ? new Response(o.bytes, { headers: { "content-type": o.type } }) : json({ message: "Object not found" }, 404);
+      }
+      if (method === "DELETE") return objects.delete(key) ? json({}) : json({ message: "Object not found" }, 404);
+    }
+    return json({ message: `fake Supabase: unexpected storage call ${method} ${route}` }, 404);
+  }
+
   async function fetch(input, init = {}) {
     const u = new URL(input);
     const headers = init.headers || {};
+    if (u.pathname.startsWith("/storage/v1/")) return storage(u, init, headers);
     if (u.pathname.startsWith("/auth/v1/")) return auth(u, init, headers);
     if (u.pathname.startsWith("/rest/v1/")) return rest(u, init, headers);
     throw new Error(`fake Supabase: unexpected call ${init.method || "GET"} ${u.pathname}`);
   }
-  return { fetch, url, counters, calls, tables, expire, tokens };
+  return { fetch, url, counters, calls, tables, expire, tokens, objects };
+}
+
+// --- the image API (photo generation) -------------------------------------------------------------------------------------------
+
+/** A fake of OpenRouter's image endpoint: a plain coloured "plate" JPEG per prompt, so staged photos have something to show. */
+export function createFakeImageApi() {
+  const requests = [];
+  async function fetch(url, init) {
+    const { default: sharp } = await import("sharp");
+    const prompt = JSON.parse(init.body).prompt || "";
+    requests.push({ prompt, auth: init.headers?.Authorization });
+    let h = 0;
+    for (const c of prompt) h = (h * 31 + c.charCodeAt(0)) % 360;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900"><rect width="1200" height="900" fill="hsl(${h},30%,85%)"/><circle cx="600" cy="450" r="300" fill="hsl(${h},45%,95%)"/><circle cx="600" cy="450" r="200" fill="hsl(${(h + 30) % 360},55%,60%)"/></svg>`;
+    const jpeg = await sharp(Buffer.from(svg)).jpeg().toBuffer();
+    return Response.json({ data: [{ b64_json: jpeg.toString("base64") }] });
+  }
+  return { fetch, requests };
 }

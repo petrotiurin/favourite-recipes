@@ -118,7 +118,9 @@ test("an editor's turn uses the editor key, model and the read + UI tools, and i
   const first = openrouter.requests[0];
   assert.equal(first.auth, "Bearer or-editor-test");
   assert.equal(first.model, "test/editor-model");
-  assert.deepEqual(first.tools.map((t) => t.function.name).sort(), ["get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "search_recipes", "show_recipes", "suggest_replies"]);
+  const stageTools = tools.TOOLS.filter((t) => tools.accessOf(t) === "stage").map((t) => t.name);
+  assert.deepEqual(first.tools.map((t) => t.function.name).sort(), ["ask_user", "get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "search_recipes", "show_recipes", "suggest_replies", ...stageTools].sort());
+  assert.ok(!first.tools.some((t) => { const x = tools.TOOLS.find((y) => y.name === t.function.name); return x && tools.accessOf(x) === "write"; }), "the tools that commit are never offered in chat");
 
   assert.equal(supabase.tables.conversations.length, 1);
   assert.equal(supabase.tables.conversations[0].user_id, OWNER);
@@ -148,7 +150,8 @@ test("the second turn is built from the server's stored history (tool calls and 
   assert.ok(sent.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "search_recipes")), "the earlier tool call is in the model's history");
   assert.ok(sent.some((m) => m.role === "tool"), "and its result");
   assert.ok(!sent.some((m) => m.ui), "our panel extras never go to the model");
-  assert.equal(sent.at(-1).content, "what else?");
+  assert.match(sent.at(-1).content, /^what else\?\n\n\[Note from the site, not from the user: Plan tray/, "the tray summary rides on the latest message");
+  assert.doesNotMatch(JSON.stringify(supabase.tables.messages), /Note from the site/, "and is never stored");
   assert.doesNotMatch(JSON.stringify(sent), /forged/);
   assert.equal(supabase.tables.conversations.length, 1, "same conversation");
 });
@@ -314,7 +317,7 @@ test("titles are short and come from the first message", () => {
 
 // --- the registry-wide auth test ---------------------------------------------------------------------------------
 
-test("every stage/write tool in the registry is refused through /chat for a visitor, an expired token, a non-editor and (until phase 4) an editor", async () => {
+test("every stage/write tool in the registry is refused through /chat for a visitor, an expired token and a non-editor; for an editor only stage tools are offered and nothing commits", async () => {
   config.chatEditorHourlyLimit = 1000;
   const gated = tools.TOOLS.filter((t) => tools.accessOf(t) !== "read");
   assert.ok(gated.length >= 8, "the registry has write tools to check");
@@ -323,7 +326,6 @@ test("every stage/write tool in the registry is refused through /chat for a visi
   try {
     for (const tool of gated) {
       const ask = `mock-call:${tool.name}`;
-      // a visitor (no token)
       for (const [label, token, body] of [
         ["no token", undefined, { messages: [{ role: "user", content: ask }] }],
         ["non-editor", "stranger-token", { messages: [{ role: "user", content: ask }] }],
@@ -333,9 +335,15 @@ test("every stage/write tool in the registry is refused through /chat for a visi
         const res = await turn(token, body);
         assert.equal(res.status, 200, `${tool.name} (${label})`);
         await events(res);
-        assert.ok(!openrouter.requests[0].tools.some((t) => t.function.name === tool.name), `${tool.name} isn't offered to ${label}`);
+        const offered = openrouter.requests[0].tools.some((t) => t.function.name === tool.name);
         const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool");
-        assert.match(toolMsg.content, /not available here/, `${tool.name} is refused for ${label}`);
+        if (label === "editor" && tools.accessOf(tool) === "stage") {
+          assert.ok(offered, `${tool.name} is offered to an editor`);
+          assert.doesNotMatch(toolMsg.content, /not available here/, `${tool.name} reaches the dispatcher for an editor`);
+        } else {
+          assert.ok(!offered, `${tool.name} isn't offered to ${label}`);
+          assert.match(toolMsg.content, /not available here/, `${tool.name} is refused for ${label}`);
+        }
       }
       // an expired token never even reaches the model
       supabase.expire("owner-token");

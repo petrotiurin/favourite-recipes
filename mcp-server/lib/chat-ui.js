@@ -89,13 +89,21 @@ const MAX_REPLY_CHARS = 30;
  * Cleans what the model passed to suggest_replies: short, single-line, no emoji, at most 4. A reply is a string (sent as the user's
  * next message) or { label, action: { navigate } }, which becomes { label, url }; an action that doesn't resolve drops the reply.
  */
-export function cleanReplyList(replies, book) {
+export const PLAN_ACTIONS = new Set(["apply_plan", "finalise_plan"]);
+
+export function cleanReplyList(replies, book, { editor = false } = {}) {
   const seen = new Set();
   const out = [];
   for (const r of Array.isArray(replies) ? replies : []) {
     const isAction = r && typeof r === "object";
     const text = clean(isAction ? r.label : r, MAX_REPLY_CHARS * 2);
     if (typeof (isAction ? r.label : r) !== "string" || !text || text.length > MAX_REPLY_CHARS || seen.has(text.toLowerCase())) continue;
+    if (isAction && editor && typeof r.action === "string" && PLAN_ACTIONS.has(r.action)) {
+      out.push({ label: text, action: r.action }); // a chip that presses the tray's own button (a human tap): Finalise list, Save to site
+      seen.add(text.toLowerCase());
+      if (out.length === 4) break;
+      continue;
+    }
     if (isAction) {
       const target = book && resolveTarget(book, r.action?.navigate);
       if (!target) continue;
@@ -105,4 +113,18 @@ export function cleanReplyList(replies, book) {
     if (out.length === 4) break;
   }
   return out;
+}
+
+// --- ask_user ------------------------------------------------------------------------------------------------------------
+
+/** A question that needs an answer: { question, options (2-6 short, distinct), multi }, or null when it isn't usable. */
+export function cleanQuestion(args) {
+  const question = clean(args?.question, 240);
+  const options = [];
+  for (const o of Array.isArray(args?.options) ? args.options : []) {
+    const text = clean(o, MAX_REPLY_CHARS * 2);
+    if (typeof o === "string" && text && text.length <= MAX_REPLY_CHARS && !options.some((x) => x.toLowerCase() === text.toLowerCase())) options.push(text);
+    if (options.length === 6) break;
+  }
+  return question && options.length >= 2 ? { question, options, multi: args?.multi === true } : null;
 }

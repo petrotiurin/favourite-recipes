@@ -6,8 +6,8 @@ import { z } from "zod";
 import { config, COURSES } from "./config.js";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
-import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
-import { loadBook, buildCards, buildNavigation, cleanReplyList } from "./chat-ui.js";
+import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, ASK_USER_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion } from "./chat-ui.js";
 
 export const MAX_TURNS = 20; // messages kept from the client's history
 export const MAX_USER_CHARS = 2000;
@@ -17,7 +17,7 @@ const MAX_TOOL_RESULT_CHARS = 12000;
 // Limits on what ONE model reply may ask for, so a single request can't fan out into thousands of GitHub calls or a huge prompt.
 export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
 export const MAX_TOOL_CALLS_PER_TURN = 10; // data and write tool calls per user turn (UI tools like suggest_replies don't count)
-export const MAX_RESULT_CHARS_PER_TURN = 60_000; // total tool-result text added to the thread in one turn
+export const MAX_RESULT_CHARS_PER_TURN = 80_000; // total tool-result text added to the thread in one turn
 
 /** An error with a message that is safe to show the visitor. */
 export class ChatError extends Error {
@@ -189,6 +189,17 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
 // --- tools ----------------------------------------------------------------------------------------------------
 
 const STATUS = {
+  stage_create_recipe: "Adding it to the tray…",
+  stage_update_recipe: "Adding the edit to the tray…",
+  stage_promote_recipe: "Adding that to the tray…",
+  stage_remove_draft: "Adding that to the tray…",
+  stage_set_week_recipes: "Adding that to the tray…",
+  stage_start_next_week: "Adding the switch to the tray…",
+  stage_update_shopping_list: "Building the list…",
+  stage_set_shopping_servings: "Adding that to the tray…",
+  get_tray: "Reading next week's recipes…",
+  resolve_clash: "Sorting that out…",
+  drop_tray_item: "Taking that out of the tray…",
   search_recipes: "Looking through the recipes…",
   list_recipes: "Looking through the recipes…",
   get_recipe: "Reading the recipe…",
@@ -201,28 +212,32 @@ const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
  * Cleans what the model passed to suggest_replies (see chat-ui.js cleanReplyList). `book` (slug -> recipe) is what an action
  * reply's slug is checked against; without it only plain-string replies survive.
  */
-export function cleanReplies(args, book) {
+export function cleanReplies(args, book, opts) {
   const parsed = repliesSchema.safeParse(args);
-  return parsed.success ? cleanReplyList(parsed.data.replies, book) : [];
+  return parsed.success ? cleanReplyList(parsed.data.replies, book, opts) : [];
 }
 
-const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation"]);
+const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
 
-const resultText = (result) => {
+const resultText = (result, max = MAX_TOOL_RESULT_CHARS) => {
   const text = (result?.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
-  return text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n… (cut: ${text.length - MAX_TOOL_RESULT_CHARS} more characters)` : text;
+  return text.length > max ? `${text.slice(0, max)}\n… (cut: ${text.length - max} more characters)` : text;
 };
 
 const READ_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name));
 
+const STAGE_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "stage").map((t) => t.name));
+
 /**
- * The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools.
- * TODO(phase 4): editors also get the stage tools here (they change the plan tray, never the repo); the write tools stay
- * out of chat for good: saving is its own request (POST /chat/plan/apply). Until then an editor is offered exactly what a
- * visitor is, but on the editor's model and key (the role split is real, the extra tools are not offered yet).
+ * The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools; an editor also gets the
+ * stage tools (they change the plan tray, never the repo) and ask_user. The write tools stay out of chat for good: saving is its own
+ * request (POST /chat/plan/apply), a button a person taps.
  */
 export function offeredTools(role) {
-  return [...toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide"), SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
+  const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide");
+  const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
+  if (role !== "editor") return [...base, ...ui];
+  return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
@@ -237,7 +252,7 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
 
@@ -248,7 +263,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
     console.error("Couldn't load the catalogue:", err.message);
     rows = "";
   }
-  const note = await pageNote(page);
+  const note = [await pageNote(page), extraNote].filter(Boolean).join("\n");
   const book = await loadBook();
 
   // Stable prefix first (system prompt + catalogue, then the conversation); the volatile page note rides on the latest user message,
@@ -258,11 +273,12 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
     const last = convo[convo.length - 1];
     last.content = `${last.content}\n\n[Note from the site, not from the user: ${note}]`;
   }
-  const thread = [{ role: "system", content: systemPrompt(rows) }, ...convo];
+  const thread = [{ role: "system", content: systemPrompt(rows, { editor: caller.role === "editor" }) }, ...convo];
   const base = thread.length; // everything pushed after this is new this turn (an editor's turn is stored)
   const ui = {}; // what the panel shows again on reload: { cards, nav, replies }
 
   let suggestions = false;
+  let askedUser = false;
   let navigationOffered = false;
   const seenCalls = new Map(); // "name\nargs" -> the result already given this turn
   let turnCalls = 0;
@@ -336,13 +352,23 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
       const span = trace.span({ name: `tool ${call.name}`, input: args, metadata: { access: UI_TOOLS.has(call.name) ? "ui" : undefined } });
       let content;
       if (call.name === "suggest_replies") {
-        const replies = cleanReplies(args, book);
+        const replies = askedUser ? [] : cleanReplies(args, book, { editor: caller.role === "editor" });
         if (replies.length) {
           suggestions = true;
           ui.replies = replies;
           emit({ type: "suggestions", replies });
         }
         content = JSON.stringify({ shown: replies.length > 0 });
+        span.end({ output: content });
+      } else if (call.name === "ask_user") {
+        const q = askedUser ? null : cleanQuestion(args);
+        if (q) {
+          askedUser = true;
+          ui.question = q;
+          delete ui.replies;
+          emit({ type: "question", ...q });
+        }
+        content = JSON.stringify(q ? { shown: true, note: "End your turn now: the answer arrives as the user's next message." } : { shown: false, error: askedUser ? "One question per turn." : "Give a question and 2-6 short options." });
         span.end({ output: content });
       } else if (call.name === "show_recipes") {
         const { cards, dropped } = buildCards(book, args?.slugs);
@@ -368,8 +394,8 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         span.end({ output: content, refused: true });
       } else {
         emit({ type: "status", text: STATUS[call.name] || "Working on it…" });
-        const out = await dispatch(call.name, args, caller, { origin });
-        content = resultText(out);
+        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title } });
+        content = resultText(out, call.name === "get_tray" ? 40000 : MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;
       }

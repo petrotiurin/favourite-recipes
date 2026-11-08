@@ -23,7 +23,7 @@ export class StoreError extends Error {}
 
 export const storeConfigured = () => !!(config.supabaseUrl && config.supabaseServiceKey);
 
-async function rest(path, { method = "GET", body, prefer, query } = {}) {
+export async function rest(path, { method = "GET", body, prefer, query } = {}) {
   const url = `${config.supabaseUrl}/rest/v1/${path}${query ? `?${query}` : ""}`;
   let res;
   try {
@@ -46,7 +46,7 @@ async function rest(path, { method = "GET", body, prefer, query } = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-const q = (params) => new URLSearchParams(params).toString();
+export const q = (params) => new URLSearchParams(params).toString();
 const cutoffIso = (now = Date.now()) => new Date(now - RETENTION_MS).toISOString();
 
 /** When a chat last touched at `updatedAt` goes away. */
@@ -163,10 +163,11 @@ export function messagesForPanel(rows) {
       if (ui.cards?.length) turn.cards = [...(turn.cards || []), ...ui.cards].slice(0, 8);
       if (ui.nav) turn.nav = ui.nav;
       if (ui.replies?.length) turn.replies = ui.replies;
+      if (ui.question) turn.question = ui.question;
       if (row.feedback) turn.feedback = row.feedback;
     }
   }
-  return out.filter((m) => m.role === "user" || m.content || m.cards?.length);
+  return out.filter((m) => m.role === "user" || m.content || m.cards?.length || m.question);
 }
 
 /** A short title from the first message: its first line, cut at a word boundary. No model call, no spend. */
@@ -175,4 +176,16 @@ export function titleFrom(text) {
   if (line.length <= 48) return line || "New chat";
   const cut = line.slice(0, 48);
   return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 24)).replace(/[\s,.;:!?-]+$/, "")}…`;
+}
+
+/**
+ * Posts a message from the bot into a chat on the user's behalf (Save's summary): an assistant row with its panel extras (`ui`), as a turn of
+ * its own. The model sees the text on later turns, not the extras. Only if the conversation is this user's; returns the turn id or null.
+ */
+export async function postAssistantMessage(conversationId, userId, content, ui) {
+  const convo = await getConversation(conversationId, userId);
+  if (!convo) return null;
+  const turnId = newId();
+  await appendMessages(convo.id, [{ role: "assistant", content, ...(ui ? { ui } : {}) }], { turnId });
+  return turnId;
 }
