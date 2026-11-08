@@ -155,6 +155,41 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   const ask = (question, options, text = "") => scriptedStream({ ...opts, text, calls: [{ name: "ask_user", arguments: { question, options } }] });
   const done = (text, ...chips) => scriptedStream({ ...opts, text, calls: [replies(...(chips.length ? chips : ["Anything else?"]))] });
 
+  // a photo the user attached: "read" it (a mock: always the same soup) and stage the recipe; "use this as the photo" keeps their photo
+  const photos = imagesIn(msgs[lastUserIdx]);
+  if (photos) {
+    if (!lastCall) {
+      return tray("stage_create_recipe", {
+        title: "Screenshot Tomato Soup", course: ["Lunch"], tags: ["Soup"], total_mins: 30, serves: 4, calories: 210,
+        ingredients: [{ quantity: "800g", name: "tinned tomatoes" }, { quantity: "1", name: "onion" }, { quantity: "500ml", name: "vegetable stock" }],
+        instructions: ["Soften the **onion** in a pan.", "Add the **tinned tomatoes** and **vegetable stock** and simmer for 15 minutes.", "Blend until smooth."],
+        ...(/use (this|that|it|my|the)\b.*photo|as the photo/.test(user) ? { photo_from_attachment: 1 } : {}),
+        reason: "read from the screenshot",
+      }, "I read the recipe off your photo and will put it in the tray.");
+    }
+    return done("It's in the tray as a draft for next week (serves and calories are my estimate). It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
+  }
+  // a link: read it with fetch_url, then stage the recipe from the page's own recipe data
+  const link = userText(msgs[lastUserIdx]).match(/https?:\/\/[^\s)]+/)?.[0];
+  if (link && !/add a new recipe:/.test(user)) {
+    if (!lastCall) return tray("fetch_url", { url: link }, "Let me read that page.");
+    if (lastCall.name === "fetch_url") {
+      const body = String(lastResult.content);
+      const json = body.match(/\(JSON-LD[^\n]*\):\n([\s\S]*?)\nPage text:/)?.[1];
+      let recipe;
+      try { recipe = JSON.parse(json); } catch { /* none */ }
+      if (!recipe) return done("I couldn't read a recipe off that page. Could you paste it or send a screenshot?", "I'll paste it");
+      const ingredients = (recipe.ingredients || []).map((line) => {
+        const m = line.match(/^([\d½¼¾./]+\s*(?:g|kg|ml|l|tbsp|tsp|cups?)?)\s+(.+)$/i);
+        return m ? { quantity: m[1].trim(), name: m[2].trim() } : { quantity: "1", name: line };
+      });
+      return tray("stage_create_recipe", {
+        title: recipe.name || "Linked Recipe", course: ["Dinner"], total_mins: recipe.total_mins || 30, serves: 4, calories: 400,
+        ingredients, instructions: (recipe.steps || ["Cook everything."]).map((x) => x), image_url: link, reason: "from a link",
+      }, `I read ${recipe.name || "the page"} and will put it in the tray.`);
+    }
+    if (lastCall.name === "stage_create_recipe") return done("It's in the tray as a draft for next week, with the page's own photo. It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
+  }
   // a new recipe
   const created = user.match(/add a new recipe:\s*(.+)$/);
   if (created) {
@@ -244,7 +279,10 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   return null;
 }
 
-const userText = (m) => String(m.content).replace(/\n\n\[Note from the site[\s\S]*$/, "");
+/** A message's text, whether its content is a string or text + image parts. */
+const contentText = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(m.content ?? ""));
+const imagesIn = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url").length : 0);
+const userText = (m) => contentText(m).replace(/\n\n\[Note from the site[\s\S]*$/, "");
 
 /**
  * A scripted stand-in for OpenRouter's /chat/completions. Behaviour depends on the latest user message:
@@ -279,7 +317,7 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
     const msgs = body.messages;
     const lastUserIdx = msgs.findLastIndex((m) => m.role === "user");
     const user = userText(msgs[lastUserIdx]).toLowerCase();
-    const note = String(msgs[lastUserIdx].content).match(/\[Note from the site, not from the user: ([\s\S]*)\]$/)?.[1];
+    const note = contentText(msgs[lastUserIdx]).match(/\[Note from the site, not from the user: ([\s\S]*)\]$/)?.[1];
     const after = msgs.slice(lastUserIdx + 1);
     const toolResults = after.filter((m) => m.role === "tool");
     const lastTool = toolResults[toolResults.length - 1];
@@ -463,6 +501,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       const have = row[k];
       if (op === "eq" && String(have) !== want) return false;
       if (op === "gt" && !(String(have) > want)) return false; // ISO timestamps compare as strings
+      if (op === "in" && !want.replace(/^\(|\)$/g, "").split(",").includes(String(have))) return false;
     }
     return true;
   }
@@ -548,6 +587,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     }
     if ((m = route.match(/^object\/list\/([^/]+)$/)) && method === "POST") {
       const { prefix = "" } = JSON.parse(init.body);
+      if (!prefix) return json([...new Set([...objects.keys()].filter((k) => k.startsWith(`${m[1]}/`)).map((k) => k.slice(m[1].length + 1).split("/")[0]))].map((name) => ({ name, id: null })));
       return json([...objects.keys()].filter((k) => k.startsWith(`${m[1]}/${prefix}/`)).map((k) => ({ name: k.slice(`${m[1]}/${prefix}/`.length) })));
     }
     if ((m = route.match(/^object\/([^/]+)$/)) && method === "DELETE") {

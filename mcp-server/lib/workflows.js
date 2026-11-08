@@ -45,3 +45,19 @@ export const WORKFLOWS = {
 };
 
 export const WORKFLOW_NAMES = Object.keys(WORKFLOWS);
+
+/**
+ * The parts of plan-recipes that the chat's editor model needs in its system prompt: the recipe-writing rules ("Writing a recipe that passes
+ * first time"), "3. Build the shopping list" and the "In chat" section, which says how the rest maps onto the tray. Cut out by heading, so the
+ * MCP-only plumbing (batch_changes, AskUserQuestion, upload links) stays out of the chat prompt.
+ */
+export function chatGuide() {
+  const text = WORKFLOWS["plan-recipes"].text;
+  const between = (start, end) => {
+    const i = text.indexOf(start);
+    if (i === -1) throw new Error(`plan-recipes.md has no "${start}" section`);
+    const j = end ? text.indexOf(end, i) : text.length;
+    return text.slice(i, j === -1 ? text.length : j).trim();
+  };
+  return [between("### Writing a recipe that passes first time", "**Photos.**"), between("## 3. Build the shopping list (always)", "## 4."), between("## In chat")].join("\n\n");
+}

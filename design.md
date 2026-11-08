@@ -281,6 +281,13 @@ On the **At home** tab every row is a fill bar:
   next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
 - **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
   tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
+- **Photo attachments** (`.chat-attach`, editors only): a 44px round outline icon button (the stroke "picture" icon, `--text-muted`) to the left of the
+  input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 4 photos;
+  the button disables at 4. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
+  round × on the corner; they're downscaled to 1600px JPEG in the browser first. A muted line says when a file couldn't be read. A sent message
+  shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened. Visitors have no button.
+- **Action chips that commit** (`.chat-chip.is-action`: Save to site, Finalise list): solid `--accent-strong` like the primary button, fixed text
+  drawn by the panel ("Save to site (3)"), never the model's wording.
 - Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.
 - **Questions** (`.chat-question`, `ask_user`): the question in bold, then **solid** chips (`--accent-strong`, `--on-accent`; a suggestion is an
   outline chip). The input's placeholder reads "Or type an answer" while one is live. `multi` chips toggle (`--current-soft` with an accent
@@ -299,4 +306,4 @@ On the **At home** tab every row is a fill bar:
   button that applies.
 - **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
   "Publishing…" until the server sees their page, then they turn into normal cards.
-- **Action chips** (`.chat-chip.is-action`): accent-ink outline chips that press the tray's own button ("Finalise list", "Save to site"): still a tap by a person.
+- **Action chips** (`.chat-chip.is-action`): solid chips that press the tray's own button ("Finalise list", "Save to site (n)"), with fixed text: still a tap by a person (see "Action chips that commit" above).

@@ -52,7 +52,7 @@ export async function deleteTrayRow(id) {
 
 // --- Storage ----------------------------------------------------------------------------------------------------------
 
-async function storage(path, { method = "GET", body, headers = {}, json = false } = {}) {
+export async function storage(path, { method = "GET", body, headers = {}, json = false } = {}) {
   let res;
   try {
     res = await fetch(`${config.supabaseUrl}/storage/v1/${path}`, {
@@ -66,7 +66,7 @@ async function storage(path, { method = "GET", body, headers = {}, json = false 
   return res;
 }
 
-const objectPath = (path) => path.split("/").map(encodeURIComponent).join("/");
+export const objectPath = (path) => path.split("/").map(encodeURIComponent).join("/");
 
 /** Stores (or replaces) a staged photo. `path` is "<tray id>/<slug>.jpg". */
 export async function uploadPhoto(path, bytes) {

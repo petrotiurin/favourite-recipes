@@ -128,12 +128,17 @@ export async function setFeedback(messageId, feedback) {
  * (a turn whose answer failed) merged, at most `max` of them and never starting in the middle of a tool exchange.
  */
 export function historyForModel(rows, max = MAX_HISTORY_MESSAGES) {
+  // user messages keep `images` ([{ path }]) here; withReplayImages() turns them into image parts or a placeholder before the model sees them
   const out = [];
   for (const row of rows) {
     const { ui, ...m } = row.content || {};
     if (!m.role || (m.role === "assistant" && !m.content && !m.tool_calls)) continue;
+    if (Array.isArray(m.images)) m.images = m.images.map((i) => (typeof i === "string" ? i : i?.path)).filter(Boolean);
     const prev = out[out.length - 1];
-    if (prev && prev.role === "user" && m.role === "user") prev.content = `${prev.content}\n\n${m.content}`;
+    if (prev && prev.role === "user" && m.role === "user") {
+      prev.content = `${prev.content}\n\n${m.content}`;
+      if (m.images?.length) prev.images = [...(prev.images || []), ...m.images];
+    }
     else out.push(m);
   }
   const tail = out.slice(-max);
@@ -151,7 +156,7 @@ export function messagesForPanel(rows) {
   for (const row of rows) {
     const m = row.content || {};
     if (row.role === "user") {
-      out.push({ role: "user", content: String(m.content || "") });
+      out.push({ role: "user", content: String(m.content || ""), ...(Array.isArray(m.images) && m.images.length ? { images: m.images.map((i) => i.path) } : {}) });
       turn = null;
     } else if (row.role === "assistant") {
       if (!turn || turn.turn_id !== row.turn_id) {
@@ -188,4 +193,51 @@ export async function postAssistantMessage(conversationId, userId, content, ui) 
   const turnId = newId();
   await appendMessages(convo.id, [{ role: "assistant", content, ...(ui ? { ui } : {}) }], { turnId });
   return turnId;
+}
+
+// --- photos in the history -------------------------------------------------------------------------------------------------
+
+/** Photos are sent to the model again only for the most recent messages and at most this many in all; older ones become a text placeholder. */
+export const REPLAY_RECENT_MESSAGES = 8;
+export const REPLAY_MAX_IMAGES = 4;
+export const OLD_PHOTO_PLACEHOLDER = "[photo the user sent earlier]";
+
+/**
+ * The model-facing history: each user message's stored photos become OpenAI image parts (data URLs) when the message is among the last
+ * REPLAY_RECENT_MESSAGES of `history` and fewer than REPLAY_MAX_IMAGES photos are replayed in all (newest first); otherwise (or when the
+ * file is gone) a "[photo the user sent earlier]" note in the text. `load(path)` resolves the JPEG bytes or null. The `images` key never goes on.
+ */
+export async function withReplayImages(history, load, toUrl) {
+  let budget = REPLAY_MAX_IMAGES;
+  const out = history.map((m) => ({ ...m }));
+  for (let i = out.length - 1; i >= 0; i--) {
+    const m = out[i];
+    if (m.role !== "user" || !m.images?.length) {
+      delete m.images;
+      continue;
+    }
+    const paths = m.images;
+    delete m.images;
+    const recent = i >= out.length - REPLAY_RECENT_MESSAGES;
+    const parts = [];
+    let missing = 0;
+    for (const path of paths) {
+      let bytes = null;
+      if (recent && budget > 0) {
+        try {
+          bytes = await load(path);
+        } catch {
+          bytes = null;
+        }
+      }
+      if (bytes) {
+        budget--;
+        parts.push({ type: "image_url", image_url: { url: toUrl(bytes) } });
+      } else missing++;
+    }
+    const note = missing ? Array(missing).fill(OLD_PHOTO_PLACEHOLDER).join(" ") : "";
+    const text = [m.content, note].filter(Boolean).join("\n");
+    m.content = parts.length ? [{ type: "text", text: text || "(photo)" }, ...parts] : text;
+  }
+  return out;
 }

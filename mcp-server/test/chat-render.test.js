@@ -208,3 +208,14 @@ test("the tray from the server is reduced to plain values: photos only from Supa
   assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 20 * 3600_000).toISOString() }, Date.now()).startsWith("The tray expires"), true);
   assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 3 * 86400_000).toISOString() }, Date.now()), "");
 });
+
+test("an editor's sent photos: only signed URLs of our own project's chat-uploads bucket survive, at most four", () => {
+  const base = "https://proj.supabase.co";
+  const ok = `${base}/storage/v1/object/sign/chat-uploads/a/b.jpg?token=t`;
+  const out = chat.cleanServerMessages([{ role: "user", content: "", images: [ok, "https://evil.test/x.jpg", `${base}/storage/v1/object/sign/tray-photos/a.jpg?token=t`, "javascript:alert(1)", 5, ok, ok, ok, ok] }], ORIGIN, base);
+  assert.equal(out.length, 1, "a message with only photos is kept");
+  assert.equal(out[0].images.length, 4);
+  assert.ok(out[0].images.every((u) => u === ok));
+  assert.equal(chat.cleanServerMessages([{ role: "user", content: "hi", images: [ok] }], ORIGIN, "").length, 1);
+  assert.equal(chat.cleanServerMessages([{ role: "user", content: "hi", images: [ok] }], ORIGIN, "")[0].images, undefined, "no Supabase base: no photos");
+});

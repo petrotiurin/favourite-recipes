@@ -326,13 +326,14 @@ export async function stageOp(spec, caller, ctx = {}) {
   const { op } = spec;
   if (!kindOf(op)) throw new UserError(`Unknown change "${op?.action}"`);
   if (op.action === "remove_draft") await removeDraft(op.slug, new ChangeSet(await warmReads()), caller); // the real rule, against the repo as it is (a draft planned for next week stays)
-  if (op.action === "update_recipe" && !Object.keys(op).some((k) => EDIT_FIELDS.includes(k)) && !spec.imageUrl && !spec.newPhoto) throw new UserError("Nothing to change: pass at least one field");
+  if (op.action === "update_recipe" && !Object.keys(op).some((k) => EDIT_FIELDS.includes(k)) && !spec.imageUrl && !spec.newPhoto && !spec.uploadPath) throw new UserError("Nothing to change: pass at least one field");
   const base = await baseFor(op);
   if (base === null && ["update_recipe", "promote_recipe", "remove_draft"].includes(op.action)) {
     // not on the site: fine if it is a recipe staged in this tray (planChange folds into it), else the dry run reports "No recipe with slug"
   }
   const reason = spec.reason || (ctx.conversationTitle ? `from the chat "${oneLine(ctx.conversationTitle, 40)}"` : "");
-  const wantsPhoto = op.action === "create_recipe" ? { status: "pending", image_url: spec.imageUrl || null, started: clock.now() } : spec.imageUrl || spec.newPhoto ? { status: "pending", image_url: spec.imageUrl || null, started: clock.now() } : null;
+  const photoSpec = { status: "pending", image_url: spec.imageUrl || null, ...(spec.uploadPath ? { upload: spec.uploadPath } : {}), started: clock.now() };
+  const wantsPhoto = op.action === "create_recipe" || spec.imageUrl || spec.newPhoto || spec.uploadPath ? photoSpec : null;
   const reads = await warmReads();
   let outcome;
   const { tray } = await mutate(caller, async (tray) => {
@@ -450,7 +451,7 @@ export function startPhotoJob(trayId, itemId, { regenerate = false } = {}) {
     const path = `${trayId}/${slugOf(item)}.jpg`;
     try {
       const subject = await photoSubject(item);
-      const made = await makePhoto({ title: subject.title, ingredients: subject.ingredients, description: item.photo.description, imageUrl: item.photo.image_url, regenerate });
+      const made = await makePhoto({ title: subject.title, ingredients: subject.ingredients, description: item.photo.description, imageUrl: item.photo.image_url, uploadPath: item.photo.upload, regenerate });
       await uploadPhoto(path, made.buffer);
       const after = await updateItem(trayId, itemId, (i) => ({ ...i, photo: { ...i.photo, status: "ready", path, source: made.source, note: made.note || null, error: null } }));
       if (!after) await removePhotos([path]).catch(() => {}); // dropped (or saved) while we were making it

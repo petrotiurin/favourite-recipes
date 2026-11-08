@@ -348,12 +348,25 @@
 
   var FEEDBACK_REASONS = ["Wrong recipe", "Didn't do what I asked", "Wrong amounts", "Too slow", "Something else"];
 
+  /** Photo URLs the server signed for an editor's own messages: only the Supabase signed-URL path of the chat-uploads bucket on the site's own project, at most 4. */
+  function cleanUploadUrls(list, base) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (u) {
+      if (out.length < 4 && typeof u === "string" && base && u.indexOf(base + "/storage/v1/object/sign/chat-uploads/") === 0 && u.length < 1200) out.push(u);
+    });
+    return out;
+  }
+
   /** A signed-in editor's chat as the server returns it (GET /chat/conversations/:id): same cleaning as the local history, plus the turn id and feedback. */
-  function cleanServerMessages(list, origin) {
+  function cleanServerMessages(list, origin, photoBase) {
     var out = [];
     (Array.isArray(list) ? list : []).forEach(function (m) {
       if (!m || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") return;
       var msg = { role: m.role, content: m.content };
+      if (m.role === "user") {
+        var photos = cleanUploadUrls(m.images, photoBase);
+        if (photos.length) msg.images = photos;
+      }
       if (m.role === "assistant") {
         var replies = cleanReplyItems(m.replies, origin);
         if (replies.length) msg.replies = replies;
@@ -372,7 +385,7 @@
           };
         }
       }
-      if (msg.content || msg.cards || msg.question) out.push(msg);
+      if (msg.content || msg.cards || msg.question || msg.images) out.push(msg);
     });
     return out;
   }
@@ -411,6 +424,7 @@
 
   var api = {
     cleanServerMessages: cleanServerMessages,
+    cleanUploadUrls: cleanUploadUrls,
     updatedLabel: updatedLabel,
     expiryLabel: expiryLabel,
     chatMeta: chatMeta,
@@ -464,6 +478,7 @@
     up: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9z"/><path d="M7 11l4-7c1.7 0 2.5 1.2 2.2 2.8L12.6 10H19a1.8 1.8 0 0 1 1.8 2.1l-1.3 6.4A2 2 0 0 1 17.5 20H7"/></svg>',
     down: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V4H4v9z"/><path d="M7 13l4 7c1.7 0 2.5-1.2 2.2-2.8L12.6 14H19a1.8 1.8 0 0 0 1.8-2.1l-1.3-6.4A2 2 0 0 0 17.5 4H7"/></svg>',
     chevron: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+    attach: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10.5" r="1.6"/><path d="m21 16-5-5-8 8"/></svg>',
     trash: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>',
   };
 
@@ -593,9 +608,18 @@
   var input = el("textarea", "chat-input", { rows: "1", placeholder: "Ask about our recipes", "aria-label": "Message", maxlength: "2000", enterkeyhint: "send", autocomplete: "off" });
   var sendBtn = iconButton("chat-send", "Send", ICON.send);
   sendBtn.type = "submit";
+  // Photos (editors only): the attach button opens the camera / photo library, the picked photos are downscaled here and listed above the input.
+  var attachBtn = iconButton("chat-attach", "Attach photos", ICON.attach);
+  attachBtn.hidden = true;
+  var picker = el("input", "chat-file", { type: "file", accept: "image/*", multiple: "", hidden: "", tabindex: "-1", "aria-hidden": "true" });
+  var shelf = el("div", "chat-attachments", { "aria-label": "Photos to send" });
+  shelf.hidden = true;
+  form.appendChild(attachBtn);
+  form.appendChild(picker);
   form.appendChild(input);
   form.appendChild(sendBtn);
   foot.appendChild(ctxChip);
+  foot.appendChild(shelf);
   foot.appendChild(form);
   panel.appendChild(head);
   panel.appendChild(banner);
@@ -693,8 +717,21 @@
   function messageEl(m, live) {
     var wrap = el("div", "chat-msg " + (m.role === "user" ? "is-user" : "is-bot"));
     var body = el("div", "chat-body");
-    if (m.role === "user") body.textContent = m.content;
-    else renderInto(doc, body, m.content, origin);
+    if (m.role === "user") {
+      if (m.images && m.images.length) {
+        var strip = el("div", "chat-photos");
+        m.images.forEach(function (u) {
+          var img = el("img", "chat-photo", { src: u, alt: "A photo you sent", loading: "lazy", decoding: "async" });
+          strip.appendChild(img);
+        });
+        body.appendChild(strip);
+      }
+      if (m.content) {
+        var txt = el("span", "chat-text");
+        txt.textContent = m.content;
+        body.appendChild(txt);
+      }
+    } else renderInto(doc, body, m.content, origin);
     wrap.appendChild(body);
     if (m.role !== "user") {
       if (m.cards && m.cards.length) setCards(wrap, m.cards);
@@ -894,7 +931,8 @@
     text = String(text || "").trim();
     var action = opts && opts.action;
     keyboardUnfold();
-    if (!text || streaming || checkingMe) return;
+    var photos = mode === "editor" && chat.server && !action ? pending.slice() : [];
+    if ((!text && !photos.length) || streaming || checkingMe) return;
     retireChips();
     Array.prototype.forEach.call(log.querySelectorAll(".chat-feedback"), function (f) { f.classList.add("is-old"); }); // earlier turns keep their thumbs, dimmed
     var editorTurn = mode === "editor" && chat.server;
@@ -903,9 +941,13 @@
     if (intro0) log.removeChild(intro0);
     Array.prototype.forEach.call(log.querySelectorAll(".chat-error"), function (e) { e.parentNode.removeChild(e); });
 
-    chat.messages.push({ role: "user", content: text });
-    log.appendChild(messageEl({ role: "user", content: text }));
+    var sent = { role: "user", content: text };
+    if (photos.length) sent.images = photos.map(function (p) { return p.url; });
+    chat.messages.push(sent);
+    log.appendChild(messageEl(sent));
     saveChat();
+    if (photos.length) pending = [];
+    paintShelf();
     input.value = "";
     autosize();
     saveUi();
@@ -962,7 +1004,7 @@
 
     // An editor sends only the new message and the conversation id (the server owns the history); a visitor sends their own.
     var payload = editorTurn
-      ? { conversation_id: chat.id || undefined, message: text, page: pageState(), action: action || undefined }
+      ? { conversation_id: chat.id || undefined, message: text, page: pageState(), action: action || undefined, images: photos.length ? photos.map(function (p) { return p.data; }) : undefined }
       : { conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() };
     (editorTurn ? authedFetch : fetch)(apiUrl, {
       method: "POST",
@@ -1038,6 +1080,8 @@
           if (err && err.name === "AuthExpired") {
             // The sign-in sheet is open: put the message back so it isn't lost, and keep the panel open through a page-reloading sign-in.
             input.value = text;
+            pending = photos;
+            paintShelf();
             autosize();
             saveUi();
           }
@@ -1206,6 +1250,11 @@
   function paintHeader() {
     var editor = mode === "editor";
     chatsBtn.hidden = !editor;
+    attachBtn.hidden = !editor || !(chat && chat.server);
+    if (attachBtn.hidden && pending.length) {
+      pending = [];
+      paintShelf();
+    }
     title.textContent = editor && chat.title ? chat.title : "Recipe chat";
     var readOnly = me.signedIn && !editor ? "Signed in as " + me.email + " — this account can't edit, so the chat is read-only." : "";
     banner.textContent = readOnly;
@@ -1222,6 +1271,8 @@
       setBusy(false);
     }
     mode = "public";
+    pending = [];
+    paintShelf();
     clearTray();
     chat = anonChat;
     // An expired session keeps the open conversation's id, so signing in again comes back to it; only an explicit sign-out forgets it.
@@ -1269,7 +1320,7 @@
             chat = { server: true, id: null, title: "", messages: [] }; // expired or deleted: start fresh
             rememberEditorChat();
           } else {
-            chat = { server: true, id: j.id, title: String(j.title || "").slice(0, 80), messages: cleanServerMessages(j.messages, origin) };
+            chat = { server: true, id: j.id, title: String(j.title || "").slice(0, 80), messages: cleanServerMessages(j.messages, origin, photoBase) };
             rememberEditorChat();
           }
           setListing(false);
@@ -1873,6 +1924,82 @@
       send(input.value);
     }
   });
+  // --- photos to send ------------------------------------------------------------------------------------------------------------
+  // Each picked photo is decoded and redrawn on a canvas at most 1600px on the long edge as a JPEG (no EXIF leaves the phone, and the upload
+  // stays small); the server checks and re-encodes it again. { url (a local preview), data (the JPEG as a data URL) }.
+  var MAX_PHOTOS = 4;
+  var pending = [];
+  var photoNote = "";
+  function paintShelf() {
+    while (shelf.firstChild) shelf.removeChild(shelf.firstChild);
+    pending.forEach(function (p, i) {
+      var chip = el("div", "chat-attachment");
+      chip.appendChild(el("img", "chat-attachment-img", { src: p.url, alt: "Photo " + (i + 1) }));
+      var x = iconButton("chat-attachment-remove", "Remove photo " + (i + 1), ICON.close);
+      x.addEventListener("click", function () {
+        pending.splice(i, 1);
+        paintShelf();
+      });
+      chip.appendChild(x);
+      shelf.appendChild(chip);
+    });
+    if (photoNote) {
+      var n = el("p", "chat-attachment-note", { role: "status" });
+      n.textContent = photoNote;
+      shelf.appendChild(n);
+    }
+    shelf.hidden = !pending.length && !photoNote;
+    attachBtn.disabled = pending.length >= MAX_PHOTOS;
+  }
+  function downscale(file) {
+    return new Promise(function (resolve, reject) {
+      var src = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth;
+        var h = img.naturalHeight;
+        if (!w || !h) return reject(new Error("size"));
+        var attempt = [[1600, 0.82], [1600, 0.68], [1280, 0.6], [1000, 0.55]];
+        var data = "";
+        for (var i = 0; i < attempt.length; i++) {
+          var k = Math.min(1, attempt[i][0] / Math.max(w, h));
+          var c = doc.createElement("canvas");
+          c.width = Math.max(1, Math.round(w * k));
+          c.height = Math.max(1, Math.round(h * k));
+          var ctx = c.getContext("2d");
+          ctx.fillStyle = "#fff";
+          ctx.fillRect(0, 0, c.width, c.height);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          data = c.toDataURL("image/jpeg", attempt[i][1]);
+          if (data.length < 1100000) break; // ~800 KB of JPEG: four of them stay under the request limit
+        }
+        resolve({ url: src, data: data });
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(src);
+        reject(new Error("decode"));
+      };
+      img.src = src;
+    });
+  }
+  attachBtn.addEventListener("click", function () {
+    if (!streaming && pending.length < MAX_PHOTOS) picker.click();
+  });
+  picker.addEventListener("change", function () {
+    var files = Array.prototype.slice.call(picker.files || [], 0, MAX_PHOTOS - pending.length);
+    picker.value = "";
+    photoNote = "";
+    files.reduce(function (chain, file) {
+      return chain.then(function () {
+        if (!/^image\//.test(file.type || "image/")) { photoNote = "Only photos can be attached."; return; }
+        return downscale(file).then(
+          function (p) { if (pending.length < MAX_PHOTOS) pending.push(p); },
+          function () { photoNote = "Couldn't read one of those photos. Try a JPEG or PNG."; }
+        );
+      });
+    }, Promise.resolve()).then(paintShelf);
+  });
+
   function autosize() {
     input.style.height = "auto";
     input.style.height = Math.min(input.scrollHeight, 140) + "px";

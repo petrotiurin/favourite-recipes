@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) and 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) are built. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) and 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) are built. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 ## 1. Desired outcome

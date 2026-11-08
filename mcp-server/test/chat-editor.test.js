@@ -119,7 +119,7 @@ test("an editor's turn uses the editor key, model and the read + UI tools, and i
   assert.equal(first.auth, "Bearer or-editor-test");
   assert.equal(first.model, "test/editor-model");
   const stageTools = tools.TOOLS.filter((t) => tools.accessOf(t) === "stage").map((t) => t.name);
-  assert.deepEqual(first.tools.map((t) => t.function.name).sort(), ["ask_user", "get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "search_recipes", "show_recipes", "suggest_replies", ...stageTools].sort());
+  assert.deepEqual(first.tools.map((t) => t.function.name).sort(), ["ask_user", "fetch_url", "get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "search_recipes", "show_recipes", "suggest_replies", ...stageTools].sort());
   assert.ok(!first.tools.some((t) => { const x = tools.TOOLS.find((y) => y.name === t.function.name); return x && tools.accessOf(x) === "write"; }), "the tools that commit are never offered in chat");
 
   assert.equal(supabase.tables.conversations.length, 1);

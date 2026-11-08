@@ -147,8 +147,8 @@ export function buildServer({ origin }) {
     );
   }
 
-  // Stage tools are the chat's (they fill the plan tray); /mcp keeps the write tools that commit.
-  for (const tool of TOOLS.filter((t) => accessOf(t) !== "stage")) {
+  // Stage tools and editor-only tools (fetch_url) are the chat's (they fill the plan tray); /mcp keeps the write tools that commit.
+  for (const tool of TOOLS.filter((t) => accessOf(t) !== "stage" && !t.editorOnly)) {
     server.registerTool(
       tool.name,
       {

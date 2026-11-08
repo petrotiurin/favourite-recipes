@@ -203,6 +203,7 @@ const STATUS = {
   search_recipes: "Looking through the recipes…",
   list_recipes: "Looking through the recipes…",
   get_recipe: "Reading the recipe…",
+  fetch_url: "Reading the link…",
   get_shopping_list: "Checking the shopping list…",
 };
 
@@ -215,6 +216,22 @@ const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
 export function cleanReplies(args, book, opts) {
   const parsed = repliesSchema.safeParse(args);
   return parsed.success ? cleanReplyList(parsed.data.replies, book, opts) : [];
+}
+
+/** Appends the site note to a user message whose content is text or text + image parts. */
+function withNote(content, note) {
+  const add = `\n\n[Note from the site, not from the user: ${note}]`;
+  if (!Array.isArray(content)) return `${content}${add}`;
+  const parts = content.map((p) => ({ ...p }));
+  const first = parts.find((p) => p.type === "text");
+  if (first) first.text += add;
+  else parts.unshift({ type: "text", text: add.trim() });
+  return parts;
+}
+
+/** Messages as a trace should show them: photos are named, never inlined (a data URL would bloat the trace). */
+export function redactImages(messages) {
+  return messages.map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.map((p) => (p.type === "image_url" ? { type: "text", text: "[photo attached]" } : p)) } : m));
 }
 
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
@@ -234,7 +251,7 @@ const STAGE_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "stage").map((t)
  * request (POST /chat/plan/apply), a button a person taps.
  */
 export function offeredTools(role) {
-  const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide");
+  const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
   const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
   if (role !== "editor") return [...base, ...ui];
   return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL];
@@ -249,10 +266,11 @@ export function offeredTools(role) {
  *   messages  already sanitized (sanitizeMessages) for a visitor; for an editor the server's own stored history plus the new
  *             user message (full OpenAI-format messages, tool calls and results included)
  *   apiKey    the OpenRouter key for this role
+ *   attachments  the editor's photos on this message, [{ path }] in order (stage tools may use one as a recipe photo)
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+export async function runChat({ caller, messages, page, emit, trace, signal, attachments = [], model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
 
@@ -271,7 +289,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
   const convo = messages.map((m) => ({ ...m }));
   if (note) {
     const last = convo[convo.length - 1];
-    last.content = `${last.content}\n\n[Note from the site, not from the user: ${note}]`;
+    last.content = withNote(last.content, note);
   }
   const thread = [{ role: "system", content: systemPrompt(rows, { editor: caller.role === "editor" }) }, ...convo];
   const base = thread.length; // everything pushed after this is new this turn (an editor's turn is stored)
@@ -287,7 +305,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
   let finalRound = false;
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     finalRound = round === MAX_TOOL_ROUNDS; // out of rounds: one last call without tools, so the user always gets an answer
-    const generation = trace.generation({ name: `chat round ${round + 1}`, model, input: thread.slice(1), metadata: { promptVersion: PROMPT_VERSION } });
+    const generation = trace.generation({ name: `chat round ${round + 1}`, model, input: redactImages(thread.slice(1)), metadata: { promptVersion: PROMPT_VERSION } });
     let result;
     let separate = reply.trim() !== ""; // text from an earlier round: start this one in a new paragraph
     try {
@@ -394,7 +412,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         span.end({ output: content, refused: true });
       } else {
         emit({ type: "status", text: STATUS[call.name] || "Working on it…" });
-        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title } });
+        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, attachments } });
         content = resultText(out, call.name === "get_tray" ? 40000 : MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;

@@ -4,7 +4,7 @@
 //
 // Fetching a URL the MODEL chose is an SSRF risk, so it is locked down: public http(s) only (ports 80/443), no credentials in the URL,
 // no localhost or private, link-local, loopback or reserved addresses (checked on the name's DNS answers, and again on every redirect),
-// short timeouts and hard size caps. The same guard is meant for the phase 5 `fetch_url` tool.
+// short timeouts and hard size caps. The same guard serves the chat's `fetch_url` tool (lib/page-reader.js).
 import dns from "node:dns/promises";
 import net from "node:net";
 import { request as httpRequest } from "node:http";
@@ -13,6 +13,7 @@ import { Readable } from "node:stream";
 import { CARD_ASPECT } from "./config.js";
 import { normalizeImage } from "./images.js";
 import { generateDishImage } from "./image-generation.js";
+import { downloadUpload } from "./chat-uploads.js";
 
 const MAX_HTML_BYTES = 1_500_000;
 const MAX_SCANNED_HTML = 256 * 1024;
@@ -231,11 +232,21 @@ export async function photoFromLink(link) {
 
 /**
  * The photo for a staged recipe. With `imageUrl`: the source's own photo; if that fails (or there is none), a generated one. Without: generated.
- * Resolves { buffer, source: "link" | "generated", note? }; rejects only when generation fails too.
+ * Resolves { buffer, source: "upload" | "link" | "generated", note? }; rejects only when generation fails too.
  */
-export async function makePhoto({ title, ingredients = [], description, imageUrl, regenerate = false }) {
+export async function makePhoto({ title, ingredients = [], description, imageUrl, uploadPath, regenerate = false }) {
   let note;
-  if (imageUrl && !regenerate) {
+  if (uploadPath && !regenerate) {
+    // The editor's own attached photo (stored by /chat, server-built path): re-cropped to the card shape like any other photo.
+    try {
+      const bytes = await downloadUpload(uploadPath);
+      if (!bytes) throw new Error("the attached photo is gone");
+      return { buffer: (await normalizeImage(bytes, { aspect: CARD_ASPECT })).buffer, source: "upload" };
+    } catch (err) {
+      note = `couldn't use the attached photo (${err.message})`;
+    }
+  }
+  if (imageUrl && !regenerate && !(uploadPath && !note)) {
     try {
       return { buffer: await photoFromLink(imageUrl), source: "link" };
     } catch (err) {
