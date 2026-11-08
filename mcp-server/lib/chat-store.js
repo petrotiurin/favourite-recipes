@@ -175,6 +175,20 @@ export function messagesForPanel(rows) {
   return out.filter((m) => m.role === "user" || m.content || m.cards?.length || m.question);
 }
 
+/**
+ * The turns that have ended, as { turnId: null (answered) | "error message" }: a turn's answer is stored when it ends, even when the
+ * panel lost the stream, so a panel that came back checks here for the turn it was waiting on.
+ */
+export function endedTurns(rows) {
+  const out = {};
+  for (const row of rows) {
+    if (row.role !== "assistant" || !row.turn_id) continue;
+    const err = row.content?.ui?.error;
+    if (!(row.turn_id in out) || out[row.turn_id] !== null) out[row.turn_id] = typeof err === "string" && err ? err.slice(0, 300) : null;
+  }
+  return out;
+}
+
 /** A short title from the first message: its first line, cut at a word boundary. No model call, no spend. */
 export function titleFrom(text) {
   const line = String(text || "").replace(/\s+/g, " ").trim();

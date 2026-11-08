@@ -26,6 +26,7 @@ import {
   historyForModel,
   withReplayImages,
   messagesForPanel,
+  endedTurns,
   titleFrom,
   expiresAt,
 } from "../lib/chat-store.js";
@@ -150,7 +151,7 @@ export async function GET(request) {
       const rows = await getMessages(convo.id);
       const messages = messagesForPanel(rows);
       for (const m of messages) if (m.images) m.images = (await Promise.all(m.images.map((p) => signedUploadUrl(p)))).filter(Boolean);
-      return reply({ id: convo.id, title: convo.title || "New chat", expires_at: expiresAt(convo.updated_at), messages });
+      return reply({ id: convo.id, title: convo.title || "New chat", expires_at: expiresAt(convo.updated_at), messages, ended_turns: endedTurns(rows) });
     } catch (err) {
       console.error("Loading chats failed:", err.message);
       return reply({ error: "Couldn't load your chats. Try again in a moment." }, 502);
@@ -461,97 +462,108 @@ export async function POST(request) {
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
-    async start(controller) {
-      let closed = false;
-      let content = false; // something the user can see (or an error) went out
-      let lastEvent = Date.now();
-      // Long tool-heavy turns can be quiet for a while: say we're still on it instead of leaving "Thinking…" up
-      const heartbeat = setInterval(() => {
-        if (!closed && Date.now() - lastEvent > STILL_WORKING_MS) send("status", { text: "Still working on it…" });
-      }, 5000);
-      const send = (event, data) => {
-        if (closed) return;
-        lastEvent = Date.now();
-        if (!["meta", "title", "done", "status"].includes(event)) content = true;
-        try {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
-        } catch {
-          closed = true;
-        }
-      };
-      const emit = ({ type, ...data }) => send(type, data);
-      let output;
-      try {
-        if (isEditor) {
-          send("meta", { conversation_id: convo.id, turn_id: turnId });
-          if (title) send("title", { conversation_id: convo.id, title });
-        }
-        const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-        if (notYet) {
-          // "Not yet" to the promote question: nothing is staged, the tray goes back to collecting, no model call (design 7.1)
-          await settleFinalise(caller);
-          let chips = [];
+    start(controller) {
+      // An editor's turn runs to the end even if the panel goes away (a phone switching apps or tabs drops the stream): its answer and tray
+      // changes are stored, and the panel picks them up when it comes back. waitUntil keeps the function alive for it. A visitor's turn,
+      // stored nowhere, stops with the connection.
+      const job = (async () => {
+        let closed = false;
+        let content = false; // something the user can see (or an error) went out
+        let lastEvent = Date.now();
+        // Long tool-heavy turns can be quiet for a while: say we're still on it instead of leaving "Thinking…" up
+        const heartbeat = setInterval(() => {
+          if (!closed && Date.now() - lastEvent > STILL_WORKING_MS) send("status", { text: "Still working on it…" });
+        }, 5000);
+        const send = (event, data) => {
+          if (closed) return;
+          lastEvent = Date.now();
+          if (!["meta", "title", "done", "status"].includes(event)) content = true;
           try {
-            if (trayAction(await trayView(await loadTray(), caller)) === "finalise_plan") chips = [{ label: "Finalise list", action: "finalise_plan" }];
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
           } catch {
-            // no chip
+            closed = true;
           }
-          emit({ type: "text", delta: NOT_YET_REPLY });
-          if (chips.length) emit({ type: "suggestions", replies: chips });
-          emit({ type: "done", suggestions: chips.length > 0 });
-          output = NOT_YET_REPLY;
-          try {
-            await appendMessages(convo.id, [{ role: "assistant", content: NOT_YET_REPLY, ...(chips.length ? { ui: { replies: chips } } : {}) }], { turnId, traceId: trace.traceId });
-          } catch (err) {
-            console.error("Saving the answer failed:", err.message);
-          }
-          return;
-        }
-        const result = await runChat({
-          caller,
-          messages,
-          page,
-          emit,
-          trace,
-          signal: request.signal,
-          attachments,
-          model,
-          apiKey: isEditor ? config.chatEditorKey : config.chatPublicKey,
-          origin: host ? `https://${host}` : new URL(request.url).origin,
-          extraNote,
-          conversation: isEditor ? { id: convo.id, title: convo.title || title } : undefined,
-        });
-        output = result.reply;
-        if (isEditor) {
-          try {
-            await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
-          } catch (err) {
-            console.error("Saving the answer failed:", err.message);
-          }
-        }
-      } catch (err) {
-        if (err?.name !== "AbortError") {
-          if (!(err instanceof ChatError)) console.error(err);
-          else if (err.kind === "out-of-credit") trace.event({ name: "out-of-credit", level: "ERROR" });
-          const message = err instanceof ChatError ? err.message : "Something went wrong with the chat. Try again in a moment.";
-          send("error", { message });
-          output = `error: ${message}`;
-        }
-      } finally {
-        clearInterval(heartbeat);
-        if (!content && !closed) send("error", { message: "The chat didn't answer. Try again in a moment." }); // a stream is never empty
-        if (finalise) {
-          await settleFinalise(caller);
-          trayEvent("tray-finalise", { trace, userId: caller.userId });
-        }
-        trace.finish(output);
-        closed = true;
+        };
+        const emit = ({ type, ...data }) => send(type, data);
+        let output;
         try {
-          controller.close();
-        } catch {
-          // the client already went away
+          if (isEditor) {
+            send("meta", { conversation_id: convo.id, turn_id: turnId });
+            if (title) send("title", { conversation_id: convo.id, title });
+          }
+          const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+          if (notYet) {
+            // "Not yet" to the promote question: nothing is staged, the tray goes back to collecting, no model call (design 7.1)
+            await settleFinalise(caller);
+            let chips = [];
+            try {
+              if (trayAction(await trayView(await loadTray(), caller)) === "finalise_plan") chips = [{ label: "Finalise list", action: "finalise_plan" }];
+            } catch {
+              // no chip
+            }
+            emit({ type: "text", delta: NOT_YET_REPLY });
+            if (chips.length) emit({ type: "suggestions", replies: chips });
+            emit({ type: "done", suggestions: chips.length > 0 });
+            output = NOT_YET_REPLY;
+            try {
+              await appendMessages(convo.id, [{ role: "assistant", content: NOT_YET_REPLY, ...(chips.length ? { ui: { replies: chips } } : {}) }], { turnId, traceId: trace.traceId });
+            } catch (err) {
+              console.error("Saving the answer failed:", err.message);
+            }
+            return;
+          }
+          const result = await runChat({
+            caller,
+            messages,
+            page,
+            emit,
+            trace,
+            signal: isEditor ? undefined : request.signal,
+            attachments,
+            model,
+            apiKey: isEditor ? config.chatEditorKey : config.chatPublicKey,
+            origin: host ? `https://${host}` : new URL(request.url).origin,
+            extraNote,
+            conversation: isEditor ? { id: convo.id, title: convo.title || title } : undefined,
+          });
+          output = result.reply;
+          if (isEditor) {
+            try {
+              await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
+            } catch (err) {
+              console.error("Saving the answer failed:", err.message);
+            }
+          }
+        } catch (err) {
+          if (err?.name !== "AbortError") {
+            if (!(err instanceof ChatError)) console.error(err);
+            else if (err.kind === "out-of-credit") trace.event({ name: "out-of-credit", level: "ERROR" });
+            const message = err instanceof ChatError ? err.message : "Something went wrong with the chat. Try again in a moment.";
+            send("error", { message });
+            output = `error: ${message}`;
+            if (isEditor) {
+              // a marker row so a panel that lost the stream learns the turn ended (the model never sees it: no content)
+              await appendMessages(convo.id, [{ role: "assistant", content: "", ui: { error: message } }], { turnId, traceId: trace.traceId }).catch((e) => console.error("Saving the error failed:", e.message));
+            }
+          }
+        } finally {
+          clearInterval(heartbeat);
+          if (!content && !closed) send("error", { message: "The chat didn't answer. Try again in a moment." }); // a stream is never empty
+          if (finalise) {
+            await settleFinalise(caller);
+            trayEvent("tray-finalise", { trace, userId: caller.userId });
+          }
+          trace.finish(output);
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // the client already went away
+          }
         }
-      }
+      })();
+      if (isEditor) background(job);
+      return job;
     },
   });
 

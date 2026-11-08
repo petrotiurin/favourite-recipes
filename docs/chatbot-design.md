@@ -618,6 +618,16 @@ draft kickers, calm states.
 - **Mobile keyboard:** size the panel with `visualViewport`, so the input stays above the keyboard.
 - **Streaming:** text streams in; tool activity shows as one quiet status line ("Looking through
   the recipes…"), not raw tool names.
+- **A dropped stream doesn't lose an editor's turn:** a phone that switches to another app or tab
+  (or a page change) drops the stream, which the browser reports only as "network error". An
+  editor's turn is not tied to the connection: it runs to the end on the server (kept alive with
+  Vercel's `waitUntil`), its answer and tray changes are stored, and a turn that fails stores a
+  marker row (no content, `ui.error`, never shown to the model). `GET /chat/conversations/:id`
+  returns `ended_turns` (`{ turnId: null | "error" }`). The panel, having had the turn id from
+  the stream's `meta`, says "Still working on it… The answer will show here when it's ready",
+  checks every 4s while the page is visible (and at once when it comes back), then shows the
+  conversation as stored. It gives up after 6 minutes. A visitor's turn, stored nowhere, still
+  stops with the connection, and a stream that ends without `done` counts as dropped.
 - **Wake lock:** the recipe page's "Keep screen on" keeps working while the panel is open.
 
 ## 10. Gaps found in the brief

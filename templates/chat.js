@@ -1115,9 +1115,13 @@
         var decoder = new TextDecoder();
         var buffer = "";
         var failed = null;
+        var ended = false; // the server's "done": without it (and without an error) the stream was cut, not finished
         function pump() {
           return reader.read().then(function (r) {
-            if (r.done) return;
+            if (r.done) {
+              if (!ended && !failed) throw dropped();
+              return;
+            }
             buffer += decoder.decode(r.value, { stream: true }).replace(/\r\n/g, "\n");
             var i;
             while ((i = buffer.indexOf("\n\n")) !== -1) {
@@ -1153,6 +1157,7 @@
                 }
               } else if (ev.name === "navigation") reply.nav = cleanNav(ev.data, origin) || reply.nav;
               else if (ev.name === "error") failed = String(ev.data.message || "Something went wrong with the chat.");
+              else if (ev.name === "done") ended = true;
             }
             return pump();
           });
@@ -1179,13 +1184,90 @@
             return;
           }
           var stillMine = streaming === mine;
+          // A dropped connection is a bare TypeError from the browser ("network error", "Load failed", "Failed to fetch"), e.g. a phone that
+          // switched to another app or tab. An editor's turn carries on on the server and is stored: wait for it instead of failing.
+          var cut = err && (err.name === "TypeError" || err.name === "Dropped");
+          if (stillMine && cut && editorTurn && chat.server && chat.id && reply.turn_id) {
+            resumeTurn(mine, chat.id, reply.turn_id, botEl);
+            return;
+          }
           finish(false);
           if (!stillMine || (err && err.name === "AbortError")) return;
-          // A dropped connection is a bare TypeError from the browser ("network error", "Load failed", "Failed to fetch"): say it in words.
-          if (err && err.name === "TypeError") showError("The connection to the chat dropped before the answer finished. Anything already in the tray is still there: try again in a moment.");
+          if (cut) showError("The connection to the chat dropped before the answer finished. Try again in a moment.");
           else showError(err && err.message ? err.message : "Something went wrong with the chat.");
         }
       );
+  }
+
+  function dropped() {
+    var e = new Error("dropped");
+    e.name = "Dropped";
+    return e;
+  }
+
+  var RESUME_EVERY_MS = 4000;
+  var RESUME_MAX_MS = 6 * 60 * 1000; // past any turn's lifetime on the server (Vercel stops a function at 5 minutes)
+  /**
+   * The stream of an editor's turn dropped (the phone switched apps, the tab was put away): the turn carries on on the server and its
+   * answer is stored, so the panel stays busy and checks the conversation until that turn has ended, then shows it as stored.
+   */
+  function resumeTurn(mine, convId, turnId, partialEl) {
+    var started = Date.now();
+    var timer = null;
+    var stopped = false;
+    mine.abort = function () {
+      stopped = true;
+      clearTimeout(timer);
+      doc.removeEventListener("visibilitychange", onVisible);
+    };
+    setStatus("Still working on it… The answer will show here when it's ready.");
+    function end(errorText) {
+      mine.abort();
+      if (streaming !== mine) return;
+      streaming = null;
+      setBusy(false);
+      clearStatus();
+      if (partialEl.parentNode) partialEl.parentNode.removeChild(partialEl); // the stored answer replaces what had streamed so far
+      loadTray({ highlight: true });
+      loadConversation(convId).then(function () {
+        if (errorText) showError(errorText);
+        else if (panel.hidden) dot.hidden = false;
+        watchPublishing();
+      });
+    }
+    function later() {
+      clearTimeout(timer);
+      timer = setTimeout(check, RESUME_EVERY_MS);
+    }
+    function check() {
+      if (stopped || streaming !== mine) return;
+      if (Date.now() - started > RESUME_MAX_MS) return end("That answer didn't come through. Anything already in the tray is still there: try again in a moment.");
+      if (doc.visibilityState === "hidden") return later(); // checked again as soon as the page is back
+      authedFetch(apiBase + "/conversations/" + encodeURIComponent(convId))
+        .then(function (res) {
+          if (res.status === 404) return { gone: true };
+          return res.ok ? res.json() : null;
+        })
+        .then(
+          function (j) {
+            if (stopped || streaming !== mine) return;
+            if (j && j.gone) return end("That chat isn't available any more.");
+            var ended = j && j.ended_turns && typeof j.ended_turns === "object" ? j.ended_turns : {};
+            if (Object.prototype.hasOwnProperty.call(ended, turnId)) return end(ended[turnId] ? String(ended[turnId]).slice(0, 300) : "");
+            later();
+          },
+          function (err) {
+            if (stopped || streaming !== mine) return;
+            if (err && err.name === "AuthExpired") return end(""); // the sign-in sheet is open; the answer is in the chat after it
+            later(); // still offline: try again
+          }
+        );
+    }
+    function onVisible() {
+      if (doc.visibilityState === "visible") check();
+    }
+    doc.addEventListener("visibilitychange", onVisible);
+    later();
   }
 
   // --- signed-in editors: requests with a token, thumbs up / down, the chats list, switching modes ------------------------------

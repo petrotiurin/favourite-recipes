@@ -356,6 +356,32 @@ test("a clash resolved with Keep theirs / Drop it removes the item", async () =>
   assert.equal(github.commitLog.length, 0);
 });
 
+test("an editor's turn carries on when the panel drops the stream (a phone switching apps): the answer and the tray change are stored, ended_turns says so", async () => {
+  openrouter = createMockOpenRouter({ delayMs: 10 }); // slow enough that the stream is dropped mid-turn
+  const res = await call("POST", "/chat", { token: "owner-token", body: { message: "add a new recipe: test pasta", page: { page: "index" } } });
+  assert.equal(res.status, 200);
+  const reader = res.body.getReader();
+  const first = new TextDecoder().decode((await reader.read()).value);
+  const meta = JSON.parse(first.match(/^event: meta\ndata: (.*)$/m)[1]);
+  await reader.cancel(); // the browser went away
+  await background.backgroundIdle();
+  assert.equal((await plan()).count, 1, "the staged recipe is in the tray");
+  const convo = await (await call("GET", `/chat/conversations/${meta.conversation_id}`, { token: "owner-token" })).json();
+  assert.deepEqual(convo.ended_turns, { [meta.turn_id]: null }, "the turn ended with an answer");
+  assert.ok(convo.messages.some((m) => m.role === "assistant" && m.turn_id === meta.turn_id && m.content), "the answer was saved");
+});
+
+test("an editor's turn that failed leaves a marker the panel can find, which the model never sees", async () => {
+  const { conversation_id } = await say("mock-402");
+  const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
+  const [[, err]] = Object.entries(convo.ended_turns);
+  assert.equal(typeof err, "string");
+  assert.ok(err.length > 0, "the error the panel showed");
+  assert.ok(!convo.messages.some((m) => m.role === "assistant"), "nothing to show in the chat itself");
+  const { historyForModel, getMessages } = store;
+  assert.ok(!historyForModel(await getMessages(conversation_id)).some((m) => m.role === "assistant"));
+});
+
 test("a Finalise turn that never ended (its function was killed) doesn't leave the tray without its button for good", async () => {
   await say("add a new recipe: test pasta");
   assert.equal((await plan()).state, "collecting");
