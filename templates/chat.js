@@ -229,6 +229,9 @@
   function str(v, max) {
     return typeof v === "string" ? v.slice(0, max) : "";
   }
+  function num(v) {
+    return typeof v === "number" && isFinite(v) && v >= 0 && v < 1e6 ? Math.round(v) : 0;
+  }
 
   /**
    * The plan tray as GET /chat/plan returns it, reduced to plain values: strings cut, links only on this site's origin, staged photos only from
@@ -277,6 +280,7 @@
     });
     return {
       id: str(raw.id, 64),
+      balance: raw.balance && typeof raw.balance === "object" ? { recipes: num(raw.balance.recipes), dinners: num(raw.balance.dinners), avg_kcal: num(raw.balance.avg_kcal), total_mins: num(raw.balance.total_mins) } : null,
       state: ["collecting", "finalising", "ready"].indexOf(raw.state) !== -1 ? raw.state : "collecting",
       count: items.length,
       needs_list: raw.needs_list === true,
@@ -290,6 +294,13 @@
   }
 
   /** "Tray · 8 changes" (the folded line), with "until Fri" when it's open. */
+  /** "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each · 2 h 15 min", from the numbers the server computed, or "". */
+  function balanceLine(b) {
+    if (!b || !b.recipes) return "";
+    var mins = b.total_mins;
+    var time = mins >= 60 ? Math.floor(mins / 60) + " h" + (mins % 60 ? " " + (mins % 60) + " min" : "") : mins + " min";
+    return "Next week after Save: " + b.recipes + (b.recipes === 1 ? " recipe" : " recipes") + " · " + b.dinners + (b.dinners === 1 ? " dinner" : " dinners") + (b.avg_kcal ? " · ~" + b.avg_kcal + " kcal each" : "") + (mins ? " · " + time + " in all" : "");
+  }
   function trayLine(tray, folded) {
     return "Tray · " + tray.count + " change" + (tray.count === 1 ? "" : "s") + (!folded && tray.expires_day ? " · until " + tray.expires_day : "");
   }
@@ -442,6 +453,7 @@
     cleanQuestion: cleanQuestion,
     cleanTray: cleanTray,
     trayLine: trayLine,
+    balanceLine: balanceLine,
     trayExpiryNotice: trayExpiryNotice,
     trayButton: trayButton,
     startersFor: startersFor,
@@ -1681,6 +1693,12 @@
     });
     tray.appendChild(head);
     if (folded) return;
+    var bl = balanceLine(trayData.balance);
+    if (bl) {
+      var bal = el("p", "tray-balance");
+      bal.textContent = bl;
+      tray.appendChild(bal);
+    }
 
     var notice = trayExpiryNotice(trayData, Date.now());
     var btn = trayButton(trayData);

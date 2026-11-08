@@ -2956,6 +2956,13 @@ body.chat-open {
   color: var(--text-muted);
 }
 
+/* Next week as it will be after Save, in numbers (from the server's recipe data). */
+.tray-balance {
+  margin: 0 1rem 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 .tray-go {
   position: sticky;
   bottom: 0.6rem;

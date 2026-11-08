@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) and 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) are built. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 ## 1. Desired outcome
@@ -655,9 +655,11 @@ Ranked roughly by value for effort:
    `start_next_week` on its own.
 6. **Week balance**: totals for the planned week (calories, protein, how many fish/veg dinners)
    shown on the tray.
-7. **Voice input** (Web Speech API, progressive) for hands-busy cooking.
-8. **Diff view** for staged edits (before/after of the changed lines) on the tray card.
-9. **Revert last save** (a server tool that reverts the chat's last commit).
+7. **Voice input** (Web Speech API, progressive) for hands-busy cooking. *Later.*
+8. **Diff view** for staged edits (before/after of the changed lines) on the tray card. *Later.*
+9. **Revert last save** (a server tool that reverts the chat's last commit). *Later.*
+
+Built in phase 6 (1, 3, 4 and 6 above): `scale_recipe` (the recipe page's scaling rules, `lib/scaling.js`, kept in step with `templates/quantities.js` by a test), `recipes_from_home` (`lib/at-home.js`, ranks the book by the stocktake; starter chip on the shopping page), `stage_stocktake` (an "At home" tray card, same validation as `/stocktake`, refused with a 409 if the list changed since it was staged, Save now eligible) and the tray's week balance line (`weekBalance` in `lib/tray.js`, from recipe data, no model). Item 5 (switching weeks by chat) is the Finalise flow of phase 4.
 
 ## 12. Phases
 

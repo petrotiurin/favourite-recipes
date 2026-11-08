@@ -507,12 +507,28 @@ export function saveNowRule(item, inNext) {
 const lineOfIngredient = (i) => renderIngredient(i).replace(/^- /, "").replace(/\*\*/g, "");
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 
+/**
+ * Next week as it will be after Save, in numbers (design 11.6; no model): how many recipes, how many are dinners, the average kcal per serving
+ * and the total cooking time. `rows` are list rows (course, calories, total_mins). null when there are no recipes.
+ */
+export function weekBalance(rows) {
+  if (!rows.length) return null;
+  const kcal = rows.map((r) => Number(r.calories)).filter((n) => Number.isFinite(n) && n > 0);
+  return {
+    recipes: rows.length,
+    dinners: rows.filter((r) => (r.course || []).includes("Dinner")).length,
+    avg_kcal: kcal.length ? Math.round(kcal.reduce((a, b) => a + b, 0) / kcal.length) : null,
+    total_mins: rows.reduce((n, r) => n + (Number(r.total_mins) || 0), 0),
+  };
+}
+
 /** Everything the panel needs to draw the tray, computed fresh. null when there's no tray. */
 export async function trayView(tray, caller) {
   if (!tray) return null;
   const items = tray.items || [];
   const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
-  const { results, nextSlugs } = await replay(items, caller, await warmReads());
+  const { results, nextSlugs, cs: afterSave } = await replay(items, caller, await warmReads());
+  const balance = weekBalance((await listRecipes(afterSave)).filter(isNextWeek));
   const needs = needsList(items, nextSlugs);
   const current = listCurrent(tray, items);
   const inNext = new Set([...(await listRecipes().then((rs) => rs.filter(isNextWeek).map((r) => r.slug)).catch(() => [])), ...items.filter((i) => i.kind === "next" && i.op.add).map((i) => slugOf(i))]);
@@ -604,6 +620,7 @@ export async function trayView(tray, caller) {
     state: statusFor(tray, items, needs),
     count: items.length,
     needs_list: needs,
+    balance,
     list_current: current,
     can_save: ready && !problems && !photosPending && !photosFailed && items.length > 0,
     blocked: problems ? "Some changes have a problem" : photosPending ? "Photos are still being made" : photosFailed ? "A photo failed: tap New photo" : "",

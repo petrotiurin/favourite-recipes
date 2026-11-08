@@ -304,6 +304,9 @@ On the **At home** tab every row is a fill bar:
   previews it by aisle. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
   the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
   button that applies.
+- **Week balance** (`.tray-balance`): one muted 0.82rem line under the tray's head, "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each ·
+  2 h 15 min in all", from numbers the server computed; hidden while the tray is folded. **At home card**: kicker "At home" (muted, like Edit), title
+  "At home: 2 items", sub "Eggs 6, Basmati rice"; tapping opens the list of what was recorded; **Save now** works on it.
 - **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
   "Publishing…" until the server sees their page, then they turn into normal cards.
 - **Action chips** (`.chat-chip.is-action`): solid chips that press the tray's own button ("Finalise list", "Save to site (n)"), with fixed text: still a tap by a person (see "Action chips that commit" above).

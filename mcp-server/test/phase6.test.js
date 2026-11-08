@@ -237,3 +237,26 @@ test("stage_stocktake is a stage tool: refused for the public and for the agent 
   } finally { console.warn = warn; }
   assert.equal(tools.accessOf(tools.TOOLS.find((t) => t.name === "stage_stocktake")), "stage");
 });
+
+// --- 4. week balance ------------------------------------------------------------------------------------------------------------
+
+test("weekBalance: recipes, dinners, average kcal and total time, from recipe data", async () => {
+  const { weekBalance } = await import("../lib/tray.js");
+  assert.equal(weekBalance([]), null);
+  assert.deepEqual(weekBalance([{ course: ["Dinner"], calories: 500, total_mins: 30 }, { course: ["Lunch", "Dinner"], calories: 301, total_mins: 45 }, { course: ["Snack"], calories: 100, total_mins: 5 }]), { recipes: 3, dinners: 2, avg_kcal: 300, total_mins: 80 });
+  assert.deepEqual(weekBalance([{ course: [], total_mins: 10 }]), { recipes: 1, dinners: 0, avg_kcal: null, total_mins: 10 });
+});
+
+test("the tray reports next week as it will be after Save (staged recipes included), computed on the server", async () => {
+  const slug = slugs().find((s) => s);
+  await tools.dispatch("stage_set_week_recipes", { slugs: [slug], add: true }, editor(), { chat: { emit() {} } });
+  await say("add a new recipe: balance pasta");
+  const t = await planGet();
+  assert.equal(t.balance.recipes, 2);
+  assert.ok(t.balance.avg_kcal > 0 && t.balance.total_mins >= 20);
+  assert.ok(t.balance.dinners >= 1, "the staged pasta is a dinner");
+  const chatJs = createRequire(import.meta.url)("../../templates/chat.js");
+  assert.match(chatJs.balanceLine({ recipes: 5, dinners: 3, avg_kcal: 420, total_mins: 135 }), /^Next week after Save: 5 recipes · 3 dinners · ~420 kcal each · 2 h 15 min in all$/);
+  assert.equal(chatJs.balanceLine(null), "");
+  assert.equal(chatJs.cleanTray({ items: [], balance: { recipes: "5", dinners: -1, avg_kcal: 1e9, total_mins: 12 } }, "https://x", "").balance.recipes, 0, "non-numbers are dropped");
+});
