@@ -1796,3 +1796,1253 @@ body.sheet-open {
   text-align: center;
   font-size: 0.8rem !important;
 }
+
+/* Recipe chat (templates/chat.js): a bubble bottom right, a bottom sheet on phones, a floating panel from 720px. See design.md. */
+.chat-bubble[hidden] {
+  display: none;
+}
+
+/* The chat can't be used (switched off, editors only, or this account isn't an editor): a calm message, no input. */
+.chat-panel.is-locked .chat-foot,
+.chat-panel.is-locked .chat-tray,
+.chat-panel.is-locked .chat-chats-btn,
+.chat-panel.is-locked .chat-new {
+  display: none;
+}
+
+.chat-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1.5rem 1rem;
+}
+
+.chat-locked-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.25rem;
+}
+
+.chat-locked-text {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.chat-locked-signin {
+  width: auto;
+  height: 2.75rem;
+  padding: 0 1.4rem;
+}
+
+.chat-bubble {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom) + var(--chat-lift, 0px));
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-hover);
+  cursor: pointer;
+  transition: bottom 0.2s ease;
+}
+
+.chat-bubble .icon {
+  width: 1.6rem;
+  height: 1.6rem;
+}
+
+/* Unread: a reply finished while the panel was closed. */
+.chat-dot {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: var(--on-accent);
+  border: 2px solid var(--accent-strong);
+}
+
+.chat-dot[hidden] {
+  display: none;
+}
+
+/* Out of the way of a sheet, and of the full-height panel on phones. */
+body.sheet-open .chat-bubble {
+  display: none;
+}
+
+body.chat-open {
+  overflow: hidden;
+}
+
+.chat-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--chat-top, 0px);
+  height: var(--chat-h, 100dvh);
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: calc(0.6rem + env(safe-area-inset-top)) 0.5rem 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+
+.chat-new {
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.chat-close {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--track);
+}
+
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.chat-intro p {
+  margin: 0 0 0.5rem;
+}
+
+.chat-note {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.chat-msg {
+  display: flex;
+  max-width: 100%;
+}
+
+.chat-msg.is-user {
+  justify-content: flex-end;
+}
+
+.chat-body {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.chat-msg.is-user .chat-body {
+  max-width: 85%;
+  padding: 0.55rem 0.85rem;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--current-soft);
+  white-space: pre-wrap;
+}
+
+.chat-body p {
+  margin: 0 0 0.6rem;
+}
+
+.chat-body p:last-child,
+.chat-body ul:last-child,
+.chat-body ol:last-child {
+  margin-bottom: 0;
+}
+
+.chat-body ul,
+.chat-body ol {
+  margin: 0 0 0.6rem;
+  padding-left: 1.2rem;
+}
+
+.chat-body li {
+  margin-bottom: 0.25rem;
+}
+
+.chat-body a {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-msg.is-partial {
+  opacity: 0.6;
+}
+
+.chat-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.chat-status[hidden] {
+  display: none;
+}
+
+.chat-error {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  color: #b42318;
+  background: #fdecea;
+  font-size: 0.9rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chat-error {
+    color: #f6a29b;
+    background: #3a1f1c;
+  }
+}
+
+/* Suggested replies: outline chips. Only the last message's are live; older ones fade. */
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chat-chip {
+  min-height: 2.75rem;
+  padding: 0 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.chat-chip:hover:not(:disabled) {
+  background: var(--track);
+}
+
+.chat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+/* A chip or button that opens a page on the site (an action chip, "Open Steamed Rice"): an arrow says it leaves the chat. */
+.chat-chip.is-nav {
+  border-color: var(--accent-strong);
+  color: var(--accent-ink);
+}
+
+.chat-nav-arrow {
+  display: inline-grid;
+  place-items: center;
+}
+
+.chat-nav-arrow .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.chat-nav {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 1.5px solid var(--accent-strong);
+  border-radius: 999px;
+  color: var(--accent-ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.chat-nav:hover:not(.is-old) {
+  background: var(--current-soft);
+}
+
+.chat-nav.is-old,
+.chat-chips.is-old a {
+  pointer-events: none;
+}
+
+.chat-nav.is-old {
+  opacity: 0.4;
+}
+
+.chat-msg.is-bot {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.chat-body:empty {
+  display: none;
+}
+
+/* Recipe cards (show_recipes): the site's tile look, in a sideways row that runs to the panel's edges. */
+.chat-cards {
+  align-self: stretch;
+  display: flex;
+  gap: 0.75rem;
+  margin: 0 -1rem;
+  padding: 0 1rem 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+}
+
+.chat-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-card {
+  flex: 0 0 8.75rem;
+  gap: 0.3rem;
+  scroll-snap-align: start;
+  text-decoration: none;
+  color: inherit;
+}
+
+.chat-card .tile-image {
+  border-radius: 10px;
+  margin-bottom: 0.2rem;
+}
+
+.chat-card .tile-title {
+  font-size: 1rem;
+  -webkit-line-clamp: 2;
+}
+
+.chat-card .tile-meta {
+  font-size: 0.75rem;
+}
+
+.chat-card .kicker:empty {
+  display: none;
+}
+
+.kicker-draft {
+  color: var(--draft);
+}
+
+.chat-chips.is-old {
+  opacity: 0.4;
+}
+
+.chat-chips.is-old .chat-chip {
+  cursor: default;
+}
+
+.chat-foot {
+  padding: 0.5rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+
+.chat-context {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0 0.25rem 0 0.7rem;
+  border-radius: 999px;
+  background: var(--track);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.chat-context[hidden] {
+  display: none;
+}
+
+.chat-context-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-context-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chat-context-close .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.chat-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.chat-attach {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chat-attach[hidden],
+.chat-attachments[hidden] {
+  display: none;
+}
+
+.chat-attach:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Photos waiting to be sent: small thumbnails above the input, each with a remove button. */
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.chat-attachment {
+  position: relative;
+  width: 3.75rem;
+  height: 3.75rem;
+}
+
+.chat-attachment-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.chat-attachment-remove {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.4rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.chat-attachment-remove .icon {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.chat-attachment-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Photos in a sent message. */
+.chat-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.chat-photo {
+  display: block;
+  width: 5.5rem;
+  height: 5.5rem;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+.chat-input {
+  flex: 1;
+  min-height: 2.75rem;
+  max-height: 140px;
+  padding: 0.65rem 0.9rem;
+  resize: none;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* 16px: keeps iOS from zooming in */
+  line-height: 1.35;
+}
+
+.chat-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+.chat-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (min-width: 720px) {
+  .chat-panel {
+    left: auto;
+    right: calc(16px + env(safe-area-inset-right));
+    top: auto;
+    bottom: calc(16px + 3.5rem + 12px + env(safe-area-inset-bottom) + var(--chat-lift, 0px));
+    width: 400px;
+    height: min(640px, calc(100dvh - 7rem));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow-hover);
+    overflow: hidden;
+  }
+
+  .chat-head {
+    padding-top: 0.6rem;
+  }
+
+  body.chat-open {
+    overflow: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble {
+    transition: none;
+  }
+}
+
+/* Recipe chat, signed-in editors (templates/chat.js + templates/auth.js): account button, chats list, thumbs up / down. See design.md. */
+.chat-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-head {
+  gap: 0.25rem;
+}
+
+.chat-account {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.chat-account[hidden],
+.chat-chats-btn[hidden],
+.chat-banner[hidden],
+.chat-chats[hidden] {
+  display: none;
+}
+
+.pill.is-compact {
+  justify-content: center;
+  width: 2.25rem;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.pill.is-compact .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.chat-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.chat-icon-btn:hover,
+.chat-icon-btn[aria-expanded="true"] {
+  background: var(--track);
+  color: var(--text);
+}
+
+.chat-icon-btn .icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+/* A signed-in account that isn't an editor: a quiet line under the header. */
+.chat-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--track);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* The chats list takes the place of the log and the input while it is open. */
+.chat-panel.is-listing .chat-log,
+.chat-panel.is-listing .chat-foot {
+  display: none;
+}
+
+.chat-chats {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.chat-chats-title {
+  margin: 0 0 0.25rem;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 1.1rem;
+}
+
+.chat-chats-note {
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.chat-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 3.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.chat-row.is-current {
+  background: var(--current-soft);
+}
+
+.chat-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.6rem 0.25rem;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-row-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-row-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.chat-row-delete {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--icon-muted);
+  cursor: pointer;
+}
+
+.chat-row-delete:hover {
+  background: var(--track);
+  color: var(--text);
+}
+
+.chat-row-delete .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.chat-row-ask {
+  flex: 1;
+  padding: 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+/* Thumbs up / down under a turn's last message (editors). */
+.chat-feedback {
+  margin-top: -0.35rem;
+}
+
+.chat-feedback.is-old {
+  opacity: 0.5;
+}
+
+.fb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.fb-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--icon-muted);
+  cursor: pointer;
+}
+
+.fb-btn:hover {
+  background: var(--track);
+}
+
+.fb-btn .icon {
+  width: 1.06rem;
+  height: 1.06rem;
+}
+
+.fb-btn[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.fb-btn[aria-pressed="true"] .icon {
+  fill: currentColor;
+}
+
+.fb-note {
+  margin-left: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.fb-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fb-box[hidden] {
+  display: none;
+}
+
+.fb-q {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.fb-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fb-chip {
+  min-height: 2.25rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.fb-chip[aria-pressed="true"] {
+  border-color: var(--accent-strong);
+  background: var(--current-soft);
+}
+
+.fb-input {
+  font: inherit;
+  font-size: 1rem;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fb-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.fb-send {
+  min-height: 2.25rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Recipe chat, phase 4 (templates/chat.js): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
+.chat-question {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.chat-q {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* A question needs an answer: solid chips (a suggestion is an outline chip). */
+.chat-chip.is-solid,
+.chat-chip.is-done {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.chat-chip.is-solid:hover:not(:disabled),
+.chat-chip.is-done:hover:not(:disabled) {
+  background: var(--accent-strong);
+  filter: brightness(1.08);
+}
+
+.chat-chip.is-solid[aria-pressed="true"] {
+  background: var(--current-soft);
+  color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-strong);
+}
+
+.chat-chip.is-done:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A chip that presses one of the tray's buttons (Finalise list, Save to site). */
+.chat-chip.is-action {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.chat-question.is-old {
+  opacity: 0.4;
+}
+
+.chat-card.is-publishing {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* The plan tray: between the log and the input, a sideways row of small cards; folds to one line while the keyboard is up. */
+.chat-tray {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0;
+  max-height: min(63%, 26rem); /* room for a full card row (about 16rem) + head + button; anything taller scrolls inside .tray-scroll, the button is its own row below */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tray-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-tray .tray-head,
+.chat-tray .tray-balance,
+.chat-tray .tray-go {
+  flex: none;
+}
+
+.chat-tray[hidden],
+.chat-panel.is-listing .chat-tray {
+  display: none;
+}
+
+.tray-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tray-chev .icon {
+  width: 1rem;
+  height: 1rem;
+  color: var(--icon-muted);
+  transition: transform 0.15s;
+}
+
+.chat-tray.is-folded .tray-chev .icon {
+  transform: rotate(-90deg);
+}
+
+.chat-tray.is-folded {
+  padding-bottom: 0;
+}
+
+.tray-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.75rem;
+  border-radius: 10px;
+  background: var(--current-soft);
+  font-size: 0.9rem;
+}
+
+.tray-notice .chat-chip {
+  min-height: 2.25rem;
+}
+
+.tray-cards {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0 1rem 0.25rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+  scrollbar-width: none;
+}
+
+.tray-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.tray-card {
+  position: relative;
+  flex: 0 0 9.5rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  scroll-snap-align: start;
+}
+
+.tray-card.is-new {
+  border-color: var(--accent);
+  background: var(--current-soft);
+}
+
+.tray-card.has-error,
+.tray-card.has-clash {
+  border-color: #b42318;
+}
+
+.tray-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tray-thumb {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 0.25rem;
+  border-radius: 8px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.tray-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tray-thumb-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.25rem;
+  font-size: 0.72rem;
+  font-style: italic;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.tray-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-sub,
+.tray-who {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.tray-why {
+  margin-top: 0.1rem;
+}
+
+.tray-who {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-problem {
+  margin: 0.15rem 0 0;
+  font-size: 0.74rem;
+  color: #b42318;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tray-drop {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.tray-drop .icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.tray-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.6rem;
+  padding: 0 0.55rem 0.45rem;
+}
+
+.tray-link {
+  min-height: 1.75rem;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.tray-link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tray-detail {
+  max-height: 10rem;
+  overflow-y: auto;
+  margin: 0.5rem 1rem 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+.tray-detail-title {
+  margin: 0 0 0.3rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.05rem;
+}
+
+.tray-detail-h {
+  margin: 0.5rem 0 0.15rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tray-detail ul,
+.tray-detail ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.tray-detail-notes {
+  margin: 0.4rem 0;
+  color: var(--text-muted);
+}
+
+.tray-msg {
+  margin: 0.4rem 1rem 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Next week as it will be after Save, in numbers (from the server's recipe data). */
+.tray-balance {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0 1rem 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.tray-go {
+  display: block;
+  width: calc(100% - 2rem);
+  margin: 0.55rem 1rem 0.6rem;
+  height: 2.9rem;
+  font-size: 0.95rem;
+  border: 0;
+}
+
+.tray-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tray-card.has-error,
+  .tray-card.has-clash {
+    border-color: #f6a29b;
+  }
+
+  .tray-problem {
+    color: #f6a29b;
+  }
+}

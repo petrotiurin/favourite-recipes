@@ -1,9 +1,10 @@
 import { config, assertStocktakeConfigured } from "../lib/config.js";
 import { verifyEditor } from "../lib/auth.js";
 import { saveStocktake, StocktakeError } from "../lib/shopping-list.js";
+import { makeCaller } from "../lib/tools.js";
 
 // The shopping page (on GitHub Pages) posts the stocktake here: which items are already at home,
-// fully or partly. The editor is signed in with Supabase Auth on the page; only SHOPPING_EDITORS
+// fully or partly. The editor is signed in with Supabase Auth on the page; only EDITORS
 // may save. Saving commits shopping-list.json, so the site redeploys with the stocktake baked in.
 
 function corsHeaders(request) {
@@ -40,7 +41,7 @@ export async function POST(request) {
     return reply({ error: "Send JSON: { items: [{ name, quantity, have }] }" }, 400);
   }
   try {
-    const { list, commit, counts } = await saveStocktake(body?.items);
+    const { list, commit, counts } = await saveStocktake(body?.items, makeCaller({ role: "editor", email: editor.email, userId: editor.userId }));
     return reply({ ok: true, stocktake: list.stocktake, counts, commit: commit.url });
   } catch (err) {
     if (err instanceof StocktakeError) return reply({ error: err.message }, err.status);

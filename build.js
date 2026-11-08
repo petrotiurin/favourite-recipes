@@ -16,8 +16,11 @@ const SEARCH_SCRIPT_FILE = path.join(ROOT, "templates", "search.js");
 const SERVINGS_SCRIPT_FILE = path.join(ROOT, "templates", "servings.js");
 const WAKELOCK_SCRIPT_FILE = path.join(ROOT, "templates", "wakelock.js");
 const SHOPPING_SCRIPT_FILE = path.join(ROOT, "templates", "shopping.js");
+const AUTH_SCRIPT_FILE = path.join(ROOT, "templates", "auth.js");
+const CHAT_SCRIPT_FILE = path.join(ROOT, "templates", "chat.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
-const DIST_DIR = path.join(ROOT, "dist");
+// BUILD_OUT_DIR lets tests and one-off builds write somewhere else, so a running dev site in dist/ is left alone.
+const DIST_DIR = process.env.BUILD_OUT_DIR ? path.resolve(process.env.BUILD_OUT_DIR) : path.join(ROOT, "dist");
 
 function rimraf(dir) {
   fs.rmSync(dir, { recursive: true, force: true });
@@ -94,6 +97,8 @@ function build() {
   fs.copyFileSync(SERVINGS_SCRIPT_FILE, path.join(DIST_DIR, "servings.js"));
   fs.copyFileSync(WAKELOCK_SCRIPT_FILE, path.join(DIST_DIR, "wakelock.js"));
   fs.copyFileSync(SHOPPING_SCRIPT_FILE, path.join(DIST_DIR, "shopping.js"));
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) fs.copyFileSync(AUTH_SCRIPT_FILE, path.join(DIST_DIR, "auth.js"));
+  if (process.env.CHAT_API_URL) fs.copyFileSync(CHAT_SCRIPT_FILE, path.join(DIST_DIR, "chat.js"));
   if (fs.existsSync(IMAGES_DIR)) {
     copyDir(IMAGES_DIR, path.join(DIST_DIR, "images"));
   }

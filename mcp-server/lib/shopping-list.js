@@ -1,6 +1,9 @@
-import { ChangeSet } from "./github.js";
+import { ChangeSet, assertCanCommit } from "./github.js";
 import { listRecipes, isNextWeek } from "./recipes.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
+import { cached } from "./cache.js";
+import { createHash } from "node:crypto";
+import { sameIngredient } from "./ingredient-match.js";
 
 // The shopping list is for NEXT WEEK's recipes (`next: true`). The agent combines their
 // ingredients itself; this module only validates and stores the result as shopping-list.json
@@ -157,7 +160,7 @@ export const serializeShoppingList = (list) => `${JSON.stringify(list, null, 2)}
 // servings selector. A new list from update_shopping_list starts without a stocktake.
 // Keep parseQuantity in sync with templates/shopping-list.js.
 
-export class StocktakeError extends Error {
+export class StocktakeError extends ShoppingListError {
   constructor(message, status = 400) {
     super(message);
     this.status = status;
@@ -231,8 +234,52 @@ export function applyStocktake(list, items, now = new Date()) {
   return { ...list, stocktake: now.toISOString(), sections };
 }
 
+/** A fingerprint of the list's items (name + quantity): what a staged stocktake was made against. */
+export const listSignature = (list) => createHash("sha1").update(JSON.stringify((list?.sections || []).flatMap((s) => s.items).map(itemKey))).digest("hex").slice(0, 16);
+
+/**
+ * Resolves what the user said is at home ({ name, have: true | amount | false/0 to clear }) against the stored list's items: the name as written
+ * (any case), else the one item it is the same ingredient as. Returns the list's whole item set with those `have`s changed (the shape
+ * applyStocktake wants), and what changed.
+ */
+export function mergeStocktake(list, updates) {
+  if (!list?.sections?.length) throw new StocktakeError("There is no shopping list to record what's at home against.", 409);
+  const stored = list.sections.flatMap((s) => s.items);
+  const changed = new Map(); // item -> have
+  const unknown = [];
+  for (const u of Array.isArray(updates) ? updates : []) {
+    const name = String(u?.name ?? "").trim();
+    const exact = stored.filter((i) => i.name.trim().toLowerCase() === name.toLowerCase());
+    const close = exact.length ? exact : stored.filter((i) => sameIngredient(i.name, name));
+    if (close.length !== 1) unknown.push(close.length ? `"${name}" matches several items (${close.map((i) => i.name).join(", ")}): use the exact name` : `"${name}"`);
+    else changed.set(close[0], u.have);
+  }
+  if (unknown.length) throw new StocktakeError(`Not on the shopping list: ${unknown.join(", ")}. The list's items are: ${stored.map((i) => i.name).join(", ")}.`);
+  const items = stored.map((i) => ({ name: i.name, quantity: i.quantity, have: changed.has(i) ? changed.get(i) : i.have }));
+  return { items, changed: [...changed].map(([i, have]) => ({ name: i.name, quantity: i.quantity, have })) };
+}
+
+/**
+ * Records what's at home (a partial update by item name) on the stored list: the same validation as the page's stocktake (applyStocktake).
+ * `signature`: the list signature the update was made against; a different list now is a 409 (Reload and do it again). Without a ChangeSet it
+ * commits; with one (the plan tray's dry run and Save) it only stages the file.
+ */
+export async function updateStocktake(updates, batch, caller, { signature, now = new Date() } = {}) {
+  assertCanCommit(caller);
+  const cs = batch || new ChangeSet();
+  const stored = await readStoredList(cs);
+  if (signature && listSignature(stored) !== signature) throw new StocktakeError("The shopping list changed since this was staged, so what's at home may not match it any more. Drop it and say it again.", 409);
+  const { items, changed } = mergeStocktake(stored, updates);
+  const list = applyStocktake(stored, items, now);
+  cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
+  const subject = `Update shopping list stocktake (${changed.length} item${changed.length === 1 ? "" : "s"} by chat)`;
+  const commit = batch ? null : await cs.commit(`${subject}\n\nSaved from the chat.`, caller);
+  return { list, changed, commit, subject };
+}
+
 /** Commits the stocktake to shopping-list.json (one commit = one site deploy). */
-export async function saveStocktake(items, now = new Date()) {
+export async function saveStocktake(items, caller, now = new Date()) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = new ChangeSet();
   const list = applyStocktake(await readStoredList(cs), items, now);
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
@@ -244,7 +291,8 @@ export async function saveStocktake(items, now = new Date()) {
     if (status in counts) counts[status]++;
   }
   const commit = await cs.commit(
-    `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`
+    `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`,
+    caller
   );
   return { list, commit, counts };
 }
@@ -296,7 +344,7 @@ export function shoppingListStatus(list, nextSlugs) {
   return covered === [...nextSlugs].sort().join("\n") ? "current" : "outdated";
 }
 
-async function readStoredList(cs) {
+export async function readStoredList(cs) {
   const raw = await cs.read(SHOPPING_LIST_PATH);
   if (!raw) return null;
   try {
@@ -306,8 +354,12 @@ async function readStoredList(cs) {
   }
 }
 
-export async function getShoppingList(cs = new ChangeSet()) {
-  const [list, recipes] = await Promise.all([readStoredList(cs), listRecipes(cs)]);
+/** A read (no ChangeSet): the stored list comes from a short cache shared with the recipe index; with a ChangeSet it is fresh. */
+export async function getShoppingList(cs) {
+  const [list, recipes] = await Promise.all([
+    cs ? readStoredList(cs) : cached(`shopping-list:${config.repo}@${config.branch}`, () => readStoredList(new ChangeSet())),
+    listRecipes(cs),
+  ]);
   const next = recipes.filter(isNextWeek);
   return { list, next, status: shoppingListStatus(list, next.map((r) => r.slug)) };
 }
@@ -317,7 +369,8 @@ export async function getShoppingList(cs = new ChangeSet()) {
  * `servings` (slug -> people) plans individual recipes; the others keep what the previous list
  * planned for them, else DEFAULT_SERVINGS.
  */
-export async function updateShoppingList(sections, batch, servings = {}) {
+export async function updateShoppingList(sections, batch, servings = {}, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   validateSections(sections);
   const next = (await listRecipes(cs)).filter(isNextWeek);
@@ -333,7 +386,7 @@ export async function updateShoppingList(sections, batch, servings = {}) {
   const list = buildShoppingList(sections, slugs, new Date(), resolveServings(slugs, servings, previous?.servings));
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
   const subject = `Update shopping list (${next.length} next-week recipe${next.length === 1 ? "" : "s"})`;
-  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
+  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
   return { list, next, commit, subject };
 }
 
@@ -342,7 +395,8 @@ export async function updateShoppingList(sections, batch, servings = {}) {
  * without rebuilding the list: quantities stay at the 2-serving base and the stocktake (absolute
  * amounts) is kept. The page opens on the new plan once the site redeploys.
  */
-export async function setShoppingServings(servings, batch) {
+export async function setShoppingServings(servings, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const list = await readStoredList(cs);
   if (!list?.sections?.length) {
@@ -356,6 +410,6 @@ export async function setShoppingServings(servings, batch) {
   const updated = { ...list, servings: resolveServings(list.recipes, servings, before) };
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(updated)));
   const subject = `Set shopping list servings (${changed.map(([slug, n]) => `${slug}: ${n}`).join(", ")})`;
-  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`);
+  const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
   return { list: updated, changed, commit, subject };
 }

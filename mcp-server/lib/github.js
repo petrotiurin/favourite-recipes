@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { clearCache, registerClear } from "./cache.js";
 
 // The ONLY paths this server is ever allowed to write or delete. Everything
 // else in the repo (including this server's own code, build.js, templates,
@@ -16,6 +17,17 @@ export function isAllowedPath(path) {
 export function assertAllowedPath(path) {
   if (!isAllowedPath(path)) {
     throw new Error(`Refusing to write "${path}": only recipes/<slug>.md, images/recipes/<slug>.<ext> and shopping-list.json may be changed`);
+  }
+}
+
+/**
+ * Defence in depth (docs/chatbot-design.md 4.1 layer 3): everything that commits takes the caller and
+ * checks the role itself, so a code path that skips the tool dispatcher still can't write for a public caller.
+ */
+export function assertCanCommit(caller) {
+  if (!caller || (caller.role !== "editor" && caller.role !== "agent")) {
+    console.warn(`Refused a commit: caller role "${caller?.role ?? "none"}" may not write`);
+    throw new Error("Refusing to commit: only an editor or the MCP agent may change the site");
   }
 }
 
@@ -44,8 +56,8 @@ async function gh(method, path, body, { accept = "application/vnd.github+json", 
 }
 
 /** Returns file contents as a Buffer, or null if it doesn't exist on the branch. */
-export async function readFile(path) {
-  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${config.branch}`, null, {
+export async function readFile(path, ref = config.branch) {
+  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`, null, {
     accept: "application/vnd.github.raw+json",
     allow404: true,
   });
@@ -53,19 +65,35 @@ export async function readFile(path) {
 }
 
 /** Lists file names in a directory on the branch. */
-export async function listDir(path) {
-  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${config.branch}`, null, { allow404: true });
+export async function listDir(path, ref = config.branch) {
+  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`, null, { allow404: true });
   if (!res) return [];
   const entries = await res.json();
   return entries.filter((e) => e.type === "file").map((e) => e.name);
 }
+
+// A snapshot of the branch for dry runs (the plan tray's staging and view): ONE ref read per call, and everything read from the branch is
+// kept per head SHA (and pinned to that SHA), so however many replays and polls happen, GitHub is read once per branch state, not once
+// per recipe per replay. Cleared on our own commits. Save, clash detection and the commit never use it: they read fresh.
+let snapshot = null;
+export async function branchSnapshot() {
+  const ref = await (await gh("GET", `/git/ref/heads/${config.branch}`)).json();
+  const sha = ref.object.sha;
+  if (!snapshot || snapshot.sha !== sha) snapshot = { sha, reads: new Map() };
+  return snapshot;
+}
+export const clearSnapshot = () => {
+  snapshot = null;
+};
+registerClear(clearSnapshot);
 
 /**
  * Creates one commit on the branch containing all the given changes.
  * changes: [{ path, content: Buffer }] to write, or [{ path, delete: true }] to remove.
  * Uses the Git Data API so a recipe + its image land atomically in one commit.
  */
-export async function commitChanges(changes, message) {
+export async function commitChanges(changes, message, caller) {
+  assertCanCommit(caller);
   if (!changes.length) throw new Error("Nothing to commit");
   for (const c of changes) assertAllowedPath(c.path);
 
@@ -96,6 +124,8 @@ export async function commitChanges(changes, message) {
 
     try {
       await gh("PATCH", `/git/refs/heads/${config.branch}`, { sha: commit.sha, force: false });
+      clearSnapshot();
+      clearCache(); // the cached recipe index no longer matches the branch
       return { sha: commit.sha, url: commit.html_url };
     } catch (err) {
       if (err.status !== 422 || attempt === 3) throw err;
@@ -108,8 +138,34 @@ export async function commitChanges(changes, message) {
  * GitHub until commit(). Lets several tool operations land in one commit (= one site deploy).
  */
 export class ChangeSet {
-  constructor() {
+  /**
+   * `reads` (optional): a Map shared between ChangeSets that caches what was read from the branch (path -> Promise<Buffer | null>, and
+   * "dir:<path>" -> Promise<names>), so a dry run that replays the plan tray several times doesn't read every recipe from GitHub each time.
+   * Only for short-lived, throwaway sets that never commit.
+   */
+  constructor({ reads, ref } = {}) {
     this.staged = new Map(); // path -> Buffer, or null for a deletion
+    this.reads = reads || null;
+    this.ref = ref || config.branch; // with `reads` from branchSnapshot(): the head SHA those reads are pinned to
+  }
+
+  /** The staged edits as they are now, to put back with restore() if an operation fails half way. */
+  snapshot() {
+    return new Map(this.staged);
+  }
+
+  restore(snapshot) {
+    this.staged = new Map(snapshot);
+  }
+
+  #fromBranch(key, load) {
+    if (!this.reads) return load();
+    if (!this.reads.has(key)) {
+      const p = load();
+      this.reads.set(key, p);
+      p.catch(() => this.reads.get(key) === p && this.reads.delete(key)); // never keep a failed read
+    }
+    return this.reads.get(key);
   }
 
   get size() {
@@ -117,11 +173,11 @@ export class ChangeSet {
   }
 
   async read(path) {
-    return this.staged.has(path) ? this.staged.get(path) : readFile(path);
+    return this.staged.has(path) ? this.staged.get(path) : this.#fromBranch(path, () => readFile(path, this.ref));
   }
 
   async list(dir) {
-    const names = new Set(await listDir(dir));
+    const names = new Set(await this.#fromBranch(`dir:${dir}`, () => listDir(dir, this.ref)));
     for (const [path, content] of this.staged) {
       if (!path.startsWith(`${dir}/`) || path.slice(dir.length + 1).includes("/")) continue;
       const name = path.slice(dir.length + 1);
@@ -145,13 +201,14 @@ export class ChangeSet {
     return [...this.staged.keys()];
   }
 
-  async commit(message) {
+  async commit(message, caller) {
+    assertCanCommit(caller);
     const changes = [];
     for (const [path, content] of this.staged) {
       if (content !== null) changes.push({ path, content });
       // A file staged and then deleted again within one batch never existed on the branch: nothing to delete.
       else if (await readFile(path)) changes.push({ path, delete: true });
     }
-    return commitChanges(changes, message);
+    return commitChanges(changes, message, caller);
   }
 }

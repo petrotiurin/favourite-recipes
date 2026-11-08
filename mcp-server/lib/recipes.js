@@ -1,5 +1,6 @@
 import { config, COURSES, CARD_ASPECT } from "./config.js";
-import { ChangeSet, isAllowedPath } from "./github.js";
+import { cached } from "./cache.js";
+import { ChangeSet, isAllowedPath, assertCanCommit } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";
 import { generateDishImage } from "./image-generation.js";
 import {
@@ -41,35 +42,149 @@ function assertSlug(slug) {
 // with one (batch_changes), the caller commits everything together.
 const via = (verb) => `\n\n${verb} via the recipes MCP server.`;
 
-export async function listRecipes(cs = new ChangeSet()) {
+const listRow = (data) => ({
+  slug: data.slug,
+  title: data.title,
+  course: data.course || [],
+  tags: data.tags || [],
+  total_mins: data.total_mins,
+  serves: data.serves,
+  calories: data.calories,
+  ...(data.scalable === false ? { scalable: false } : {}),
+  ...(data.draft === true ? { draft: true } : {}),
+  ...(isThisWeek(data) ? { current: true } : {}),
+  ...(isNextWeek(data) ? { next: true } : {}),
+});
+
+/**
+ * Every recipe's list row. Without a ChangeSet this is a READ: served from the shared, cached recipe index (one load per minute per
+ * instance, however many calls ask), so a flood of list_recipes calls can't turn into a flood of GitHub requests. With a ChangeSet (the
+ * write paths: batch_changes, the plan tray) it reads fresh from the branch, plus whatever the set has staged.
+ */
+export async function listRecipes(cs) {
+  if (!cs) return (await recipeIndex()).map((r) => listRow(r.data));
   const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const recipes = await Promise.all(
     files.map(async (f) => {
       const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
-      return {
-        slug: data.slug,
-        title: data.title,
-        course: data.course || [],
-        tags: data.tags || [],
-        total_mins: data.total_mins,
-        serves: data.serves,
-        calories: data.calories,
-        ...(data.scalable === false ? { scalable: false } : {}),
-        ...(data.draft === true ? { draft: true } : {}),
-        ...(isThisWeek(data) ? { current: true } : {}),
-        ...(isNextWeek(data) ? { next: true } : {}),
-      };
+      return listRow(data);
     })
   );
   // Same order as the site: this week (drafts first), then next week, then the rest; alphabetical within each.
   return recipes.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
 }
 
-export async function getRecipe(slug, cs = new ChangeSet()) {
+// --- search and catalogue (read-only, shared by the search_recipes tool and the chat prompt) ---------------
+
+// Everything search needs about each recipe, read from GitHub like listRecipes does and cached for a minute
+// (cleared on our own commits), so the bot knows a recipe minutes before the site redeploys.
+async function loadRecipeIndex() {
+  const cs = new ChangeSet();
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
+  const rows = await Promise.all(
+    files.map(async (f) => {
+      const raw = (await cs.read(`recipes/${f}`)).toString("utf8");
+      const { data, sections } = parseRecipe(raw);
+      const ingredients = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content).map((i) => i.name.trim());
+      return {
+        data,
+        markdown: raw,
+        slug: data.slug,
+        title: data.title,
+        course: data.course || [],
+        tags: data.tags || [],
+        total_mins: data.total_mins,
+        calories: data.calories,
+        image: typeof data.image === "string" ? data.image : "",
+        draft: data.draft === true,
+        current: isThisWeek(data),
+        next: isNextWeek(data),
+        ingredients,
+        text: `${data.title}\n${sections.map((s) => s.content).join("\n")}`.toLowerCase(),
+      };
+    })
+  );
+  return rows.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
+}
+
+const recipeIndex = () => cached(`recipe-index:${config.repo}@${config.branch}`, loadRecipeIndex);
+
+const norm = (x) => String(x).trim().toLowerCase();
+
+/**
+ * Filters the book. All filters are optional and combine with AND:
+ * text (every word in the title or body), include_ingredients / exclude_ingredients (substring of a bolded ingredient name),
+ * course, tags (all of them), max_calories, max_minutes, draft, week ("this" | "next" | "none").
+ * Returns compact rows in the list_recipes order (this week, next week, the rest).
+ */
+export async function searchRecipes({ text, include_ingredients = [], exclude_ingredients = [], course, tags = [], max_calories, max_minutes, draft, week } = {}) {
+  const words = norm(text || "").split(/\s+/).filter(Boolean);
+  const has = (r, term) => r.ingredients.some((name) => name.toLowerCase().includes(norm(term)));
+  const matches = (r) =>
+    words.every((w) => r.text.includes(w)) &&
+    include_ingredients.every((t) => has(r, t)) &&
+    !exclude_ingredients.some((t) => has(r, t)) &&
+    (!course || r.course.some((c) => norm(c) === norm(course))) &&
+    tags.every((t) => r.tags.some((x) => norm(x) === norm(t))) &&
+    (max_calories === undefined || (r.calories !== undefined && r.calories <= max_calories)) &&
+    (max_minutes === undefined || (r.total_mins !== undefined && r.total_mins <= max_minutes)) &&
+    (draft === undefined || r.draft === draft) &&
+    (week === undefined || (week === "this" ? r.current : week === "next" ? r.next : !r.current && !r.next));
+  return (await recipeIndex()).filter(matches).map(({ ingredients, text, image, data, markdown, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
+}
+
+// Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
+export const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|vegetable oil|sunflower oil|cooking spray|butter|sugar|flour|garlic powder|paprika|cumin|soy sauce)\b|\b(salt|pepper)( and (black )?pepper)?$/i;
+
+/** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
+/** Every recipe's ingredient names with its list row, from the cached index (for matching against what's at home). */
+export async function recipeIngredients() {
+  return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n) => n.trim()) }));
+}
+
+export async function recipeSummaries() {
+  return (await recipeIndex()).map(({ ingredients, text, data, markdown, ...row }) => row);
+}
+
+/**
+ * A compact catalogue of the whole book for the chat prompt: one row per recipe with its key ingredients.
+ * Same cache as search_recipes. status: "draft" | "regular"; week: "this" | "next" | "both" | "none".
+ */
+export async function catalogue({ keyIngredients = 6 } = {}) {
+  return (await recipeIndex()).map((r) => ({
+    slug: r.slug,
+    title: r.title,
+    course: r.course,
+    tags: r.tags,
+    mins: r.total_mins,
+    kcal: r.calories,
+    status: r.draft ? "draft" : "regular",
+    week: r.current && r.next ? "both" : r.current ? "this" : r.next ? "next" : "none",
+    ingredients: [...new Set(r.ingredients.filter((n) => !STAPLES.test(n.trim())).map((n) => n.toLowerCase()))].slice(0, keyIngredients),
+  }));
+}
+
+/** One line per recipe: "slug | Title | Dinner | High Protein | 30 min | 620 kcal | draft, this week | salmon, rice, ...". */
+export function catalogueText(rows) {
+  const weeks = { this: "this week", next: "next week", both: "this week + next week", none: "" };
+  return rows
+    .map((r) =>
+      [r.slug, r.title, r.course.join("/"), r.tags.join("/"), `${r.mins} min`, `${r.kcal} kcal`, [r.status === "draft" ? "draft" : "", weeks[r.week]].filter(Boolean).join(", "), r.ingredients.join(", ")].join(" | ")
+    )
+    .join("\n");
+}
+
+/** One recipe's data and Markdown. Without a ChangeSet: a read, from the cached recipe index. With one: fresh from the branch (and its staged edits). */
+export async function getRecipe(slug, cs) {
   assertSlug(slug);
-  const raw = await cs.read(recipePath(slug));
-  if (!raw) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
-  const markdown = raw.toString("utf8");
+  let markdown;
+  if (cs) {
+    const raw = await cs.read(recipePath(slug));
+    if (raw) markdown = raw.toString("utf8");
+  } else {
+    markdown = (await recipeIndex()).find((r) => r.slug === slug)?.markdown;
+  }
+  if (!markdown) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
   const { data } = parseRecipe(markdown);
   return { data, markdown };
 }
@@ -165,7 +280,8 @@ function tidyTags(tags) {
   return [...new Set((tags || []).map((t) => t.trim()).filter(Boolean))];
 }
 
-export async function createRecipe(input, batch) {
+export async function createRecipe(input, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const title = input.title.trim();
   const slug = slugify(title);
@@ -201,12 +317,13 @@ export async function createRecipe(input, batch) {
   if (imageBuffer) cs.write(imagePathFor(slug), imageBuffer);
 
   const subject = `${data.draft ? "Add draft recipe" : "Add recipe"}: ${title}${input.week ? ` (${WEEK_NAME[input.week]})` : ""}`;
-  const commit = batch ? null : await cs.commit(subject + via("Added"));
+  const commit = batch ? null : await cs.commit(subject + via("Added"), caller);
   return { slug, markdown, commit, subject, draft: !!data.draft, week: input.week || null, warnings: instructionWarnings(input.ingredients, input.instructions) };
 }
 
 /** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. Its weeks are unchanged. */
-export async function promoteRecipe(slug, batch) {
+export async function promoteRecipe(slug, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const { markdown: before } = await getRecipe(slug, cs);
   const { data, sections } = parseRecipe(before);
@@ -215,7 +332,7 @@ export async function promoteRecipe(slug, batch) {
   const markdown = serializeRecipe(data, sections);
   cs.write(recipePath(slug), Buffer.from(markdown));
   const subject = `Promote recipe: ${data.title} (draft -> regular)`;
-  const commit = batch ? null : await cs.commit(subject + via("Promoted"));
+  const commit = batch ? null : await cs.commit(subject + via("Promoted"), caller);
   return { slug, markdown, commit, subject };
 }
 
@@ -223,7 +340,8 @@ export async function promoteRecipe(slug, batch) {
  * Adds recipes to / takes them out of this week (`current: true`) or next week (`next: true`), all in one commit.
  * Drafts and regular recipes alike. A recipe can be in both weeks.
  */
-export async function setWeekRecipes(slugs, week, add, batch) {
+export async function setWeekRecipes(slugs, week, add, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   if (!WEEKS.includes(week)) throw new UserError(`week must be one of: ${WEEKS.join(", ")}`);
   const key = WEEK_KEY[week];
   const cs = batch || new ChangeSet();
@@ -251,7 +369,7 @@ export async function setWeekRecipes(slugs, week, add, batch) {
 
   const verb = `${add ? "Add to" : "Take out of"} ${WEEK_NAME[week]}`;
   const subject = `${verb}: ${titles.length > 3 ? `${titles.length} recipes` : titles.join(", ")}`;
-  const commit = batch ? null : await cs.commit(subject + via("Updated"));
+  const commit = batch ? null : await cs.commit(subject + via("Updated"), caller);
   return { changed, unchanged, week, add, commit, subject };
 }
 
@@ -261,7 +379,8 @@ export async function setWeekRecipes(slugs, week, add, batch) {
  * this week as well. The shopping list isn't touched: it was built for next week, so it now covers this week and
  * the page keeps showing it until a new next week is planned and a new list saved.
  */
-export async function startNextWeek(carryOver = [], batch) {
+export async function startNextWeek(carryOver = [], batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const recipes = await listRecipes(cs);
   const bySlug = new Map(recipes.map((r) => [r.slug, r]));
@@ -291,7 +410,7 @@ export async function startNextWeek(carryOver = [], batch) {
   const thisWeek = [...report.started, ...report.stayed, ...report.carried];
   const subject = `Start next week (${thisWeek.length} recipe${thisWeek.length === 1 ? "" : "s"} this week)`;
   if (!writes) return { ...report, thisWeek, commit: null, subject: null };
-  const commit = batch ? null : await cs.commit(subject + via("Switched"));
+  const commit = batch ? null : await cs.commit(subject + via("Switched"), caller);
   return { ...report, thisWeek, commit, subject };
 }
 
@@ -299,7 +418,8 @@ export async function startNextWeek(carryOver = [], batch) {
  * Deletes a draft the family didn't like: recipes/<slug>.md and its photo, in one commit. Only drafts can be
  * removed (a safety net: regular recipes are the family's keepers and can't be deleted through the server).
  */
-export async function removeDraft(slug, batch) {
+export async function removeDraft(slug, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const { markdown } = await getRecipe(slug, cs);
   const { data } = parseRecipe(markdown);
@@ -323,11 +443,12 @@ export async function removeDraft(slug, batch) {
   }
 
   const subject = `Remove draft recipe: ${data.title}`;
-  const commit = batch ? null : await cs.commit(subject + via("Removed"));
+  const commit = batch ? null : await cs.commit(subject + via("Removed"), caller);
   return { slug, title: data.title, removedImages, commit, subject };
 }
 
-export async function updateRecipe(input, batch) {
+export async function updateRecipe(input, batch, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   const cs = batch || new ChangeSet();
   const { slug } = input;
   const { markdown: before } = await getRecipe(slug, cs);
@@ -385,7 +506,7 @@ export async function updateRecipe(input, batch) {
 
   for (const c of changes) (c.delete ? cs.remove(c.path) : cs.write(c.path, c.content));
   const subject = `Update recipe: ${data.title} (${summary.join(", ")})`;
-  const commit = batch ? null : await cs.commit(subject + via("Updated"));
+  const commit = batch ? null : await cs.commit(subject + via("Updated"), caller);
 
   const ingredientsForCheck =
     input.ingredients || ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
@@ -398,7 +519,8 @@ export async function updateRecipe(input, batch) {
  * the recipe already exists with a different image path (e.g. an old .webp),
  * repoints its frontmatter and removes the old file in the same commit.
  */
-export async function saveUploadedImage(slug, rawBuffer) {
+export async function saveUploadedImage(slug, rawBuffer, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
   assertSlug(slug);
   const { buffer } = await normalizeImage(rawBuffer);
   const newPath = imagePathFor(slug);
@@ -420,5 +542,5 @@ export async function saveUploadedImage(slug, rawBuffer) {
   // A photo for a recipe that doesn't exist yet isn't on any page, so don't spend a site deploy on it:
   // [skip ci] stops the Pages workflow, and the create_recipe commit that follows deploys it.
   const subject = existing ? `Update photo: ${title}` : `Add photo: ${title} [skip ci]`;
-  return cs.commit(subject + via("Uploaded"));
+  return cs.commit(subject + via("Uploaded"), caller);
 }

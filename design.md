@@ -235,3 +235,82 @@ On the **At home** tab every row is a fill bar:
 - the round house-with-cross button clears every row;
 - a sticky bar at the bottom holds undo + **Save (n)** while there are unsaved changes, and
   "✓ Saved <date>" otherwise.
+
+## Chat
+
+`templates/chat.js` (+ the `.chat-*` rules at the end of `styles/style.css`), on every page of a build that has `CHAT_API_URL`.
+
+- **Bubble** (`.chat-bubble`): 56px round, `--accent-strong` with `--on-accent` speech-bubble stroke icon, bottom right, 16px +
+  safe-area inset. A small `--on-accent` dot marks an unread reply. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
+  of the screen (shopping page Save bar), hides while a sheet is open (`body.sheet-open`), and is covered by the panel on phones.
+- **Panel** (`.chat-panel`): a full-height sheet on phones (sized with `visualViewport`, so the input stays above the keyboard; the page behind
+  doesn't scroll), a 400×640 floating panel anchored above the bubble from 720px. Header: serif title, "New chat" text button, round close
+  button. Escape closes it.
+- **Messages:** the user's in a `--current-soft` bubble on the right; the bot's as plain text on the surface (no box), at most paragraphs,
+  bold, bullet/numbered lists and links. Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
+  origin (anything else is shown as plain text).
+- **Status line** (`.chat-status`): one quiet muted italic line while it works ("Thinking…", "Looking through the recipes…"), never tool names;
+  gone when the answer is done. Errors are the muted red box (`.chat-error`).
+- **Suggested replies** (`.chat-chip`): outline pills (1px `--border`, 44px tall, sentence case, no emoji) under the last bot message. Only the
+  last message's chips are live; older rows fade to 40% and are disabled.
+- **Context chip** (`.chat-context`): "On: Steamed Rice" on a `--track` pill above the input, dismissable with ×; it tells the user what "this
+  recipe" means.
+- **First run:** the empty chat says what it can do and that chats are stored in this browser for two weeks (history is in `localStorage`, last
+  ~20 turns, dropped after two weeks).
+- **Recipe cards** (`.chat-cards` / `.chat-card`, from the `show_recipes` tool): the site's tile look (square photo, small-caps kicker, serif
+  title clamped to 2 lines, "20 min · 412 kcal") in a sideways scrolling row that runs to the panel's edges, 8.75rem wide, snapping at the
+  start. Kicker: "This week" (accent), "Next week" (teal), "Draft" (purple, only when it is in neither week), else the course in muted text.
+  Built by the server from our recipe files, never from model text; tapping one opens the recipe page (inert while a reply is streaming).
+- **Navigation button** (`.chat-nav`, `offer_navigation`): an outline pill in `--accent-ink` with a stroke arrow ("Open Steamed Rice"), shown
+  only once the reply is complete. It is a plain link the user must tap; the chat never navigates on its own. Only the last message's is live.
+- **Action chips** (`.chat-chip.is-nav`): a suggested reply that opens a page rather than sending text; same pill, accent outline plus the arrow.
+- **Account** (`.chat-account`, signed-in builds only): in the header, a round person button (the compact `.pill`) that opens the shared sign-in
+  sheet, or the avatar with its menu (email, Set a password, Sign out), exactly as on the shopping page; the sheet is titled "Sign in to the chat".
+  Signing in keeps the panel open (a magic link that reloads the page reopens it with the draft). A signed-in account that isn't an editor gets a
+  quiet `.chat-banner` under the header: "Signed in as x — this account can't edit, so the chat is read-only."
+- **Chats list** (editors): a list icon button in the header swaps the log for "Your chats" (`.chat-chats`): serif heading, a muted note ("A chat
+  is deleted two weeks after its last message."), then rows with the title, a muted "Today · until Sat" line and a trash icon button; the open
+  chat is on `--current-soft`. Delete asks inline ("Delete this chat?" Cancel / Delete). The header title is the open chat's title. "New chat" leaves
+  the list. On sign-out the panel goes back to the visitor's chat and nothing of the editor's is kept in the browser but the open chat's id.
+- **Feedback controls** (editors, `.chat-feedback`): under each turn's last message, before its chips, two 32px round icon buttons (thumbs up and
+  down, 17px stroke icons in `--icon-muted`, `aria-label` "Good reply" / "Bad reply", `aria-pressed`; a pressed one is filled `--accent-strong`)
+  and a muted note ("Thanks"; after Send "Sent: Wrong amounts" or "Sent"). Thumbs down opens a bordered box: "What went wrong? (optional)", reason
+  chips (several can be picked; picked ones get the accent border on `--current-soft`), a one-line "Add a note", and Skip / Send. Tapping the other
+  thumb switches the score; tapping the chosen one clears it. Earlier turns' rows are dimmed to half opacity and still work. Visitors see none of it.
+- **Starter chips** (`.chat-starters`): the empty chat's first suggestions, by page (recipe: "Swap an ingredient", "Scale it for 6", "Add to
+  next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
+- **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
+  tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
+- **Photo attachments** (`.chat-attach`, editors only): a 44px round outline icon button (the stroke "picture" icon, `--text-muted`) to the left of the
+  input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 4 photos;
+  the button disables at 4. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
+  round × on the corner; they're downscaled to 1600px JPEG in the browser first. A muted line says when a file couldn't be read. A sent message
+  shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened. Visitors have no button.
+- **Action chips that commit** (`.chat-chip.is-action`: Save to site, Finalise list): solid `--accent-strong` like the primary button, fixed text
+  drawn by the panel ("Save to site (3)"), never the model's wording.
+- Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.
+- **Questions** (`.chat-question`, `ask_user`): the question in bold, then **solid** chips (`--accent-strong`, `--on-accent`; a suggestion is an
+  outline chip). The input's placeholder reads "Or type an answer" while one is live. `multi` chips toggle (`--current-soft` with an accent
+  inset border) and a solid "Done" sends them together. Only the last message's question is live.
+- **Plan tray** (`.chat-tray`, editors only, between the log and the input): a hairline-topped strip. A small-caps head line "Tray · 8 changes ·
+  until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
+  week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button
+  (`.save-button` look): **Finalise list** while the tray changes next week or the servings and no current list exists, "Building the list…"
+  while the agent works, **Save to site (n)** when ready. On a phone the tray folds itself to its header line while a reply streams and when the reader scrolls up, and opens on a tap, a new card or the end of the turn. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most 63% of the panel / 26rem: enough for a full row of cards, ~16rem, so no card is ever clipped by the button) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
+  when it closes or a message is sent. A card has the kind as a kicker (New in the draft purple, Next week teal, Switch accent, the rest muted),
+  a serif title, a muted sub line, "Added by Name: reason", × to drop (a round button on the corner), and quiet text buttons: **Save now** (quick
+  fixes only) and **New photo**. A newly added card gets the accent border on `--current-soft` for a few seconds and the row scrolls to it. A
+  new recipe shows "Making the photo…" on its photo until ready; tapping it opens its staged ingredients and steps, tapping the list card
+  previews it by aisle. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
+  the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
+  button that applies.
+- **Week balance** (`.tray-balance`): one muted 0.82rem line under the tray's head, "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each ·
+  2 h 15 min in all", from numbers the server computed; hidden while the tray is folded. **At home card**: kicker "At home" (muted, like Edit), title
+  "At home: 2 items", sub "Eggs 6, Basmati rice"; tapping opens the list of what was recorded; **Save now** works on it.
+- **Locked panel** (`.chat-locked`, no input, no tray, no "New chat"): a serif title and a muted line, shown in place of the conversation when the chat
+  can't be used: "The chat is switched off for now." (server `disabled`; the bubble is then gone on later pages of the tab session), "Chat is for
+  signed-in editors" with a solid Sign in button (server `signin`), or "This account can't use the chat" for a signed-in account that isn't an editor.
+  With the build variable `CHAT_PUBLIC=false` the bubble itself is only shown to a signed-in visitor.
+- **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
+  "Publishing…" until the server sees their page, then they turn into normal cards.
+- **Action chips** (`.chat-chip.is-action`): solid chips that press the tray's own button ("Finalise list", "Save to site (n)"), with fixed text: still a tap by a person (see "Action chips that commit" above).

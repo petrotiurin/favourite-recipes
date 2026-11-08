@@ -8,12 +8,15 @@
     "node": "22.x"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "dev": "node scripts/dev.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@vercel/functions": "^3.11.0",
     "gray-matter": "^4.0.3",
     "sharp": "^0.34.5",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

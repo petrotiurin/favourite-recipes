@@ -82,6 +82,7 @@ ${bodyHtmlOut}
     bodyClass: "recipe-page",
     content,
     rootPrefix: "../",
+    pageContext: { page: "recipe", slug: recipe.slug, title: recipe.title },
   });
 }
 

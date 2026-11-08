@@ -1,6 +1,12 @@
 import { assertConfigured } from "../lib/config.js";
 import { verifyUploadToken } from "../lib/auth.js";
 import { saveUploadedImage, pageUrl } from "../lib/recipes.js";
+import { makeCaller } from "../lib/tools.js";
+
+// The upload link is its own capability: an HMAC-signed, expiring URL that can only write the photos of the slugs it
+// lists (checked below), handed out by the agent through create_image_upload_link. So it is not an editor sign-in and
+// not a public caller; it commits as the agent that issued the link, marked with how it got here.
+const UPLOAD_LINK = makeCaller({ role: "agent", via: "upload-link" });
 
 // A tiny page a person opens from the link create_image_upload_link returns. One link
 // can cover several recipes: the page lists them all, and each photo uploads as soon as
@@ -179,7 +185,7 @@ export async function POST(request) {
   if (!photo || typeof photo === "string" || !photo.size) return reply(400, { error: "No photo received" });
 
   try {
-    const commit = await saveUploadedImage(slug, Buffer.from(await photo.arrayBuffer()));
+    const commit = await saveUploadedImage(slug, Buffer.from(await photo.arrayBuffer()), UPLOAD_LINK);
     return reply(200, { ok: true, slug, commit: commit.url, page: pageUrl(slug) });
   } catch (err) {
     console.error(err);

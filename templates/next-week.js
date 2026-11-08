@@ -26,7 +26,7 @@ ${recipes.map((r) => tile(r, { kicker: { cls: "kicker-next", label: "Next week" 
 ${body}
   </main>`;
 
-  return layout({ title: "Next week — Our Favourite Recipes", content, rootPrefix: "" });
+  return layout({ title: "Next week — Our Favourite Recipes", content, rootPrefix: "", pageContext: { page: "next-week" } });
 }
 
 module.exports = { renderNextWeek };
