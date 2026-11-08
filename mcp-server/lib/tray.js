@@ -8,7 +8,7 @@
 // item's card straight away.
 import { createHash, randomBytes } from "node:crypto";
 import { config } from "./config.js";
-import { ChangeSet, assertAllowedPath } from "./github.js";
+import { ChangeSet, assertAllowedPath, branchSnapshot } from "./github.js";
 import { slugify, parseRecipe, renderIngredient, ingredientNamesFromSection } from "./recipe-format.js";
 import { listRecipes, isNextWeek, isDraft, recipeSummaries, removeDraft, UserError } from "./recipes.js";
 import { ShoppingListError } from "./shopping-list.js";
@@ -81,12 +81,18 @@ const hashOf = (text) => createHash("sha1").update(text).digest("hex");
 const PICK = ["title", "course", "tags", "total_mins", "serves", "calories", "scalable", "draft", "current", "next"];
 
 /** { hash, data } of a recipe as it is on the branch right now (not through any ChangeSet), or null. */
-export async function repoSnapshot(slug) {
-  const raw = await new ChangeSet().read(`recipes/${slug}.md`);
+export async function repoSnapshot(slug, { warm = false } = {}) {
+  const raw = await (warm ? new ChangeSet(await warmReads()) : new ChangeSet()).read(`recipes/${slug}.md`);
   if (!raw) return null;
   const text = raw.toString("utf8");
   const { data } = parseRecipe(text);
   return { hash: hashOf(text), data: Object.fromEntries(PICK.filter((k) => k in data).map((k) => [k, data[k]])) };
+}
+
+/** Reads for a throwaway ChangeSet from the branch snapshot (lib/github.js): one ref read, everything else shared per head SHA. */
+export async function warmReads() {
+  const { sha, reads } = await branchSnapshot();
+  return { reads, ref: sha };
 }
 
 // --- the dry run -----------------------------------------------------------------------------------------------------------
@@ -111,9 +117,9 @@ export function applicableOp(item, cs, photoBytes) {
  * | { warnings, result }), nextSlugs } where an item that fails is skipped (its half-done edits undone) and later items go on without it.
  * Never commits. Unexpected failures (GitHub down) throw: those aren't a problem with the item.
  */
-export async function replay(items, caller, { reads = new Map(), photoBytes = () => PLACEHOLDER_PHOTO } = {}) {
+export async function replay(items, caller, { reads = new Map(), ref, photoBytes = () => PLACEHOLDER_PHOTO } = {}) {
   assertCanStage(caller);
-  const cs = new ChangeSet({ reads });
+  const cs = new ChangeSet({ reads, ref });
   const results = new Map();
   for (const item of saveOrder(items)) {
     const snapshot = cs.snapshot();
@@ -306,7 +312,7 @@ function planChange(items, op, { caller, reason, base, photo }) {
 /** What to look at in the repo before staging, to know later whether the recipe changed under us (clash detection). */
 async function baseFor(op) {
   if (!["update_recipe", "promote_recipe", "remove_draft"].includes(op.action)) return null;
-  const snap = await repoSnapshot(op.slug);
+  const snap = await repoSnapshot(op.slug, { warm: true });
   return snap ? { slug: op.slug, ...snap } : null;
 }
 
@@ -319,7 +325,7 @@ export async function stageOp(spec, caller, ctx = {}) {
   assertCanStage(caller);
   const { op } = spec;
   if (!kindOf(op)) throw new UserError(`Unknown change "${op?.action}"`);
-  if (op.action === "remove_draft") await removeDraft(op.slug, new ChangeSet(), caller); // the real rule, against the repo as it is (a draft planned for next week stays)
+  if (op.action === "remove_draft") await removeDraft(op.slug, new ChangeSet(await warmReads()), caller); // the real rule, against the repo as it is (a draft planned for next week stays)
   if (op.action === "update_recipe" && !Object.keys(op).some((k) => EDIT_FIELDS.includes(k)) && !spec.imageUrl && !spec.newPhoto) throw new UserError("Nothing to change: pass at least one field");
   const base = await baseFor(op);
   if (base === null && ["update_recipe", "promote_recipe", "remove_draft"].includes(op.action)) {
@@ -327,14 +333,14 @@ export async function stageOp(spec, caller, ctx = {}) {
   }
   const reason = spec.reason || (ctx.conversationTitle ? `from the chat "${oneLine(ctx.conversationTitle, 40)}"` : "");
   const wantsPhoto = op.action === "create_recipe" ? { status: "pending", image_url: spec.imageUrl || null, started: clock.now() } : spec.imageUrl || spec.newPhoto ? { status: "pending", image_url: spec.imageUrl || null, started: clock.now() } : null;
-  const reads = new Map();
+  const reads = await warmReads();
   let outcome;
   const { tray } = await mutate(caller, async (tray) => {
     const items = tray?.items || [];
     if (items.length >= MAX_ITEMS && !(op.action === "update_recipe" || op.action === "create_recipe")) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
     const planned = planChange(items, op, { caller, reason, base, photo: wantsPhoto });
     if (planned.items.length > MAX_ITEMS) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
-    const { results, nextSlugs } = await replay(planned.items, caller, { reads });
+    const { results, nextSlugs } = await replay(planned.items, caller, reads);
     const checked = planned.items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
     const item = planned.item ? checked.find((i) => i.id === planned.item.id) : null;
     const needs = needsList(checked, nextSlugs);
@@ -352,13 +358,13 @@ export async function stageOp(spec, caller, ctx = {}) {
 export async function dropItem(id, caller, ctx = {}) {
   assertCanStage(caller);
   let dropped = null;
-  const reads = new Map();
+  const reads = await warmReads();
   const { tray } = await mutate(caller, async (tray) => {
     dropped = tray?.items.find((i) => i.id === id) || null;
     if (!dropped) return { result: null };
     const items = tray.items.filter((i) => i.id !== id);
     if (!items.length) return { items: [], result: null };
-    const { results, nextSlugs } = await replay(items, caller, { reads });
+    const { results, nextSlugs } = await replay(items, caller, reads);
     const checked = items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
     const needs = needsList(checked, nextSlugs);
     const listHash = checked.some((i) => i.kind === "list") ? tray.list_hash : null;
@@ -418,7 +424,7 @@ export async function findClashes(items) {
 
 async function photoSubject(item) {
   if (item.kind === "new") return { title: item.op.title, ingredients: item.op.ingredients || [], slug: slugOf(item) };
-  const { data, sections } = parseRecipe((await new ChangeSet().read(`recipes/${item.op.slug}.md`)).toString("utf8"));
+  const { data, sections } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
   const names = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
   return { title: item.op.title || data.title, ingredients: item.op.ingredients || names, slug: item.op.slug };
 }
@@ -493,24 +499,12 @@ export async function trayView(tray, caller) {
   if (!tray) return null;
   const items = tray.items || [];
   const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
-  const reads = new Map();
-  const { results, nextSlugs } = await replay(items, caller, { reads });
+  const { results, nextSlugs } = await replay(items, caller, await warmReads());
   const needs = needsList(items, nextSlugs);
   const current = listCurrent(tray, items);
   const inNext = new Set([...(await listRecipes().then((rs) => rs.filter(isNextWeek).map((r) => r.slug)).catch(() => [])), ...items.filter((i) => i.kind === "next" && i.op.add).map((i) => slugOf(i))]);
-  const saveNow = new Map();
-  for (const item of items) {
-    let ok = !item.error && !item.clash && saveNowRule(item, inNext) && (!item.photo || item.photo.status === "ready");
-    if (ok) {
-      try {
-        const alone = await replay([item], caller, { reads: new Map(), photoBytes: () => PLACEHOLDER_PHOTO });
-        ok = !alone.results.get(item.id)?.error;
-      } catch {
-        ok = false;
-      }
-    }
-    saveNow.set(item.id, ok);
-  }
+  // "Save now" eligibility comes from the one full replay above (plus the quick-fix rule): no replay per item. Save re-checks the item on its own.
+  const saveNow = new Map(items.map((item) => [item.id, !item.error && !item.clash && saveNowRule(item, inNext) && (!item.photo || item.photo.status === "ready") && !results.get(item.id)?.error]));
   const photoState = (item) => {
     if (!item.photo) return null;
     const stale = item.photo.status === "pending" && clock.now() - (item.photo.started || 0) > PHOTO_STALE_MS;
@@ -623,7 +617,7 @@ export async function trayNote(tray, caller) {
 export async function settleFinalise(caller) {
   await mutate(caller, async (tray) => {
     if (!tray || tray.status !== "finalising") return { result: null };
-    const { nextSlugs } = await replay(tray.items, caller);
+    const { nextSlugs } = await replay(tray.items, caller, await warmReads());
     const needs = needsList(tray.items, nextSlugs);
     return { items: tray.items, listHash: tray.list_hash, status: needs && !listCurrent(tray, tray.items) ? "collecting" : "ready", result: null };
   }).catch((err) => console.error("Settling the tray failed:", err.message));

@@ -7,22 +7,45 @@
 // short timeouts and hard size caps. The same guard is meant for the phase 5 `fetch_url` tool.
 import dns from "node:dns/promises";
 import net from "node:net";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { Readable } from "node:stream";
 import { CARD_ASPECT } from "./config.js";
 import { normalizeImage } from "./images.js";
 import { generateDishImage } from "./image-generation.js";
 
 const MAX_HTML_BYTES = 1_500_000;
+const MAX_SCANNED_HTML = 256 * 1024;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 4;
 const UA = "Mozilla/5.0 (compatible; favourite-recipes-chat)";
 
 /** Replaceable in tests: how a hostname is resolved. Must resolve to [{ address }]. */
-export const deps = { lookup: (host) => dns.lookup(host, { all: true, verbatim: true }) };
+export const deps = {
+  lookup: (host) => dns.lookup(host, { all: true, verbatim: true }),
+  // How a checked URL is fetched: the default connects to the checked address itself (pinnedGet). Tests and the dev harness swap in the global fetch.
+  get: (url, address, init) => pinnedGet(url, address, init),
+};
 
 export class UnsafeUrlError extends Error {}
 
-/** True for an address that isn't on the public internet (private, loopback, link-local, CGNAT, multicast, reserved, mapped). */
+/** The 16 bytes of an IPv6 address (`::` expanded, an embedded dotted IPv4 tail handled), or null if it doesn't parse. */
+function ipv6Bytes(address) {
+  let a = address.toLowerCase().split("%")[0];
+  const tail = a.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (tail) a = a.slice(0, tail.index) + (((+tail[1] << 8) | +tail[2]).toString(16)) + ":" + (((+tail[3] << 8) | +tail[4]).toString(16));
+  const halves = a.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(":") : [];
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const fill = halves.length === 2 ? 8 - head.length - rest.length : 0;
+  const groups = [...head, ...Array(Math.max(fill, 0)).fill("0"), ...rest];
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.flatMap((g) => [parseInt(g, 16) >> 8, parseInt(g, 16) & 255]);
+}
+
+/** True for an address that isn't on the public internet (private, loopback, link-local, CGNAT, multicast, reserved, mapped, tunnelled). */
 export function isPrivateAddress(address) {
   const kind = net.isIP(address);
   if (kind === 4) {
@@ -39,23 +62,29 @@ export function isPrivateAddress(address) {
     );
   }
   if (kind === 6) {
-    const a = address.toLowerCase();
-    if (a === "::" || a === "::1") return true;
-    const mapped = a.match(/^(?:::ffff:|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    const mappedHex = a.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-    if (mappedHex) {
-      const hi = parseInt(mappedHex[1], 16);
-      const lo = parseInt(mappedHex[2], 16);
-      return isPrivateAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
-    }
-    return /^f[cd]/.test(a) || /^fe[89ab]/.test(a) || /^ff/.test(a) || a.startsWith("2001:db8");
+    const x = ipv6Bytes(address);
+    if (!x) return true;
+    const zeros = (n) => x.slice(0, n).every((v) => v === 0);
+    if (zeros(12)) return true; // ::/96: unspecified, loopback and IPv4-compatible
+    if (zeros(10) && x[10] === 255 && x[11] === 255) return isPrivateAddress(x.slice(12).join(".")); // ::ffff:a.b.c.d (mapped)
+    if (x[0] === 0 && x[1] === 0x64 && x[2] === 0xff && x[3] === 0x9b && x.slice(4, 12).every((v) => v === 0)) return true; // 64:ff9b::/96 (NAT64: embeds any IPv4)
+    return (
+      (x[0] & 0xfe) === 0xfc || // fc00::/7 unique local
+      (x[0] === 0xfe && (x[1] & 0xc0) >= 0x80) || // fe80::/10 link-local and fec0::/10 site-local (fe80-febf, fec0-feff)
+      x[0] === 0xff || // multicast
+      (x[0] === 0x20 && x[1] === 0x02) || // 2002::/16 6to4
+      (x[0] === 0x20 && x[1] === 0x01 && x[2] === 0 && x[3] === 0) || // 2001::/32 Teredo
+      (x[0] === 0x20 && x[1] === 0x01 && x[2] === 0x0d && x[3] === 0xb8) // 2001:db8::/32 documentation
+    );
   }
   return true; // not an address at all
 }
 
-/** Throws UnsafeUrlError unless `url` is a public http(s) URL. Returns the parsed URL. */
-export async function assertPublicUrl(url) {
+/**
+ * Checks `url` is a public http(s) URL and returns { url (parsed), address (the one public address to connect to) }. Every address the name
+ * resolves to must be public. The caller connects to `address` itself (see pinnedGet), so the name can't resolve differently a moment later.
+ */
+export async function resolvePublic(url) {
   let u;
   try {
     u = new URL(String(url));
@@ -69,7 +98,7 @@ export async function assertPublicUrl(url) {
   if (!host || host === "localhost" || /\.(localhost|local|internal|localdomain|lan|home|corp)$/.test(host)) throw new UnsafeUrlError("that address isn't public");
   if (net.isIP(host)) {
     if (isPrivateAddress(host)) throw new UnsafeUrlError("that address isn't public");
-    return u;
+    return { url: u, address: host };
   }
   let answers;
   try {
@@ -78,7 +107,35 @@ export async function assertPublicUrl(url) {
     throw new UnsafeUrlError("that host couldn't be found");
   }
   if (!answers?.length || answers.some((a) => isPrivateAddress(a.address))) throw new UnsafeUrlError("that address isn't public");
-  return u;
+  return { url: u, address: answers[0].address };
+}
+
+/** Throws UnsafeUrlError unless `url` is a public http(s) URL. Returns the parsed URL. */
+export async function assertPublicUrl(url) {
+  return (await resolvePublic(url)).url;
+}
+
+/**
+ * One GET that connects to `address` (already checked) whatever the name would resolve to now: the TLS name and Host header stay the URL's.
+ * Resolves a Web Response (status, headers, streaming body). Aborts after timeoutMs, body included.
+ */
+export function pinnedGet(url, address, { headers, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    const https = url.protocol === "https:";
+    const req = (https ? httpsRequest : httpRequest)(
+      url,
+      { method: "GET", headers, signal: AbortSignal.timeout(timeoutMs), lookup: (_host, _opts, cb) => (_opts?.all ? cb(null, [{ address, family: net.isIP(address) }]) : cb(null, address, net.isIP(address))) },
+      (res) => {
+        const nullBody = [101, 204, 205, 304].includes(res.statusCode) || (res.statusCode >= 300 && res.statusCode < 400);
+        const h = new Headers();
+        for (const [k, v] of Object.entries(res.headers)) for (const x of [].concat(v)) h.append(k, x);
+        if (nullBody) res.resume();
+        resolve(new Response(nullBody ? null : Readable.toWeb(res), { status: res.statusCode, headers: h }));
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 async function readLimited(res, max) {
@@ -96,12 +153,13 @@ async function readLimited(res, max) {
 
 /** GETs a public URL, following at most MAX_REDIRECTS redirects (each one checked), with a time and size limit. Returns { buffer, type, url }. */
 export async function fetchPublic(url, { accept = "*/*", maxBytes }) {
-  let current = await assertPublicUrl(url);
+  let target = await resolvePublic(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const res = await fetch(current, { redirect: "manual", headers: { "User-Agent": UA, Accept: accept }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const current = target.url;
+    const res = await deps.get(current, target.address, { headers: { "User-Agent": UA, Accept: accept }, timeoutMs: FETCH_TIMEOUT_MS });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       await res.body?.cancel?.().catch(() => {});
-      current = await assertPublicUrl(new URL(res.headers.get("location"), current).href);
+      target = await resolvePublic(new URL(res.headers.get("location"), current).href); // each hop is checked and pinned again
       continue;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -114,6 +172,7 @@ const decodeEntities = (s) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').r
 
 /** The dish photo URL a recipe page advertises: og:image / twitter:image, else the image of its JSON-LD Recipe. Resolved against the page URL. */
 export function pageImageUrl(html, pageUrl) {
+  html = html.slice(0, MAX_SCANNED_HTML); // meta tags and JSON-LD live at the top; don't run regexes over a megabyte of body
   const metas = [...html.matchAll(/<meta\b[^>]*>/gi)].map((m) => m[0]);
   const content = (tag) => decodeEntities(tag.match(/\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x) => x !== undefined) || "");
   const prop = (tag) => (tag.match(/\b(?:property|name)\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x) => x !== undefined) || "").toLowerCase();

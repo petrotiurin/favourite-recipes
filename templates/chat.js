@@ -161,6 +161,7 @@
     return out;
   }
 
+  var PLAN_LABELS = { apply_plan: "Save to site", finalise_plan: "Finalise list" };
   var PLAN_ACTIONS = { apply_plan: true, finalise_plan: true }; // chips that press the tray's own button (a human tap)
 
   /** Suggested replies: a string (sent as the next message), { label, url } (opens a page on this site) or { label, action } (presses a tray button). Anything else is dropped. */
@@ -170,10 +171,12 @@
       if (out.length >= 4) return;
       if (typeof r === "string") {
         if (r) out.push(r);
+      } else if (r && typeof r === "object" && typeof r.action === "string" && PLAN_ACTIONS[r.action] === true) {
+        out.push({ label: PLAN_LABELS[r.action], action: r.action }); // fixed text: the model's words never label a button that commits
       } else if (r && typeof r === "object" && typeof r.label === "string" && r.label) {
         var href = origin && typeof r.url === "string" ? safeHref(r.url, origin) : null;
         if (href) out.push({ label: r.label.slice(0, 60), url: href });
-        else if (typeof r.action === "string" && PLAN_ACTIONS[r.action] === true) out.push({ label: r.label.slice(0, 60), action: r.action });
+        
       }
     });
     return out;
@@ -713,7 +716,7 @@
         });
       } else if (r.action) {
         chip = el("button", "chat-chip is-action", { type: "button" }); // presses the tray's own button: still a tap by a person
-        chip.textContent = r.label;
+        chip.textContent = PLAN_LABELS[r.action] + (r.action === "apply_plan" && trayData && trayData.count ? " (" + trayData.count + ")" : ""); // fixed text, never the model's
         chip.addEventListener("click", function () {
           if (!row.classList.contains("is-old")) pressTray(r.action);
         });
@@ -1009,7 +1012,7 @@
               }
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
               else if (ev.name === "question") reply.question = cleanQuestion(ev.data) || reply.question;
-              else if (ev.name === "tray") loadTray({ highlight: true });
+              else if (ev.name === "tray") { /* the tray is loaded once, when the turn ends (finish) */ }
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
                 if (more.length) {
@@ -1681,7 +1684,7 @@
     clearTimeout(trayTimer);
     if (!trayData || panel.hidden || mode !== "editor") return;
     var waiting = trayData.state === "finalising" || trayData.items.some(function (i) { return i.photo && i.photo.status === "pending"; });
-    if (waiting) trayTimer = setTimeout(function () { loadTray({ highlight: true }); }, 3000);
+    if (waiting) trayTimer = setTimeout(function () { loadTray({ highlight: true }); }, 10000); // each load is a server dry run: poll slowly, and only while something is pending
   }
 
   /** Fetches the household's tray and draws it. highlight: cards that weren't there before get the new-card treatment and the row scrolls to them. */

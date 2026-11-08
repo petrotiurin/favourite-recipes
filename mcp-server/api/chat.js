@@ -1,7 +1,7 @@
 import { config, assertChatConfigured, warnSharedKeys } from "../lib/config.js";
 import { verifyUser } from "../lib/auth.js";
 import { makeCaller } from "../lib/tools.js";
-import { checkRateLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
+import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
 import { loadTray, trayView, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
@@ -118,7 +118,7 @@ async function whoIs(request) {
 
 export async function GET(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
-  const reply = (body, status = 200) => Response.json(body, { status, headers });
+  const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
 
   if (route === "me") {
@@ -144,7 +144,7 @@ export async function GET(request) {
     }
   }
   if (route === "plan") {
-    const editor = await requireEditor(request, reply);
+    const editor = await requireEditor(request, reply, { limited: true });
     if (editor.response) return editor.response;
     try {
       const caller = editorCaller(editor, request);
@@ -156,7 +156,7 @@ export async function GET(request) {
     }
   }
   if (route === "status") {
-    const editor = await requireEditor(request, reply);
+    const editor = await requireEditor(request, reply, { limited: true });
     if (editor.response) return editor.response;
     const slugs = (new URL(request.url).searchParams.get("slugs") || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 8);
     return reply({ live: await pagesLive(slugs) });
@@ -169,11 +169,11 @@ const ITEM_ID = /^[a-f0-9]{8}$/;
 
 export async function DELETE(request) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
-  const reply = (body, status = 200) => Response.json(body, { status, headers });
+  const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
   const planItem = route.match(/^plan\/items\/([^/]+)$/);
   if (planItem) {
-    const editor = await requireEditor(request, reply);
+    const editor = await requireEditor(request, reply, { limited: true });
     if (editor.response) return editor.response;
     if (!ITEM_ID.test(planItem[1])) return reply({ error: "That item isn't in the tray." }, 404);
     try {
@@ -197,7 +197,7 @@ export async function DELETE(request) {
 }
 
 /** Editor-only endpoints: 401 without a (good) token, 403 for a signed-in non-editor, 503 if chats aren't set up. */
-async function requireEditor(request, reply) {
+async function requireEditor(request, reply, { limited = false } = {}) {
   if (!storeConfigured()) return { response: reply({ error: "Saved chats aren't available right now." }, 503) };
   if (!request.headers.get("authorization")) return { response: reply({ error: "Sign in first." }, 401) };
   const { user, refusal } = await whoIs(request);
@@ -205,6 +205,10 @@ async function requireEditor(request, reply) {
   if (!user.isEditor) {
     console.warn("A non-editor tried an editor-only chat endpoint");
     return { response: reply({ error: `${user.email || "This account"} can't edit, so there are no saved chats.` }, 403) };
+  }
+  if (limited) {
+    const limit = await checkPanelLimit(user.userId);
+    if (!limit.ok) return { response: reply({ error: "Too many requests. Try again in a while." }, 429, { "Retry-After": String(limit.retryAfter) }) };
   }
   return { userId: user.userId, email: user.email };
 }
@@ -280,7 +284,7 @@ async function planApply(request, reply) {
 }
 
 async function planPhoto(request, reply, id) {
-  const editor = await requireEditor(request, reply);
+  const editor = await requireEditor(request, reply, { limited: true });
   if (editor.response) return editor.response;
   if (!ITEM_ID.test(id)) return reply({ error: "That item isn't in the tray." }, 404);
   try {

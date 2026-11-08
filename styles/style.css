@@ -2589,8 +2589,10 @@ body.chat-open {
 
 /* A chip that presses one of the tray's buttons (Finalise list, Save to site). */
 .chat-chip.is-action {
-  border-color: var(--accent-ink);
-  color: var(--accent-ink);
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
 }
 
 .chat-question.is-old {

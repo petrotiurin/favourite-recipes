@@ -9,7 +9,7 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
-import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage } from "./tray.js";
+import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
 import {
   listRecipes,
   searchRecipes,
@@ -371,7 +371,7 @@ const STAGE_TOOLS = [
       needChat(ctx);
       const tray = await loadTray();
       const note = await trayNote(tray, ctx.caller);
-      const { cs, nextSlugs } = await replay(tray?.items || [], ctx.caller);
+      const { cs, nextSlugs } = await replay(tray?.items || [], ctx.caller, await warmReads());
       const recipes = [];
       if (include_recipes !== false) for (const slug of nextSlugs) recipes.push({ slug, ...(await (async () => { const { data, markdown } = await getRecipe(slug, cs); return { title: data.title, serves: data.serves, markdown }; })()) });
       return ok([note, "", `Recipes that will be in next week after Save (${nextSlugs.length}):`, JSON.stringify(include_recipes === false ? nextSlugs : recipes, null, 2)].join("\n"));

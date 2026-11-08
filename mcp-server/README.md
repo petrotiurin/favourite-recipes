@@ -113,6 +113,7 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `OPENROUTER_CHAT_EDITOR_KEY` | For signed-in editors' chats: their own OpenRouter key (own credit limit). Falls back to `OPENROUTER_API_KEY` |
 | `CHAT_EDITOR_MODEL` | Optional; the editors' chat model, defaults to `anthropic/claude-sonnet-4.5`. Needs tool calling, streaming and (later) vision |
 | `CHAT_EDITOR_HOURLY_LIMIT` / `CHAT_EDITOR_DAILY_LIMIT` | Optional; messages per editor (user id) per hour / day, default 200 / 1000 |
+| `CHAT_PANEL_HOURLY_LIMIT` | Optional; the panel's own requests (plan tray, publishing status, dropping an item, new photo) per editor per hour, default 600 |
 | `OPENROUTER_BASE_URL` | Optional; defaults to `https://openrouter.ai/api/v1` (the local dev harness points it at a mock) |
 | `CHAT_PUBLIC_TOTAL_HOURLY_LIMIT` | Optional; one hourly cap across ALL visitors together, default 300 |
 | `AUTH_FAILURE_HOURLY_LIMIT` | Optional; failed sign-in checks per visitor per hour before `/chat` answers 429 without asking Supabase, default 20 |

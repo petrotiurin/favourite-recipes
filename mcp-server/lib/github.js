@@ -1,5 +1,5 @@
 import { config } from "./config.js";
-import { clearCache } from "./cache.js";
+import { clearCache, registerClear } from "./cache.js";
 
 // The ONLY paths this server is ever allowed to write or delete. Everything
 // else in the repo (including this server's own code, build.js, templates,
@@ -56,8 +56,8 @@ async function gh(method, path, body, { accept = "application/vnd.github+json", 
 }
 
 /** Returns file contents as a Buffer, or null if it doesn't exist on the branch. */
-export async function readFile(path) {
-  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${config.branch}`, null, {
+export async function readFile(path, ref = config.branch) {
+  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`, null, {
     accept: "application/vnd.github.raw+json",
     allow404: true,
   });
@@ -65,12 +65,27 @@ export async function readFile(path) {
 }
 
 /** Lists file names in a directory on the branch. */
-export async function listDir(path) {
-  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${config.branch}`, null, { allow404: true });
+export async function listDir(path, ref = config.branch) {
+  const res = await gh("GET", `/contents/${encodeURI(path)}?ref=${encodeURIComponent(ref)}`, null, { allow404: true });
   if (!res) return [];
   const entries = await res.json();
   return entries.filter((e) => e.type === "file").map((e) => e.name);
 }
+
+// A snapshot of the branch for dry runs (the plan tray's staging and view): ONE ref read per call, and everything read from the branch is
+// kept per head SHA (and pinned to that SHA), so however many replays and polls happen, GitHub is read once per branch state, not once
+// per recipe per replay. Cleared on our own commits. Save, clash detection and the commit never use it: they read fresh.
+let snapshot = null;
+export async function branchSnapshot() {
+  const ref = await (await gh("GET", `/git/ref/heads/${config.branch}`)).json();
+  const sha = ref.object.sha;
+  if (!snapshot || snapshot.sha !== sha) snapshot = { sha, reads: new Map() };
+  return snapshot;
+}
+export const clearSnapshot = () => {
+  snapshot = null;
+};
+registerClear(clearSnapshot);
 
 /**
  * Creates one commit on the branch containing all the given changes.
@@ -109,6 +124,7 @@ export async function commitChanges(changes, message, caller) {
 
     try {
       await gh("PATCH", `/git/refs/heads/${config.branch}`, { sha: commit.sha, force: false });
+      clearSnapshot();
       clearCache(); // the cached recipe index no longer matches the branch
       return { sha: commit.sha, url: commit.html_url };
     } catch (err) {
@@ -127,9 +143,10 @@ export class ChangeSet {
    * "dir:<path>" -> Promise<names>), so a dry run that replays the plan tray several times doesn't read every recipe from GitHub each time.
    * Only for short-lived, throwaway sets that never commit.
    */
-  constructor({ reads } = {}) {
+  constructor({ reads, ref } = {}) {
     this.staged = new Map(); // path -> Buffer, or null for a deletion
     this.reads = reads || null;
+    this.ref = ref || config.branch; // with `reads` from branchSnapshot(): the head SHA those reads are pinned to
   }
 
   /** The staged edits as they are now, to put back with restore() if an operation fails half way. */
@@ -143,7 +160,11 @@ export class ChangeSet {
 
   #fromBranch(key, load) {
     if (!this.reads) return load();
-    if (!this.reads.has(key)) this.reads.set(key, load());
+    if (!this.reads.has(key)) {
+      const p = load();
+      this.reads.set(key, p);
+      p.catch(() => this.reads.get(key) === p && this.reads.delete(key)); // never keep a failed read
+    }
     return this.reads.get(key);
   }
 
@@ -152,11 +173,11 @@ export class ChangeSet {
   }
 
   async read(path) {
-    return this.staged.has(path) ? this.staged.get(path) : this.#fromBranch(path, () => readFile(path));
+    return this.staged.has(path) ? this.staged.get(path) : this.#fromBranch(path, () => readFile(path, this.ref));
   }
 
   async list(dir) {
-    const names = new Set(await this.#fromBranch(`dir:${dir}`, () => listDir(dir)));
+    const names = new Set(await this.#fromBranch(`dir:${dir}`, () => listDir(dir, this.ref)));
     for (const [path, content] of this.staged) {
       if (!path.startsWith(`${dir}/`) || path.slice(dir.length + 1).includes("/")) continue;
       const name = path.slice(dir.length + 1);

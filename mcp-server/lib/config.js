@@ -33,6 +33,7 @@ export const config = {
   chatEditorKey: process.env.OPENROUTER_CHAT_EDITOR_KEY || process.env.OPENROUTER_API_KEY,
   chatEditorModel: process.env.CHAT_EDITOR_MODEL || "anthropic/claude-sonnet-4.5",
   chatEditorHourlyLimit: Number(process.env.CHAT_EDITOR_HOURLY_LIMIT) || 200,
+  chatPanelHourlyLimit: Number(process.env.CHAT_PANEL_HOURLY_LIMIT) || 600, // the panel's plan / status requests per editor
   chatEditorDailyLimit: Number(process.env.CHAT_EDITOR_DAILY_LIMIT) || 1000,
   // Langfuse tracing: off unless all three are set.
   langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,

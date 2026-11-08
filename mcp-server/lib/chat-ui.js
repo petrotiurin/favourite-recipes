@@ -90,20 +90,22 @@ const MAX_REPLY_CHARS = 30;
  * next message) or { label, action: { navigate } }, which becomes { label, url }; an action that doesn't resolve drops the reply.
  */
 export const PLAN_ACTIONS = new Set(["apply_plan", "finalise_plan"]);
+// Chips that press a button which commits or starts work never carry the model's words: the label is fixed here (the panel draws its own
+// text too), so an injected or confused model can't dress "Save to site" up as something harmless.
+export const PLAN_ACTION_LABELS = { apply_plan: "Save to site", finalise_plan: "Finalise list" };
 
 export function cleanReplyList(replies, book, { editor = false } = {}) {
   const seen = new Set();
   const out = [];
   for (const r of Array.isArray(replies) ? replies : []) {
-    const isAction = r && typeof r === "object";
-    const text = clean(isAction ? r.label : r, MAX_REPLY_CHARS * 2);
-    if (typeof (isAction ? r.label : r) !== "string" || !text || text.length > MAX_REPLY_CHARS || seen.has(text.toLowerCase())) continue;
-    if (isAction && editor && typeof r.action === "string" && PLAN_ACTIONS.has(r.action)) {
-      out.push({ label: text, action: r.action }); // a chip that presses the tray's own button (a human tap): Finalise list, Save to site
-      seen.add(text.toLowerCase());
+    if (editor && r && typeof r === "object" && typeof r.action === "string" && PLAN_ACTIONS.has(r.action)) {
+      if (!out.some((x) => x.action === r.action)) out.push({ label: PLAN_ACTION_LABELS[r.action], action: r.action });
       if (out.length === 4) break;
       continue;
     }
+    const isAction = r && typeof r === "object";
+    const text = clean(isAction ? r.label : r, MAX_REPLY_CHARS * 2);
+    if (typeof (isAction ? r.label : r) !== "string" || !text || text.length > MAX_REPLY_CHARS || seen.has(text.toLowerCase())) continue;
     if (isAction) {
       const target = book && resolveTarget(book, r.action?.navigate);
       if (!target) continue;

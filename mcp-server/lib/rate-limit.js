@@ -118,6 +118,19 @@ export async function checkRateLimit(caller, { now = Date.now } = {}) {
   return { ok: true };
 }
 
+/**
+ * The panel's own requests (GET /chat/plan, /chat/status, dropping an item, a new photo) per editor: generous (config.chatPanelHourlyLimit, 600/hour),
+ * so polling and normal use never trip it, but a loop can't turn into unbounded work. { ok: true } or { ok: false, retryAfter }.
+ */
+export async function checkPanelLimit(userId, { now = Date.now } = {}) {
+  const { counts, limits } = await count([{ key: `panel:${userId}:hour`, seconds: 3600, fallback: 1200 }], now);
+  if (counts[0] > (limits ? limits[0] : config.chatPanelHourlyLimit)) {
+    console.warn(`Panel rate limit hit by editor ${userId}`);
+    return { ok: false, retryAfter: Math.max(1, Math.ceil(3600 - ((now() / 1000) % 3600))) };
+  }
+  return { ok: true };
+}
+
 // --- failed sign-in checks ------------------------------------------------------------------------------------------------------
 // Every request with a token makes /chat ask Supabase who it is. Failures are counted per visitor, and once a visitor has failed too
 // often this hour /chat refuses (429) before asking Supabase again. The count is kept in memory per instance and seeded from the

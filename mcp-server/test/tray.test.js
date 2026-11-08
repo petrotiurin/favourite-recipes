@@ -3,6 +3,7 @@
 // clashes stop a Save; expired trays and their photos are purged; photo fetching refuses private addresses.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { clearCache } from "../lib/cache.js";
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
@@ -51,7 +52,6 @@ const STRANGER = "00000000-0000-4000-8000-0000000000a1";
 beforeEach(async () => {
   clock = Date.now();
   store.clock.now = () => clock;
-  const { clearCache } = await import("../lib/cache.js");
   clearCache();
   github = createFakeGitHub({ clean: true });
   openrouter = createMockOpenRouter({ delayMs: 0 });
@@ -64,6 +64,7 @@ beforeEach(async () => {
   config.shoppingEditors = ["owner@example.com", "partner@example.com"];
   config.supabaseServiceKey = "service-test";
   photos.deps.lookup = async () => [{ address: "93.184.216.34" }];
+  photos.deps.get = (url, _address, init) => fetch(url, { redirect: "manual", ...init }); // the tests fake the network through the global fetch
 });
 
 let ip = 0;
@@ -92,6 +93,7 @@ const setFlag = (slug, flags) => {
   let md = github.files.get(recipePath(slug)).toString().replace(/^(draft|current|next): true\n/gm, "");
   md = md.replace(/^---\n([\s\S]*?)\n---/, (m, fm) => `---\n${fm}\n${flags}\n---`);
   github.files.set(recipePath(slug), Buffer.from(md));
+  clearCache(); // changed behind the server's back: drop its branch snapshot
 };
 const pageOf = (slug) => ({ page: "recipe", slug });
 
@@ -318,7 +320,6 @@ test("a clash (the recipe changed on the site since staging) stops Save: nothing
   await say("it's 35 minutes", { page: pageOf(slug) });
   // someone changes the same recipe elsewhere (e.g. through the MCP)
   github.files.set(recipePath(slug), Buffer.from(github.files.get(recipePath(slug)).toString().replace(/total_mins: \d+/, "total_mins: 20")));
-  const { clearCache } = await import("../lib/cache.js");
   clearCache();
   const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
   assert.equal(res.status, 409);
@@ -347,7 +348,6 @@ test("a clash resolved with Keep theirs / Drop it removes the item", async () =>
   const slug = anySlug(1);
   await say("it's 35 minutes", { page: pageOf(slug) });
   github.files.set(recipePath(slug), Buffer.from(github.files.get(recipePath(slug)).toString().replace(/total_mins: \d+/, "total_mins: 20")));
-  const { clearCache } = await import("../lib/cache.js");
   clearCache();
   await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
   const { conversation_id } = await say("there was a clash, help me resolve it");

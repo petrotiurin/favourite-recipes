@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { MAX_IMAGE_EDGE } from "./config.js";
 
+const MAX_PIXELS = 40_000_000; // decompression-bomb guard for every decode
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 
 /**
@@ -12,7 +13,7 @@ const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
 export async function normalizeImage(buffer, { aspect } = {}) {
   let meta;
   try {
-    meta = await sharp(buffer).metadata();
+    meta = await sharp(buffer, { limitInputPixels: MAX_PIXELS }).metadata();
   } catch {
     throw new Error("That file isn't a readable image (supported: JPEG, PNG, WebP, AVIF, GIF, TIFF)");
   }
@@ -20,7 +21,7 @@ export async function normalizeImage(buffer, { aspect } = {}) {
   if (Math.min(meta.width, meta.height) < 300) {
     throw new Error(`Image is too small (${meta.width}x${meta.height}); use a photo at least 300px on the short edge`);
   }
-  let img = sharp(buffer).rotate();
+  let img = sharp(buffer, { limitInputPixels: MAX_PIXELS }).rotate();
   if (aspect) {
     const [w, h] = (meta.orientation || 1) >= 5 ? [meta.height, meta.width] : [meta.width, meta.height];
     const width = Math.round(Math.min(w, h * aspect));

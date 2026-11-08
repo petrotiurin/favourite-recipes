@@ -18,6 +18,11 @@ export async function cached(key, load, { ttl = CACHE_TTL_MS, now = Date.now } =
   }
 }
 
+const onClear = [];
+/** Other short-lived read caches (the branch snapshot in lib/github.js) register here so one clearCache() drops them all. */
+export const registerClear = (fn) => onClear.push(fn);
+
 export function clearCache() {
   entries.clear();
+  for (const fn of onClear) fn();
 }
