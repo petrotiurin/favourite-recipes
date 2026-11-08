@@ -204,6 +204,7 @@ const STATUS = {
   list_recipes: "Looking through the recipes…",
   get_recipe: "Reading the recipe…",
   fetch_url: "Reading the link…",
+  scale_recipe: "Scaling the recipe…",
   get_shopping_list: "Checking the shopping list…",
 };
 

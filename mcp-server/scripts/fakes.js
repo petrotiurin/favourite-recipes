@@ -376,6 +376,20 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
     if (user.includes("add") && user.includes("next week")) {
       return scriptedStream({ ...opts, text: "Planning is something only a signed-in editor can do, so I can't add it from here. You can see what's planned on the Next week page.", calls: [replies("What's planned?", { label: "Open next week", action: { navigate: "next-week" } })] });
     }
+    // cooking help on a recipe page: read the recipe, then answer from it
+    const pageSlug = String(note || "").match(/viewing: .+? \(([a-z0-9-]+)\)/)?.[1];
+    const scaleTo = user.match(/scale (?:it |this )?(?:for|to) (\d+)/)?.[1];
+    const stepNo = user.match(/(?:what'?s|what is|tell me) step (\d+)/)?.[1];
+    if (pageSlug && (scaleTo || stepNo || /swap the |substitut|replace the /.test(user))) {
+      if (!lastTool) return scriptedStream({ ...opts, text: "Let me check the recipe.", calls: [scaleTo ? { name: "scale_recipe", arguments: { slug: pageSlug, servings: Number(scaleTo) } } : { name: "get_recipe", arguments: { slug: pageSlug } }] });
+      const body = String(lastTool.content);
+      if (scaleTo) return scriptedStream({ ...opts, text: `For ${scaleTo} people:\n\n${body.split("\n").filter((l) => l.startsWith("- ")).map((l) => l.replace(/\*\*/g, "")).join("\n")}\n\nTimes and pan sizes may need a tweak.`, calls: [replies("Scale it for 2", "Swap an ingredient")] });
+      if (stepNo) {
+        const steps = (body.split(/^## Instructions/m)[1] || "").split("\n").filter((l) => /^\d+\./.test(l));
+        return scriptedStream({ ...opts, text: steps[stepNo - 1] ? `Step ${stepNo}: ${steps[stepNo - 1].replace(/^\d+\.\s*/, "").replace(/\*\*/g, "")}` : `There's no step ${stepNo} in this recipe.`, calls: [replies("What's step 3?", "Scale it for 6")] });
+      }
+      return scriptedStream({ ...opts, text: "A plain swap: use Greek yogurt with a squeeze of lemon, same amount. It will be a little tangier and less rich.", calls: [replies("Scale it for 6", "What's step 2?")] });
+    }
     if (user.includes("this recipe") || user.includes("this one")) {
       const text = note?.includes("is viewing") || note?.includes("viewing:")
         ? `You're looking at ${note.match(/viewing: ([^(]+) \(/)?.[1].trim()}. ${note.match(/serves \d+/)?.[0] ? `It ${note.match(/serves \d+/)[0]}.` : ""} What would you like to know about it?`

@@ -9,6 +9,7 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
+import { scaleLine, ingredientLines } from "./scaling.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
 import {
@@ -415,6 +416,26 @@ export const TOOLS = [
       } catch (err) {
         throw new UserError(`Couldn't read ${url}: ${err.message}. Ask the user to paste the recipe or send a screenshot instead.`);
       }
+    }),
+  },
+  {
+    name: "scale_recipe",
+    title: "Scale a recipe",
+    description:
+      "A recipe's ingredient list rescaled to N servings, exactly as the recipe page's 1/2/4 picker does it (same numbers scaled, same rounding to ¼ ⅓ ½ ⅔ ¾). " +
+      "Use it for \"scale it for 6\" instead of doing the sums yourself. Steps are not scaled (they never repeat amounts); mention that times may need a little more or less. Reads only.",
+    inputSchema: { slug: z.string().describe("Recipe slug"), servings: z.number().int().min(1).max(50).describe("How many people to scale to") },
+    access: "read",
+    chatOnly: true, // the chat's helper; /mcp keeps its tools as they were
+    handler: safe(async ({ slug, servings }) => {
+      const { data, markdown } = await getRecipe(slug);
+      const base = Number(data.serves) || 1;
+      const lines = ingredientLines(markdown);
+      if (data.scalable === false) {
+        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...lines].join("\n"));
+      }
+      const factor = servings / base;
+      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...lines.map((l) => scaleLine(l, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
     }),
   },
   {
