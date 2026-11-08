@@ -4,7 +4,7 @@ slug: egg-omelet
 image: /images/recipes/egg-omelet.jpg
 course: [Breakfast]
 tags: [High Protein, Low Carb]
-total_mins: 10
+total_mins: 8
 serves: 2
 calories: 350
 ---
