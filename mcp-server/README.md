@@ -121,7 +121,7 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `OPENROUTER_BASE_URL` | Optional; defaults to `https://openrouter.ai/api/v1` (the local dev harness points it at a mock) |
 | `CHAT_PUBLIC_TOTAL_HOURLY_LIMIT` | Optional; one hourly cap across ALL visitors together, default 300 |
 | `AUTH_FAILURE_HOURLY_LIMIT` | Optional; failed sign-in checks per visitor per hour before `/chat` answers 429 without asking Supabase, default 20 |
-| `CHAT_PUBLIC_MAX_TOKENS` / `CHAT_EDITOR_MAX_TOKENS` | Optional; longest model reply per request, default 1500 / 4000 |
+| `CHAT_PUBLIC_MAX_TOKENS` / `CHAT_EDITOR_MAX_TOKENS` | Optional; longest model reply per request (reasoning tokens count too), default 1500 / 16000. A thinking editor model reading a screenshot needs well over 4000 |
 | `CHAT_PUBLIC_HOURLY_LIMIT` / `CHAT_PUBLIC_DAILY_LIMIT` | Optional; messages per visitor (hashed IP) per hour / day, default 20 / 100 |
 | `IP_HASH_SALT` | Optional salt for hashing visitor IPs (rate limits, traces); defaults to the service-role key. Raw IPs are never stored |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | Optional: all three turn on Langfuse tracing of chats (one trace per request, a generation per model call, a span per tool call). Never contains tokens, IPs or emails |

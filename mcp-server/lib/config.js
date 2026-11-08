@@ -26,7 +26,7 @@ export const config = {
   authFailureHourlyLimit: Number(process.env.AUTH_FAILURE_HOURLY_LIMIT) || 20,
   // Longest model reply (tokens) per request.
   chatPublicMaxTokens: Number(process.env.CHAT_PUBLIC_MAX_TOKENS) || 1500,
-  chatEditorMaxTokens: Number(process.env.CHAT_EDITOR_MAX_TOKENS) || 4000,
+  chatEditorMaxTokens: Number(process.env.CHAT_EDITOR_MAX_TOKENS) || 16000, // thinking models spend much of it reasoning (a screenshot turn used all of 4000 before writing the recipe)
   // Salt for hashing visitor IPs (rate limits, traces). Falls back to the service key, so no raw IP is ever stored either way.
   ipHashSalt: process.env.IP_HASH_SALT,
   // Signed-in editors (phase 3): their own OpenRouter key (falls back to OPENROUTER_API_KEY), model and generous limits, keyed by user id.

@@ -75,7 +75,7 @@ test("every model request has max_tokens (public and editor defaults)", async ()
   await turn("hello", "198.51.100.8");
   assert.equal(requests[0].max_tokens, 1500);
   const { config } = await import("../lib/config.js");
-  assert.equal(config.chatEditorMaxTokens, 4000);
+  assert.equal(config.chatEditorMaxTokens, 16000);
 });
 
 test("identical calls in a turn are answered once; data calls per turn are capped; UI tools don't count", async () => {
