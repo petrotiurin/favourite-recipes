@@ -244,7 +244,8 @@ On the **At home** tab every row is a fill bar:
   safe-area inset. A small `--on-accent` dot marks an unread reply. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
   of the screen (shopping page Save bar), hides while a sheet is open (`body.sheet-open`), and is covered by the panel on phones.
 - **Panel** (`.chat-panel`): a full-height sheet on phones (sized with `visualViewport`, so the input stays above the keyboard; the page behind
-  doesn't scroll), a 400×640 floating panel anchored above the bubble from 720px. Header: serif title, "New chat" text button, round close
+  doesn't scroll; its surface carries on below it, under iOS Safari's translucent address pill and keyboard toolbar, so the page never
+  shows through; no safe-area gap under the input while the keyboard is up), a 400×640 floating panel anchored above the bubble from 720px. Header: serif title, "New chat" text button, round close
   button. Escape closes it.
 - **Messages:** the user's in a `--current-soft` bubble on the right; the bot's as plain text on the surface (no box), at most paragraphs,
   bold, bullet/numbered lists and links. Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
