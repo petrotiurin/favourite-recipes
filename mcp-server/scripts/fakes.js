@@ -262,7 +262,9 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     if (d) carried.push(d.slug);
   });
   const nextStep = () => {
-    const left = drafts.find((d) => !asked.some((q) => q.includes(`Did you like ${d.title}?`)));
+    // what the tray note says is already answered (history may have scrolled out), plus what this conversation asked
+    const noted = String(note || "").match(/Drafts with an answer already in the tray \(don't ask again\): (.*?)\. Drafts not yet answered/)?.[1] || "";
+    const left = drafts.find((d) => !asked.some((q) => q.includes(`Did you like ${d.title}?`)) && !noted.includes(`(${d.slug},`));
     if (left) return ask(`Did you like ${left.title}?`, ["Liked", "Not for us", "Not tried yet"]);
     if (!lastCall || lastCall.name !== "get_tray") return tray("get_tray", {}, "Now I'll read next week's recipes and build the list.");
     return null;
@@ -338,7 +340,8 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
   async function fetch(url, init) {
     const body = JSON.parse(init.body);
     requests.push({ ...body, auth: init.headers.Authorization, url: String(url) });
-    const msgs = body.messages;
+    // the loop may add a "you already told the user" note to the last tool result; the mock reads results without it
+    const msgs = body.messages.map((m) => (m.role === "tool" && typeof m.content === "string" ? { ...m, content: m.content.replace(/\n\n\[Note from the site, not a tool result[\s\S]*$/, "") } : m));
     const lastUserIdx = msgs.findLastIndex((m) => m.role === "user");
     const user = userText(msgs[lastUserIdx]).toLowerCase();
     const note = contentText(msgs[lastUserIdx]).match(/\[Note from the site, not from the user: ([\s\S]*)\]$/)?.[1];

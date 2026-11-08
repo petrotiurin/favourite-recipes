@@ -591,3 +591,22 @@ test("Finalise with next week empty on the site: no promote question, no questio
   const sw = (await plan()).items.find((i) => i.kind === "switch");
   assert.match(sw.sub, /^Carried over in this week: /);
 });
+
+test("the tray note says which of this week's drafts already have an answer staged, so a capped history can't make Finalise re-ask", async () => {
+  const [a, b, c] = [anySlug(0), anySlug(1), anySlug(2)];
+  for (const s of [a, b, c]) setFlag(s, "draft: true\ncurrent: true");
+  const caller = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const stage = (name, args) => tools.dispatch(name, args, caller, { chat: { emit() {} } });
+  await stage("stage_start_next_week", { carry_over: [c] });
+  await stage("stage_promote_recipe", { slug: a });
+  const note = await tray.trayNote(await tray.loadTray(), caller);
+  const line = note.split("\n").find((l) => l.startsWith("Finalise progress:"));
+  assert.ok(line, note);
+  assert.match(line, new RegExp(`${a}, liked: promote staged`));
+  assert.match(line, new RegExp(`${c}, kept this week: carry-over staged`));
+  assert.match(line, new RegExp(`not yet answered in the tray: .*${b}`));
+  assert.doesNotMatch(line.split("not yet answered")[1].split("(one answered")[0], new RegExp(`${a}|${c}`));
+  // no switch staged: no progress line
+  supabase.tables.trays.length = 0;
+  assert.doesNotMatch(await tray.trayNote(await tray.loadTray(), caller), /Finalise progress/);
+});

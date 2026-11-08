@@ -73,7 +73,7 @@ const SITE = "https://site.test/favourite-recipes";
 
 test("show_recipes: cards are built from the repo, unknown slugs are dropped", async () => {
   const evs = await turn([
-    { text: "Try these.", calls: [{ name: "show_recipes", arguments: { slugs: ["avocado-toast", "no-such-recipe", draftSlug, "avocado-toast", "../../etc/passwd", "https://evil.test/x"], reason: "mock" } }] },
+    { calls: [{ name: "show_recipes", arguments: { slugs: ["avocado-toast", "no-such-recipe", draftSlug, "avocado-toast", "../../etc/passwd", "https://evil.test/x"], reason: "mock" } }] },
     { text: "Enjoy." },
   ]);
   const cards = evs.find((e) => e.name === "cards").data.cards;

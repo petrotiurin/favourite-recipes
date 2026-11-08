@@ -455,8 +455,10 @@ export async function POST(request) {
   const stream = new ReadableStream({
     async start(controller) {
       let closed = false;
+      let content = false; // something the user can see (or an error) went out
       const send = (event, data) => {
         if (closed) return;
+        if (!["meta", "title", "done", "status"].includes(event)) content = true;
         try {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         } catch {
@@ -502,6 +504,7 @@ export async function POST(request) {
           output = `error: ${message}`;
         }
       } finally {
+        if (!content && !closed) send("error", { message: "The chat didn't answer. Try again in a moment." }); // a stream is never empty
         if (finalise) {
           await settleFinalise(caller);
           trayEvent("tray-finalise", { trace, userId: caller.userId });

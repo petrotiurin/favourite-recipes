@@ -94,7 +94,7 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   assert.deepEqual(replies[2], { label: "Open the first one", url: cards[0].url });
 
   // What the server sent to OpenRouter.
-  assert.equal(openrouter.requests.length, 3); // search, text + suggest_replies, closing
+  assert.equal(openrouter.requests.length, 2); // search, then text + cards + suggest_replies: those only show things, so the turn ends there
   const first = openrouter.requests[0];
   assert.equal(first.auth, "Bearer or-public-test");
   assert.equal(first.model, "test/model");

@@ -647,6 +647,16 @@ export async function trayNote(tray, caller) {
   }
   lines.push(`Next week on the site now: ${next.length ? `${next.length} recipe${next.length === 1 ? "" : "s"}: ${next.map((r) => `${r.title} (${r.slug})`).join(", ")}` : "no recipes"}.`);
   lines.push(`This week's drafts on the site: ${drafts.length ? drafts.map((r) => `${r.title} (${r.slug})${r.next ? " [also in next week]" : ""}`).join(", ") : "none"}.`);
+  // Finalise progress from the tray itself (the chat history the model sees is capped, so old answers can scroll out): which of this week's drafts
+  // already have an answer staged. "Back to the book" leaves no item, so it is only in the conversation.
+  const items = tray?.items || [];
+  if (items.some((i) => i.kind === "switch") && drafts.length) {
+    const carried = new Set(items.find((i) => i.kind === "switch")?.op.carry_over || []);
+    const answer = (slug) => (items.some((i) => i.kind === "promote" && i.op.slug === slug) ? "liked: promote staged" : items.some((i) => i.kind === "remove" && i.op.slug === slug) ? "not for us: removal staged" : carried.has(slug) ? "kept this week: carry-over staged" : null);
+    const done = drafts.map((r) => [r, answer(r.slug)]).filter(([, a]) => a);
+    const left = drafts.filter((r) => !answer(r.slug));
+    lines.push(`Finalise progress: the switch is staged. Drafts with an answer already in the tray (don't ask again): ${done.length ? done.map(([r, a]) => `${r.title} (${r.slug}, ${a})`).join(", ") : "none"}. Drafts not yet answered in the tray: ${left.length ? left.map((r) => `${r.title} (${r.slug})`).join(", ") : "none"} (one answered "Not tried yet, back to the book" leaves no item: check the conversation before asking).`);
+  }
   return lines.join("\n");
 }
 

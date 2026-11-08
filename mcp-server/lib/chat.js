@@ -34,6 +34,10 @@ const GENERIC = "Something went wrong with the chat. Try again in a moment.";
 /** Maps an OpenRouter failure to something friendly. 402 (out of credit) and a dead key both mean "resting". */
 export function friendlyOpenRouterError(status, bodyText = "") {
   if (status === 402 || status === 401 || status === 403 || /insufficient|credit/i.test(bodyText)) return new ChatError(RESTING, { status: 503, kind: "out-of-credit" });
+  // a text-only model sent a photo
+  if (/image|modalit|vision|multimodal|multi-modal|image_url/i.test(bodyText) && /support|accept|not (?:allowed|available|valid)|invalid|cannot|can't|unsupported|no endpoints/i.test(bodyText)) {
+    return new ChatError("This chat model can't read photos — paste the recipe text or a link instead.", { status: 400, kind: "no-vision" });
+  }
   if (status === 429) return new ChatError("The chat is busy right now. Try again in a minute.", { status: 503, kind: "busy" });
   return new ChatError(GENERIC, { status: 502, kind: "upstream" });
 }
@@ -119,6 +123,54 @@ async function* sseEvents(body) {
   }
 }
 
+/** Drops <think>…</think> (and <thinking>…</thinking>) spans from streamed text, even when a tag is split across chunks. */
+export function createThinkFilter() {
+  let buf = "";
+  let inside = false;
+  const OPEN = /<think(?:ing)?>/i;
+  const CLOSE = /<\/think(?:ing)?>/i;
+  const MAXTAG = 12;
+  return {
+    push(chunk) {
+      buf += chunk;
+      let out = "";
+      for (;;) {
+        if (inside) {
+          const m = buf.match(CLOSE);
+          if (!m) {
+            buf = buf.slice(-MAXTAG); // keep a possible partial closing tag
+            return out;
+          }
+          buf = buf.slice(m.index + m[0].length);
+          inside = false;
+        } else {
+          const m = buf.match(OPEN);
+          if (m) {
+            out += buf.slice(0, m.index);
+            buf = buf.slice(m.index + m[0].length);
+            inside = true;
+            continue;
+          }
+          const lt = buf.lastIndexOf("<");
+          if (lt !== -1 && buf.length - lt < MAXTAG && /^<\/?t?h?i?n?k?i?n?g?>?$/i.test(buf.slice(lt))) {
+            out += buf.slice(0, lt);
+            buf = buf.slice(lt); // maybe the start of a tag: wait for more
+          } else {
+            out += buf;
+            buf = "";
+          }
+          return out;
+        }
+      }
+    },
+    flush() {
+      const rest = inside ? "" : buf;
+      buf = "";
+      return rest;
+    },
+  };
+}
+
 /**
  * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
  * toolCalls: [{ id, name, arguments (string) }].
@@ -153,13 +205,14 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    console.error(`OpenRouter answered ${res.status}: ${text.slice(0, 300)}`);
+    console.error(`OpenRouter answered ${res.status} (model ${model}): ${text.slice(0, 600)}`);
     throw friendlyOpenRouterError(res.status, text);
   }
 
   let text = "";
   let usage;
   let finishReason;
+  const thinking = createThinkFilter();
   const calls = []; // by index
   for await (const event of sseEvents(res.body)) {
     if (event.error) {
@@ -171,9 +224,13 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
     if (!choice) continue;
     if (choice.finish_reason) finishReason = choice.finish_reason;
     const delta = choice.delta || {};
+    // delta.reasoning / reasoning_content / reasoning_details are the model's thinking: never shown. Some models inline it as <think>…</think>.
     if (typeof delta.content === "string" && delta.content) {
-      text += delta.content;
-      onText(delta.content);
+      const visible = thinking.push(delta.content);
+      if (visible) {
+        text += visible;
+        onText(visible);
+      }
     }
     for (const tc of delta.tool_calls || []) {
       const call = (calls[tc.index ?? 0] ||= { id: "", name: "", arguments: "" });
@@ -181,6 +238,11 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
       if (tc.function?.name) call.name += tc.function.name;
       if (tc.function?.arguments) call.arguments += tc.function.arguments;
     }
+  }
+  const tail = thinking.flush();
+  if (tail) {
+    text += tail;
+    onText(tail);
   }
   const toolCalls = calls.filter((c) => c?.name).map((c, i) => ({ ...c, id: c.id || `call_${i}_${Math.random().toString(36).slice(2, 8)}` }));
   return { text, toolCalls, usage, finishReason };
@@ -237,6 +299,8 @@ export function redactImages(messages) {
   return messages.map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.map((p) => (p.type === "image_url" ? { type: "text", text: "[photo attached]" } : p)) } : m));
 }
 
+const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
 
 const resultText = (result, max = MAX_TOOL_RESULT_CHARS) => {
@@ -273,7 +337,12 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit, trace, signal, attachments = [], model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+  let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
+  const emit = (event) => {
+    if (["cards", "question", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
+    rawEmit(event);
+  };
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
 
@@ -306,42 +375,68 @@ export async function runChat({ caller, messages, page, emit, trace, signal, att
   let resultChars = 0;
   let reply = "";
   let finalRound = false;
+  let roundNote = ""; // told to the model on its next call, not stored
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     finalRound = round === MAX_TOOL_ROUNDS; // out of rounds: one last call without tools, so the user always gets an answer
     const generation = trace.generation({ name: `chat round ${round + 1}`, model, input: redactImages(thread.slice(1)), metadata: { promptVersion: PROMPT_VERSION } });
     let result;
     let separate = reply.trim() !== ""; // text from an earlier round: start this one in a new paragraph
+    // A follow-up round must not say again what the user already has (some models restate their greeting or summary after every tool call):
+    // its first words are held back and compared with this turn's text so far; a repeat is swallowed.
+    let held = "";
+    let guard = reply.trim() ? "check" : "pass"; // check | drop | pass
+    let kept = "";
+    const emitText = (delta) => {
+      if (separate) {
+        separate = false;
+        delta = `\n\n${delta.replace(/^\s+/, "")}`;
+      }
+      reply += delta;
+      kept += delta;
+      emit({ type: "text", delta });
+    };
+    const before = reply;
+    const repeats = (t) => {
+      const n = normText(t);
+      return n.length >= 12 && normText(before).includes(n.slice(0, Math.min(n.length, 40)));
+    };
     try {
       result = await streamCompletion({
-        messages: thread,
+        messages: roundNote ? thread.map((m, i) => (i === thread.length - 1 && m.role === "tool" ? { ...m, content: m.content + roundNote } : m)) : thread,
         tools: finalRound ? [] : tools,
         model,
         apiKey,
         signal,
         maxTokens,
         onText: (delta) => {
-          if (separate) {
-            separate = false;
-            delta = `\n\n${delta.replace(/^\s+/, "")}`;
+          if (guard === "pass") return emitText(delta);
+          if (guard === "drop") return;
+          held += delta;
+          if (normText(held).length >= 40) {
+            if (repeats(held)) guard = "drop";
+            else {
+              guard = "pass";
+              emitText(held);
+            }
           }
-          reply += delta;
-          emit({ type: "text", delta });
         },
       });
     } catch (err) {
       generation.end({ error: err.message });
       throw err;
     }
+    if (guard === "check" && held && !repeats(held)) emitText(held);
+    if (guard !== "pass" && !kept) result = { ...result, text: "" }; // what was swallowed isn't part of the turn's text
     generation.end({ output: result.text || result.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: result.usage, finishReason: result.finishReason });
 
     if (!result.toolCalls.length || finalRound) {
-      thread.push({ role: "assistant", content: result.text || "" });
+      thread.push({ role: "assistant", content: kept || "" });
       break;
     }
 
     thread.push({
       role: "assistant",
-      content: result.text || null,
+      content: kept || null,
       tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })),
     });
     let roundCalls = 0;
@@ -425,8 +520,21 @@ export async function runChat({ caller, messages, page, emit, trace, signal, att
       seenCalls.set(key, content);
       thread.push({ role: "tool", tool_call_id: call.id, content });
     }
+    // The model already spoke and only asked for things to SHOW (chips, cards, a button, a question): nothing is left to say, and asking it
+    // again is what makes some models repeat themselves. Finish the turn.
+    if (result.toolCalls.every((c) => UI_TOOLS.has(c.name)) && (kept.trim() || askedUser)) break;
+    // Text plus data or stage tools: that text is already on the user's screen. Tell the model so, on the last tool result (a message after
+    // tool results would break the pairing some providers require).
+    // (Only the copy sent to the model carries the note; it is never stored.)
+    roundNote = kept.trim() ? `\n\n[Note from the site, not a tool result: you already told the user: "${oneLine(kept, 600)}". Continue from there; don't repeat it.]` : "";
   }
-  if (!reply.trim()) console.warn("Chat turn ended with no text");
+  if (!reply.trim() && !shownUi) {
+    // never end a turn in silence
+    console.warn("Chat turn ended with no text and nothing shown: sending the fallback line");
+    reply = "Sorry, I didn't manage to answer that. Could you try again?";
+    emit({ type: "text", delta: reply });
+    thread.push({ role: "assistant", content: reply });
+  }
   emit({ type: "done", suggestions });
   // This turn's new model messages (assistant tool calls, tool results, the final answer), the panel extras on the last
   // assistant one, ready to be stored for an editor.
