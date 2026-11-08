@@ -1876,6 +1876,25 @@ body.sheet-open {
   display: none;
 }
 
+/* Still answering: the panel was closed while a reply (or a Save) was on its way. A ring turns around the bubble until it arrives. */
+.chat-bubble.is-working::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 3px solid transparent;
+  border-top-color: var(--accent-strong);
+  border-right-color: var(--accent-strong);
+  border-radius: 50%;
+  animation: chat-working 1s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes chat-working {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Out of the way of a sheet, and of the full-height panel on phones. */
 body.sheet-open .chat-bubble {
   display: none;
@@ -2393,6 +2412,12 @@ body.chat-open {
 @media (prefers-reduced-motion: reduce) {
   .chat-bubble {
     transition: none;
+  }
+
+  .chat-bubble.is-working::after {
+    animation: none;
+    border-color: var(--accent-strong);
+    border-style: dashed;
   }
 }
 

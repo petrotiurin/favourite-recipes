@@ -580,7 +580,7 @@
   }
   function saveUi() {
     try {
-      sessionStorage.setItem(UI_KEY, JSON.stringify({ open: !panel.hidden, id: chat.id, draft: input.value.slice(0, 2000) }));
+      sessionStorage.setItem(UI_KEY, JSON.stringify({ open: !panel.hidden, id: chat.id, draft: input.value.slice(0, 2000), unread: unread, pending: pendingTurn }));
     } catch (e) {
       // not remembered, the chat still works
     }
@@ -588,6 +588,14 @@
 
   var contextDismissed = false;
   var streaming = null; // { abort }
+  // The bubble's notice while the panel is closed: a ring while an answer (or a Save) is on its way, a dot once it has arrived.
+  // Both are remembered for the tab (sessionStorage), so closing the panel and moving to another page keeps them.
+  var unread = loadUi().unread === true;
+  // An editor's turn still running on the server: { conv, turn, t }. A page left mid-answer picks it up on the next page (resumePending).
+  var pendingTurn = (function (p) {
+    return p && typeof p.conv === "string" && typeof p.turn === "string" && Number(p.t) > 0 ? { conv: p.conv.slice(0, 64), turn: p.turn.slice(0, 64), t: Number(p.t) } : null;
+  })(loadUi().pending);
+  var leaving = false; // the page is unloading: a stream it cuts must not clear pendingTurn
 
   // --- DOM ---------------------------------------------------------------------------------------------------------
   var bubble = el("button", "chat-bubble", { type: "button", "aria-label": "Chat about recipes", "aria-expanded": "false", "aria-controls": "chat-panel" });
@@ -886,6 +894,21 @@
     if (hidden && !panel.hidden) close();
   }
 
+  function paintNotice() {
+    var working = panel.hidden && !unread && !!(streaming || trayBusy);
+    var dotOn = panel.hidden && unread;
+    dot.hidden = !dotOn;
+    bubble.classList.toggle("is-working", working);
+    bubble.setAttribute("aria-label", dotOn ? "Chat about recipes: new reply" : working ? "Chat about recipes: still answering" : "Chat about recipes");
+  }
+  /** Something arrived (an answer, an error, a save) while the panel was closed: the dot on the bubble until it is opened. */
+  function markUnread() {
+    if (!panel.hidden) return;
+    unread = true;
+    paintNotice();
+    saveUi();
+  }
+
   /** Switch the panel into a locked state (from a server answer) and remember "off" for the rest of this tab session. */
   function lock(kind) {
     locked = kind;
@@ -985,6 +1008,7 @@
     sendBtn.disabled = busy;
     panel.classList.toggle("is-busy", busy);
     input.setAttribute("aria-busy", busy ? "true" : "false");
+    paintNotice();
   }
 
   function parseEvent(block) {
@@ -1054,6 +1078,10 @@
     }
     function finish(ok) {
       if (streaming !== mine) return; // "New chat" already replaced this conversation
+      if (!leaving) {
+        pendingTurn = null;
+        saveUi();
+      }
       streaming = null;
       setBusy(false);
       clearStatus();
@@ -1072,7 +1100,7 @@
         else if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
         paintPlaceholder();
         watchPublishing();
-        if (panel.hidden) dot.hidden = false;
+        markUnread();
       } else if (added && botEl.parentNode) {
         // a partial answer that errored out is not kept in the history
         botEl.classList.add("is-partial");
@@ -1135,6 +1163,7 @@
                 if (chat.server && typeof ev.data.conversation_id === "string") {
                   chat.id = ev.data.conversation_id;
                   rememberEditorChat();
+                  if (reply.turn_id) pendingTurn = { conv: chat.id, turn: reply.turn_id, t: Date.now() };
                   saveUi();
                 }
               } else if (ev.name === "title") {
@@ -1195,6 +1224,7 @@
           if (!stillMine || (err && err.name === "AbortError")) return;
           if (cut) showError("The connection to the chat dropped before the answer finished. Try again in a moment.");
           else showError(err && err.message ? err.message : "Something went wrong with the chat.");
+          markUnread();
         }
       );
   }
@@ -1211,8 +1241,8 @@
    * The stream of an editor's turn dropped (the phone switched apps, the tab was put away): the turn carries on on the server and its
    * answer is stored, so the panel stays busy and checks the conversation until that turn has ended, then shows it as stored.
    */
-  function resumeTurn(mine, convId, turnId, partialEl) {
-    var started = Date.now();
+  function resumeTurn(mine, convId, turnId, partialEl, startedAt, now) {
+    var started = startedAt || Date.now();
     var timer = null;
     var stopped = false;
     mine.abort = function () {
@@ -1224,6 +1254,8 @@
     function end(errorText) {
       mine.abort();
       if (streaming !== mine) return;
+      pendingTurn = null;
+      saveUi();
       streaming = null;
       setBusy(false);
       clearStatus();
@@ -1231,7 +1263,7 @@
       loadTray({ highlight: true });
       loadConversation(convId).then(function () {
         if (errorText) showError(errorText);
-        else if (panel.hidden) dot.hidden = false;
+        markUnread();
         watchPublishing();
       });
     }
@@ -1267,7 +1299,23 @@
       if (doc.visibilityState === "visible") check();
     }
     doc.addEventListener("visibilitychange", onVisible);
-    later();
+    if (now) check();
+    else later();
+  }
+
+  /** A page left while an editor's turn was still answering (the panel closed, a tapped link): wait for that turn here. */
+  function resumePending() {
+    var p = pendingTurn;
+    if (!p || streaming || mode !== "editor" || chat.id !== p.conv) return;
+    if (!(Date.now() - p.t < RESUME_MAX_MS)) {
+      pendingTurn = null;
+      saveUi();
+      return;
+    }
+    var mine = { abort: function () {} };
+    streaming = mine;
+    setBusy(true);
+    resumeTurn(mine, p.conv, p.turn, el("div"), p.t, true);
   }
 
   // --- signed-in editors: requests with a token, thumbs up / down, the chats list, switching modes ------------------------------
@@ -1476,7 +1524,7 @@
     paintHeader();
     renderAll();
     loadTray();
-    if (wantId) loadConversation(wantId);
+    if (wantId) loadConversation(wantId).then(resumePending);
   }
 
   function loadConversation(id) {
@@ -2051,6 +2099,7 @@
     trayBusy = true;
     trayMsg = itemId ? "Saving that change…" : "Saving…";
     renderTray();
+    paintNotice();
     trayCall("POST", "/plan/apply", { item_id: itemId, conversation_id: chat.server && chat.id ? chat.id : undefined })
       .then(function (res) {
         return res.json().then(function (j) { return { status: res.status, body: j || {} }; }, function () { return { status: res.status, body: {} }; });
@@ -2058,6 +2107,8 @@
       .then(
         function (r) {
           trayBusy = false;
+          markUnread();
+          paintNotice();
           if (r.status === 200) {
             trayMsg = "";
             var msg = { role: "assistant", content: String(r.body.summary || "Saved."), cards: cleanCards(r.body.cards, origin) };
@@ -2079,6 +2130,8 @@
         },
         function (err) {
           trayBusy = false;
+          markUnread();
+          paintNotice();
           trayMsg = err && err.name === "AuthExpired" ? "" : "Couldn't save just now. Nothing was changed.";
           renderTray();
         }
@@ -2137,7 +2190,8 @@
     panel.hidden = false;
     bubble.setAttribute("aria-expanded", "true");
     doc.body.classList.add("chat-open");
-    dot.hidden = true;
+    unread = false;
+    paintNotice();
     paintContext();
     layoutPanel();
     toBottom();
@@ -2150,6 +2204,7 @@
     panel.hidden = true;
     bubble.setAttribute("aria-expanded", "false");
     doc.body.classList.remove("chat-open");
+    paintNotice();
     bubble.focus({ preventScroll: true });
     saveUi();
   }
@@ -2276,7 +2331,12 @@
     autosize();
     saveUi();
   });
-  window.addEventListener("pagehide", saveUi);
+  window.addEventListener("pagehide", function () {
+    leaving = true;
+    saveUi();
+  });
+  window.addEventListener("beforeunload", function () { leaving = true; });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) leaving = false; }); // back from the bfcache: alive again
 
   // Scrolling up in the conversation folds the tray (phones), so the older messages get the room. It opens again on a tap, a new card or the end of a turn.
   var lastLogTop = 0;
@@ -2338,6 +2398,7 @@
   // carries it to the server.
   var restored = loadUi();
   paintBubble();
+  paintNotice();
   renderAll();
   paintHeader();
   if (checkingMe) refreshMe();

@@ -241,7 +241,9 @@ On the **At home** tab every row is a fill bar:
 `templates/chat.js` (+ the `.chat-*` rules at the end of `styles/style.css`), on every page of a build that has `CHAT_API_URL`.
 
 - **Bubble** (`.chat-bubble`): 56px round, `--accent-strong` with `--on-accent` speech-bubble stroke icon, bottom right, 16px +
-  safe-area inset. A small `--on-accent` dot marks an unread reply. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
+  safe-area inset. With the panel closed it carries a notice: a `--accent-strong` ring turning around it while an answer (or a Save) is on its way
+  ("still answering" in its label; a still dashed ring with reduced motion), then a small `--on-accent` dot once it has arrived (an answer,
+  an error or a save: "new reply"), until the panel is opened. Both last for the tab across pages. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
   of the screen (shopping page Save bar), hides while a sheet is open (`body.sheet-open`), and is covered by the panel on phones.
 - **Panel** (`.chat-panel`): a full-height sheet on phones (sized with `visualViewport`, so the input stays above the keyboard; the page behind
   doesn't scroll; its surface carries on below it, under iOS Safari's translucent address pill and keyboard toolbar, so the page never
