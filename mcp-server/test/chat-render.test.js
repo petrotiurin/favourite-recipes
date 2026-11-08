@@ -117,7 +117,8 @@ test("stored history keeps cards, nav and action chips only when they point at t
 });
 
 test("starter chips depend on the page", () => {
-  assert.deepEqual(chat.startersFor("recipe"), ["Swap an ingredient", "Scale it for 6", "Add to next week"]);
+  assert.deepEqual(chat.startersFor("recipe"), ["Swap an ingredient", "Scale it for 6", "What goes with it?"], "a visitor isn't invited to write");
+  assert.deepEqual(chat.startersFor("recipe", true), ["Swap an ingredient", "Scale it for 6", "Add to next week"], "an editor is");
   assert.deepEqual(chat.startersFor("index"), ["Something quick tonight", "Light and healthy"]);
   assert.deepEqual(chat.startersFor("next-week"), ["What's planned?"]);
   assert.deepEqual(chat.startersFor("shopping"), ["What's left to buy?"]);
@@ -134,4 +135,34 @@ test("the history sent to the server is well formed after a failed turn", () => 
     chat.wellFormed([{ role: "assistant", content: "x" }, { role: "user", content: "a" }, { role: "user", content: "b" }, { role: "assistant", content: "", cards: [] }, { role: "assistant", content: "c" }, { role: "user", content: "d" }]),
     [{ role: "user", content: "a\n\nb" }, { role: "assistant", content: "c" }, { role: "user", content: "d" }]
   );
+});
+
+test("an editor's chat from the server keeps cards, buttons, turn ids and feedback, only on this site", () => {
+  const list = [
+    { role: "user", content: "hi" },
+    { role: "system", content: "evil" },
+    { role: "assistant", content: "hello", turn_id: "t1", replies: ["ok", { label: "Go", url: "https://evil.test/x" }], nav: { label: "Open", url: "https://evil.test/" }, feedback: { value: 0, reasons: ["Wrong amounts", "bogus"], note: "n" },
+      cards: [{ title: "Soup", url: `${ORIGIN}/recipes/soup.html`, kicker: { kind: "this", label: "This week" }, meta: "10 min" }] },
+  ];
+  const out = chat.cleanServerMessages(list, ORIGIN);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out[1].replies, ["ok"]);
+  assert.equal(out[1].nav, undefined);
+  assert.equal(out[1].turn_id, "t1");
+  assert.deepEqual(out[1].feedback, { value: 0, reasons: ["Wrong amounts"], note: "n" });
+  assert.equal(out[1].cards.length, 1);
+});
+
+test("chat list labels: updated today / yesterday / date, expiry as a weekday", () => {
+  const now = new Date(2026, 10, 7, 15, 0).getTime(); // Sat 7 Nov 2026
+  const at = (d, h = 9) => new Date(2026, 10, d, h).toISOString();
+  assert.equal(chat.updatedLabel(at(7), now), "Today");
+  assert.equal(chat.updatedLabel(at(6), now), "Yesterday");
+  assert.match(chat.expiryLabel(at(14), now), /^until (Sat|Sat\.)/);
+  assert.equal(chat.expiryLabel(at(8), now), "until tomorrow");
+  assert.match(chat.expiryLabel(at(21), now), /until .*21/);
+  assert.equal(chat.feedbackNote({ value: 1 }, false), "Thanks");
+  assert.equal(chat.feedbackNote({ value: 0, reasons: ["Wrong amounts"] }, true), "Sent: Wrong amounts");
+  assert.equal(chat.feedbackNote({ value: 0, reasons: [] }, true), "Sent");
+  assert.equal(chat.feedbackNote({ value: 0, reasons: [] }, false), "");
 });

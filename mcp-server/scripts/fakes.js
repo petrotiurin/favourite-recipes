@@ -2,7 +2,8 @@
 // touches the real GitHub, OpenRouter or Supabase:
 //   createFakeGitHub    the repo's recipes/, images/ and shopping-list.json read from disk; commits stay in memory
 //   createMockOpenRouter a scripted, deterministic chat model that streams OpenAI-format SSE and exercises tool calls
-//   createFakeSupabase  /auth/v1/user for a few known tokens, and the rate_limit_hit RPC with in-memory counters
+//   createFakeSupabase  Auth (token check, password and email-code sign-in, refresh, logout) and PostgREST for the chat's tables
+//                       (conversations, messages) and RPCs (rate_limit_hit, purge_old_chats), all in memory
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 
 const REPO_ROOT = new URL("../../", import.meta.url);
@@ -123,6 +124,7 @@ const userText = (m) => String(m.content).replace(/\n\n\[Note from the site[\s\S
  *   "shopping"     -> get_shopping_list, then a one-line answer
  *   "mock-402"     -> HTTP 402 (out of credit);   "mock-500" -> HTTP 500;   "mock-stream-error" -> an error event mid-stream
  *   "mock-add"     -> asks for create_recipe, which the public caller must be refused (shows the refusal path)
+ *   "mock-call:x"  -> asks for the tool x with no arguments (the auth tests walk the whole registry with it)
  *   anything else  -> a plain reply + suggest_replies
  * `requests` records every request body, so tests can assert on what the server sent.
  */
@@ -146,6 +148,12 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
     if (user.includes("mock-stream-error")) return sse([chunk({ role: "assistant", content: "Let me" }), { error: { code: 500, message: "upstream died" } }], delayMs);
     if (calledShown) return scriptedStream({ ...opts }); // nothing more to say after the replies were shown
 
+    // "mock-call:<tool>" asks for that tool with no arguments (the registry-wide auth test uses it), then closes with a line of text.
+    const forced = user.match(/mock-call:([a-z_]+)/)?.[1];
+    if (forced) {
+      if (!lastTool) return scriptedStream({ ...opts, text: "Doing that.", calls: [{ name: forced, arguments: {} }] });
+      return scriptedStream({ ...opts, text: "That didn't go through." });
+    }
     if (user.includes("mock-add")) {
       if (!lastTool) return scriptedStream({ ...opts, text: "I'll add that.", calls: [{ name: "create_recipe", arguments: { title: "Mock Pie" } }] });
       return scriptedStream({ ...opts, text: "I can't change the site from here, but an editor can sign in to do that.", calls: [replies("How do editors sign in?", "Show me pies")] });
@@ -198,28 +206,178 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
 
 // --- Supabase ---------------------------------------------------------------------------------------------------------
 
-/** users: { "<access token>": { id, email } }. rate_limit_hit counts per (key, window) in memory, like the SQL function. */
-export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {} } = {}) {
+const UUID_V4 = () => crypto.randomUUID();
+const HOUR = 3600;
+
+/**
+ * An in-memory Supabase.
+ *   Auth      users: { "<access token>": { id, email } } are tokens that are valid from the start (tests); accounts:
+ *             [{ id, email, password }] can sign in with a password (POST /auth/v1/token?grant_type=password), with the email code
+ *             (/otp then /verify with the code "123456") or refresh (grant_type=refresh_token). Tokens it issues expire after
+ *             `tokenTtlSeconds` (default an hour), after which /auth/v1/user answers 401 like the real thing; `expire(token)` ages one now.
+ *   PostgREST the chat's tables (conversations, messages) with the filters, ordering and limits lib/chat-store.js uses, only
+ *             for the service-role key (the anon key gets 401, like RLS with no policies), and the RPCs rate_limit_hit and
+ *             purge_old_chats (rows older than 14 days go, messages with them).
+ * Inspect: `tables.conversations` / `tables.messages` (arrays), `counters`, `calls`.
+ */
+export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {}, accounts = [], tokenTtlSeconds = HOUR, now = () => Date.now() } = {}) {
   const counters = new Map();
   const calls = [];
-  async function fetch(input, init = {}) {
-    const u = new URL(input);
-    const headers = init.headers || {};
-    if (u.pathname === "/auth/v1/user") {
-      if (headers.apikey !== anonKey) return Response.json({ msg: "bad apikey" }, { status: 401 });
-      const user = users[String(headers.Authorization || "").replace(/^Bearer /, "")];
-      return user ? Response.json(user) : Response.json({ msg: "invalid JWT" }, { status: 401 });
+  const tables = { conversations: [], messages: [] };
+  let seq = 0;
+  let issued = 0;
+  const tokens = new Map(); // access token -> { id, email, exp (ms, or Infinity) }
+  for (const [token, u] of Object.entries(users)) tokens.set(token, { ...u, exp: Infinity });
+  const refreshTokens = new Map(); // refresh token -> account
+  const byEmail = (email) => accounts.find((a) => a.email.toLowerCase() === String(email || "").toLowerCase());
+
+  function issue(account) {
+    const n = ++issued;
+    const access = `fake-access-${n}`;
+    const refresh = `fake-refresh-${n}`;
+    tokens.set(access, { id: account.id, email: account.email, exp: now() + tokenTtlSeconds * 1000 });
+    refreshTokens.set(refresh, account);
+    return {
+      access_token: access,
+      refresh_token: refresh,
+      token_type: "bearer",
+      expires_in: tokenTtlSeconds,
+      expires_at: Math.floor(now() / 1000) + tokenTtlSeconds,
+      user: { id: account.id, email: account.email },
+    };
+  }
+  const expire = (token) => {
+    const t = tokens.get(token);
+    if (t) t.exp = 0;
+  };
+
+  const json = (body, status = 200) => Response.json(body, { status });
+  const bearer = (headers) => String(headers.Authorization || headers.authorization || "").replace(/^Bearer /, "");
+
+  // ----- Auth
+  async function auth(u, init, headers) {
+    const method = init.method || "GET";
+    if (headers.apikey !== anonKey) return json({ msg: "bad apikey" }, 401);
+    const body = init.body ? JSON.parse(init.body) : {};
+    const route = u.pathname.replace("/auth/v1/", "");
+    if (route === "user" && method === "GET") {
+      const t = tokens.get(bearer(headers));
+      return t && t.exp > now() ? json({ id: t.id, email: t.email }) : json({ msg: "invalid JWT" }, 401);
     }
-    if (u.pathname === "/rest/v1/rpc/rate_limit_hit") {
-      if (headers.apikey !== serviceKey || headers.Authorization !== `Bearer ${serviceKey}`) return Response.json({ message: "permission denied" }, { status: 401 });
-      const { p_key, p_window_seconds } = JSON.parse(init.body);
+    if (route === "token") {
+      const grant = u.searchParams.get("grant_type");
+      if (grant === "password") {
+        const a = byEmail(body.email);
+        return a && a.password === body.password ? json(issue(a)) : json({ error_description: "Invalid login credentials", msg: "Invalid login credentials" }, 400);
+      }
+      if (grant === "refresh_token") {
+        const a = refreshTokens.get(body.refresh_token);
+        return a ? json(issue(a)) : json({ msg: "Invalid Refresh Token" }, 400);
+      }
+    }
+    if (route === "otp") {
+      const a = byEmail(body.email);
+      if (!a) return json({ msg: "Signups not allowed for otp" }, 422);
+      calls.push({ otp: a.email, redirect: u.searchParams.get("redirect_to") });
+      return json({});
+    }
+    if (route === "verify") {
+      const a = byEmail(body.email);
+      return a && body.token === "123456" ? json(issue(a)) : json({ msg: "Token has expired or is invalid" }, 403);
+    }
+    if (route === "user" && method === "PUT") {
+      const t = tokens.get(bearer(headers));
+      const a = t && t.exp > now() && accounts.find((x) => x.id === t.id);
+      if (!a) return json({ msg: "invalid JWT" }, 401);
+      a.password = body.password;
+      return json({ id: a.id, email: a.email });
+    }
+    if (route === "logout") {
+      tokens.delete(bearer(headers));
+      return new Response(null, { status: 204 });
+    }
+    return json({ msg: `fake Supabase: unexpected auth call ${method} ${route}` }, 404);
+  }
+
+  // ----- PostgREST
+  const COLUMNS = {
+    conversations: () => ({ id: UUID_V4(), title: null, created_at: new Date(now()).toISOString(), updated_at: new Date(now()).toISOString(), archived: false }),
+    messages: () => ({ id: UUID_V4(), seq: ++seq, turn_id: null, trace_id: null, feedback: null, created_at: new Date(now()).toISOString() }),
+  };
+  function matches(row, params) {
+    for (const [k, v] of params) {
+      if (["select", "order", "limit"].includes(k)) continue;
+      const [op, ...rest] = v.split(".");
+      const want = rest.join(".");
+      const have = row[k];
+      if (op === "eq" && String(have) !== want) return false;
+      if (op === "gt" && !(String(have) > want)) return false; // ISO timestamps compare as strings
+    }
+    return true;
+  }
+  const order = (rows, spec) => {
+    if (!spec) return rows;
+    const [col, dir] = spec.split(".");
+    return [...rows].sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (dir === "desc" ? -1 : 1));
+  };
+  function dropConversation(id) {
+    tables.conversations = tables.conversations.filter((c) => c.id !== id);
+    tables.messages = tables.messages.filter((m) => m.conversation_id !== id); // on delete cascade
+  }
+
+  async function rest(u, init, headers) {
+    if (headers.apikey !== serviceKey || bearer(headers) !== serviceKey) return json({ message: "permission denied", code: "42501" }, 401);
+    const method = init.method || "GET";
+    const name = u.pathname.replace("/rest/v1/", "");
+    const body = init.body ? JSON.parse(init.body) : undefined;
+    if (name === "rpc/rate_limit_hit") {
+      const { p_key, p_window_seconds } = body;
       calls.push({ p_key, p_window_seconds });
       const window = Math.floor(Date.now() / 1000 / p_window_seconds);
       const k = `${p_key}|${window}`;
       counters.set(k, (counters.get(k) || 0) + 1);
-      return Response.json(counters.get(k));
+      return json(counters.get(k));
     }
+    if (name === "rpc/purge_old_chats") {
+      const cutoff = new Date(now() - 14 * 24 * HOUR * 1000).toISOString();
+      const old = tables.conversations.filter((c) => c.updated_at < cutoff);
+      old.forEach((c) => dropConversation(c.id));
+      calls.push({ purged: old.length });
+      return json(old.length);
+    }
+    if (!tables[name]) return json({ message: `unknown table ${name}` }, 404);
+    const wantRows = /return=representation/.test(headers.Prefer || "");
+    if (method === "GET") {
+      const rows = order(tables[name].filter((r) => matches(r, u.searchParams)), u.searchParams.get("order"));
+      const limit = Number(u.searchParams.get("limit")) || rows.length;
+      return json(rows.slice(0, limit));
+    }
+    if (method === "POST") {
+      const inserted = (Array.isArray(body) ? body : [body]).map((r) => ({ ...COLUMNS[name](), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) }));
+      if (name === "messages" && inserted.some((m) => !tables.conversations.some((c) => c.id === m.conversation_id))) return json({ message: "foreign key violation", code: "23503" }, 409);
+      tables[name].push(...inserted);
+      return wantRows ? json(inserted, 201) : new Response(null, { status: 201 });
+    }
+    if (method === "PATCH") {
+      const rows = tables[name].filter((r) => matches(r, u.searchParams));
+      rows.forEach((r) => Object.assign(r, body));
+      return wantRows ? json(rows) : new Response(null, { status: 204 });
+    }
+    if (method === "DELETE") {
+      const rows = tables[name].filter((r) => matches(r, u.searchParams));
+      if (name === "conversations") rows.forEach((r) => dropConversation(r.id));
+      else tables[name] = tables[name].filter((r) => !rows.includes(r));
+      return wantRows ? json(rows) : new Response(null, { status: 204 });
+    }
+    return json({ message: "unsupported" }, 405);
+  }
+
+  async function fetch(input, init = {}) {
+    const u = new URL(input);
+    const headers = init.headers || {};
+    if (u.pathname.startsWith("/auth/v1/")) return auth(u, init, headers);
+    if (u.pathname.startsWith("/rest/v1/")) return rest(u, init, headers);
     throw new Error(`fake Supabase: unexpected call ${init.method || "GET"} ${u.pathname}`);
   }
-  return { fetch, url, counters, calls };
+  return { fetch, url, counters, calls, tables, expire, tokens };
 }

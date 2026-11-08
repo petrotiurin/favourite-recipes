@@ -4,7 +4,7 @@
 // to plain user/assistant text before it gets here.
 import { z } from "zod";
 import { config, COURSES } from "./config.js";
-import { toolDefinitions, dispatch } from "./tools.js";
+import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
 import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
 import { loadBook, buildCards, buildNavigation, cleanReplyList } from "./chat-ui.js";
@@ -119,14 +119,14 @@ async function* sseEvents(body) {
  * One streamed model call. Calls onText(delta) as text arrives; resolves to { text, toolCalls, usage, finishReason }.
  * toolCalls: [{ id, name, arguments (string) }].
  */
-async function streamCompletion({ messages, tools, model, signal, onText }) {
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText }) {
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
       method: "POST",
       signal,
       headers: {
-        Authorization: `Bearer ${config.chatPublicKey}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": config.siteUrl,
         "X-Title": "Our Favourite Recipes",
@@ -208,9 +208,16 @@ const resultText = (result) => {
   return text.length > MAX_TOOL_RESULT_CHARS ? `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n… (cut: ${text.length - MAX_TOOL_RESULT_CHARS} more characters)` : text;
 };
 
-/** The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools. */
+const READ_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name));
+
+/**
+ * The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools.
+ * TODO(phase 4): editors also get the stage tools here (they change the plan tray, never the repo); the write tools stay
+ * out of chat for good: saving is its own request (POST /chat/plan/apply). Until then an editor is offered exactly what a
+ * visitor is, but on the editor's model and key (the role split is real, the extra tools are not offered yet).
+ */
 export function offeredTools(role) {
-  return [...toolDefinitions(role).filter((t) => t.function.name !== "get_workflow_guide"), SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
+  return [...toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide"), SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
@@ -219,11 +226,13 @@ export function offeredTools(role) {
  * Runs one user turn. Emits events through emit({ type: "text" | "status" | "suggestions" | "cards" | "navigation" | "done", ... }); throws ChatError
  * for failures (the caller turns it into an `error` event).
  *   caller    frozen { role, ... } from makeCaller; decides what dispatch() allows
- *   messages  already sanitized (sanitizeMessages)
+ *   messages  already sanitized (sanitizeMessages) for a visitor; for an editor the server's own stored history plus the new
+ *             user message (full OpenAI-format messages, tool calls and results included)
+ *   apiKey    the OpenRouter key for this role
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, origin }) {
+export async function runChat({ caller, messages, page, emit, trace, signal, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin }) {
   const tools = offeredTools(caller.role);
   const offered = new Set(tools.map((t) => t.function.name));
 
@@ -245,6 +254,8 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
     last.content = `${last.content}\n\n[Note from the site, not from the user: ${note}]`;
   }
   const thread = [{ role: "system", content: systemPrompt(rows) }, ...convo];
+  const base = thread.length; // everything pushed after this is new this turn (an editor's turn is stored)
+  const ui = {}; // what the panel shows again on reload: { cards, nav, replies }
 
   let suggestions = false;
   let navigationOffered = false;
@@ -260,6 +271,7 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         messages: thread,
         tools: finalRound ? [] : tools,
         model,
+        apiKey,
         signal,
         onText: (delta) => {
           if (separate) {
@@ -276,7 +288,10 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
     }
     generation.end({ output: result.text || result.toolCalls.map((c) => `${c.name}(${c.arguments})`).join("\n"), usage: result.usage, finishReason: result.finishReason });
 
-    if (!result.toolCalls.length || finalRound) break;
+    if (!result.toolCalls.length || finalRound) {
+      thread.push({ role: "assistant", content: result.text || "" });
+      break;
+    }
 
     thread.push({
       role: "assistant",
@@ -297,19 +312,24 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
         const replies = cleanReplies(args, book);
         if (replies.length) {
           suggestions = true;
+          ui.replies = replies;
           emit({ type: "suggestions", replies });
         }
         content = JSON.stringify({ shown: replies.length > 0 });
         span.end({ output: content });
       } else if (call.name === "show_recipes") {
         const { cards, dropped } = buildCards(book, args?.slugs);
-        if (cards.length) emit({ type: "cards", cards });
+        if (cards.length) {
+          ui.cards = [...(ui.cards || []), ...cards].slice(0, 8);
+          emit({ type: "cards", cards });
+        }
         content = JSON.stringify(cards.length ? { shown: true, count: cards.length, ...(dropped.length ? { ignored_unknown_slugs: dropped } : {}) } : { shown: false, error: "None of those slugs are in our book." });
         span.end({ output: content });
       } else if (call.name === "offer_navigation") {
         const nav = navigationOffered ? null : buildNavigation(book, args);
         if (nav) {
           navigationOffered = true;
+          ui.nav = { label: nav.label, url: nav.url };
           emit({ type: "navigation", label: nav.label, url: nav.url });
         }
         content = JSON.stringify(nav ? { shown: true } : { shown: false, error: navigationOffered ? "One button per answer." : "Unknown recipe slug or page." });
@@ -331,5 +351,10 @@ export async function runChat({ caller, messages, page, emit, trace, signal, mod
   }
   if (!reply.trim()) console.warn("Chat turn ended with no text");
   emit({ type: "done", suggestions });
-  return { reply, suggestions };
+  // This turn's new model messages (assistant tool calls, tool results, the final answer), the panel extras on the last
+  // assistant one, ready to be stored for an editor.
+  const produced = thread.slice(base);
+  const lastAssistant = produced.findLastIndex((m) => m.role === "assistant");
+  if (lastAssistant !== -1 && Object.keys(ui).length) produced[lastAssistant] = { ...produced[lastAssistant], ui };
+  return { reply, suggestions, produced };
 }

@@ -18,6 +18,16 @@ function chatScript(rootPrefix) {
   return `\n  <script src="${rootPrefix}chat.js" data-api="${attr}" defer></script>`;
 }
 
+// Sign-in (templates/auth.js): on every page of a build that has the Supabase values (SUPABASE_URL and SUPABASE_ANON_KEY, both
+// public, from the repo's Actions variables), so the chat and the shopping page share one session. It is in the head, deferred,
+// so it runs before the page scripts that use window.RecipeAuth. Without the values there is no sign-in anywhere.
+function authScript(rootPrefix) {
+  const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return "";
+  const attr = (v) => String(v).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `\n  <script src="${rootPrefix}auth.js" data-supabase-url="${attr(SUPABASE_URL.replace(/\/$/, ""))}" data-supabase-key="${attr(SUPABASE_ANON_KEY)}" defer></script>`;
+}
+
 function layout({ title, bodyClass = "", content, rootPrefix = "", pageContext }) {
   if (!pageContext || !pageContext.page) throw new Error(`layout: "${title}" needs a pageContext ({ page: ... })`);
   return `<!doctype html>
@@ -29,7 +39,7 @@ function layout({ title, bodyClass = "", content, rootPrefix = "", pageContext }
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Public+Sans:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="${rootPrefix}style.css">
+  <link rel="stylesheet" href="${rootPrefix}style.css">${authScript(rootPrefix)}
 </head>
 <body class="${bodyClass}">
 ${content}

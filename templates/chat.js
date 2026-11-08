@@ -1,6 +1,8 @@
-// The recipe chat (docs/chatbot-design.md, phase 1: read-only, anonymous). A bubble bottom right opens a panel that talks to
-// the backend's POST /chat (the script tag's data-api) and streams the answer in. Vanilla JS, no dependencies. It is only
-// ever added to a page when the build was given CHAT_API_URL, and with JS off nothing appears.
+// The recipe chat (docs/chatbot-design.md). A bubble bottom right opens a panel that talks to the backend's POST /chat (the
+// script tag's data-api) and streams the answer in. Vanilla JS, no dependencies. It is only ever added to a page when the build
+// was given CHAT_API_URL, and with JS off nothing appears.
+// Two modes: a visitor's chat (history in this browser, sent with each turn) and a signed-in editor's (templates/auth.js signs
+// in; the server owns the history, the client only sends its message and the conversation id; chats list, thumbs up / down).
 //
 // Safety: model text never goes through innerHTML. A tiny renderer turns it into DOM nodes (paragraphs, bold, lists,
 // links), and a link is only made a link when it points at this site's own origin; anything else shows as plain text.
@@ -203,10 +205,11 @@
   }
 
   /** Starter chips for an empty chat, by page (they are sent as the user's first message). */
-  function startersFor(page) {
+  function startersFor(page, editor) {
     return (
       {
-        recipe: ["Swap an ingredient", "Scale it for 6", "Add to next week"],
+        // "Add to next week" invites a write, which only a signed-in editor's chat can do.
+        recipe: editor ? ["Swap an ingredient", "Scale it for 6", "Add to next week"] : ["Swap an ingredient", "Scale it for 6", "What goes with it?"],
         index: ["Something quick tonight", "Light and healthy"],
         "next-week": ["What's planned?"],
         shopping: ["What's left to buy?"],
@@ -234,7 +237,74 @@
     return { id: typeof raw.id === "string" ? raw.id : null, updated: raw.updated, messages: messages.slice(-MAX_STORED) };
   }
 
+  var FEEDBACK_REASONS = ["Wrong recipe", "Didn't do what I asked", "Wrong amounts", "Too slow", "Something else"];
+
+  /** A signed-in editor's chat as the server returns it (GET /chat/conversations/:id): same cleaning as the local history, plus the turn id and feedback. */
+  function cleanServerMessages(list, origin) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (m) {
+      if (!m || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") return;
+      var msg = { role: m.role, content: m.content };
+      if (m.role === "assistant") {
+        var replies = cleanReplyItems(m.replies, origin);
+        if (replies.length) msg.replies = replies;
+        var cards = cleanCards(m.cards, origin);
+        if (cards.length) msg.cards = cards;
+        var nav = cleanNav(m.nav, origin);
+        if (nav) msg.nav = nav;
+        if (typeof m.turn_id === "string" && m.turn_id) msg.turn_id = m.turn_id.slice(0, 64);
+        if (m.feedback && (m.feedback.value === 1 || m.feedback.value === 0)) {
+          msg.feedback = {
+            value: m.feedback.value,
+            reasons: (Array.isArray(m.feedback.reasons) ? m.feedback.reasons : []).filter(function (r) { return FEEDBACK_REASONS.indexOf(r) !== -1; }),
+            note: typeof m.feedback.note === "string" ? m.feedback.note.slice(0, 300) : "",
+          };
+        }
+      }
+      if (msg.content || msg.cards) out.push(msg);
+    });
+    return out;
+  }
+
+  var DAY = 24 * 60 * 60 * 1000;
+  function dayStart(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+  /** "Today" / "Yesterday" / "Mon 2 Nov" for when a chat was last updated. */
+  function updatedLabel(iso, now) {
+    var d = new Date(iso);
+    var diff = Math.round((dayStart(new Date(now)) - dayStart(d)) / DAY);
+    if (diff <= 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  }
+  /** "until Sat" for when a chat goes away (with the date once it is more than a week off, so the weekday isn't ambiguous). */
+  function expiryLabel(iso, now) {
+    var d = new Date(iso);
+    var days = Math.round((dayStart(d) - dayStart(new Date(now))) / DAY);
+    if (days <= 0) return "until today";
+    if (days === 1) return "until tomorrow";
+    return "until " + d.toLocaleDateString(undefined, days > 6 ? { weekday: "short", day: "numeric", month: "short" } : { weekday: "short" });
+  }
+  /** What the chats list shows under a title: "Today · until Sat". */
+  function chatMeta(conv, now) {
+    return updatedLabel(conv.updated_at, now) + " · " + expiryLabel(conv.expires_at, now);
+  }
+  /** The one line next to the thumbs once feedback is given: "Thanks" for up, "Sent: Wrong amounts" / "Sent" after the box, else "". */
+  function feedbackNote(fb, sent) {
+    if (!fb) return "";
+    if (fb.value === 1) return "Thanks";
+    if (!sent) return "";
+    return fb.reasons && fb.reasons.length ? "Sent: " + fb.reasons.join(", ") : "Sent";
+  }
+
   var api = {
+    cleanServerMessages: cleanServerMessages,
+    updatedLabel: updatedLabel,
+    expiryLabel: expiryLabel,
+    chatMeta: chatMeta,
+    feedbackNote: feedbackNote,
+    FEEDBACK_REASONS: FEEDBACK_REASONS,
     safeHref: safeHref,
     parseInline: parseInline,
     parseBlocks: parseBlocks,
@@ -274,6 +344,10 @@
     close: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     arrow: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>',
     send: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
+    list: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+    up: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 11v9H4v-9z"/><path d="M7 11l4-7c1.7 0 2.5 1.2 2.2 2.8L12.6 10H19a1.8 1.8 0 0 1 1.8 2.1l-1.3 6.4A2 2 0 0 1 17.5 20H7"/></svg>',
+    down: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 13V4H4v9z"/><path d="M7 13l4 7c1.7 0 2.5-1.2 2.2-2.8L12.6 14H19a1.8 1.8 0 0 0 1.8-2.1l-1.3-6.4A2 2 0 0 0 17.5 4H7"/></svg>',
+    trash: '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/></svg>',
   };
 
   function el(tag, cls, attrs) {
@@ -289,6 +363,24 @@
   }
 
   // --- state -------------------------------------------------------------------------------------------------------
+  function readJson(storage, key) {
+    try {
+      return JSON.parse(storage.getItem(key));
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeJson(storage, key, value) {
+    try {
+      if (value === null) storage.removeItem(key);
+      else storage.setItem(key, JSON.stringify(value));
+    } catch (e) {
+      // not remembered, the chat still works
+    }
+  }
+  function rememberEditorChat() {
+    writeJson(localStorage, EDITOR_KEY, chat.server && chat.id ? { email: me.email, id: chat.id } : null);
+  }
   function newId() {
     return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -301,8 +393,18 @@
     }
     return { id: newId(), messages: [] };
   }
-  var chat = loadChat();
+  var RA = window.RecipeAuth || null; // present only when the build has Supabase sign-in (templates/auth.js)
+  var apiBase = apiUrl.replace(/\/+$/, "");
+  var anonChat = loadChat(); // the visitor's chat, kept in this browser
+  var chat = anonChat; // what the panel shows: anonChat, or an editor's server chat { server: true, id (server id or null), messages }
+  var mode = "public"; // "public" | "editor" (decided by the server from the token: GET /chat/me)
+  var me = { signedIn: false, email: "" };
+  var checkingMe = !!(RA && RA.getSession()); // until /chat/me has answered we don't know which chat to show
+  var listing = false; // the chats list is open
+  var EDITOR_KEY = "recipes-chat-editor"; // { email, id }: the editor's open conversation (an id only; the messages live on the server)
+  var PENDING_KEY = "recipes-chat-signin"; // set when the sign-in sheet is opened from the chat: { t, open, draft }
   function saveChat() {
+    if (chat.server) return;
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({ id: chat.id, updated: Date.now(), messages: chat.messages.slice(-MAX_STORED) }));
     } catch (e) {
@@ -342,12 +444,25 @@
   var head = el("header", "chat-head");
   var title = el("h2", "chat-title");
   title.textContent = "Ask about our recipes";
+  var chatsBtn = iconButton("chat-icon-btn chat-chats-btn", "Your chats", ICON.list);
+  chatsBtn.setAttribute("aria-expanded", "false");
+  chatsBtn.hidden = true; // editors only
   var newBtn = el("button", "text-button chat-new", { type: "button" });
   newBtn.textContent = "New chat";
+  var accountWrap = el("div", "chat-account"); // the Sign in button, or the avatar and its menu (templates/auth.js)
+  accountWrap.hidden = !RA;
   var closeBtn = iconButton("icon-button chat-close", "Close chat", ICON.close);
   head.appendChild(title);
+  head.appendChild(chatsBtn);
   head.appendChild(newBtn);
+  head.appendChild(accountWrap);
   head.appendChild(closeBtn);
+  if (RA) RA.renderAccount(accountWrap, { compact: true });
+
+  var banner = el("p", "chat-banner"); // "Signed in as x - this account can't edit, so the chat is read-only."
+  banner.hidden = true;
+  var chatsView = el("div", "chat-chats"); // the chats list, in place of the log while open
+  chatsView.hidden = true;
 
   var log = el("div", "chat-log", { role: "log", "aria-live": "polite", "aria-label": "Conversation" });
   var foot = el("div", "chat-foot");
@@ -366,6 +481,8 @@
   foot.appendChild(ctxChip);
   foot.appendChild(form);
   panel.appendChild(head);
+  panel.appendChild(banner);
+  panel.appendChild(chatsView);
   panel.appendChild(log);
   panel.appendChild(foot);
   doc.body.appendChild(panel);
@@ -385,10 +502,13 @@
     var a = el("p");
     a.textContent = "Ask me about our recipes: what to cook, what's in something, what to swap.";
     var b = el("p", "chat-note");
-    b.textContent = "Chats are stored in this browser for two weeks. I can look things up, but I can't change anything on the site.";
+    b.textContent =
+      mode === "editor"
+        ? "Your chats are saved to your account for two weeks after the last message, on any of your devices. I can look things up, but I can't change anything on the site yet."
+        : "Chats are stored in this browser for two weeks. I can look things up, but I can't change anything on the site.";
     p.appendChild(a);
     p.appendChild(b);
-    var starters = startersFor(CTX.page === "recipe" && contextDismissed ? "" : CTX.page);
+    var starters = startersFor(CTX.page === "recipe" && contextDismissed ? "" : CTX.page, mode === "editor");
     if (starters.length) {
       var row = chipsEl(starters);
       row.classList.add("chat-starters");
@@ -509,10 +629,17 @@
   function renderAll() {
     while (log.firstChild) log.removeChild(log.firstChild);
     statusEl = null;
+    if (checkingMe) {
+      var wait = el("p", "chat-status", { role: "status" });
+      wait.textContent = "Checking your sign-in…";
+      log.appendChild(wait);
+      return;
+    }
     if (!chat.messages.length) log.appendChild(intro());
     chat.messages.forEach(function (m, i) {
       var last = i === chat.messages.length - 1;
       log.appendChild(messageEl(m, last));
+      if (mode === "editor" && chat.server && m.role === "assistant" && m.turn_id) log.appendChild(feedbackEl(m, !last));
       if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
     toBottom();
@@ -592,8 +719,10 @@
 
   function send(text) {
     text = String(text || "").trim();
-    if (!text || streaming) return;
+    if (!text || streaming || checkingMe) return;
     retireChips();
+    Array.prototype.forEach.call(log.querySelectorAll(".chat-feedback"), function (f) { f.classList.add("is-old"); }); // earlier turns keep their thumbs, dimmed
+    var editorTurn = mode === "editor" && chat.server;
     clearStatus();
     var intro0 = log.querySelector(".chat-intro");
     if (intro0) log.removeChild(intro0);
@@ -642,6 +771,7 @@
           ensureAdded();
           botEl.appendChild(navEl(reply.nav));
         }
+        if (editorTurn && reply.turn_id) log.appendChild(feedbackEl(reply, false));
         if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
         if (panel.hidden) dot.hidden = false;
       } else if (added && botEl.parentNode) {
@@ -651,13 +781,22 @@
       toBottom();
     }
 
-    fetch(apiUrl, {
+    // An editor sends only the new message and the conversation id (the server owns the history); a visitor sends their own.
+    var payload = editorTurn
+      ? { conversation_id: chat.id || undefined, message: text, page: pageState() }
+      : { conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() };
+    (editorTurn ? authedFetch : fetch)(apiUrl, {
       method: "POST",
       signal: controller.signal,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() }),
+      body: JSON.stringify(payload),
     })
       .then(function (res) {
+        if (editorTurn && res.status === 404) {
+          chat.id = null; // that conversation is gone (expired or deleted): the next message starts a new one
+          rememberEditorChat();
+          throw new Error("That chat isn't available any more. Your next message starts a new one.");
+        }
         if (!res.ok) {
           return res.json().then(
             function (j) { throw new Error((j && j.error) || "The chat isn't available right now."); },
@@ -679,6 +818,19 @@
               if (!ev) continue;
               if (ev.name === "text") onText(String(ev.data.delta || ""));
               else if (ev.name === "status") setStatus(String(ev.data.text || ""));
+              else if (ev.name === "meta") {
+                if (typeof ev.data.turn_id === "string") reply.turn_id = ev.data.turn_id.slice(0, 64);
+                if (chat.server && typeof ev.data.conversation_id === "string") {
+                  chat.id = ev.data.conversation_id;
+                  rememberEditorChat();
+                  saveUi();
+                }
+              } else if (ev.name === "title") {
+                if (chat.server && ev.data.conversation_id === chat.id && typeof ev.data.title === "string") {
+                  chat.title = ev.data.title.slice(0, 80);
+                  paintHeader();
+                }
+              }
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
@@ -702,6 +854,12 @@
       .then(
         function () { finish(true); },
         function (err) {
+          if (err && err.name === "AuthExpired") {
+            // The sign-in sheet is open: put the message back so it isn't lost, and keep the panel open through a page-reloading sign-in.
+            input.value = text;
+            autosize();
+            saveUi();
+          }
           var stillMine = streaming === mine;
           finish(false);
           if (!stillMine || (err && err.name === "AbortError")) return;
@@ -709,6 +867,405 @@
         }
       );
   }
+
+  // --- signed-in editors: requests with a token, thumbs up / down, the chats list, switching modes ------------------------------
+
+  function authError() {
+    var e = new Error("Your sign-in has expired. Sign in again.");
+    e.name = "AuthExpired";
+    return e;
+  }
+  /** Remembers that the sign-in sheet was opened from the chat, so a sign-in that reloads the page (the magic link) reopens the panel with the draft. */
+  function markSigninPending() {
+    writeJson(localStorage, PENDING_KEY, { t: Date.now(), open: !panel.hidden, draft: input.value.slice(0, 2000) });
+  }
+  function handlePending() {
+    var p = readJson(localStorage, PENDING_KEY);
+    writeJson(localStorage, PENDING_KEY, null);
+    if (!p || !(Date.now() - Number(p.t) < 30 * 60 * 1000)) return;
+    if (p.open && panel.hidden) open({ restore: true });
+    if (typeof p.draft === "string" && p.draft && !input.value) {
+      input.value = p.draft.slice(0, 2000);
+      autosize();
+    }
+  }
+  /**
+   * fetch with the signed-in user's token (refreshed when it is about to expire). A 401 refreshes once and retries; if that fails too the
+   * session is over: the sign-in sheet opens and the promise rejects with an "AuthExpired" error. Without a session it is a plain fetch.
+   */
+  function authedFetch(url, opts) {
+    opts = opts || {};
+    if (!RA || !RA.getSession()) return fetch(url, opts);
+    function withToken(token) {
+      return fetch(url, Object.assign({}, opts, { headers: Object.assign({}, opts.headers, { Authorization: "Bearer " + token }) }));
+    }
+    function expired() {
+      markSigninPending();
+      RA.sessionExpired("Your sign-in has expired. Sign in again to keep chatting.");
+      throw authError();
+    }
+    return RA.getAccessToken().then(function (token) {
+      if (!token) return expired();
+      return withToken(token).then(function (res) {
+        if (res.status !== 401) return res;
+        return RA.refresh().then(function (fresh) {
+          if (!fresh) return expired();
+          return withToken(fresh).then(function (again) {
+            return again.status === 401 ? expired() : again;
+          });
+        });
+      });
+    });
+  }
+
+  // --- feedback: thumbs up / down under a turn's last message (editors only) ---
+  function feedbackEl(m, old) {
+    var convId = chat.id;
+    var fb = m.feedback || null;
+    var sent = !!(fb && fb.value === 0 && ((fb.reasons && fb.reasons.length) || fb.note));
+    var picked = fb && fb.reasons ? fb.reasons.slice() : [];
+    var row = el("div", "chat-feedback" + (old ? " is-old" : ""));
+    var line = el("div", "fb-row");
+    var up = iconButton("fb-btn", "Good reply", ICON.up);
+    var down = iconButton("fb-btn", "Bad reply", ICON.down);
+    var note = el("span", "fb-note", { role: "status" });
+    line.appendChild(up);
+    line.appendChild(down);
+    line.appendChild(note);
+    var box = el("div", "fb-box");
+    box.hidden = true;
+    var q = el("p", "fb-q");
+    q.textContent = "What went wrong? (optional)";
+    var chips = el("div", "fb-chips");
+    FEEDBACK_REASONS.forEach(function (r) {
+      var c = el("button", "fb-chip", { type: "button", "aria-pressed": picked.indexOf(r) !== -1 ? "true" : "false" });
+      c.textContent = r;
+      c.addEventListener("click", function () {
+        var at = picked.indexOf(r);
+        if (at === -1) picked.push(r);
+        else picked.splice(at, 1);
+        c.setAttribute("aria-pressed", at === -1 ? "true" : "false");
+      });
+      chips.appendChild(c);
+    });
+    var field = el("input", "fb-input", { type: "text", maxlength: "300", placeholder: "Add a note", "aria-label": "Add a note", autocomplete: "off" });
+    if (fb && fb.note) field.value = fb.note;
+    var actions = el("div", "fb-actions");
+    var skip = el("button", "text-button is-quiet", { type: "button" });
+    skip.textContent = "Skip";
+    var sendBtn2 = el("button", "fb-send", { type: "button" });
+    sendBtn2.textContent = "Send";
+    actions.appendChild(skip);
+    actions.appendChild(sendBtn2);
+    box.appendChild(q);
+    box.appendChild(chips);
+    box.appendChild(field);
+    box.appendChild(actions);
+    row.appendChild(line);
+    row.appendChild(box);
+
+    function paint() {
+      up.setAttribute("aria-pressed", fb && fb.value === 1 ? "true" : "false");
+      down.setAttribute("aria-pressed", fb && fb.value === 0 ? "true" : "false");
+      note.textContent = feedbackNote(fb, sent);
+    }
+    function post(value) {
+      var body = { conversation_id: convId, turn_id: m.turn_id, value: value };
+      if (value === 0 && fb) {
+        body.reasons = fb.reasons;
+        body.note = fb.note;
+      }
+      authedFetch(apiBase + "/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(
+        function (res) {
+          if (!res.ok) note.textContent = "Couldn't save that";
+        },
+        function () {
+          note.textContent = "Couldn't save that";
+        }
+      );
+    }
+    function choose(value) {
+      sent = false;
+      box.hidden = true;
+      if (fb && fb.value === value) {
+        fb = null; // tapping the chosen thumb again takes it back
+        m.feedback = null;
+        post(null);
+      } else {
+        fb = { value: value, reasons: [], note: "" };
+        picked.length = 0;
+        field.value = "";
+        Array.prototype.forEach.call(chips.children, function (c) { c.setAttribute("aria-pressed", "false"); });
+        m.feedback = fb;
+        post(value);
+        if (value === 0) box.hidden = false;
+      }
+      paint();
+    }
+    up.addEventListener("click", function () { choose(1); });
+    down.addEventListener("click", function () { choose(0); });
+    skip.addEventListener("click", function () {
+      box.hidden = true;
+    });
+    sendBtn2.addEventListener("click", function () {
+      if (!fb || fb.value !== 0) return;
+      fb.reasons = picked.slice();
+      fb.note = field.value.trim().slice(0, 300);
+      m.feedback = fb;
+      sent = true;
+      box.hidden = true;
+      post(0);
+      paint();
+    });
+    paint();
+    return row;
+  }
+
+  // --- header, modes ---
+  function paintHeader() {
+    var editor = mode === "editor";
+    chatsBtn.hidden = !editor;
+    title.textContent = editor && chat.title ? chat.title : "Ask about our recipes";
+    var readOnly = me.signedIn && !editor ? "Signed in as " + me.email + " — this account can't edit, so the chat is read-only." : "";
+    banner.textContent = readOnly;
+    banner.hidden = !readOnly;
+    if (!editor && listing) setListing(false);
+  }
+
+  /** Back to the visitor's chat (signed out, expired, or a signed-in account that can't edit). The editor's chat leaves the panel. */
+  function goPublic() {
+    if (streaming && chat.server) streaming.abort();
+    if (chat.server) {
+      streaming = null;
+      setBusy(false);
+    }
+    mode = "public";
+    chat = anonChat;
+    writeJson(localStorage, EDITOR_KEY, null);
+    setListing(false);
+    paintHeader();
+    renderAll();
+  }
+
+  var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var loadSeq = 0;
+  function enterEditor() {
+    if (mode === "editor" && chat.server) {
+      paintHeader();
+      return;
+    }
+    if (streaming) streaming.abort();
+    streaming = null;
+    setBusy(false);
+    mode = "editor";
+    var stored = readJson(localStorage, EDITOR_KEY);
+    var wantId = (UUID.test(loadUi().id || "") && loadUi().id) || (stored && stored.email === me.email && UUID.test(stored.id || "") && stored.id) || null;
+    chat = { server: true, id: null, title: "", messages: [] };
+    paintHeader();
+    renderAll();
+    if (wantId) loadConversation(wantId);
+  }
+
+  function loadConversation(id) {
+    var seq = ++loadSeq;
+    var wait = el("p", "chat-status", { role: "status" });
+    wait.textContent = "Opening your chat…";
+    log.appendChild(wait);
+    return authedFetch(apiBase + "/conversations/" + encodeURIComponent(id))
+      .then(function (res) {
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error("load");
+        return res.json();
+      })
+      .then(
+        function (j) {
+          if (seq !== loadSeq || mode !== "editor") return;
+          if (!j) {
+            chat = { server: true, id: null, title: "", messages: [] }; // expired or deleted: start fresh
+            rememberEditorChat();
+          } else {
+            chat = { server: true, id: j.id, title: String(j.title || "").slice(0, 80), messages: cleanServerMessages(j.messages, origin) };
+            rememberEditorChat();
+          }
+          setListing(false);
+          paintHeader();
+          renderAll();
+          saveUi();
+        },
+        function (err) {
+          if (seq !== loadSeq || (err && err.name === "AuthExpired")) return;
+          renderAll();
+          showError("Couldn't open that chat. Try again in a moment.");
+        }
+      );
+  }
+
+  /** Asks the server who we are (it decides the role from the token) and shows the matching chat. */
+  function refreshMe() {
+    if (!RA || !RA.getSession()) {
+      me = { signedIn: false, email: "" };
+      checkingMe = false;
+      goPublic();
+      return Promise.resolve();
+    }
+    checkingMe = true;
+    renderAll();
+    return authedFetch(apiBase + "/me")
+      .then(function (res) {
+        if (!res.ok) throw new Error("me");
+        return res.json();
+      })
+      .then(
+        function (j) {
+          me = { signedIn: !!j.signedIn, email: String(j.email || "") };
+          checkingMe = false;
+          if (j.role === "editor") enterEditor();
+          else goPublic();
+        },
+        function (err) {
+          checkingMe = false;
+          if (err && err.name === "AuthExpired") return; // the sign-out event has taken the panel back to the visitor chat
+          me = { signedIn: false, email: "" };
+          goPublic(); // couldn't reach the server: stay a visitor
+        }
+      );
+  }
+
+  // --- chats list ---
+  function setListing(on) {
+    listing = !!on;
+    panel.classList.toggle("is-listing", listing);
+    chatsView.hidden = !listing;
+    chatsBtn.setAttribute("aria-expanded", listing ? "true" : "false");
+    if (listing) loadList();
+  }
+  function loadList() {
+    while (chatsView.firstChild) chatsView.removeChild(chatsView.firstChild);
+    var wait = el("p", "chat-chats-note");
+    wait.textContent = "Loading your chats…";
+    chatsView.appendChild(wait);
+    authedFetch(apiBase + "/conversations")
+      .then(function (res) {
+        if (!res.ok) throw new Error("list");
+        return res.json();
+      })
+      .then(
+        function (j) {
+          if (listing) renderList(Array.isArray(j.conversations) ? j.conversations : []);
+        },
+        function (err) {
+          if (!listing || (err && err.name === "AuthExpired")) return;
+          wait.textContent = "Couldn't load your chats. Try again in a moment.";
+        }
+      );
+  }
+  function renderList(convs) {
+    while (chatsView.firstChild) chatsView.removeChild(chatsView.firstChild);
+    var h = el("h3", "chat-chats-title");
+    h.textContent = "Your chats";
+    var note = el("p", "chat-chats-note");
+    note.textContent = convs.length ? "A chat is deleted two weeks after its last message." : "No saved chats yet. Ask something and it will show up here.";
+    chatsView.appendChild(h);
+    chatsView.appendChild(note);
+    var ul = el("ul", "chat-rows");
+    var now = Date.now();
+    convs.forEach(function (c) {
+      if (!c || typeof c.id !== "string") return;
+      var li = el("li", "chat-row" + (chat.server && c.id === chat.id ? " is-current" : ""));
+      function main() {
+        while (li.firstChild) li.removeChild(li.firstChild);
+        var open1 = el("button", "chat-row-main", { type: "button" });
+        var t = el("span", "chat-row-title");
+        t.textContent = String(c.title || "New chat").slice(0, 80);
+        var meta = el("span", "chat-row-meta");
+        meta.textContent = chatMeta(c, now);
+        open1.appendChild(t);
+        open1.appendChild(meta);
+        open1.addEventListener("click", function () {
+          if (streaming) streaming.abort();
+          streaming = null;
+          setBusy(false);
+          chat = { server: true, id: c.id, title: String(c.title || ""), messages: [] };
+          setListing(false);
+          paintHeader();
+          renderAll();
+          loadConversation(c.id);
+        });
+        var del = iconButton("chat-row-delete", "Delete chat: " + String(c.title || "New chat").slice(0, 60), ICON.trash);
+        del.addEventListener("click", confirmDelete);
+        li.appendChild(open1);
+        li.appendChild(del);
+      }
+      function confirmDelete() {
+        while (li.firstChild) li.removeChild(li.firstChild);
+        var ask = el("span", "chat-row-ask");
+        ask.textContent = "Delete this chat?";
+        var no = el("button", "text-button is-quiet", { type: "button" });
+        no.textContent = "Cancel";
+        no.addEventListener("click", main);
+        var yes = el("button", "text-button chat-row-yes", { type: "button" });
+        yes.textContent = "Delete";
+        yes.addEventListener("click", function () {
+          yes.disabled = true;
+          authedFetch(apiBase + "/conversations/" + encodeURIComponent(c.id), { method: "DELETE" }).then(
+            function (res) {
+              if (!res.ok && res.status !== 404) {
+                ask.textContent = "Couldn't delete it.";
+                yes.disabled = false;
+                return;
+              }
+              if (li.parentNode) li.parentNode.removeChild(li);
+              if (chat.server && chat.id === c.id) {
+                chat = { server: true, id: null, title: "", messages: [] };
+                rememberEditorChat();
+                paintHeader();
+                renderAll();
+              }
+              if (!ul.children.length) note.textContent = "No saved chats yet. Ask something and it will show up here.";
+            },
+            function (err) {
+              if (!err || err.name !== "AuthExpired") {
+                ask.textContent = "Couldn't delete it.";
+                yes.disabled = false;
+              }
+            }
+          );
+        });
+        li.appendChild(ask);
+        li.appendChild(no);
+        li.appendChild(yes);
+        yes.focus();
+      }
+      main();
+      ul.appendChild(li);
+    });
+    chatsView.appendChild(ul);
+  }
+
+  if (RA) {
+    // The Sign in button in the header opens the sheet with the chat's own wording, and remembers the open panel and draft.
+    accountWrap.addEventListener(
+      "click",
+      function (e) {
+        if (!e.target.closest || !e.target.closest('[data-auth="signin"]')) return;
+        e.stopPropagation(); // not auth.js's own handler: this one passes the chat's wording
+        markSigninPending();
+        RA.openSignIn({ title: "Sign in to the chat", lede: "Family editors can sign in to keep their chats, on any of their devices." });
+      },
+      true
+    );
+    RA.onChange(function (session, info) {
+      if (info.type === "sign-in") {
+        handlePending();
+        refreshMe();
+      } else if (info.type === "sign-out") {
+        me = { signedIn: false, email: "" };
+        checkingMe = false;
+        goPublic();
+      }
+    });
+  }
+  chatsBtn.addEventListener("click", function () { setListing(!listing); });
 
   // --- panel open / close / new chat ------------------------------------------------------------------------------------------
   function open(opts) {
@@ -735,8 +1292,15 @@
     if (streaming) streaming.abort();
     streaming = null;
     setBusy(false);
-    chat = { id: newId(), messages: [] };
-    saveChat();
+    if (mode === "editor") {
+      chat = { server: true, id: null, title: "", messages: [] };
+      rememberEditorChat();
+    } else {
+      chat = anonChat = { id: newId(), messages: [] };
+      saveChat();
+    }
+    setListing(false);
+    paintHeader();
     saveUi();
     renderAll();
     input.focus({ preventScroll: true });
@@ -817,7 +1381,9 @@
   // carries it to the server.
   var restored = loadUi();
   renderAll();
-  if (restored.id === chat.id && typeof restored.draft === "string" && restored.draft) {
+  paintHeader();
+  if (checkingMe) refreshMe();
+  if ((restored.id === chat.id || checkingMe) && typeof restored.draft === "string" && restored.draft) {
     input.value = restored.draft.slice(0, 2000);
     autosize();
   }

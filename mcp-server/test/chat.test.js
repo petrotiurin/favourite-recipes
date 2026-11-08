@@ -164,14 +164,14 @@ test("a bad or expired token is a 401, never downgraded to a visitor", async () 
   assert.equal(openrouter.requests.length, 0);
 });
 
-test("a valid token is still a visitor in this phase (read tools only)", async () => {
-  for (const token of ["good-token", "stranger-token"]) {
-    openrouter.requests.length = 0;
-    const res = await post({ messages: [{ role: "user", content: "hi" }] }, { headers: { authorization: `Bearer ${token}` } });
-    assert.equal(res.status, 200);
-    await events(res);
-    assert.ok(!openrouter.requests[0].tools.some((t) => t.function.name === "create_recipe"));
-  }
+test("a valid token whose email isn't in EDITORS is a visitor: public model and key, read tools only, history from the client", async () => {
+  const res = await post({ messages: [{ role: "user", content: "hi" }] }, { headers: { authorization: "Bearer stranger-token" } });
+  assert.equal(res.status, 200);
+  await events(res);
+  assert.ok(!openrouter.requests[0].tools.some((t) => t.function.name === "create_recipe"));
+  assert.equal(openrouter.requests[0].auth, "Bearer or-public-test");
+  assert.equal(openrouter.requests[0].model, "test/model");
+  assert.deepEqual(supabase.tables.conversations, [], "nothing is stored for a visitor");
 });
 
 test("the page the user is on is re-resolved by the server and added as a note on the latest message", async () => {
@@ -277,7 +277,7 @@ test("Langfuse: off by default; with keys, one trace per request with generation
   config.langfuseSecretKey = "sk-lf-test";
   config.langfuseBaseUrl = "https://langfuse.test";
   const ip = "198.51.100.77";
-  await events(await post({ conversation_id: "conv-1", messages: [{ role: "user", content: "mock-add a pie" }], page: { page: "recipe", slug: "avocado-toast" } }, { ip, headers: { authorization: "Bearer good-token" } }));
+  await events(await post({ conversation_id: "conv-1", messages: [{ role: "user", content: "mock-add a pie" }], page: { page: "recipe", slug: "avocado-toast" } }, { ip, headers: { authorization: "Bearer stranger-token" } }));
   await langfuse.idle();
   assert.equal(langfuseCalls.length, 1, "one ingestion request per chat request");
   const call = langfuseCalls[0];
@@ -300,7 +300,7 @@ test("Langfuse: off by default; with keys, one trace per request with generation
   assert.equal(refused.metadata.refused, true);
   assert.equal(refused.level, "WARNING");
   const raw = JSON.stringify(call.body);
-  assert.ok(!raw.includes(ip) && !raw.includes("good-token") && !raw.includes("owner@example.com") && !raw.includes("or-public-test"));
+  assert.ok(!raw.includes(ip) && !raw.includes("stranger-token") && !raw.includes("stranger@example.com") && !raw.includes("or-public-test"));
 });
 
 test("Langfuse failures never break the chat", async () => {

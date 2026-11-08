@@ -64,8 +64,18 @@ read from the body), client history is reduced to plain user/assistant text, the
 (hashed IP, counters in Supabase: `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing
 (`lib/langfuse.js`) apply. The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on builds that
 set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
-Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase, site on :4000; see the top of
-`mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
+**Phase 3 (sign-in + per-user chats) is in:** `templates/auth.js` is the one sign-in (sheet, session in `localStorage`, token refresh,
+`window.RecipeAuth`) for the shopping page and the chat; it is added to every page (head, deferred) only when the build has `SUPABASE_URL` +
+`SUPABASE_ANON_KEY`, and the magic link returns to the page it was sent from. `/chat` decides the caller from a verified token: none =
+`public`; valid and in `EDITORS` = `editor` (editor key `OPENROUTER_CHAT_EDITOR_KEY`, model `CHAT_EDITOR_MODEL`, 200/hour per user id);
+valid but not an editor = `public` (the panel says the account can't edit); bad or expired = 401. Editors' chats are server-owned
+(`conversations` / `messages` tables, service-role key only, RLS with no policies; `lib/chat-store.js`): the client sends
+`{ conversation_id?, message, page }`, never history; another user's conversation is a 404; chats are deleted 2 weeks after the last
+message (`purge_old_chats()`, run when the chats list is opened, plus pg_cron where available). Editor-only routes under `/chat`:
+`GET /chat/me`, `GET /chat/conversations`, `GET|DELETE /chat/conversations/:id`, `POST /chat/feedback` (thumbs up / down become the
+Langfuse score `user-feedback`). In this phase editors are still offered only read + UI tools (TODO in `offeredTools`: phase 4 adds the
+stage tools; the write tools never go into chat). Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase
+with sign-in accounts, site on :4000; test accounts and ports are at the top of `mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
 is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
 enforced on the server by the dispatcher, never by the prompt.
 
@@ -91,10 +101,10 @@ mcp-server/lib/tools.js  the tool registry (access levels) + dispatch() + toolDe
 mcp-server/lib/cache.js  short in-memory cache (60s, cleared on commit) behind search_recipes and the chat catalogue
 docs/chatbot-design.md  design of the recipe chat assistant (phased; see "Chat")
 templates/chat.js        the chat bubble + panel, vanilla JS, talks only to /chat; included on every page only when CHAT_API_URL is set at build time
-templates/auth.js        (planned, phase 3) the sign-in sheet and session handling shared by the shopping page and the chat
+templates/auth.js        the sign-in sheet and session handling (window.RecipeAuth) shared by the shopping page and the chat; copied to dist/ only when SUPABASE_URL + SUPABASE_ANON_KEY are set at build time
 mcp-server/api/chat.js   the /chat endpoint: streams a model through OpenRouter, runs tools via dispatch(); lib/chat.js (agent loop), lib/chat-prompt.js, lib/rate-limit.js, lib/langfuse.js
 mcp-server/scripts/dev.js  local harness: backend :8787 + built site :4000 with fake GitHub / OpenRouter / Supabase (scripts/fakes.js); `npm run dev` in mcp-server/
-supabase/           `supabase init` layout: migrations/ (rate_limits table + rate_limit_hit function; later phases add chat tables), config.toml for `supabase start`
+supabase/           `supabase init` layout: migrations/ (rate_limits table + rate_limit_hit function; conversations + messages tables + purge_old_chats; later phases add the tray), config.toml for `supabase start`
 mcp-server/workflows/  agent workflows the server serves (plan-recipes.md, ocado-shop.md, sainsburys-shop.md), as MCP prompts + get_workflow_guide; shared/ holds the rules every shop flow includes
 ```
 
@@ -157,7 +167,7 @@ The editor taps **Sign in** (top right) or **Update** on the "Home checked" card
 
 For everyone, the list shows only what's left to buy: partly stocked items show the remaining amount with a half-filled house, and fully stocked items fold into "Already at home". Anyone can tick items while shopping; those ticks stay in their own browser (`localStorage`, per list). Until the site redeploys, the saving browser shows its own saved stocktake. The look and the icon language are described in `design.md`.
 
-Setup: Supabase project with email sign-in, sign-ups off, the editor invited as a user, and the shopping page URL in Auth → URL Configuration → Redirect URLs. Password sign-in needs the Email provider's password option on (the default); the editor sets their password from the page after a first code sign-in. For the code, the Magic Link email template (Auth → Email Templates) must include `{{ .Token }}` (keep `{{ .ConfirmationURL }}` for the link). The Pages build gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `STOCKTAKE_API_URL` from the repo's Actions **variables**; without them the page has no sign-in and is read-only. The Vercel project needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `EDITORS` (see `mcp-server/README.md`).
+Setup: Supabase project with email sign-in, sign-ups off, the editor invited as a user, and the whole site (`https://<user>.github.io/<repo>/**`, since the chat signs in from any page and the magic link returns to the page it was sent from) in Auth → URL Configuration → Redirect URLs. Password sign-in needs the Email provider's password option on (the default); the editor sets their password from the page after a first code sign-in. For the code, the Magic Link email template (Auth → Email Templates) must include `{{ .Token }}` (keep `{{ .ConfirmationURL }}` for the link). The Pages build gets `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `STOCKTAKE_API_URL` from the repo's Actions **variables**; without them the page has no sign-in and is read-only. The Vercel project needs `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `EDITORS` (see `mcp-server/README.md`).
 
 ## Deployment
 

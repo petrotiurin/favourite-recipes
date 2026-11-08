@@ -8,6 +8,7 @@
     { "source": "/mcp", "destination": "/api/mcp" },
     { "source": "/upload", "destination": "/api/upload" },
     { "source": "/stocktake", "destination": "/api/stocktake" },
-    { "source": "/chat", "destination": "/api/chat" }
+    { "source": "/chat", "destination": "/api/chat" },
+    { "source": "/chat/:route*", "destination": "/api/chat?route=:route*" }
   ]
 }

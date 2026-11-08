@@ -5,7 +5,16 @@
 //   npm run dev -- --no-build               (reuse the existing ../dist)
 //
 //   http://localhost:4000   the built site (../dist), built with CHAT_API_URL=http://localhost:8787/chat
-//   http://localhost:8787   the backend: /chat, /stocktake, /upload, /mcp (the api/*.js handlers, as Vercel would run them)
+//   http://localhost:8787   the backend: /chat (+ /chat/me, /chat/conversations, /chat/feedback), /stocktake, /upload, /mcp (the api/*.js
+//                           handlers, as Vercel would run them)
+//   http://localhost:54321  the fake Supabase (Auth + the chat tables), so the real sign-in sheet works in the browser
+//
+// TEST ACCOUNTS (sign in through the real UI: the chat header's person button, or the shopping page's Sign in):
+//   editor@example.com    password  editor-pass     in EDITORS: an editor (own chats, thumbs up / down, shopping stocktake)
+//   stranger@example.com  password  stranger-pass   a valid account that is NOT an editor (the chat stays read-only, with a note)
+//   "No password? Email me a code" works for both: the code is always 123456 (no email is sent; the magic link isn't emulated).
+//   Everything is in memory: restart the harness to wipe accounts' changes, chats and stocktakes. To see the retention clock use
+//   the chats list (chats older than 14 days vanish; nothing in the UI can age them, the tests do that).
 //
 // Everything outside is faked in-process (scripts/fakes.js), by wrapping global fetch:
 //   GitHub     your working tree's recipes/, images/ and shopping-list.json, read from disk; commits live in memory only
@@ -13,12 +22,12 @@
 //   OpenRouter a scripted model. Try: "chicken" (search tool + linked list + suggestions), "this recipe" (uses the page the
 //              user is on), "shopping", "mock-add" (a write attempt the public role must be refused), "mock-402" (out of
 //              credit), "mock-500", "mock-stream-error", or anything else for a plain reply with suggestions
-//   Supabase   /auth/v1/user for the tokens "dev-editor-token" (editor@example.com, in EDITORS) and "dev-stranger-token",
-//              and the rate_limit_hit counters in memory. Limits are 20/hour, 100/day per IP; to see the 429 quickly
-//              start with CHAT_PUBLIC_HOURLY_LIMIT=3 npm run dev
+//   Supabase   Auth (password and code sign-in, refresh, logout; tokens last an hour, or FAKE_TOKEN_TTL seconds: try 90 to watch the
+//              refresh), the conversations/messages tables, and the rate_limit_hit counters, in memory. Limits are 20/hour, 100/day
+//              per visitor IP and 200/hour per editor; to see the 429 quickly start with CHAT_PUBLIC_HOURLY_LIMIT=3 npm run dev
 //   Langfuse   off (set LANGFUSE_* yourself to trace to a real one)
 //
-// Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000). Later phases extend this file (fake Supabase tables, editor chat).
+// Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000), SUPABASE_PORT (54321), FAKE_TOKEN_TTL. Later phases extend this file.
 import http from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -28,6 +37,7 @@ import { createFakeGitHub, createMockOpenRouter, createFakeSupabase } from "./fa
 
 const API_PORT = Number(process.env.CHAT_API_PORT) || 8787;
 const SITE_PORT = Number(process.env.SITE_PORT) || 4000;
+const SUPABASE_PORT = Number(process.env.SUPABASE_PORT) || 54321;
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 const DIST = join(REPO, "dist");
 
@@ -36,11 +46,12 @@ const env = {
   GITHUB_TOKEN: "dev-github",
   MCP_AUTH_TOKEN: "dev-secret",
   PUBLIC_SITE_URL: `http://localhost:${SITE_PORT}`,
-  SUPABASE_URL: "http://supabase.fake",
+  SUPABASE_URL: `http://localhost:${SUPABASE_PORT}`,
   SUPABASE_ANON_KEY: "dev-anon",
   SUPABASE_SERVICE_ROLE_KEY: "dev-service",
   EDITORS: "editor@example.com",
   OPENROUTER_CHAT_PUBLIC_KEY: "dev-openrouter",
+  OPENROUTER_CHAT_EDITOR_KEY: "dev-openrouter-editor",
   OPENROUTER_BASE_URL: "http://openrouter.fake/api/v1",
 };
 for (const [k, v] of Object.entries(env)) process.env[k] ??= v;
@@ -51,10 +62,11 @@ const supabase = createFakeSupabase({
   url: process.env.SUPABASE_URL,
   anonKey: process.env.SUPABASE_ANON_KEY,
   serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  users: {
-    "dev-editor-token": { id: "00000000-0000-0000-0000-0000000000e1", email: "editor@example.com" },
-    "dev-stranger-token": { id: "00000000-0000-0000-0000-0000000000a1", email: "stranger@example.com" },
-  },
+  tokenTtlSeconds: Number(process.env.FAKE_TOKEN_TTL) || 3600,
+  accounts: [
+    { id: "00000000-0000-4000-8000-0000000000e1", email: "editor@example.com", password: "editor-pass" },
+    { id: "00000000-0000-4000-8000-0000000000a1", email: "stranger@example.com", password: "stranger-pass" },
+  ],
 });
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init) => {
@@ -75,7 +87,10 @@ const handlers = {
 // --- the backend: Node http -> Web Request -> handler -> Web Response ------------------------------------------------------
 const api = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${API_PORT}`);
-  const handler = handlers[url.pathname];
+  // /chat/<route> is what Vercel's rewrite turns into /api/chat?route=<route>
+  const sub = url.pathname.match(/^\/chat\/(.+)$/);
+  if (sub) url.search = `?route=${sub[1]}`;
+  const handler = handlers[sub ? "/chat" : url.pathname];
   const fn = handler?.[req.method];
   if (!fn) {
     res.writeHead(handler ? 405 : 404, { "content-type": "application/json" }).end(JSON.stringify({ error: handler ? "Method not allowed" : "Not found" }));
@@ -104,10 +119,22 @@ const api = http.createServer(async (req, res) => {
   }
 });
 
+// --- the fake Supabase over HTTP, for the browser (the server side reaches it in-process, through the fetch wrapper above) -----
+const sbCors = { "access-control-allow-origin": "*", "access-control-allow-headers": "apikey, authorization, content-type, x-client-info, prefer", "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS" };
+http
+  .createServer(async (req, res) => {
+    if (req.method === "OPTIONS") return void res.writeHead(204, sbCors).end();
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const response = await supabase.fetch(new URL(req.url, process.env.SUPABASE_URL).href, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks).toString() : undefined });
+    res.writeHead(response.status, { ...sbCors, "content-type": "application/json" }).end(Buffer.from(await response.arrayBuffer()));
+  })
+  .listen(SUPABASE_PORT, () => console.log(`Supabase http://localhost:${SUPABASE_PORT}  (fake: sign in as editor@example.com / editor-pass or stranger@example.com / stranger-pass)`));
+
 // --- the site: ../dist, built to talk to the local backend -----------------------------------------------------------------
 if (!process.argv.includes("--no-build")) {
   console.log("Building the site (CHAT_API_URL points at the local backend)…");
-  const build = spawnSync("node", ["build.js"], { cwd: REPO, stdio: "inherit", env: { ...process.env, CHAT_API_URL: `http://localhost:${API_PORT}/chat` } });
+  const build = spawnSync("node", ["build.js"], { cwd: REPO, stdio: "inherit", env: { ...process.env, CHAT_API_URL: `http://localhost:${API_PORT}/chat`, STOCKTAKE_API_URL: `http://localhost:${API_PORT}/stocktake`, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY } });
   if (build.status !== 0) process.exit(build.status || 1);
 }
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".json": "application/json", ".svg": "image/svg+xml" };
@@ -122,5 +149,5 @@ const site = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": MIME[extname(file)] || "application/octet-stream", "cache-control": "no-store" }).end(readFileSync(file));
 });
 
-api.listen(API_PORT, () => console.log(`Backend  http://localhost:${API_PORT}  (/chat, /stocktake, /upload, /mcp)`));
+api.listen(API_PORT, () => console.log(`Backend  http://localhost:${API_PORT}  (/chat, /chat/*, /stocktake, /upload, /mcp)`));
 site.listen(SITE_PORT, () => console.log(`Site     http://localhost:${SITE_PORT}   (open this; the chat bubble is bottom right)`));

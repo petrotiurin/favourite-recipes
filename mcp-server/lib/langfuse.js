@@ -145,3 +145,41 @@ export function startTrace(opts = {}) {
     },
   };
 }
+
+// --- scores (editors' thumbs up / down) ------------------------------------------------------------------------------
+
+/**
+ * Records (or overwrites) the score `user-feedback` on a trace: 1 = up, 0 = down. The id is fixed per turn, so sending it again
+ * replaces the earlier score. Resolves true when it was sent; false when tracing is off or Langfuse failed (never throws).
+ */
+export async function setScore({ id, traceId, value, comment }) {
+  if (!langfuseEnabled() || !traceId) return false;
+  try {
+    const res = await fetch(`${config.langfuseBaseUrl}/api/public/ingestion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Basic ${Buffer.from(`${config.langfusePublicKey}:${config.langfuseSecretKey}`).toString("base64")}` },
+      body: JSON.stringify({
+        batch: [{ id: randomUUID(), type: "score-create", timestamp: new Date().toISOString(), body: { id, traceId, name: "user-feedback", value, dataType: "NUMERIC", comment: comment ? clip(comment, 500) : undefined } }],
+      }),
+    });
+    return res.ok || res.status === 207;
+  } catch (err) {
+    console.warn(`Langfuse score failed: ${err.message}`);
+    return false;
+  }
+}
+
+/** Deletes a score set with setScore (the editor took their thumb back). Never throws. */
+export async function deleteScore(id) {
+  if (!langfuseEnabled()) return false;
+  try {
+    const res = await fetch(`${config.langfuseBaseUrl}/api/public/scores/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${Buffer.from(`${config.langfusePublicKey}:${config.langfuseSecretKey}`).toString("base64")}` },
+    });
+    return res.ok || res.status === 404;
+  } catch (err) {
+    console.warn(`Langfuse score delete failed: ${err.message}`);
+    return false;
+  }
+}

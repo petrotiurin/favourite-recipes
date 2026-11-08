@@ -22,6 +22,11 @@ export const config = {
   chatPublicDailyLimit: Number(process.env.CHAT_PUBLIC_DAILY_LIMIT) || 100,
   // Salt for hashing visitor IPs (rate limits, traces). Falls back to the service key, so no raw IP is ever stored either way.
   ipHashSalt: process.env.IP_HASH_SALT,
+  // Signed-in editors (phase 3): their own OpenRouter key (falls back to OPENROUTER_API_KEY), model and generous limits, keyed by user id.
+  chatEditorKey: process.env.OPENROUTER_CHAT_EDITOR_KEY || process.env.OPENROUTER_API_KEY,
+  chatEditorModel: process.env.CHAT_EDITOR_MODEL || "anthropic/claude-sonnet-4.5",
+  chatEditorHourlyLimit: Number(process.env.CHAT_EDITOR_HOURLY_LIMIT) || 200,
+  chatEditorDailyLimit: Number(process.env.CHAT_EDITOR_DAILY_LIMIT) || 1000,
   // Langfuse tracing: off unless all three are set.
   langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,
   langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,

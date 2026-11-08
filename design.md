@@ -264,6 +264,19 @@ On the **At home** tab every row is a fill bar:
 - **Navigation button** (`.chat-nav`, `offer_navigation`): an outline pill in `--accent-ink` with a stroke arrow ("Open Steamed Rice"), shown
   only once the reply is complete. It is a plain link the user must tap; the chat never navigates on its own. Only the last message's is live.
 - **Action chips** (`.chat-chip.is-nav`): a suggested reply that opens a page rather than sending text; same pill, accent outline plus the arrow.
+- **Account** (`.chat-account`, signed-in builds only): in the header, a round person button (the compact `.pill`) that opens the shared sign-in
+  sheet, or the avatar with its menu (email, Set a password, Sign out), exactly as on the shopping page; the sheet is titled "Sign in to the chat".
+  Signing in keeps the panel open (a magic link that reloads the page reopens it with the draft). A signed-in account that isn't an editor gets a
+  quiet `.chat-banner` under the header: "Signed in as x — this account can't edit, so the chat is read-only."
+- **Chats list** (editors): a list icon button in the header swaps the log for "Your chats" (`.chat-chats`): serif heading, a muted note ("A chat
+  is deleted two weeks after its last message."), then rows with the title, a muted "Today · until Sat" line and a trash icon button; the open
+  chat is on `--current-soft`. Delete asks inline ("Delete this chat?" Cancel / Delete). The header title is the open chat's title. "New chat" leaves
+  the list. On sign-out the panel goes back to the visitor's chat and nothing of the editor's is kept in the browser but the open chat's id.
+- **Feedback controls** (editors, `.chat-feedback`): under each turn's last message, before its chips, two 32px round icon buttons (thumbs up and
+  down, 17px stroke icons in `--icon-muted`, `aria-label` "Good reply" / "Bad reply", `aria-pressed`; a pressed one is filled `--accent-strong`)
+  and a muted note ("Thanks"; after Send "Sent: Wrong amounts" or "Sent"). Thumbs down opens a bordered box: "What went wrong? (optional)", reason
+  chips (several can be picked; picked ones get the accent border on `--current-soft`), a one-line "Add a note", and Skip / Send. Tapping the other
+  thumb switches the score; tapping the chosen one clears it. Earlier turns' rows are dimmed to half opacity and still work. Visitors see none of it.
 - **Starter chips** (`.chat-starters`): the empty chat's first suggestions, by page (recipe: "Swap an ingredient", "Scale it for 6", "Add to
   next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
 - **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so

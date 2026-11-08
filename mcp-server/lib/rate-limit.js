@@ -17,10 +17,17 @@ export function clientIp(request) {
 }
 
 let warned = false;
-const WINDOWS = [
-  { name: "hour", seconds: 3600, limit: () => config.chatPublicHourlyLimit, say: "You've sent a lot of messages in the last hour. Give it a little while and try again." },
-  { name: "day", seconds: 86400, limit: () => config.chatPublicDailyLimit, say: "That's all the chat messages for today. Try again tomorrow." },
-];
+// Visitors are limited per hashed IP, signed-in editors (generous) per Supabase user id.
+const WINDOWS = {
+  public: [
+    { name: "hour", seconds: 3600, limit: () => config.chatPublicHourlyLimit, say: "You've sent a lot of messages in the last hour. Give it a little while and try again." },
+    { name: "day", seconds: 86400, limit: () => config.chatPublicDailyLimit, say: "That's all the chat messages for today. Try again tomorrow." },
+  ],
+  editor: [
+    { name: "hour", seconds: 3600, limit: () => config.chatEditorHourlyLimit, say: "You've sent a lot of messages in the last hour. Give it a little while and try again." },
+    { name: "day", seconds: 86400, limit: () => config.chatEditorDailyLimit, say: "That's all the chat messages for today. Try again tomorrow." },
+  ],
+};
 
 async function hit(key, seconds) {
   const res = await fetch(`${config.supabaseUrl}/rest/v1/rpc/rate_limit_hit`, {
@@ -50,18 +57,20 @@ export async function checkRateLimit(caller, { now = Date.now } = {}) {
     }
     return { ok: true };
   }
-  const id = `${caller.role}:${hashIp(caller.ip)}`;
+  const windows = WINDOWS[caller.role] || WINDOWS.public;
+  const who = caller.role === "editor" && caller.userId ? caller.userId : hashIp(caller.ip);
+  const id = `${caller.role}:${who}`;
   let counts;
   try {
-    counts = await Promise.all(WINDOWS.map((w) => hit(`${id}:${w.name}`, w.seconds)));
+    counts = await Promise.all(windows.map((w) => hit(`${id}:${w.name}`, w.seconds)));
   } catch (err) {
     console.error("Rate limit check failed, letting the message through:", err.message);
     return { ok: true };
   }
-  for (const [i, w] of WINDOWS.entries()) {
+  for (const [i, w] of windows.entries()) {
     if (counts[i] > w.limit()) {
       const retryAfter = Math.max(1, Math.ceil(w.seconds - ((now() / 1000) % w.seconds)));
-      console.warn(`Chat rate limit (${w.name}) hit by ${caller.role} ${hashIp(caller.ip)}`);
+      console.warn(`Chat rate limit (${w.name}) hit by ${caller.role} ${caller.role === "editor" ? caller.userId : hashIp(caller.ip)}`);
       return { ok: false, retryAfter, message: w.say };
     }
   }
