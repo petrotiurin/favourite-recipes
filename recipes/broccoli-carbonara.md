@@ -4,7 +4,7 @@ slug: broccoli-carbonara
 image: /images/recipes/broccoli-carbonara.jpg
 course: [Dinner]
 tags: [High Protein]
-total_mins: 20
+total_mins: 35
 serves: 4
 calories: 566
 next: true
