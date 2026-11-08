@@ -115,6 +115,7 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `CHAT_EDITOR_HOURLY_LIMIT` / `CHAT_EDITOR_DAILY_LIMIT` | Optional; messages per editor (user id) per hour / day, default 200 / 1000 |
 | `BUILD_OUT_DIR` (build.js) / `DEV_DIST` (dev harness) | Optional; build or serve the site somewhere other than `../dist`, so tests and one-off builds leave a running dev site alone |
 | `CHAT_PANEL_HOURLY_LIMIT` | Optional; the panel's own requests (plan tray, publishing status, dropping an item, new photo) per editor per hour, default 600 |
+| `CHAT_TURN_BUDGET_MS` | Optional; a chat turn that has run this long (ms) stops between model calls with a clear message, default 200000 (Vercel `maxDuration` is 300s) |
 | `OPENROUTER_BASE_URL` | Optional; defaults to `https://openrouter.ai/api/v1` (the local dev harness points it at a mock) |
 | `CHAT_PUBLIC_TOTAL_HOURLY_LIMIT` | Optional; one hourly cap across ALL visitors together, default 300 |
 | `AUTH_FAILURE_HOURLY_LIMIT` | Optional; failed sign-in checks per visitor per hour before `/chat` answers 429 without asking Supabase, default 20 |
