@@ -95,6 +95,13 @@ with sign-in accounts, site on :4000; test accounts and ports are at the top of 
 is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
 enforced on the server by the dispatcher, never by the prompt.
 
+## Debugging production
+
+For "why are we getting errors", "what happened in my last chat" and similar, **use the `debug` skill**
+(`.claude/skills/debug/`): it reads the stored chats and tray in Supabase, the chat traces in Langfuse and the Vercel runtime logs
+(kept only about an hour on the Hobby plan) through the connected MCP servers, read-only, with the project ids and the common
+symptoms mapped to their causes (`references/symptoms.md`). Add a symptom there when a new kind of failure turns up.
+
 ## Directory layout
 
 ```
