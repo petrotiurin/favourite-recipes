@@ -2035,11 +2035,16 @@
     var open = !!vv && window.innerHeight - vv.height > 120 && doc.activeElement === input;
     if (open === keyboardOpen) return;
     keyboardOpen = open;
+    panel.classList.toggle("kb-open", open);
     if (!open) keyboardForcedOpen = false;
     if (trayData) renderTray();
   }
   if (window.visualViewport) window.visualViewport.addEventListener("resize", checkKeyboard);
-  input.addEventListener("focus", checkKeyboard);
+  input.addEventListener("focus", function () {
+    checkKeyboard();
+    // iOS can report the viewport before the keyboard has finished sliding up: measure again once it has.
+    setTimeout(function () { layoutPanel(); checkKeyboard(); if (!panel.hidden) toBottom(); }, 350);
+  });
   input.addEventListener("blur", function () { setTimeout(checkKeyboard, 50); });
 
   // --- panel open / close / new chat ------------------------------------------------------------------------------------------
