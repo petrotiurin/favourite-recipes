@@ -667,14 +667,8 @@
   function intro() {
     var p = el("div", "chat-intro");
     var a = el("p");
-    a.textContent = "Ask me about our recipes: what to cook, what's in something, what to swap.";
-    var b = el("p", "chat-note");
-    b.textContent =
-      mode === "editor"
-        ? "Your chats are saved to your account for two weeks after the last message, on any of your devices. I can add changes to the plan tray, but nothing reaches the site until you tap Save to site."
-        : "Chats are stored in this browser for two weeks. I can look things up, but I can't change anything on the site.";
+    a.textContent = "Ask me about recipes on this site.";
     p.appendChild(a);
-    p.appendChild(b);
     var starters = startersFor(CTX.page === "recipe" && contextDismissed ? "" : CTX.page, mode === "editor");
     if (starters.length) {
       var row = chipsEl(starters);

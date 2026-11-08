@@ -255,8 +255,8 @@ On the **At home** tab every row is a fill bar:
   last message's chips are live; older rows fade to 40% and are disabled.
 - **Context chip** (`.chat-context`): "On: Steamed Rice" on a `--track` pill above the input, dismissable with ×; it tells the user what "this
   recipe" means.
-- **First run:** the empty chat says what it can do and that chats are stored in this browser for two weeks (history is in `localStorage`, last
-  ~20 turns, dropped after two weeks).
+- **First run:** the empty chat shows one short line, "Ask me about recipes on this site.", plus the page's starter chips; nothing longer,
+  so it stays visible when the phone keyboard opens. (History is still in `localStorage` for visitors, last ~20 turns, dropped after two weeks.)
 - **Recipe cards** (`.chat-cards` / `.chat-card`, from the `show_recipes` tool): the site's tile look (square photo, small-caps kicker, serif
   title clamped to 2 lines, "20 min · 412 kcal") in a sideways scrolling row that runs to the panel's edges, 8.75rem wide, snapping at the
   start. Kicker: "This week" (accent), "Next week" (teal), "Draft" (purple, only when it is in neither week), else the course in muted text.
