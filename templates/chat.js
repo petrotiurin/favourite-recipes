@@ -443,7 +443,7 @@
   panel.hidden = true;
   var head = el("header", "chat-head");
   var title = el("h2", "chat-title");
-  title.textContent = "Ask about our recipes";
+  title.textContent = "Recipe chat";
   var chatsBtn = iconButton("chat-icon-btn chat-chats-btn", "Your chats", ICON.list);
   chatsBtn.setAttribute("aria-expanded", "false");
   chatsBtn.hidden = true; // editors only
@@ -1025,7 +1025,7 @@
   function paintHeader() {
     var editor = mode === "editor";
     chatsBtn.hidden = !editor;
-    title.textContent = editor && chat.title ? chat.title : "Ask about our recipes";
+    title.textContent = editor && chat.title ? chat.title : "Recipe chat";
     var readOnly = me.signedIn && !editor ? "Signed in as " + me.email + " — this account can't edit, so the chat is read-only." : "";
     banner.textContent = readOnly;
     banner.hidden = !readOnly;
@@ -1033,7 +1033,8 @@
   }
 
   /** Back to the visitor's chat (signed out, expired, or a signed-in account that can't edit). The editor's chat leaves the panel. */
-  function goPublic() {
+  function goPublic(opts) {
+    var keepId = chat.server && chat.id && opts && opts.keepEmail ? { email: opts.keepEmail, id: chat.id } : null;
     if (streaming && chat.server) streaming.abort();
     if (chat.server) {
       streaming = null;
@@ -1041,7 +1042,8 @@
     }
     mode = "public";
     chat = anonChat;
-    writeJson(localStorage, EDITOR_KEY, null);
+    // An expired session keeps the open conversation's id, so signing in again comes back to it; only an explicit sign-out forgets it.
+    writeJson(localStorage, EDITOR_KEY, keepId);
     setListing(false);
     paintHeader();
     renderAll();
@@ -1259,9 +1261,10 @@
         handlePending();
         refreshMe();
       } else if (info.type === "sign-out") {
+        var keepEmail = info.reason === "expired" ? me.email : "";
         me = { signedIn: false, email: "" };
         checkingMe = false;
-        goPublic();
+        goPublic({ keepEmail: keepEmail });
       }
     });
   }
