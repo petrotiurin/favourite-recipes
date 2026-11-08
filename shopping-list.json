@@ -1,27 +1,125 @@
 {
   "updated": "2026-11-08",
   "recipes": [
+    "creamy-mushroom-orzo",
+    "garlic-butter-prawn-linguine",
     "lemon-garlic-pasta",
+    "lemon-herb-chicken-traybake",
     "spicy-tomato-gnocchi-bake"
   ],
   "servings": {
-    "lemon-garlic-pasta": 4,
-    "spicy-tomato-gnocchi-bake": 4
+    "creamy-mushroom-orzo": 4,
+    "garlic-butter-prawn-linguine": 2,
+    "lemon-garlic-pasta": 2,
+    "lemon-herb-chicken-traybake": 4,
+    "spicy-tomato-gnocchi-bake": 3
   },
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "Garlic cloves",
-          "quantity": "2",
+          "name": "Baby potatoes",
+          "quantity": "250g",
           "recipes": [
-            "lemon-garlic-pasta"
+            "lemon-herb-chicken-traybake"
           ]
         },
         {
-          "name": "Lemon",
+          "name": "Garlic",
+          "quantity": "5",
+          "note": "cloves",
+          "recipes": [
+            "garlic-butter-prawn-linguine",
+            "lemon-garlic-pasta"
+          ],
+          "amounts": {
+            "garlic-butter-prawn-linguine": 3,
+            "lemon-garlic-pasta": 2
+          }
+        },
+        {
+          "name": "Lemons",
+          "quantity": "2",
+          "recipes": [
+            "lemon-garlic-pasta",
+            "lemon-herb-chicken-traybake"
+          ],
+          "amounts": {
+            "lemon-garlic-pasta": 1,
+            "lemon-herb-chicken-traybake": 1
+          }
+        },
+        {
+          "name": "Mushrooms",
+          "quantity": "125g",
+          "recipes": [
+            "creamy-mushroom-orzo"
+          ]
+        },
+        {
+          "name": "Onion",
           "quantity": "1",
+          "recipes": [
+            "creamy-mushroom-orzo"
+          ]
+        },
+        {
+          "name": "Parsley",
+          "quantity": "10g",
+          "note": "chopped, to serve",
+          "recipes": [
+            "garlic-butter-prawn-linguine"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Meat & fish",
+      "items": [
+        {
+          "name": "Chicken thighs",
+          "quantity": "400g",
+          "recipes": [
+            "lemon-herb-chicken-traybake"
+          ]
+        },
+        {
+          "name": "Raw king prawns",
+          "quantity": "200g",
+          "recipes": [
+            "garlic-butter-prawn-linguine"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dairy",
+      "items": [
+        {
+          "name": "Butter",
+          "quantity": "30g",
+          "recipes": [
+            "garlic-butter-prawn-linguine"
+          ]
+        },
+        {
+          "name": "Double cream",
+          "quantity": "75ml",
+          "recipes": [
+            "creamy-mushroom-orzo"
+          ]
+        },
+        {
+          "name": "Mozzarella",
+          "quantity": "83g",
+          "recipes": [
+            "spicy-tomato-gnocchi-bake"
+          ]
+        },
+        {
+          "name": "Parmesan",
+          "quantity": "30g",
           "recipes": [
             "lemon-garlic-pasta"
           ]
@@ -32,36 +130,31 @@
       "name": "Pasta & grains",
       "items": [
         {
-          "name": "Spaghetti",
-          "quantity": "200g",
-          "recipes": [
-            "lemon-garlic-pasta"
-          ]
-        },
-        {
           "name": "Gnocchi",
           "quantity": "333g",
           "recipes": [
             "spicy-tomato-gnocchi-bake"
           ]
-        }
-      ]
-    },
-    {
-      "name": "Dairy & eggs",
-      "items": [
+        },
         {
-          "name": "Parmesan",
-          "quantity": "30g",
+          "name": "Linguine",
+          "quantity": "200g",
           "recipes": [
-            "lemon-garlic-pasta"
+            "garlic-butter-prawn-linguine"
           ]
         },
         {
-          "name": "Mozzarella",
-          "quantity": "83g",
+          "name": "Orzo",
+          "quantity": "150g",
           "recipes": [
-            "spicy-tomato-gnocchi-bake"
+            "creamy-mushroom-orzo"
+          ]
+        },
+        {
+          "name": "Spaghetti",
+          "quantity": "200g",
+          "recipes": [
+            "lemon-garlic-pasta"
           ]
         }
       ]
@@ -75,28 +168,30 @@
           "recipes": [
             "spicy-tomato-gnocchi-bake"
           ]
+        },
+        {
+          "name": "Chilli flakes",
+          "quantity": "3ml",
+          "recipes": [
+            "spicy-tomato-gnocchi-bake"
+          ]
         }
       ]
     },
     {
-      "name": "Pantry",
+      "name": "Oils",
       "items": [
         {
-          "name": "Chilli flakes",
-          "quantity": "2g",
-          "recipes": [
-            "spicy-tomato-gnocchi-bake"
-          ]
-        },
-        {
           "name": "Olive oil",
-          "quantity": "50ml",
+          "quantity": "65ml",
           "recipes": [
             "lemon-garlic-pasta",
+            "lemon-herb-chicken-traybake",
             "spicy-tomato-gnocchi-bake"
           ],
           "amounts": {
             "lemon-garlic-pasta": 30,
+            "lemon-herb-chicken-traybake": 15,
             "spicy-tomato-gnocchi-bake": 20
           }
         }
