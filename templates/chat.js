@@ -1620,11 +1620,11 @@
       var hi = el("h4", "tray-detail-h");
       hi.textContent = "Ingredients";
       var ul = el("ul");
-      item.detail.ingredients.forEach(function (x) { var li = el("li"); li.textContent = x; ul.appendChild(li); });
+      item.detail.ingredients.forEach(function (x) { var li = el("li"); inlineToDom(doc, parseInline(x), origin, li); ul.appendChild(li); });
       var hs = el("h4", "tray-detail-h");
       hs.textContent = "Instructions";
       var ol = el("ol");
-      item.detail.steps.forEach(function (x) { var li = el("li"); li.textContent = x; ol.appendChild(li); });
+      item.detail.steps.forEach(function (x) { var li = el("li"); inlineToDom(doc, parseInline(x), origin, li); ol.appendChild(li); }); // **bold** ingredient names
       box.appendChild(hi);
       box.appendChild(ul);
       box.appendChild(hs);
@@ -1699,7 +1699,7 @@
     var row = el("div", "tray-cards", { role: "list", "aria-label": "Changes in the tray" });
     var fresh = [];
     trayData.items.forEach(function (item) {
-      var isNew = !!(opts && opts.highlight && traySeen && !traySeen[item.id]);
+      var isNew = !!(opts && opts.highlight && opts.seen && !opts.seen[item.id]);
       if (isNew) fresh.push(item.id);
       row.appendChild(trayCard(item, isNew));
     });
@@ -1754,7 +1754,7 @@
       if (!wasSeen && opts && opts.highlight === undefined) opts = {};
       trayData = next;
       if (trayDetail && (!next || !next.items.some(function (i) { return i.id === trayDetail; }))) trayDetail = null;
-      renderTray(opts && opts.highlight && wasSeen ? { highlight: true } : null);
+      renderTray(opts && opts.highlight && wasSeen ? { highlight: true, seen: wasSeen } : null); // compared with what was shown BEFORE this load
       scheduleTrayPoll();
     });
   }

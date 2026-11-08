@@ -576,3 +576,18 @@ test("migrations: trays (one row, RLS, no policies, 7 days) and the private tray
   assert.doesNotMatch(bucket, /create policy/i);
   assert.match(sql(/rate_limits_revoke\.sql$/), /revoke all on public\.rate_limits from anon, authenticated/);
 });
+
+test("Finalise with next week empty on the site: no promote question, no questions about this week's drafts, the list is built; the switch card names carried-over recipes", async () => {
+  const draft = anySlug(0);
+  setFlag(draft, "draft: true\ncurrent: true");
+  const { conversation_id } = await say("add a new recipe: empty week pasta");
+  const r = await say("x", { conversation_id, action: "finalise" });
+  assert.ok(!r.evs.some((e) => e.name === "question"), "no question at all");
+  const t = await plan();
+  assert.ok(t.items.some((i) => i.kind === "list"), "the list is staged");
+  assert.ok(!t.items.some((i) => ["switch", "promote", "remove"].includes(i.kind)), "nothing about this week");
+  // the switch card lists what is carried over
+  await tools.dispatch("stage_start_next_week", { carry_over: [draft] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {} } });
+  const sw = (await plan()).items.find((i) => i.kind === "switch");
+  assert.match(sw.sub, /^Carried over in this week: /);
+});

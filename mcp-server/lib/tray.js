@@ -529,7 +529,7 @@ export async function trayView(tray, caller) {
     switch (item.kind) {
       case "switch":
         card.title = "Next week becomes this week";
-        card.sub = item.op.carry_over?.length ? `${item.op.carry_over.length} carried over` : "";
+        card.sub = item.op.carry_over?.length ? `Carried over in this week: ${item.op.carry_over.map((slug) => book.get(slug)?.title || slug).join(", ")}` : "";
         break;
       case "new":
         card.title = item.op.title;

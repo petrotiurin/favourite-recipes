@@ -256,8 +256,13 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   if (lastCall && ["get_tray", "stage_update_shopping_list"].includes(lastCall.name)) return buildStep();
   const answer = user;
   if (finaliseTap && !lastCall) {
-    if (nextN > 0) return ask(`Next week has ${nextN} recipe${nextN === 1 ? "" : "s"}. Is it ready to become this week?`, ["Promote it", "Not yet"], "Next week already has recipes, so first: is it ready to become this week?");
-    return nextStep();
+    if (nextN > 0) {
+      const nextSlugs = [...String(note || "").match(/Next week on the site now: ([^\n]*)/)?.[1].matchAll(/\(([a-z0-9-]+)\)/g) || []].map((m) => m[1]);
+      // the recipes' cards first, then the question (both in one reply: the question ends the turn)
+      return scriptedStream({ ...opts, text: "Next week already has recipes, so first: is it ready to become this week?", calls: [showRecipes(nextSlugs.slice(0, 6)), { name: "ask_user", arguments: { question: `Next week has ${nextN} recipe${nextN === 1 ? "" : "s"}. Is it ready to become this week?`, options: ["Promote it", "Not yet"] } }] });
+    }
+    // next week is empty: no promote question and no draft questions, straight to building the list
+    return tray("get_tray", {}, "Next week is empty, so there's nothing to switch. I'll read the tray and build the list.");
   }
   if (prevAsk && /ready to become this week/.test(prevAsk.question)) {
     if (answer === "not yet") return done("Okay: nothing changes, and next week and its list stay as they are. Say the word when you want to finalise.", { label: "Finalise list", action: "finalise_plan" });
