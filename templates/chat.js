@@ -1525,6 +1525,7 @@
   })();
   var trayData = null;
   var trayMsg = ""; // one muted line under the cards ("Saved", why Save is blocked, ...)
+  var revealDetail = false; // scroll the detail into view once, right after it was opened
   var trayDetail = null; // id of the card whose staged recipe / list is open
   var traySeen = null; // ids already shown, to highlight what's new
   var trayManualFold = false;
@@ -1593,6 +1594,7 @@
         send("Saving hit a clash on " + item.title + ": " + item.clash.reason + ". Help me resolve it.");
       } else {
         trayDetail = trayDetail === item.id ? null : item.id;
+        revealDetail = !!trayDetail;
         renderTray();
       }
     });
@@ -1700,6 +1702,8 @@
       tray.appendChild(bal);
     }
 
+    var scroller = el("div", "tray-scroll"); // the cards and details scroll here; the button below never overlaps them
+    tray.appendChild(scroller);
     var notice = trayExpiryNotice(trayData, Date.now());
     var btn = trayButton(trayData);
     if (notice) {
@@ -1713,7 +1717,7 @@
         nbtn.addEventListener("click", function () { pressTray(btn.kind === "save" ? "apply_plan" : "finalise_plan"); });
         nb.appendChild(nbtn);
       }
-      tray.appendChild(nb);
+      scroller.appendChild(nb);
     }
     var row = el("div", "tray-cards", { role: "list", "aria-label": "Changes in the tray" });
     var fresh = [];
@@ -1722,17 +1726,25 @@
       if (isNew) fresh.push(item.id);
       row.appendChild(trayCard(item, isNew));
     });
-    tray.appendChild(row);
+    scroller.appendChild(row);
     var open = trayDetail && trayData.items.filter(function (i) { return i.id === trayDetail; })[0];
-    if (open) tray.appendChild(trayDetailEl(open));
+    if (open) {
+      var detailEl = trayDetailEl(open);
+      scroller.appendChild(detailEl);
+      if (revealDetail) {
+        revealDetail = false;
+        // the tray scrolls inside .tray-scroll and the button sits in its own row below, so "nearest" is enough
+        if (detailEl.scrollIntoView) detailEl.scrollIntoView({ block: "nearest" });
+      }
+    }
     if (trayMsg) {
       var m = el("p", "tray-msg", { role: "status" });
       m.textContent = trayMsg;
-      tray.appendChild(m);
+      scroller.appendChild(m);
     } else if (btn.kind === "blocked" && trayData.blocked) {
       var bm = el("p", "tray-msg");
       bm.textContent = trayData.blocked;
-      tray.appendChild(bm);
+      scroller.appendChild(bm);
     }
     var go = el("button", "save-button tray-go", { type: "button" });
     go.textContent = btn.label;
@@ -1758,10 +1770,17 @@
   }
 
   /** Fetches the household's tray and draws it. highlight: cards that weren't there before get the new-card treatment and the row scrolls to them. */
+  var trayLoading = null; // the request in flight: asking again while it runs joins it instead of starting another dry run on the server
+  var trayHighlight = false;
   function loadTray(opts) {
     if (mode !== "editor" || !RA || !RA.getSession()) return Promise.resolve();
+    if (opts && opts.highlight) trayHighlight = true;
+    if (trayLoading) return trayLoading;
+    clearTimeout(trayTimer);
     var seq = ++traySeq;
-    return trayCall("GET", "/plan").then(
+    opts = trayHighlight ? { highlight: true } : opts;
+    trayHighlight = false;
+    var request = trayCall("GET", "/plan").then(
       function (res) { return res.ok ? res.json() : null; },
       function () { return null; }
     ).then(function (j) {
@@ -1776,9 +1795,14 @@
       renderTray(opts && opts.highlight && wasSeen ? { highlight: true, seen: wasSeen } : null); // compared with what was shown BEFORE this load
       scheduleTrayPoll();
     });
+    trayLoading = request;
+    var done = function () { if (trayLoading === request) trayLoading = null; };
+    request.then(done, done);
+    return request;
   }
 
   function clearTray() {
+    trayLoading = null;
     traySeq++;
     trayData = null;
     traySeen = null;
@@ -2005,15 +2029,17 @@
     if (!streaming && pending.length < MAX_PHOTOS) picker.click();
   });
   picker.addEventListener("change", function () {
-    var files = Array.prototype.slice.call(picker.files || [], 0, MAX_PHOTOS - pending.length);
+    var picked = Array.prototype.slice.call(picker.files || []);
+    var room = MAX_PHOTOS - pending.length;
+    var files = picked.slice(0, room);
     picker.value = "";
-    photoNote = "";
+    photoNote = picked.length > room ? "Only " + MAX_PHOTOS + " photos per message; added the first " + room + "." : "";
     files.reduce(function (chain, file) {
       return chain.then(function () {
-        if (!/^image\//.test(file.type || "image/")) { photoNote = "Only photos can be attached."; return; }
+        if (!/^image\//.test(file.type || "image/")) { photoNote = (photoNote ? photoNote + " " : "") + "Only photos can be attached."; return; }
         return downscale(file).then(
           function (p) { if (pending.length < MAX_PHOTOS) pending.push(p); },
-          function () { photoNote = "Couldn't read one of those photos. Try a JPEG or PNG."; }
+          function () { photoNote = (photoNote ? photoNote + " " : "") + "Couldn't read one of those photos. Try a JPEG or PNG."; }
         );
       });
     }, Promise.resolve()).then(paintShelf);

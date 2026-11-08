@@ -161,7 +161,8 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     if (!lastCall) return tray("get_shopping_list", {}, "Let me check the list.");
     if (lastCall.name === "get_shopping_list") {
       let stored = [];
-      try { stored = JSON.parse(String(lastResult.content).match(/```json\n([\s\S]*?)\n```/)[1]).sections.flatMap((x) => x.items); } catch { /* no list */ }
+      // the chat's compact table: "Section | Name | quantity | at home | recipes"
+      stored = String(lastResult.content).split("\n").filter((l) => l.split(" | ").length === 5 && !/^Stored list|^Recipes:/.test(l)).map((l) => { const [, name, quantity] = l.split(" | "); return { name, quantity }; });
       const items = [];
       for (const phrase of haveLine[1].replace(/[.!]$/, "").split(/,| and /)) {
         const m = phrase.trim().match(/^(?:(\d+(?:\.\d+)?)\s*(?:g|ml)?\s+)?(?:plenty of |loads of |lots of )?(.+)$/);

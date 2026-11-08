@@ -19,7 +19,8 @@ const SHOPPING_SCRIPT_FILE = path.join(ROOT, "templates", "shopping.js");
 const AUTH_SCRIPT_FILE = path.join(ROOT, "templates", "auth.js");
 const CHAT_SCRIPT_FILE = path.join(ROOT, "templates", "chat.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
-const DIST_DIR = path.join(ROOT, "dist");
+// BUILD_OUT_DIR lets tests and one-off builds write somewhere else, so a running dev site in dist/ is left alone.
+const DIST_DIR = process.env.BUILD_OUT_DIR ? path.resolve(process.env.BUILD_OUT_DIR) : path.join(ROOT, "dist");
 
 function rimraf(dir) {
   fs.rmSync(dir, { recursive: true, force: true });

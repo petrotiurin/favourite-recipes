@@ -172,6 +172,21 @@ const operationSchema = z.discriminatedUnion("action", [
     .describe("Same as the set_shopping_servings tool."),
 ]);
 
+/**
+ * The stored list as a compact table for the chat: "Section | Name | quantity | have | recipes", recipes as R1, R2 (a legend first).
+ * Names are exactly what stage_stocktake wants.
+ */
+export function compactListLines(list) {
+  const slugs = [...new Set((list.sections || []).flatMap((s) => s.items.flatMap((i) => i.recipes || [])))];
+  const tag = new Map(slugs.map((slug, i) => [slug, `R${i + 1}`]));
+  const have = (h) => (h === true ? "at home" : typeof h === "number" ? `have ${h}` : "");
+  return [
+    `Stored list${list.stocktake ? ` (stocktake ${list.stocktake})` : ""}, 2-serving amounts, one line per item: Section | Name | quantity | at home | recipes`,
+    ...(slugs.length ? [`Recipes: ${slugs.map((s) => `${tag.get(s)}=${s}`).join(", ")}`] : []),
+    ...(list.sections || []).flatMap((s) => s.items.map((i) => [s.name, i.name, i.quantity || "", have(i.have), (i.recipes || []).map((r) => tag.get(r)).join(",")].join(" | "))),
+  ];
+}
+
 function ok(text, extra = []) {
   return { content: [{ type: "text", text }, ...extra] };
 }
@@ -748,7 +763,7 @@ export const TOOLS = [
       "with what is left to buy at the planned servings.",
     inputSchema: {},
     access: "read",
-    handler: safe(async () => {
+    handler: safe(async (_args, ctx) => {
       const { list, next, status } = await getShoppingList();
       const note = {
         outdated: " (next week's recipes changed; the site still shows the old list until you call update_shopping_list)",
@@ -761,7 +776,8 @@ export const TOOLS = [
         next.length ? "Next week's recipes (the ones to combine):" : "Next week has no recipes yet.",
         ...next.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
       ];
-      if (list) lines.push("", ...stocktakeLines(list), "", "Stored list:", "```json", JSON.stringify(list, null, 2), "```");
+      // In chat the stored list is a compact table (one line per item): the pretty JSON is ~20k characters and gets cut by the chat's result cap.
+      if (list) lines.push("", ...stocktakeLines(list), "", ...(ctx?.chat ? compactListLines(list) : ["Stored list:", "```json", JSON.stringify(list, null, 2), "```"]));
       return ok(lines.join("\n"));
     }),
   },

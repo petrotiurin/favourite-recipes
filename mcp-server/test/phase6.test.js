@@ -260,3 +260,79 @@ test("the tray reports next week as it will be after Save (staged recipes includ
   assert.equal(chatJs.balanceLine(null), "");
   assert.equal(chatJs.cleanTray({ items: [], balance: { recipes: "5", dinners: -1, avg_kcal: 1e9, total_mins: 12 } }, "https://x", "").balance.recipes, 0, "non-numbers are dropped");
 });
+
+// --- chat result sizes -----------------------------------------------------------------------------------------------------------
+
+test("get_shopping_list in chat is a compact table that fits the result cap for the real list; /mcp output is unchanged", async () => {
+  const { readFileSync } = await import("node:fs");
+  const real = JSON.parse(readFileSync(new URL("../../shopping-list.json", import.meta.url), "utf8"));
+  const names = real.sections.flatMap((s) => s.items.map((i) => i.name));
+  assert.ok(names.length > 50, "the repo's list is a real one");
+  putList(real);
+  const inChat = (await tools.dispatch("get_shopping_list", {}, editor(), { chat: { emit() {} } })).content[0].text;
+  const viaMcp = (await tools.dispatch("get_shopping_list", {}, tools.makeCaller({ role: "agent" }))).content[0].text;
+  assert.ok(viaMcp.includes("```json"), "/mcp keeps the pretty JSON");
+  assert.ok(!inChat.includes("```json"));
+  assert.ok(inChat.length < 24000, `chat result is ${inChat.length} characters`);
+  assert.ok(viaMcp.length > inChat.length);
+  for (const name of names) assert.ok(inChat.includes(` | ${name} | `), `${name} is in the compact list`);
+  assert.match(inChat, /Recipes: R1=/);
+  // whatever the cap cuts must not be the list: the cap for this tool holds all of it
+  const { readFileSync: _r } = await import("node:fs");
+  void _r;
+  const chatSrc = readFileSync(new URL("../lib/chat.js", import.meta.url), "utf8");
+  assert.match(chatSrc, /get_shopping_list: 24000/);
+});
+
+test("stocktake by chat finds Pantry items on the real list", async () => {
+  const { readFileSync } = await import("node:fs");
+  const real = JSON.parse(readFileSync(new URL("../../shopping-list.json", import.meta.url), "utf8"));
+  putList(real);
+  const pantry = real.sections.find((s) => /pantry/i.test(s.name))?.items.find((i) => !i.quantity || true);
+  assert.ok(pantry, "the real list has a Pantry section");
+  const r = await tools.dispatch("stage_stocktake", { items: [{ name: pantry.name, have: true }] }, editor(), { chat: { emit() {} } });
+  assert.equal(r.isError, undefined, r.content[0].text);
+});
+
+test("history replay keeps ask_user calls, their results and the tapped answers; a cap never starts inside a tool exchange", async () => {
+  const store = await import("../lib/chat-store.js");
+  const row = (role, content) => ({ role, content });
+  const ask = { role: "assistant", content: "", tool_calls: [{ id: "q1", type: "function", function: { name: "ask_user", arguments: '{"question":"Did you like Soup?","options":["Liked","Not for us"]}' } }], ui: { question: { question: "Did you like Soup?" } } };
+  const rows = [
+    row("user", { role: "user", content: "Finalise list" }),
+    row("assistant", ask),
+    row("tool", { role: "tool", tool_call_id: "q1", content: '{"shown":true}' }),
+    row("user", { role: "user", content: "Liked" }),
+    row("assistant", { role: "assistant", content: "", tool_calls: [{ id: "p1", type: "function", function: { name: "stage_promote_recipe", arguments: '{"slug":"soup"}' } }] }),
+    row("tool", { role: "tool", tool_call_id: "p1", content: "Staged." }),
+    row("assistant", { role: "assistant", content: "Done." }),
+  ];
+  const h = store.historyForModel(rows);
+  assert.deepEqual(h.map((m) => m.role), ["user", "assistant", "tool", "user", "assistant", "tool", "assistant"]);
+  assert.equal(h[1].tool_calls[0].function.name, "ask_user");
+  assert.equal(h[3].content, "Liked");
+  assert.ok(!("ui" in h[1]), "panel extras don't go to the model");
+  // a cap that would cut between the question and its result starts at the next user message instead
+  const capped = store.historyForModel(rows, 5);
+  assert.equal(capped[0].role, "user");
+  assert.equal(capped[0].content, "Liked");
+  assert.ok(capped.every((m, i) => m.role !== "tool" || capped[i - 1]?.tool_calls || capped[i - 1]?.role === "tool"));
+});
+
+test("build.js can write to another folder (BUILD_OUT_DIR), leaving ../dist alone", async () => {
+  const { mkdtempSync, existsSync, statSync, rmSync } = await import("node:fs");
+  const { spawnSync } = await import("node:child_process");
+  const { tmpdir } = await import("node:os");
+  const root = new URL("../../", import.meta.url).pathname;
+  const out = mkdtempSync(`${tmpdir()}/recipes-dist-`);
+  const before = existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null;
+  try {
+    const r = spawnSync("node", ["build.js"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(`${out}/index.html`));
+    assert.ok(existsSync(`${out}/chat.js`));
+    assert.equal(existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null, before, "../dist wasn't touched");
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});

@@ -14,6 +14,8 @@ export const MAX_USER_CHARS = 2000;
 export const MAX_ASSISTANT_CHARS = 4000;
 export const MAX_TOOL_ROUNDS = 6;
 const MAX_TOOL_RESULT_CHARS = 12000;
+// tools whose answers are legitimately long (the tray with its recipes, the whole shopping list, a fetched page)
+const RESULT_CAPS = { get_tray: 40000, get_shopping_list: 24000, fetch_url: 24000 };
 // Limits on what ONE model reply may ask for, so a single request can't fan out into thousands of GitHub calls or a huge prompt.
 export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
 export const MAX_TOOL_CALLS_PER_TURN = 10; // data and write tool calls per user turn (UI tools like suggest_replies don't count)
@@ -511,7 +513,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       } else {
         emit({ type: "status", text: STATUS[call.name] || "Working on it…" });
         const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, attachments } });
-        content = resultText(out, call.name === "get_tray" ? 40000 : MAX_TOOL_RESULT_CHARS);
+        content = resultText(out, RESULT_CAPS[call.name] || MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;
       }

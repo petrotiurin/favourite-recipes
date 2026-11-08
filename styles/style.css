@@ -2701,8 +2701,22 @@ body.chat-open {
   border-top: 1px solid var(--border);
   background: var(--surface);
   padding: 0;
-  max-height: min(50%, 21rem); /* the cards and any open detail scroll inside; the button below stays in view */
+  max-height: min(50%, 21rem); /* the cards and any open detail scroll inside .tray-scroll; the button is its own row below */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tray-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+}
+
+.chat-tray .tray-head,
+.chat-tray .tray-balance,
+.chat-tray .tray-go {
+  flex: none;
 }
 
 .chat-tray[hidden],
@@ -2964,9 +2978,6 @@ body.chat-open {
 }
 
 .tray-go {
-  position: sticky;
-  bottom: 0.6rem;
-  box-shadow: 0 0.6rem 0 0 var(--surface);
   display: block;
   width: calc(100% - 2rem);
   margin: 0.55rem 1rem 0.6rem;

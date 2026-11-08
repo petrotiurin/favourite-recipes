@@ -48,7 +48,7 @@ const API_PORT = Number(process.env.CHAT_API_PORT) || 8787;
 const SITE_PORT = Number(process.env.SITE_PORT) || 4000;
 const SUPABASE_PORT = Number(process.env.SUPABASE_PORT) || 54321;
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
-const DIST = join(REPO, "dist");
+const DIST = process.env.DEV_DIST ? join(process.cwd(), process.env.DEV_DIST) : join(REPO, "dist"); // DEV_DIST: serve (and build into) another folder, e.g. DEV_DIST=.dev-dist
 
 // Local configuration, set before the handlers (and lib/config.js) are imported. Anything already in the environment wins.
 const env = {
@@ -169,7 +169,7 @@ http
 // --- the site: ../dist, built to talk to the local backend -----------------------------------------------------------------
 if (!process.argv.includes("--no-build")) {
   console.log("Building the site (CHAT_API_URL points at the local backend)…");
-  const build = spawnSync("node", ["build.js"], { cwd: REPO, stdio: "inherit", env: { ...process.env, CHAT_API_URL: `http://localhost:${API_PORT}/chat`, STOCKTAKE_API_URL: `http://localhost:${API_PORT}/stocktake`, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY } });
+  const build = spawnSync("node", ["build.js"], { cwd: REPO, stdio: "inherit", env: { ...process.env, BUILD_OUT_DIR: DIST, CHAT_API_URL: `http://localhost:${API_PORT}/chat`, STOCKTAKE_API_URL: `http://localhost:${API_PORT}/stocktake`, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY } });
   if (build.status !== 0) process.exit(build.status || 1);
 }
 const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".json": "application/json", ".svg": "image/svg+xml" };
