@@ -221,7 +221,7 @@ Alternative considered: deliver the result only on the user's next message (no f
 route, no turn lock), but nothing happens while the user is away, and they come back to "the photos are read" and still
 have to wait for the staging. Kept as the fallback path (2. above), not the main one.
 
-### 2.7 More photos per message (P6)
+### 2.6 More photos per message (P6)
 
 - Raise `MAX_PHOTOS` (client) and `MAX_IMAGES` (server) to **8**, with a number badge on each photo in the panel.
 - Request size: 8 photos don't reliably fit in one 4.3 MB request. Recommended: **upload each photo on its own** as soon as
