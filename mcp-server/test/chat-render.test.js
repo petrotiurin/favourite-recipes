@@ -209,13 +209,34 @@ test("the tray from the server is reduced to plain values: photos only from Supa
   assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 3 * 86400_000).toISOString() }, Date.now()), "");
 });
 
-test("an editor's sent photos: only signed URLs of our own project's chat-uploads bucket survive, at most four", () => {
+test("an editor's sent photos: only signed URLs of our own project's chat-uploads bucket survive, at most eight", () => {
   const base = "https://proj.supabase.co";
   const ok = `${base}/storage/v1/object/sign/chat-uploads/a/b.jpg?token=t`;
-  const out = chat.cleanServerMessages([{ role: "user", content: "", images: [ok, "https://evil.test/x.jpg", `${base}/storage/v1/object/sign/tray-photos/a.jpg?token=t`, "javascript:alert(1)", 5, ok, ok, ok, ok] }], ORIGIN, base);
+  const out = chat.cleanServerMessages([{ role: "user", content: "", images: [ok, "https://evil.test/x.jpg", `${base}/storage/v1/object/sign/tray-photos/a.jpg?token=t`, "javascript:alert(1)", 5, ok, ok, ok, ok, ok, ok, ok, ok] }], ORIGIN, base);
   assert.equal(out.length, 1, "a message with only photos is kept");
-  assert.equal(out[0].images.length, 4);
+  assert.equal(out[0].images.length, 8);
   assert.ok(out[0].images.every((u) => u === ok));
   assert.equal(chat.cleanServerMessages([{ role: "user", content: "hi", images: [ok] }], ORIGIN, "").length, 1);
   assert.equal(chat.cleanServerMessages([{ role: "user", content: "hi", images: [ok] }], ORIGIN, "")[0].images, undefined, "no Supabase base: no photos");
+});
+
+test("photo reading in the panel: numbers line up with the photos, notes from the site are plain status lines, progress and the tray's reading entries", () => {
+  const base = "https://proj.supabase.co";
+  const ok = `${base}/storage/v1/object/sign/chat-uploads/a/b.jpg?token=t`;
+  const [m] = chat.cleanServerMessages([{ role: "user", content: "", images: [ok, ok], photo_numbers: [7, 8] }], ORIGIN, base);
+  assert.deepEqual(m.numbers, [7, 8]);
+  assert.equal(chat.cleanServerMessages([{ role: "user", content: "", images: [ok, ok], photo_numbers: [7] }], ORIGIN, base)[0].numbers, undefined, "numbers that don't line up are dropped");
+  assert.deepEqual(chat.cleanNumbers([1, 2.5], 2), []);
+  assert.deepEqual(chat.cleanNumbers(["1"], 1), []);
+  const ev = chat.cleanServerMessages([{ role: "event", content: "  Photos read: 5 recipes, 1 to check " }, { role: "event", content: "" }, { role: "event", content: 3 }], ORIGIN, base);
+  assert.deepEqual(ev, [{ role: "event", content: "Photos read: 5 recipes, 1 to check" }]);
+  assert.equal(chat.cleanPhotos({ active: false, follow_up: false }), null);
+  assert.equal(chat.photoProgress(chat.cleanPhotos({ total: 6, read: 4, reading: 2, active: true })), "Reading photos… 4 of 6");
+  assert.equal(chat.photoProgress(chat.cleanPhotos({ read: 6, reading: 0, active: true, follow_up: true })), "Adding them to the tray…");
+  const entries = chat.cleanReading([{ name: "Sam", count: 3 }, { name: "", count: 1, mine: true }, { name: "x", count: 0 }, "junk"]);
+  assert.deepEqual(entries, [{ name: "Sam", count: 3, mine: false }, { name: "Someone", count: 1, mine: true }]);
+  assert.equal(chat.readingLine(entries[0]), "Reading 3 photos · Sam");
+  assert.equal(chat.readingLine(entries[1]), "Reading 1 photo · you");
+  assert.equal(chat.readingSaveNote(entries), "Sam has 3 photos still being read.");
+  assert.equal(chat.readingSaveNote([entries[1]]), "");
 });

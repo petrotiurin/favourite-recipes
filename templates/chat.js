@@ -360,24 +360,75 @@
 
   var FEEDBACK_REASONS = ["Wrong recipe", "Didn't do what I asked", "Wrong amounts", "Too slow", "Something else"];
 
-  /** Photo URLs the server signed for an editor's own messages: only the Supabase signed-URL path of the chat-uploads bucket on the site's own project, at most 4. */
+  /** Photo URLs the server signed for an editor's own messages: only the Supabase signed-URL path of the chat-uploads bucket on the site's own project, at most 8. */
   function cleanUploadUrls(list, base) {
     var out = [];
     (Array.isArray(list) ? list : []).forEach(function (u) {
-      if (out.length < 4 && typeof u === "string" && base && u.indexOf(base + "/storage/v1/object/sign/chat-uploads/") === 0 && u.length < 1200) out.push(u);
+      if (out.length < 8 && typeof u === "string" && base && u.indexOf(base + "/storage/v1/object/sign/chat-uploads/") === 0 && u.length < 1200) out.push(u);
     });
     return out;
+  }
+
+  /** The photo numbers (photo-7) that go with a message's photos, as positive whole numbers; [] when the server sent none or they don't line up. */
+  function cleanNumbers(list, count) {
+    if (!Array.isArray(list) || list.length !== count) return [];
+    for (var i = 0; i < list.length; i++) if (typeof list[i] !== "number" || !(list[i] >= 1 && list[i] <= 100000) || Math.floor(list[i]) !== list[i]) return [];
+    return list.slice();
+  }
+
+  /** The photo reading in a conversation (GET /chat/conversations/:id `photos`): { total, read, reading, active, followUp }, or null when nothing is going on. */
+  function cleanPhotos(p) {
+    if (!p || typeof p !== "object") return null;
+    var n = function (v) { return typeof v === "number" && v >= 0 && v < 100000 ? Math.floor(v) : 0; };
+    var out = { total: n(p.total), read: n(p.read), reading: n(p.reading), active: p.active === true, followUp: p.follow_up === true };
+    return out.active || out.followUp ? out : null;
+  }
+
+  /** The line under the conversation while photos are read: "Reading photos… 4 of 6", then "Adding them to the tray…". */
+  function photoProgress(p) {
+    if (!p) return "";
+    if (p.reading > 0) return "Reading photos… " + p.read + " of " + (p.read + p.reading);
+    if (p.followUp || p.active) return "Adding them to the tray…";
+    return "";
+  }
+
+  /** The tray strip's "Reading 3 photos · Sam" entries (GET /chat/plan `reading`): [{ name, count, mine }], names cut, at most 4. */
+  function cleanReading(list) {
+    var out = [];
+    (Array.isArray(list) ? list : []).forEach(function (e) {
+      if (out.length >= 4 || !e || typeof e !== "object" || typeof e.count !== "number" || !(e.count >= 1)) return;
+      out.push({ name: typeof e.name === "string" && e.name.trim() ? e.name.trim().slice(0, 40) : "Someone", count: Math.min(999, Math.floor(e.count)), mine: e.mine === true });
+    });
+    return out;
+  }
+  function readingLine(e) {
+    return "Reading " + e.count + " photo" + (e.count === 1 ? "" : "s") + " · " + (e.mine ? "you" : e.name);
+  }
+  /** The note by the Save button while someone else's photos are still being read (Save still works). */
+  function readingSaveNote(entries) {
+    var others = entries.filter(function (e) { return !e.mine; });
+    if (!others.length) return "";
+    return others.map(function (e) { return e.name + " has " + e.count + " photo" + (e.count === 1 ? "" : "s") + " still being read"; }).join("; ") + ".";
   }
 
   /** A signed-in editor's chat as the server returns it (GET /chat/conversations/:id): same cleaning as the local history, plus the turn id and feedback. */
   function cleanServerMessages(list, origin, photoBase) {
     var out = [];
     (Array.isArray(list) ? list : []).forEach(function (m) {
-      if (!m || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") return;
+      if (!m || (m.role !== "user" && m.role !== "assistant" && m.role !== "event") || typeof m.content !== "string") return;
+      if (m.role === "event") {
+        // a note from the site ("Photos read: 5 recipes, 1 to check"): a status line in the conversation, plain text
+        if (m.content.trim()) out.push({ role: "event", content: m.content.trim().slice(0, 300) });
+        return;
+      }
       var msg = { role: m.role, content: m.content };
       if (m.role === "user") {
         var photos = cleanUploadUrls(m.images, photoBase);
-        if (photos.length) msg.images = photos;
+        if (photos.length) {
+          msg.images = photos;
+          var nums = cleanNumbers(m.photo_numbers, photos.length);
+          if (nums.length) msg.numbers = nums;
+        }
       }
       if (m.role === "assistant") {
         var replies = cleanReplyItems(m.replies, origin);
@@ -452,6 +503,12 @@
     cleanNav: cleanNav,
     cleanQuestion: cleanQuestion,
     cleanTray: cleanTray,
+    cleanNumbers: cleanNumbers,
+    cleanPhotos: cleanPhotos,
+    photoProgress: photoProgress,
+    cleanReading: cleanReading,
+    readingLine: readingLine,
+    readingSaveNote: readingSaveNote,
     trayLine: trayLine,
     balanceLine: balanceLine,
     trayExpiryNotice: trayExpiryNotice,
@@ -553,6 +610,22 @@
   var chat = anonChat; // what the panel shows: anonChat, or an editor's server chat { server: true, id (server id or null), messages }
   var mode = "public"; // "public" | "editor" (decided by the server from the token: GET /chat/me)
   var me = { signedIn: false, email: "" };
+  // Photos being read in the open conversation (cleanPhotos): the panel polls the conversation while there is something on its way.
+  var photoState = null;
+  var lastReplyAt = "";
+  var photoTimer = null;
+  var photoLineEl = null;
+  // The newest reply this browser has seen (GET /chat/me reports the newest one on the server: newer means the bubble's dot on page load).
+  var SEEN_KEY = "recipes-chat-seen";
+  function markSeen(at) {
+    if (typeof at !== "string" || !at) return;
+    var seen = readJson(localStorage, SEEN_KEY);
+    if (!seen || seen.email !== me.email || !(seen.at >= at)) writeJson(localStorage, SEEN_KEY, { email: me.email, at: at.slice(0, 40) });
+  }
+  function seenAt() {
+    var seen = readJson(localStorage, SEEN_KEY);
+    return seen && seen.email === me.email && typeof seen.at === "string" ? seen.at : "";
+  }
   var checkingMe = !!(RA && RA.getSession()); // until /chat/me has answered we don't know which chat to show
   var locked = switchedOffEarlier ? "off" : null; // null | "off" (switched off on the server) | "signin" (editors only) | "account" (signed in, but can't use it)
   var listing = false; // the chats list is open
@@ -739,15 +812,37 @@
     return a;
   }
 
+  /** The number badge on each photo of a message (photo-7 is "7"): the same numbers the chat uses for them. */
+  function paintBadges(wrap, numbers) {
+    var shots = wrap.querySelectorAll(".chat-shot");
+    Array.prototype.forEach.call(shots, function (shot, i) {
+      var old = shot.querySelector(".chat-photo-num");
+      if (old) shot.removeChild(old);
+      var n = numbers && numbers[i];
+      if (!n) return;
+      var badge = el("span", "chat-photo-num", { "aria-hidden": "true" });
+      badge.textContent = String(n);
+      shot.appendChild(badge);
+      var img = shot.querySelector("img");
+      if (img) img.setAttribute("alt", "Photo " + n + " you sent");
+    });
+  }
+
   function messageEl(m, live) {
+    if (m.role === "event") {
+      var line = el("p", "chat-event", { role: "status" });
+      line.textContent = m.content;
+      return line;
+    }
     var wrap = el("div", "chat-msg " + (m.role === "user" ? "is-user" : "is-bot"));
     var body = el("div", "chat-body");
     if (m.role === "user") {
       if (m.images && m.images.length) {
         var strip = el("div", "chat-photos");
         m.images.forEach(function (u) {
-          var img = el("img", "chat-photo", { src: u, alt: "A photo you sent", loading: "lazy", decoding: "async" });
-          strip.appendChild(img);
+          var shot = el("span", "chat-shot");
+          shot.appendChild(el("img", "chat-photo", { src: u, alt: "A photo you sent", loading: "lazy", decoding: "async" }));
+          strip.appendChild(shot);
         });
         body.appendChild(strip);
       }
@@ -758,6 +853,7 @@
       }
     } else renderInto(doc, body, m.content, origin);
     wrap.appendChild(body);
+    if (m.role === "user" && m.numbers) paintBadges(wrap, m.numbers);
     if (m.role !== "user") {
       if (m.cards && m.cards.length) setCards(wrap, m.cards);
       if (live && m.nav) wrap.appendChild(navEl(m.nav));
@@ -895,13 +991,64 @@
   }
 
   function paintNotice() {
-    var working = panel.hidden && !unread && !!(streaming || trayBusy);
+    var working = panel.hidden && !unread && !!(streaming || trayBusy || photoState);
     var dotOn = panel.hidden && unread;
     dot.hidden = !dotOn;
     bubble.classList.toggle("is-working", working);
     bubble.setAttribute("aria-label", dotOn ? "Chat about recipes: new reply" : working ? "Chat about recipes: still answering" : "Chat about recipes");
   }
   /** Something arrived (an answer, an error, a save) while the panel was closed: the dot on the bubble until it is opened. */
+  function paintPhotoLine() {
+    if (photoLineEl && photoLineEl.parentNode) photoLineEl.parentNode.removeChild(photoLineEl);
+    photoLineEl = null;
+    var text = mode === "editor" && chat.server ? photoProgress(photoState) : "";
+    if (!text || locked || checkingMe) return;
+    photoLineEl = el("p", "chat-status chat-reading", { role: "status" });
+    photoLineEl.textContent = text;
+    log.appendChild(photoLineEl);
+  }
+
+  /** Photos are being read (or the follow-up is on its way): ask the conversation again in a while, and show the line under it. */
+  function schedulePhotoPoll(photos, soon) {
+    clearTimeout(photoTimer);
+    photoState = photos || null;
+    paintPhotoLine();
+    paintNotice();
+    if (mode !== "editor" || !chat.server || !chat.id || (!photoState && !soon)) return;
+    photoTimer = setTimeout(pollPhotos, soon ? 1500 : panel.hidden ? 15000 : 5000); // closed panel: slower, but the ring and the dot still work
+  }
+  function sameMessages(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i].role !== b[i].role || a[i].content !== b[i].content) return false;
+    return true;
+  }
+  function pollPhotos() {
+    var convId = chat.id;
+    if (mode !== "editor" || !chat.server || !convId) return;
+    if (streaming || listing) return schedulePhotoPoll(photoState); // a turn of our own is running: it reloads when it ends
+    authedFetch(apiBase + "/conversations/" + encodeURIComponent(convId))
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(
+        function (j) {
+          if (!j || chat.id !== convId || mode !== "editor") return;
+          if (streaming) return schedulePhotoPoll(photoState);
+          var next = cleanServerMessages(j.messages, origin, photoBase);
+          var photos = cleanPhotos(j.photos);
+          if (!sameMessages(next, chat.messages)) {
+            var grew = next.length > chat.messages.length;
+            chat.messages = next;
+            photoState = photos;
+            renderAll();
+            loadTray({ highlight: true });
+            if (grew) markUnread();
+          }
+          if (!panel.hidden) markSeen(j.last_reply_at);
+          schedulePhotoPoll(photos);
+        },
+        function () { schedulePhotoPoll(photoState); }
+      );
+  }
+
   function markUnread() {
     if (!panel.hidden) return;
     unread = true;
@@ -947,6 +1094,7 @@
       if (m.question && last) log.appendChild(questionEl(m.question));
       if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
+    paintPhotoLine();
     paintPlaceholder();
     toBottom();
     watchPublishing();
@@ -1031,6 +1179,30 @@
     keyboardUnfold();
     var photos = mode === "editor" && chat.server && !action ? pending.slice() : [];
     if ((!text && !photos.length) || streaming || checkingMe) return;
+    // photos still uploading: the message goes as soon as they are up (the input keeps it until then)
+    var uploading = photos.filter(function (p) { return p.state === "uploading"; });
+    if (uploading.length) {
+      if (sendQueued) return;
+      sendQueued = true;
+      photoNote = "Sending as soon as the photos are uploaded…";
+      paintShelf();
+      Promise.all(uploading.map(function (p) { return p.promise; })).then(function () {
+        sendQueued = false;
+        photoNote = "";
+        if (pending.some(function (p) { return p.state === "failed"; })) {
+          photoNote = "A photo didn't upload: tap it to try again, or remove it.";
+          paintShelf();
+          return;
+        }
+        send(text, opts);
+      });
+      return;
+    }
+    if (photos.some(function (p) { return p.state === "failed"; })) {
+      photoNote = "A photo didn't upload: tap it to try again, or remove it.";
+      paintShelf();
+      return;
+    }
     retireChips();
     Array.prototype.forEach.call(log.querySelectorAll(".chat-feedback"), function (f) { f.classList.add("is-old"); }); // earlier turns keep their thumbs, dimmed
     var editorTurn = mode === "editor" && chat.server;
@@ -1042,7 +1214,9 @@
     var sent = { role: "user", content: text };
     if (photos.length) sent.images = photos.map(function (p) { return p.url; });
     chat.messages.push(sent);
-    log.appendChild(messageEl(sent));
+    var sentEl = messageEl(sent);
+    log.appendChild(sentEl);
+    if (photoLineEl) log.appendChild(photoLineEl); // the reading line stays last
     saveChat();
     if (photos.length) pending = [];
     paintShelf();
@@ -1109,16 +1283,35 @@
     }
 
     // An editor sends only the new message and the conversation id (the server owns the history); a visitor sends their own.
+    // Photos uploaded on pick go as their paths (in picked order); photos that couldn't use the upload route go as data, as before.
+    var byPath = photos.length && photos.every(function (p) { return !!p.path; });
     var payload = editorTurn
-      ? { conversation_id: chat.id || undefined, message: text, page: pageState(), action: action || undefined, images: photos.length ? photos.map(function (p) { return p.data; }) : undefined }
+      ? {
+          conversation_id: chat.id || undefined,
+          message: text,
+          page: pageState(),
+          action: action || undefined,
+          image_paths: byPath ? photos.map(function (p) { return p.path; }) : undefined,
+          images: photos.length && !byPath ? photos.map(function (p) { return p.data; }) : undefined,
+        }
       : { conversation_id: chat.id, messages: wellFormed(chat.messages.slice(-MAX_SENT)), page: pageState() };
-    (editorTurn ? authedFetch : fetch)(apiUrl, {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then(function (res) {
+    var busyTries = 0;
+    function attempt() {
+      return (editorTurn ? authedFetch : fetch)(apiUrl, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).then(onResponse);
+    }
+    attempt().then(onDone, onFail);
+    function onResponse(res) {
+        if (editorTurn && res.status === 409) {
+          // another turn of this chat is running (the photos' follow-up): wait, then send again
+          var busy = new Error("busy");
+          busy.name = "Busy";
+          throw busy;
+        }
         if (editorTurn && res.status === 404) {
           chat.id = null; // that conversation is gone (expired or deleted): the next message starts a new one
           rememberEditorChat();
@@ -1166,6 +1359,13 @@
                   if (reply.turn_id) pendingTurn = { conv: chat.id, turn: reply.turn_id, t: Date.now() };
                   saveUi();
                 }
+              } else if (ev.name === "photos") {
+                var nums = cleanNumbers(ev.data.numbers, (sent.images || []).length);
+                if (nums.length) {
+                  sent.numbers = nums;
+                  paintBadges(sentEl, nums);
+                  saveChat();
+                }
               } else if (ev.name === "title") {
                 if (chat.server && ev.data.conversation_id === chat.id && typeof ev.data.title === "string") {
                   chat.title = ev.data.title.slice(0, 80);
@@ -1194,10 +1394,19 @@
         return pump().then(function () {
           if (failed) throw new Error(failed);
         });
-      })
-      .then(
-        function () { finish(true); },
-        function (err) {
+    }
+    function onDone() {
+      finish(true);
+      if (editorTurn) schedulePhotoPoll(photoState, true); // photos may be on their way now (and the reply's time marks it seen)
+    }
+    function onFail(err) {
+          if (err && err.name === "Busy" && streaming === mine && busyTries++ < 75) {
+            setStatus("Sending when I'm done…");
+            setTimeout(function () {
+              if (streaming === mine) attempt().then(onDone, onFail);
+            }, 4000);
+            return;
+          }
           if (err && err.name === "AuthExpired") {
             // The sign-in sheet is open: put the message back so it isn't lost, and keep the panel open through a page-reloading sign-in.
             input.value = text;
@@ -1223,10 +1432,9 @@
           finish(false);
           if (!stillMine || (err && err.name === "AbortError")) return;
           if (cut) showError("The connection to the chat dropped before the answer finished. Try again in a moment.");
-          else showError(err && err.message ? err.message : "Something went wrong with the chat.");
+          else showError(err && err.name === "Busy" ? "I'm still busy with the last answer. Try again in a moment." : err && err.message ? err.message : "Something went wrong with the chat.");
           markUnread();
-        }
-      );
+    }
   }
 
   function dropped() {
@@ -1497,7 +1705,9 @@
     }
     mode = "public";
     pending = [];
+    creating = null;
     paintShelf();
+    schedulePhotoPoll(null);
     clearTray();
     chat = anonChat;
     // An expired session keeps the open conversation's id, so signing in again comes back to it; only an explicit sign-out forgets it.
@@ -1550,8 +1760,11 @@
           }
           setListing(false);
           paintHeader();
+          photoState = j ? cleanPhotos(j.photos) : null;
           renderAll();
           saveUi();
+          if (j && !panel.hidden) markSeen(j.last_reply_at);
+          schedulePhotoPoll(photoState);
         },
         function (err) {
           if (seq !== loadSeq || (err && err.name === "AuthExpired")) return;
@@ -1592,6 +1805,17 @@
         function (j) {
           me = { signedIn: !!j.signedIn, email: String(j.email || "") };
           checkingMe = false;
+          // a reply that came while this browser wasn't looking (a follow-up after the photos were read): the bubble's dot
+          var last = j.last_reply && typeof j.last_reply.at === "string" ? j.last_reply.at : "";
+          if (last && j.role === "editor") {
+            if (!seenAt()) markSeen(last); // first time on this browser: nothing is "new"
+            else if (last > seenAt() && panel.hidden) {
+              unread = true;
+              paintNotice();
+              saveUi();
+            }
+            lastReplyAt = last;
+          }
           if (j.role === "editor") {
             locked = locked === "off" ? null : locked;
             enterEditor();
@@ -1763,6 +1987,7 @@
   var keyboardOpen = false;
   var keyboardForcedOpen = false; // unfolded by a tap or a sent message while the keyboard is up, until it closes
   var trayTimer = null;
+  var trayReading = []; // "Reading 3 photos · Sam": photos being read across the household (cleanReading)
   var traySeq = 0;
   var trayBusy = false;
 
@@ -1929,9 +2154,27 @@
     });
   }
 
+  function readingEl() {
+    var box = el("div", "tray-reading", { role: "status" });
+    trayReading.forEach(function (e) {
+      var line = el("p", "tray-reading-line");
+      line.textContent = readingLine(e);
+      box.appendChild(line);
+    });
+    return box;
+  }
+
   function renderTray(opts) {
     refreshActionChips();
     while (tray.firstChild) tray.removeChild(tray.firstChild);
+    if (mode === "editor" && trayReading.length && (!trayData || !trayData.count)) {
+      // nothing staged yet, but photos are being read (someone's): the strip says so, nothing to save
+      tray.hidden = false;
+      panel.classList.add("has-tray");
+      tray.classList.remove("is-folded");
+      tray.appendChild(readingEl());
+      return;
+    }
     if (!trayData || mode !== "editor" || !trayData.count) {
       tray.hidden = true;
       panel.classList.remove("has-tray");
@@ -1969,6 +2212,7 @@
 
     var scroller = el("div", "tray-scroll"); // the cards and details scroll here; the button below never overlaps them
     tray.appendChild(scroller);
+    if (trayReading.length) scroller.appendChild(readingEl()); // "Reading 3 photos · Sam": not tray items, nothing to save
     var notice = trayExpiryNotice(trayData, Date.now());
     var btn = trayButton(trayData);
     if (notice) {
@@ -2011,6 +2255,12 @@
       bm.textContent = trayData.blocked;
       scroller.appendChild(bm);
     }
+    var waitNote = readingSaveNote(trayReading);
+    if (waitNote && btn.kind === "save") {
+      var wn = el("p", "tray-msg tray-wait");
+      wn.textContent = waitNote; // Save still works
+      scroller.appendChild(wn);
+    }
     var go = el("button", "save-button tray-go", { type: "button" });
     go.textContent = btn.label;
     go.disabled = btn.kind === "finalising" || btn.kind === "blocked" || trayBusy;
@@ -2029,8 +2279,12 @@
 
   function scheduleTrayPoll() {
     clearTimeout(trayTimer);
-    if (!trayData || panel.hidden || mode !== "editor") return;
-    var waiting = trayData.state === "finalising" || trayData.items.some(function (i) { return i.photo && i.photo.status === "pending"; });
+    if ((!trayData && !trayReading.length) || panel.hidden || mode !== "editor") return;
+    if (!trayData) {
+      trayTimer = setTimeout(function () { loadTray({ highlight: true }); }, 10000);
+      return;
+    }
+    var waiting = trayReading.length > 0 || trayData.state === "finalising" || trayData.items.some(function (i) { return i.photo && i.photo.status === "pending"; });
     if (waiting) trayTimer = setTimeout(function () { loadTray({ highlight: true }); }, 10000); // each load is a server dry run: poll slowly, and only while something is pending
   }
 
@@ -2051,6 +2305,7 @@
     ).then(function (j) {
       if (seq !== traySeq || mode !== "editor" || !j) return;
       var next = cleanTray(j.tray, origin, photoBase);
+      trayReading = cleanReading(j.reading);
       var wasSeen = traySeen;
       traySeen = {};
       if (next) next.items.forEach(function (i) { traySeen[i.id] = true; });
@@ -2071,6 +2326,7 @@
     trayLoading = null;
     traySeq++;
     trayData = null;
+    trayReading = [];
     traySeen = null;
     trayMsg = "";
     trayDetail = null;
@@ -2191,6 +2447,7 @@
     bubble.setAttribute("aria-expanded", "true");
     doc.body.classList.add("chat-open");
     unread = false;
+    if (lastReplyAt) markSeen(lastReplyAt);
     paintNotice();
     paintContext();
     layoutPanel();
@@ -2212,6 +2469,11 @@
     if (streaming) streaming.abort();
     streaming = null;
     setBusy(false);
+    pending = [];
+    creating = null;
+    photoNote = "";
+    paintShelf();
+    schedulePhotoPoll(null);
     if (mode === "editor") {
       chat = { server: true, id: null, title: "", messages: [] };
       rememberEditorChat();
@@ -2247,18 +2509,93 @@
   });
   // --- photos to send ------------------------------------------------------------------------------------------------------------
   // Each picked photo is decoded and redrawn on a canvas at most 1600px on the long edge as a JPEG (no EXIF leaves the phone, and the upload
-  // stays small); the server checks and re-encodes it again. { url (a local preview), data (the JPEG as a data URL) }.
-  var MAX_PHOTOS = 4;
+  // stays small); the server checks and re-encodes it again. It is uploaded at once, on its own (POST /chat/uploads), while the editor types,
+  // so sending is instant: { url (a local preview), data (the JPEG as a data URL), state: uploading | done | failed | local, path, promise }.
+  // "local": the server has no upload route (an older one): the photo goes with the message as data, as before.
+  var MAX_PHOTOS = 8;
   var pending = [];
   var photoNote = "";
+  var sendQueued = false;
+  var creating = null; // the first upload of a chat that doesn't exist yet makes it; the others wait for its id
+  function uploadPhoto(p) {
+    p.state = "uploading";
+    var post = function (convId) {
+      return authedFetch(apiBase + "/uploads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: p.data, conversation_id: convId || undefined }) }).then(function (res) {
+        return res.json().then(
+          function (j) {
+            if (res.status === 404 && j && j.error === "Not found") return { local: true }; // an older server without the upload route
+            if (!res.ok) throw new Error((j && j.error) || "upload");
+            return j;
+          },
+          function () { throw new Error("upload"); }
+        );
+      });
+    };
+    var forChat = chat;
+    var run;
+    if (chat.id) run = post(chat.id);
+    else if (creating) {
+      run = creating.then(function (id) {
+        if (id === "local") return { local: true };
+        if (!id) throw new Error("upload"); // the first one failed: retry this one by hand
+        return post(id);
+      });
+    } else {
+      run = post(null);
+      var mine = (creating = run.then(function (j) { return j && j.local ? "local" : j && j.conversation_id; }, function () { return null; }));
+      mine.then(function () { if (creating === mine) creating = null; });
+    }
+    p.promise = run.then(
+      function (j) {
+        if (chat !== forChat || pending.indexOf(p) === -1) return; // a new chat, or the photo was removed meanwhile
+        if (j.local) {
+          p.state = "local";
+        } else {
+          if (!chat.id && typeof j.conversation_id === "string") {
+            chat.id = j.conversation_id; // the upload made the chat: the message goes to it
+            rememberEditorChat();
+            saveUi();
+          }
+          if (j.conversation_id !== chat.id || typeof j.path !== "string") throw new Error("moved");
+          p.path = j.path;
+          p.state = "done";
+        }
+        paintShelf();
+      }
+    ).then(null, function (err) {
+      if (pending.indexOf(p) === -1) return;
+      p.state = "failed";
+      if (err && err.message && err.message !== "upload" && err.message !== "moved") photoNote = err.message;
+      paintShelf();
+    });
+    paintShelf();
+    return p.promise;
+  }
   function paintShelf() {
     while (shelf.firstChild) shelf.removeChild(shelf.firstChild);
+    var before = chatPhotoCount();
     pending.forEach(function (p, i) {
-      var chip = el("div", "chat-attachment");
-      chip.appendChild(el("img", "chat-attachment-img", { src: p.url, alt: "Photo " + (i + 1) }));
-      var x = iconButton("chat-attachment-remove", "Remove photo " + (i + 1), ICON.close);
+      var chip = el("div", "chat-attachment" + (p.state === "uploading" ? " is-uploading" : p.state === "failed" ? " is-failed" : ""));
+      chip.appendChild(el("img", "chat-attachment-img", { src: p.url, alt: "Photo " + (before + i + 1) }));
+      var num = el("span", "chat-photo-num", { "aria-hidden": "true" });
+      num.textContent = String(before + i + 1); // the number it will have in this chat
+      chip.appendChild(num);
+      if (p.state === "uploading") {
+        var spin = el("span", "chat-attachment-state", { role: "status" });
+        spin.textContent = "Uploading…";
+        chip.appendChild(spin);
+      } else if (p.state === "failed") {
+        var again = el("button", "chat-attachment-state", { type: "button" });
+        again.textContent = "Retry";
+        again.addEventListener("click", function () {
+          photoNote = "";
+          uploadPhoto(p);
+        });
+        chip.appendChild(again);
+      }
+      var x = iconButton("chat-attachment-remove", "Remove photo " + (before + i + 1), ICON.close);
       x.addEventListener("click", function () {
-        pending.splice(i, 1);
+        pending.splice(pending.indexOf(p), 1);
         paintShelf();
       });
       chip.appendChild(x);
@@ -2303,6 +2640,16 @@
       img.src = src;
     });
   }
+  /** How many photos this chat already has (the next one picked is that + 1). */
+  function chatPhotoCount() {
+    var n = 0;
+    chat.messages.forEach(function (m) {
+      if (m.role !== "user" || !m.images) return;
+      var top = m.numbers && m.numbers.length ? m.numbers[m.numbers.length - 1] : 0;
+      n = Math.max(n + m.images.length, top);
+    });
+    return n;
+  }
   attachBtn.addEventListener("click", function () {
     if (!streaming && pending.length < MAX_PHOTOS) picker.click();
   });
@@ -2316,7 +2663,11 @@
       return chain.then(function () {
         if (!/^image\//.test(file.type || "image/")) { photoNote = (photoNote ? photoNote + " " : "") + "Only photos can be attached."; return; }
         return downscale(file).then(
-          function (p) { if (pending.length < MAX_PHOTOS) pending.push(p); },
+          function (p) {
+            if (pending.length >= MAX_PHOTOS) return;
+            pending.push(p);
+            if (mode === "editor" && chat.server) uploadPhoto(p);
+          },
           function () { photoNote = (photoNote ? photoNote + " " : "") + "Couldn't read one of those photos. Try a JPEG or PNG."; }
         );
       });

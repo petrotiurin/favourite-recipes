@@ -511,6 +511,8 @@ export async function POST(request) {
       // photos uploaded on pick belong to this conversation, and only once
       const used = new Set(photoList(rows).map((p) => p.path));
       if (imagePaths.some((p) => !p.startsWith(`${convo.id}/`) || used.has(p))) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
+      // another turn of this chat is running (a follow-up, usually): say so before anything is counted; the panel sends again when it's done
+      if (lockHeld(convo)) return reply({ busy: true, error: "I'm still working on the last answer. Your message goes as soon as I'm done." }, 409);
     }
     // `messages` is built after the photos are checked and stored (below)
   } else {

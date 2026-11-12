@@ -2348,6 +2348,78 @@ body.chat-open {
   border-radius: 10px;
 }
 
+/* Each photo carries its number in the chat (photo-7 is "7"), so "4 and 5 are one recipe" means something. Neutral, not a week colour. */
+.chat-shot {
+  position: relative;
+  display: block;
+}
+
+.chat-photo-num {
+  position: absolute;
+  left: 0.3rem;
+  bottom: 0.3rem;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.chat-attachment .chat-photo-num {
+  left: 0.2rem;
+  bottom: 0.2rem;
+}
+
+/* An attachment still uploading (dimmed, a quiet label) or that failed (a Retry button on it). */
+.chat-attachment.is-uploading .chat-attachment-img {
+  opacity: 0.55;
+}
+
+.chat-attachment.is-failed .chat-attachment-img {
+  opacity: 0.4;
+}
+
+.chat-attachment-state {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 0.1rem 0.35rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.65rem;
+  white-space: nowrap;
+}
+
+button.chat-attachment-state {
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* A note from the site in the conversation ("Photos read: 5 recipes, 1 to check"): a quiet centred status line, not a bubble. */
+.chat-event {
+  margin: 0.2rem auto;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  background: var(--track);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+  max-width: 90%;
+}
+
 .chat-input {
   flex: 1;
   min-height: 2.75rem;
@@ -3052,6 +3124,22 @@ body.chat-open {
   margin: 0.4rem 1rem 0;
   font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+/* "Reading 3 photos · Sam": photos being read across the household. Not tray items (nothing to save); a quiet line above the cards. */
+.tray-reading {
+  margin: 0.4rem 1rem 0;
+}
+
+.tray-reading-line {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.chat-tray > .tray-reading {
+  margin: 0.6rem 1rem;
 }
 
 /* Next week as it will be after Save, in numbers (from the server's recipe data). */
