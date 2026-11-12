@@ -348,10 +348,12 @@ The reader is configured on its own, separately from the conversation:
   fallback to `CHAT_EDITOR_MODEL` and no "photos go to the main model" path: the editor model may well be text-only. If it
   is missing anyway, the server logs it and a message with photos gets a clear error ("Photo reading isn't set up.")
   instead of a silent fallback.
-- **Starting model (decided):** `CHAT_VISION_MODEL` starts as the same model as `CHAT_EDITOR_MODEL` (which already reads
-  photos today), set explicitly in its own variable. It still runs with the reader's own prompt and limits, and can be
-  switched later without touching the conversation. If the editor model is ever changed to a text-only one,
-  `CHAT_VISION_MODEL` stays on a vision model.
+- **Starting model (decided):** `CHAT_VISION_MODEL` starts with the same model **ID** as `CHAT_EDITOR_MODEL` (a model
+  that can read images), set explicitly in its own variable. Only the model is shared, nothing else: the photo reader is
+  its own call with only the reader prompt (2.3) and the photos, with no conversation, no chat prompt, no catalogue and no
+  tools, and the main conversation still never gets the photos (only the text report). It can be switched later without
+  touching the conversation. If the editor model is ever changed to a text-only one, `CHAT_VISION_MODEL` stays on a vision
+  model.
 - The editor prompt drops the "read the screenshot yourself" lines and says "call `read_recipe_photos`".
 - Limits: each photo read counts toward the editor's rate limit (200 per hour per user) as one call, so 6 photos cost 6 (plus
   one per second-pass group), and the follow-up turn counts as one turn. At most 8 photos per message and 30 not yet reported per conversation; `read_recipe_photos` counts as one call in `MAX_TOOL_CALLS_PER_TURN`. One photo failing (timeout,
@@ -430,7 +432,8 @@ the quiet period (10s), the lease (90s), the 30-photo limit, and how strict the 
 
 Decided:
 
-- **PQ1.** `CHAT_VISION_MODEL` starts as the same model as `CHAT_EDITOR_MODEL`, set in its own variable (3).
+- **PQ1.** `CHAT_VISION_MODEL` starts with the same model ID as `CHAT_EDITOR_MODEL`, in its own variable; it runs only the
+  reader prompt, never the conversation (3).
 - **PQ2.** 8 photos per message (2.7).
 - **PQ3.** No capture time: photos are grouped by picked order and content only (2.2).
 - **PQ4–PQ6.** Ship with the defaults and log the signals and the user's corrections to Langfuse; tune after a few weeks.
