@@ -269,7 +269,7 @@ and lists the earlier ones in one line so the model always has the whole picture
 ```
 new since last time: photo-7 to photo-9
 photo-7: "Miso aubergine" · serves 2 · 540 kcal (estimated) · 35 min · ok
-photo-8: "Lemon chicken orzo" · serves 4 · 610 kcal · 40 min · ok · looks like "Lemon chicken orzo" already in the tray (added by Anna)
+photo-8: "Lemon chicken orzo" · serves 4 · 610 kcal · 40 min · ok · looks like "Lemon chicken orzo" already in the tray (added by Sam)
 photo-6+9: "Dal makhani" (photo-9 carries on photo-6, 15s apart): re-read together · serves 4 · 480 kcal (estimated) · 60 min · ok · replaces its card
 unsure: none
 earlier: photo-1 to photo-6, 5 staged, photo-5 unreadable
@@ -285,7 +285,7 @@ starting a new batch). Dropped: the user doesn't think in batches, and they adde
 
 ### 2.6 Two editors adding photos at once (P6)
 
-Both editors (say Petro and Anna) can open the site and add photos at the same time, each in their own chat. Chats stay per
+Both editors can open the site and add photos at the same time, each in their own chat. Chats stay per
 person (as decided in `docs/chatbot-design.md`, Q4); **the household tray is where the two streams meet**. Each
 conversation keeps its own queue rows, photo numbers and reports, exactly as above.
 
@@ -294,14 +294,14 @@ conversation keeps its own queue rows, photo numbers and reports, exactly as abo
 - **Duplicates are caught against the whole tray.** The report's checks (2.5, step 4) compare every read recipe with every
   item in the household tray, whoever added it, and with the book: a similar title (normalised words, most of them shared)
   **and** mostly the same ingredients, since two screenshots of one recipe rarely give the exact same title. A likely
-  duplicate is marked in the report ("looks like … already in the tray (added by Anna)"), and `stage_create_recipe` with
-  `from_photo` refuses it with `{ "duplicate_of": "<item id>", "added_by": "Anna" }` unless `keep_both: true` is passed. So
-  the follow-up doesn't add a second card: it says "Anna already added *Lemon chicken orzo*", and stages only if the user
+  duplicate is marked in the report ("looks like … already in the tray (added by Sam)"), and `stage_create_recipe` with
+  `from_photo` refuses it with `{ "duplicate_of": "<item id>", "added_by": "Sam" }` unless `keep_both: true` is passed. So
+  the follow-up doesn't add a second card: it says "Sam already added *Lemon chicken orzo*", and stages only if the user
   then says "add mine anyway". If the user asks for their dish photo to be that recipe's photo, it's a `stage_update_recipe`
-  on Anna's card, with the usual `photo_from_attachment` rule.
-- **Each sees what the other has in flight.** The tray view (`trayView` in `lib/tray.js`) adds "Reading 3 photos · Anna"
+  on the other editor's card, with the usual `photo_from_attachment` rule.
+- **Each sees what the other has in flight.** The tray view (`trayView` in `lib/tray.js`) adds "Reading 3 photos · Sam" (the other editor's name)
   entries from the household's queued and reading `photo_reads` rows. They are not tray items: nothing to save, never in the
-  shopping list's out-of-date hash. While any are there, the Save button carries a line "Anna has 3 photos still being
+  shopping list's out-of-date hash. While any are there, the Save button carries a line "Sam has 3 photos still being
   read" (Save still works). The tray already polls while something is pending; reading photos count as pending.
 - **What stays private.** Neither chat shows the other person's photos or conversation: only the count and the name in the
   tray strip, and the staged cards with "added by", as today.
@@ -314,7 +314,7 @@ conversation keeps its own queue rows, photo numbers and reports, exactly as abo
 
 Alternatives considered: one **household photo inbox** (the queue belongs to the household, each chat's prompt mentions the
 other person's photos, either can stage from them) and one **shared household chat**. The inbox would let you say "use
-Anna's photo 2" but makes numbering awkward (each chat needs labels like "Anna's 2") and puts the other person's photos into
+the other editor's photo 2" but makes numbering awkward (each chat needs labels like "Sam's 2") and puts the other person's photos into
 your chat's model; it can be added later on top of this. A shared chat goes against per-person chats (Q4), queues two
 people's turns behind each other and blurs whose sign-in a turn runs under.
 
