@@ -60,7 +60,7 @@ and **how the content carries on**.
    where A ended at 3; B has a method but no ingredients and its method uses A's ingredients; B repeats some of A's text
    (scrolling screenshots overlap).
 
-**Flow (all on the server, inside the read job started by `read_recipe_photos`, 2.5)**
+**Flow (all on the server, on the read queue that `read_recipe_photos` feeds, 2.5)**
 
 1. **First pass:** read every photo on its own, all at the same time. Most recipes are one screenshot, so they are done.
 2. **Group:** in time order, join two neighbouring photos only when **both** signals agree: taken close together (under
@@ -76,7 +76,7 @@ and **how the content carries on**.
    photos for that: the photos on the user's message carry a number badge 1–6 in the panel, so "4 and 5" means something
    to the user.
 5. **Corrections by message:** "3 and 4 are one recipe" / "2 and 3 are different" makes the main model call
-   `read_recipe_photos` again with `join: [[3, 4]]` or `split: [2, 3]`, which starts a new job that re-reads only those
+   `read_recipe_photos` again with `join: [[3, 4]]` or `split: [2, 3]`, which queues a re-read of only those
    photos.
 
 A `dish` photo is never read as a recipe. The summary lists it ("photo 6: a photo of a dish, not a recipe") so the main
@@ -135,37 +135,77 @@ errors attached to the right recipe.
 
 ### 2.5 Asynchronous: the model starts the read, the server reports back (P5)
 
-`read_recipe_photos` stays a **tool the main model calls**, but it doesn't wait for the reads. It starts a background job
-and returns at once:
+`read_recipe_photos` stays a **tool the main model calls**, but it doesn't wait for the reads. It puts the photos of the
+user's latest message on a queue and returns at once:
 
 ```
-read_recipe_photos({ })  ->  { "started": true, "job": "read-7f3a", "photos": 6,
+read_recipe_photos({ })  ->  { "queued": 6, "batch": "read-7f3a", "photos": "photo-1 to photo-6", "in_batch": 6,
                                "note": "Reading in the background. Tell the user, then end your turn: the result arrives as a note from the site." }
 ```
 
 The model says something like "Reading your 6 photos, I'll come back when they're done" (with chips) and the turn ends.
-The editor can close the panel, go to another page, or ask something unrelated in the meantime.
+The editor can close the panel, go to another page, ask something unrelated, or **send more photos** in the meantime.
 
-**The job**
+**The queue**
 
-- Started with `background()` (`lib/background.js`, Vercel `waitUntil`), the same way staged photos are made today. It runs
-  the flow in 2.2 (first pass, grouping, second pass), then the checks (a dry run of `create_recipe` through `runOperation`
-  for each recipe, and a title match against the catalogue for possible duplicates), on the server, after the reader, so
-  the reader itself never sees the catalogue.
-- Its state is a row in a new Supabase table **`photo_reads`** (`id`, `conversation_id` (deleted with the chat), `user_id`,
-  `status` running / done / failed, `progress` (photos read so far), the photo paths and capture times, `result` (groups,
-  read recipes, the summary), `error`, `started_at`, `finished_at`, `delivered_at`). Service-role only, RLS on with no
-  policies, like `trays`. A later turn can still stage `photo-2` ("make it serve 4") from it without reading again; only the
-  owner's conversation can resolve its ids (another conversation's id is "not found").
-- One job per conversation at a time: calling the tool while one is running returns `{ "running": true, "job": "read-7f3a",
-  "progress": "4 of 6" }` instead of starting another.
-- It has its own deadline (`CHAT_VISION_JOB_MS`, 240s, under the function's 300s `maxDuration`). A job still `running` after
-  its deadline (the instance died) is marked failed by whoever looks at it next (a poll, a turn), and that failure is reported
-  like any other result.
+A lightweight queue in Postgres: no new service, no long-running worker. Two tables in Supabase (service-role only, RLS on
+with no policies, like `trays`; rows deleted with the chat):
+
+- **`photo_reads`**: one row per photo. `id`, `conversation_id`, `batch_id`, `n` (its number in the conversation:
+  `photo-7`), `path` (in `chat-uploads`), `taken_at`, `status` queued / reading / read / failed / skipped, `attempts`,
+  `lease_until`, `result` (what the first pass read, with the flags of 2.2), `error`. Unique on (`conversation_id`, `path`),
+  so the same photo is never queued twice.
+- **`photo_batches`**: one row per batch. `id`, `conversation_id`, `user_id`, `status` open / grouping / done / failed,
+  `result` (groups, read recipes, checks, the summary), `created_at`, `finished_at`, `delivered_at`.
+
+Photo numbers carry on through the conversation (the second message's photos are `photo-7`, `photo-8`…), and the badges in
+the panel show the same numbers, so "7 and 8 are one recipe" is never ambiguous. A later turn can still stage `photo-2`
+("make it serve 4") from what was read without reading again; only the owner's conversation can resolve these ids
+(another conversation's id is "not found").
+
+**How it runs**
+
+1. **Enqueue.** The tool inserts one `photo_reads` row per photo into the conversation's **open** batch (or opens one), then
+   starts a **drainer** with `background()` (`lib/background.js`, Vercel `waitUntil`, as staged photos are made today).
+2. **Drain.** A drainer repeatedly claims the next queued photos of the conversation, oldest `taken_at` first, with one
+   Postgres function: `claim_photo_reads(conversation, max)` (`update … set status = 'reading', lease_until = now() + lease,
+   attempts = attempts + 1 … where id in (select id … where status = 'queued' … for update skip locked limit …) returning *`).
+   It never claims more than `CHAT_VISION_CONCURRENCY` reading at once for the conversation, counting what other drainers
+   hold. It reads each claimed photo (the first pass of 2.2) and stores the result, then claims again; when nothing is left
+   to claim, it exits.
+3. **Every enqueue starts its own drainer.** Several drainers for one conversation are fine (`skip locked` means none reads a
+   photo twice, and the cap counts all of them), and this way a photo queued just as a drainer is exiting is never left
+   behind. A photo whose lease runs out (the instance died) goes back to `queued`; after 2 attempts it is `failed`, and its
+   line in the summary says so.
+4. **Close the batch.** The drainer that finds the batch with nothing queued or reading left closes it, atomically
+   (`update photo_batches set status = 'grouping' where id = … and status = 'open' and not exists (…queued or reading…)`),
+   so exactly one drainer goes on. It runs grouping and the second pass (2.2) over **all** the batch's photos, then the checks
+   (a dry run of `create_recipe` through `runOperation` per recipe, and a title match against the catalogue for possible
+   duplicates; on the server, after the reader, so the reader itself never sees the catalogue), stores the result, sets the
+   batch `done` and starts the delivery below.
+
+**Adding photos while it reads**
+
+- More photos sent while a batch is **open** join that batch: they are read straight away alongside the rest, and the batch
+  only closes once they are read too, so grouping sees every photo together. A recipe split over the two messages (the user
+  screenshotted two more pages of it) is joined like any other.
+- A message that is **only photos** (no text) while a batch is open doesn't need the model: the server adds them to the
+  queue itself, without a model call, and answers with a fixed line, "Added 3 photos (9 in all). I'll come back when they're
+  all read.", the same way `lib/shortcuts.js` answers "Not yet" today. A message with photos **and** text goes to the model,
+  which calls `read_recipe_photos` again: `{ "queued": 3, "batch": "read-7f3a", "in_batch": 9 }`.
+- Photos that arrive after the batch has closed (it is grouping) start a **new batch**, read and delivered on their own. If
+  the first photo of the new batch looks like it carries on from the last photo of the previous batch (2.2's signals), the
+  new batch's grouping includes that photo, re-reads them together, and the note says "photo-7 carries on photo-6's recipe";
+  the follow-up stages it under the same title, which replaces the earlier card.
+- A batch takes at most 12 photos; the 13th starts a new batch.
+- "Skip photo 4" makes the model call `read_recipe_photos({ skip: [4] })`: a queued photo becomes `skipped`, a read one is
+  left out of grouping (or, if its batch is already delivered, its staged card is dropped with `drop_tray_item`).
+
+**The progress the model and the user see** comes from the same rows: "Reading photos… 6 of 9".
 
 **Reporting back: a note from the site, then a follow-up turn**
 
-When the job finishes (done or failed), its result is delivered to the conversation **exactly once**:
+When a batch finishes (done or failed), its result is delivered to the conversation **exactly once**:
 
 - **As what kind of message?** Not a `system` message: through OpenRouter, several providers only accept a system message at
   the start of the thread (they reject it or move it to the top). Not a second `tool` result either: the tool call already
@@ -174,20 +214,20 @@ When the job finishes (done or failed), its result is delivered to the conversat
   form the server already uses for its chip nudges. It is stored in `messages` as a new role **`event`** (migration: widen the
   `role` check), so it can be shown in the panel as a small status line ("Photos read: 5 recipes, 1 to check") and is turned
   into that user-role note only when the thread is sent to a model.
-- **Who delivers it.** Whoever claims it first, atomically (`update photo_reads set delivered_at = now() where id = … and
+- **Who delivers it.** Whoever claims it first, atomically (`update photo_batches set delivered_at = now() where id = … and
   delivered_at is null returning …`):
-  1. **The follow-up turn (normal case).** When the job finishes it calls the server's own internal route
+  1. **The follow-up turn (normal case).** When the batch finishes, its drainer calls the server's own internal route
      `POST /chat/internal/continue` (a fresh function run, so the follow-up gets its own time limit; authenticated with a
      server-only secret `CHAT_INTERNAL_SECRET`). That route claims the result and runs a turn for the conversation with the
-     note as its input. The model does what the workflow says: stages the clear recipes with `from_photo`, and asks about
-     doubtful pairs and unreadable photos with `ask_user`. The reply, the cards and the question are stored like any turn.
+     note as its input. The model **stages every clear recipe straight away** with `from_photo` (decided: staging only goes
+     into the tray, never the site), and asks about doubtful pairs and unreadable photos with `ask_user`. The reply, the cards and the question are stored like any turn.
   2. **The user's next turn**, if the user sends a message before the follow-up has claimed it: the note goes into that
      turn just before the user's message, and the follow-up finds it already delivered and does nothing.
-- **A user turn already running** when the job finishes: the follow-up waits for it. Each conversation has a turn lock
+- **A user turn already running** when the batch finishes: the follow-up waits for it. Each conversation has a turn lock
   (`turn_lock_until` on `conversations`, taken at the start of every turn, user or follow-up, released at the end, expiring
   by itself after the turn budget). The follow-up retries after the lock frees; a user turn that ends checks for an
   undelivered result and starts the follow-up itself.
-- **While the job runs**, every turn's prompt carries a line `[photo read read-7f3a still running: 4 of 6 read]`, so the model
+- **While a batch is open**, every turn's prompt carries a line `[photo read read-7f3a still running: 4 of 6 read]`, so the model
   answers unrelated questions normally and never claims the photos are done.
 
 **The follow-up turn's caller.** There is no user token in a server-started turn, so the caller is rebuilt from the
@@ -197,11 +237,12 @@ into the tray. Save still needs a fresh token (`POST /chat/plan/apply`), as toda
 
 **What the user sees**
 
-- The panel shows the job on a status line under the model's "Reading your 6 photos" reply: "Reading photos… 4 of 6",
+- The panel shows the batch on a status line under the model's "Reading your 6 photos" reply: "Reading photos… 4 of 6",
   then the follow-up's reply streaming in. While the panel is open it polls `GET /chat/conversations/:id?after=<last
-  message>` every 5s, only while a job or follow-up is pending (as the tray already polls while photos are being made).
+  message>` every 5s, only while a batch or follow-up is pending (as the tray already polls while photos are being made).
 - Panel closed or another page: the reply is stored server-side. On the next page load the bubble shows a dot when the
   conversation has an assistant message newer than the last one the browser saw (`GET /chat/me` reports it).
+- The attach button stays usable while photos are being read; new photos join the open batch (above).
 - The user can type while the follow-up is running: the message waits in the input as "Sending when I'm done…" and goes
   as soon as the turn lock frees (or the server answers 409 and the client retries).
 - No push notifications or emails: out of scope.
@@ -241,8 +282,8 @@ The reader is configured on its own, separately from the conversation:
 | `OPENROUTER_CHAT_VISION_KEY` | its own key, for its own spend cap | the editor key `OPENROUTER_CHAT_EDITOR_KEY` |
 | `CHAT_VISION_MAX_TOKENS` | per read | 4000 |
 | `CHAT_VISION_TIMEOUT_MS` | per read, so one slow photo can't use up the turn | 60000 |
-| `CHAT_VISION_CONCURRENCY` | reads at the same time | 6 |
-| `CHAT_VISION_JOB_MS` | deadline for the whole read job | 240000 |
+| `CHAT_VISION_CONCURRENCY` | reads at the same time, per conversation | 6 |
+| `CHAT_VISION_LEASE_MS` | how long a claimed photo is held before it goes back on the queue | 90000 |
 | `CHAT_INTERNAL_SECRET` | authenticates the server's own follow-up route | **required** |
 
 - `CHAT_VISION_MODEL` must be set (it goes into `mcp-server/README.md` with the other required settings). There is no
@@ -251,13 +292,13 @@ The reader is configured on its own, separately from the conversation:
   instead of a silent fallback.
 - The editor prompt drops the "read the screenshot yourself" lines and says "call `read_recipe_photos`".
 - Limits: each photo read counts toward the editor's rate limit (200 per hour per user) as one call, so 6 photos cost 6 (plus
-  one per second-pass group), and the follow-up turn counts as one turn. At most 8 photos per call and one job per
-  conversation at a time; `read_recipe_photos` counts as one call in `MAX_TOOL_CALLS_PER_TURN`. One photo failing (timeout,
+  one per second-pass group), and the follow-up turn counts as one turn. At most 8 photos per message and 12 per batch; `read_recipe_photos` counts as one call in `MAX_TOOL_CALLS_PER_TURN`. One photo failing (timeout,
   refusal, unparseable) doesn't fail the others: its line says why.
-- The reads run outside any turn, so `CHAT_TURN_BUDGET_MS` doesn't cover them: the job has its own deadline,
-  `CHAT_VISION_JOB_MS` (240s). The follow-up turn has the normal turn budget.
+- The reads run outside any turn, so `CHAT_TURN_BUDGET_MS` doesn't cover them. A drainer stops claiming once it has run
+  for about 200s (under the function's 300s `maxDuration`) and starts a fresh drainer for whatever is left, so a long queue
+  never hits the limit. The follow-up turn has the normal turn budget.
 - `CHAT_INTERNAL_SECRET` (Vercel, server only) authenticates `POST /chat/internal/continue`.
-- Langfuse: the job is its own trace in the conversation's session (`photo read read-7f3a`), each read its own generation
+- Langfuse: each batch is its own trace in the conversation's session (`photo read read-7f3a`), each read its own generation
   (`photo read 3+4`, model and prompt version recorded), images redacted as today (`redactImages`); the follow-up turn is
   traced like any turn, named `chat follow-up`.
 
@@ -269,9 +310,12 @@ The reader is configured on its own, separately from the conversation:
   reveal anything because the reader has nothing to reveal.
 - `read_recipe_photos` is `access: "read"` with `editorOnly: true`, enforced in `offeredTools`, `dispatch` and the handler,
   like `fetch_url`. Not registered on `/mcp`. The registry test (`test/tools.test.js`) covers it automatically.
+- The queue only ever holds photos the editor uploaded to their own conversation (`chat-uploads` paths checked by
+  `isUploadPath` and the conversation id); the only-photos shortcut runs after the same sign-in and `EDITORS` checks as any
+  editor message.
 - The follow-up turn runs as the conversation's owner, only while they are in `EDITORS`, and like every chat turn it can
-  only stage; Save still needs the editor's fresh token. `/chat/internal/continue` takes only a job id and the secret, never
-  a role, a user or a message, and refuses a job that is already delivered.
+  only stage; Save still needs the editor's fresh token. `/chat/internal/continue` takes only a batch id and the secret, never
+  a role, a user or a message, and refuses a batch that is already delivered.
 - The note is built by the server from the reader's checked output (titles, numbers, fixed words); text read off a photo
   that goes into it is fenced and shortened, like `fetch_url`'s page data.
 - `taken_at` is a hint from the browser: used only for ordering and grouping, never stored on the site.
@@ -282,30 +326,31 @@ The reader is configured on its own, separately from the conversation:
 | File | Change |
 | --- | --- |
 | `mcp-server/lib/photo-reader.js` (new) | the reader: parallel reads with a concurrency limit and timeout, the two passes, grouping, summary |
-| `mcp-server/lib/photo-jobs.js` (new) | start / progress / finish / stale check / claim-once delivery of read jobs; starting the follow-up |
-| `supabase/migrations/…_photo_reads.sql` (new) | `photo_reads` table; `event` role on `messages`; `turn_lock_until` on `conversations` |
+| `mcp-server/lib/photo-queue.js` (new) | enqueue, drainers (claim, read, lease, retry), closing a batch, claim-once delivery, starting the follow-up, progress |
+| `supabase/migrations/…_photo_reads.sql` (new) | `photo_reads` + `photo_batches` tables, `claim_photo_reads()` function; `event` role on `messages`; `turn_lock_until` on `conversations` |
+| `mcp-server/lib/shortcuts.js` | the only-photos message while a batch is open: queued without a model call |
 | `mcp-server/api/chat.js` | `POST /chat/internal/continue` (secret, follow-up turn); turn lock on every turn; `?after=` on `GET /chat/conversations/:id`; unread flag on `/chat/me` |
 | `mcp-server/lib/photo-reader-prompt.js` (new) | the reader's own prompts (single / consecutive), version, schema |
-| `mcp-server/lib/tools.js` | `read_recipe_photos` (read, editor only, `join` / `split`); `from_photo` on `stage_create_recipe` |
+| `mcp-server/lib/tools.js` | `read_recipe_photos` (read, editor only, `join` / `split` / `skip`); `from_photo` on `stage_create_recipe` |
 | `mcp-server/lib/chat.js` | per-round limit allowing up to 8 `from_photo` stage calls; `event` messages become site notes; the "still running" line; the follow-up turn |
 | `mcp-server/lib/chat-prompt.js` | no image instructions for the main model, "call `read_recipe_photos`" |
 | `mcp-server/lib/chat-store.js` | `event` messages; replay read photos as text notes |
 | `mcp-server/lib/chat-uploads.js`, `api/chat.js` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` + `taken_at` on the message |
 | `mcp-server/lib/config.js` | the `CHAT_VISION_*` settings |
-| `templates/chat.js` | `MAX_PHOTOS` 8; capture time before downscaling; upload on pick with progress on the chip; number badges; job status line; polling while a job or follow-up is pending; unread dot on the bubble; "Sending when I'm done…" |
+| `templates/chat.js` | `MAX_PHOTOS` 8; capture time before downscaling; upload on pick with progress on the chip; number badges carrying on through the chat; batch status line; attach stays usable while reading; polling while a batch or follow-up is pending; unread dot on the bubble; "Sending when I'm done…" |
 | `mcp-server/workflows/plan-recipes.md` ("In chat") | with photos: call `read_recipe_photos` once, tell the user it's reading and end the turn; when the note arrives, ask about the "unsure" pairs and unreadable photos, stage with `from_photo`; the recipe-writing rules shared with the reader prompt |
 | `mcp-server/scripts/fakes.js` | fake reader responses (with delays) for `npm run dev` |
 | `docs/chatbot-design.md`, `CLAUDE.md`, `mcp-server/README.md` (settings), `design.md` (badges, upload progress) | updated in the same change |
-| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (time + content, neighbours only), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, the tool returns at once and one job per conversation, exactly-once delivery (follow-up vs. the user's next turn), the turn lock, stale jobs fail, the follow-up caller drops to note-only when the owner left `EDITORS`, the internal route refuses without the secret, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
+| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (time + content, neighbours only), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, the tool returns at once, the queue (no photo read twice with several drainers, the per-conversation cap, leases and retries, a photo queued as a drainer exits is still read, photos added to an open batch join it, a closed batch starts a new one, the boundary join, 12 per batch, skip), the only-photos shortcut makes no model call, exactly-once delivery (follow-up vs. the user's next turn), the turn lock, the follow-up caller drops to note-only when the owner left `EDITORS`, the internal route refuses without the secret, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
 
 ## 6. Phasing
 
 1. **Quick relief (no new tool):** photo limits to 6 everywhere (with a smaller per-photo size so 6 fit in one request),
    `REPLAY_MAX_IMAGES` to 6, and a workflow line "stage each recipe as soon as you've read it, at most 2 per reply". More
    reliable, not faster.
-2. **Parallel reading:** P1–P4 plus the async job with delivery on the user's next turn only, with `CHAT_VISION_MODEL`
+2. **Parallel reading:** P1–P4 plus the queue (with photos added to an open batch) and delivery on the user's next turn only, with `CHAT_VISION_MODEL`
    set before it deploys. This is the speed-up.
-3. **Follow-up turn:** the internal route, the turn lock, polling and the unread dot (the rest of P5).
+3. **Follow-up turn:** the internal route, the turn lock, staging straight away, polling and the unread dot (the rest of P5).
 4. **Separate uploads:** P6, up to 8 photos, instant send.
 
 ## 7. Open questions
@@ -317,6 +362,10 @@ The reader is configured on its own, separately from the conversation:
   report when they were picked, not taken. Check the EXIF time and `file.lastModified` on real screenshots from each phone.
   If neither is usable, grouping falls back to the picked order plus the content signals, and more pairs become questions.
 - **PQ4.** The time gap for "taken together": start at 60s and tune it on real batches.
-- **PQ5.** Should the follow-up turn stage the clear recipes straight away, or only report and ask ("5 read, stage them
-  all?")? Staging is safe (the tray, not the site) and saves a round trip; asking keeps the user in charge while away.
-  Suggest: stage the clear ones.
+- **PQ5.** The batch limit (12) and the lease (90s): tune on real batches.
+
+Decided:
+
+- The follow-up turn stages every clear recipe straight away and asks only about the doubtful ones (2.5).
+- `read_recipe_photos` is a tool, asynchronous, on a lightweight Postgres queue; photos can be added while it reads (2.5).
+- `CHAT_VISION_MODEL` is required, with no fallback (3).
