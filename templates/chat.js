@@ -1185,9 +1185,13 @@
       if (sendQueued) return;
       sendQueued = true;
       photoNote = "Sending as soon as the photos are uploaded…";
+      sendBtn.disabled = true; // it's on its way: no second tap
+      sendBtn.setAttribute("aria-label", "Sending when the photos are uploaded");
       paintShelf();
       Promise.all(uploading.map(function (p) { return p.promise; })).then(function () {
         sendQueued = false;
+        sendBtn.disabled = false;
+        sendBtn.setAttribute("aria-label", "Send");
         photoNote = "";
         if (pending.some(function (p) { return p.state === "failed"; })) {
           photoNote = "A photo didn't upload: tap it to try again, or remove it.";
@@ -2597,6 +2601,7 @@
       x.addEventListener("click", function () {
         pending.splice(pending.indexOf(p), 1);
         paintShelf();
+        input.focus({ preventScroll: true }); // the button is gone: keep focus somewhere sensible
       });
       chip.appendChild(x);
       shelf.appendChild(chip);

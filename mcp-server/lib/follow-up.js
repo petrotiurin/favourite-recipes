@@ -44,8 +44,13 @@ export async function runFollowUp(eventId, { origin } = {}) {
     const rows = await getMessages(convo.id);
     const photos = photoList(rows);
     const reads = await readsOf(convo.id).catch(() => []);
-    const messages = withPhotoNotes(historyForModel(rows), photos, reads);
-    if (messages[messages.length - 1]?.role !== "user") return { status: "handled" };
+    // the notes this turn answers go LAST (one may have been stored while another turn was still writing its reply)
+    const claimedIds = new Set(claimed.map((e) => e.id));
+    const messages = withPhotoNotes(historyForModel(rows.filter((r) => !claimedIds.has(r.id))), photos, reads);
+    const note = claimed.map((e) => `[Note from the site, not from the user: ${String(e.content?.content || "")}]`).join("\n\n");
+    const last = messages[messages.length - 1];
+    if (last?.role === "user" && typeof last.content === "string") messages[messages.length - 1] = { ...last, content: `${last.content}\n\n${note}` };
+    else messages.push({ role: "user", content: note });
     let extraNote = "";
     try {
       extraNote = [await trayNote(await loadTray(), caller), progressNote(reads, photos)].filter(Boolean).join("\n");

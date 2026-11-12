@@ -650,7 +650,7 @@ export async function POST(request) {
             const n = out.queued.length;
             const reading = out.status.queued + out.status.reading;
             const line = n
-              ? `Added ${n} photo${n === 1 ? "" : "s"} (${reading} being read). I'll come back when they're all read.`
+              ? `Added ${n} more photo${n === 1 ? "" : "s"}: reading ${reading} in all. I'll come back when they're all read.`
               : "I couldn't add those photos to the reading just now (too many waiting, or the hourly limit). Try again in a while.";
             emit({ type: "text", delta: line });
             emit({ type: "done", suggestions: false });

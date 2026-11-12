@@ -143,6 +143,13 @@ export async function drain(conversationId, { origin, startedAt = clock.now() } 
       }
       if (st.reading || !st.unreported) return; // another drainer is reading (it reports), or there is nothing to report
       const wait = st.newestAt + config.chatVisionSettleMs - clock.now();
+      // a turn of this chat is running (usually the one that sent the photos): report after it, so the note comes after its reply and the
+      // follow-up isn't refused by the lock
+      const convo = await conversationById(conversationId);
+      if (lockHeld(convo)) {
+        await deps.sleep(2000);
+        continue;
+      }
       if (wait > 0) {
         await deps.sleep(Math.min(wait, 5000)); // the quiet period: photos sent a few seconds apart go into one report
         continue;
@@ -267,6 +274,7 @@ export async function report(conversationId, lot, { origin } = {}) {
   const lines = [];
   const meta = { pairs: pairs.map(({ a, b, overlap, signals, decision }) => ({ a, b, overlap, signals, decision })), duplicates: [], groups: [] };
   const counts = { ok: 0, check: 0 };
+  const why = { duplicate: 0, unsure: 0, unreadable: 0, incomplete: 0 };
   const newNs = lot.map((r) => r.n).sort((a, b) => a - b);
   lines.push(`new since last time: ${newNs.length === 1 ? `photo-${newNs[0]}` : `photo-${newNs[0]} to photo-${newNs[newNs.length - 1]}`}${newNs.length > 1 && newNs[newNs.length - 1] - newNs[0] + 1 !== newNs.length ? ` (${newNs.map((n) => `photo-${n}`).join(", ")})` : ""}`);
   const seenThisLot = [];
@@ -292,6 +300,7 @@ export async function report(conversationId, lot, { origin } = {}) {
     if (read.kind === "other") {
       lines.push(`${label}: not a recipe${read.unreadable ? ` (${quote(read.unreadable, 80)})` : ""}.`);
       counts.check++;
+      why.unreadable++;
       continue;
     }
     const { fields, estimated, missing } = fieldsFromRead(read);
@@ -311,17 +320,24 @@ export async function report(conversationId, lot, { origin } = {}) {
     if (stagedIds.length) bits.push(members.length > 1 ? "replaces its card" : "already staged");
     lines.push(`${label}${carries}${together}: ${bits.join(" · ")} · ${status}`);
     if (status === "ok" && !dup.match && !inLot) counts.ok++;
-    else counts.check++;
+    else {
+      counts.check++;
+      if (dup.match || inLot) why.duplicate++;
+      else if (status.startsWith("incomplete")) why.incomplete++;
+      else why.unreadable++;
+    }
     seenThisLot.push({ label, title: fields.title, ingredients: ingNames(fields) });
     meta.groups.push({ photos: label, pass, status, estimated });
   }
   for (const r of lot.filter((x) => x.status === "failed")) {
     lines.push(`photo-${r.n}: couldn't be read (${r.error || "the reader failed"}). Ask the user for a clearer photo or the text.`);
     counts.check++;
+    why.unreadable++;
   }
   const unsure = pairs.filter((p) => p.decision === "unsure" && (isNew(p.a) || isNew(p.b)));
   lines.push(`unsure: ${unsure.length ? unsure.map((p) => `photo-${p.a} and photo-${p.b} may be one recipe (${p.why})`).join("; ") : "none"}`);
   counts.check += unsure.length;
+  why.unsure += unsure.length;
   const earlier = rows.filter((r) => r.reported_at && !newIds.has(r.id) && r.status !== "skipped");
   if (earlier.length) {
     const staged = earlier.filter((r) => r.tray_item_id).length;
@@ -332,7 +348,16 @@ export async function report(conversationId, lot, { origin } = {}) {
     "What to do now: stage every recipe marked ok straight away with stage_create_recipe({ from_photo: \"photo-N\" }) (one call each; pass only fields the user changed). Don't stage likely duplicates: say who already added them (stage with keep_both: true only if the user says to add theirs anyway). Ask about the unsure pairs and the unreadable or incomplete photos with ask_user (\"Same recipe\" / \"Two recipes\" for a pair). Then one short line on what was added."
   );
   const recipes = meta.groups.length;
-  const summary = `Photos read: ${recipes} recipe${recipes === 1 ? "" : "s"}${counts.check ? `, ${counts.check} to check` : ""}`;
+  // the panel's status line says what "to check" is, in plain words
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const checks = [
+    why.duplicate && `${plural(why.duplicate, "already added", "already added")}`,
+    why.unsure && plural(why.unsure, "pair that may be one recipe", "pairs that may be one recipe"),
+    why.incomplete && plural(why.incomplete, "incomplete", "incomplete"),
+    why.unreadable && plural(why.unreadable, "unreadable", "unreadable"),
+  ].filter(Boolean);
+  const again = lot.every((r) => r.group_id || r.status === "failed") && lot.some((r) => r.group_id); // only photos reported before: a correction
+  const summary = `${again ? "Photos read again" : "Photos read"}: ${plural(recipes, "recipe", "recipes")}${checks.length ? ` · ${checks.join(" · ")}` : ""}`;
   const content = `photos read.\n${lines.join("\n")}`;
 
   const eventId = await appendEvent(conversationId, { content, summary, kind: "photos" });
@@ -387,8 +412,8 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
       lines.push(`There is no photo-${n} in this chat.`);
       continue;
     }
+    // only photos read together with it come back into a report (its neighbours can't be joined across it anyway)
     for (const m of groupOf(r)) if (byN.has(m) && m !== n) touch(byN.get(m));
-    for (const m of [n - 1, n + 1]) if (byN.has(m) && byN.get(m).status !== "skipped") touch(byN.get(m));
     touch(r, { status: "skipped", lease_until: null, group_id: null });
     let dropped = "";
     if (r.tray_item_id && trayIds.has(r.tray_item_id) && caller) {

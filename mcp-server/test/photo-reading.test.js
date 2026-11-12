@@ -435,7 +435,7 @@ test("photos sent with no words while others are being read join the queue with 
   const modelCalls = openrouter.requests.length;
   const second = await events(await post({ conversation_id, message: "", page: { page: "index" }, images: [asUrl(await solid(GREEN)), asUrl(await solid(BLUE))] }));
   assert.equal(openrouter.requests.length, modelCalls, "no model call");
-  assert.match(second.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /^Added 2 photos \(3 being read\)\. I'll come back when they're all read\.$/);
+  assert.match(second.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /^Added 2 more photos: reading 3 in all\. I'll come back when they're all read\.$/);
   assert.deepEqual(second.find((e) => e.name === "photos").data.numbers, [2, 3]);
   // while they are read, the panel reports progress and the turn's note says so
   const panel = await (await get(`conversations/${conversation_id}`)).json();
@@ -587,4 +587,44 @@ test("photos uploaded on pick: the first upload makes the (hidden) conversation,
   // reusing an already-attached photo is refused
   assert.equal((await post({ conversation_id: a.conversation_id, message: "again", image_paths: [a.path] })).status, 400);
   assert.equal((await (await get("conversations")).json()).conversations.length, 1);
+});
+
+test("a report that is ready while the user's own turn is still answering waits for it: the note comes after the reply and the follow-up still runs", async () => {
+  reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
+  const convo = await store.createConversation({ userId: OWNER, title: "slow turn" });
+  await store.appendMessages(convo.id, [{ role: "user", content: "add this", images: [{ path: `${convo.id}/${crypto.randomUUID()}.jpg` }] }]);
+  const path = supabase.tables.messages.at(-1).content.images[0].path;
+  supabase.objects.set(`chat-uploads/${path}`, { bytes: await solid(RED), type: "image/jpeg" });
+  // a user turn holds the lock while the photo is read and the report is due
+  assert.equal(await store.takeTurnLock(convo.id, "u:slow", 60_000), true);
+  const drained = queue.enqueuePhotos({ conversationId: convo.id, caller: caller(), photos: [{ n: 1, path }], origin: "https://mcp.test" });
+  await drained;
+  for (let i = 0; i < 20 && !supabase.tables.photo_reads.every((r) => r.status === "read"); i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(notes(convo.id).length, 0, "no report while the turn is running");
+  // the turn writes its reply and ends
+  await store.appendMessages(convo.id, [{ role: "assistant", content: "I'm reading your photo now." }]);
+  await followUp.afterTurn(convo.id, "u:slow");
+  await background.backgroundIdle();
+  const rows = supabase.tables.messages.filter((m) => m.conversation_id === convo.id).map((m) => m.role);
+  assert.deepEqual(rows.slice(0, 3), ["user", "assistant", "event"], "the note comes after the reply");
+  assert.deepEqual(trayItems().map((i) => i.op.title), ["Miso Aubergine"], "and the follow-up staged it");
+});
+
+test("the follow-up hands over its notes last even if a reply was stored after them", async () => {
+  reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
+  const { conversation_id } = await say("add this", { images: [asUrl(await solid(RED))] });
+  // a stored note, then an assistant row after it (two turns overlapping): the follow-up must still answer the note
+  supabase.tables.trays.length = 0;
+  const id = await store.appendEvent(conversation_id, { content: notes(conversation_id)[0].content.content, summary: "Photos read: 1 recipe" });
+  await store.appendMessages(conversation_id, [{ role: "assistant", content: "something else" }]);
+  assert.equal((await followUp.runFollowUp(id)).status, "done");
+  const req = openrouter.requests.at(-1);
+  assert.match(req.messages.findLast((m) => m.role === "user").content, /photos read\./);
+});
+
+test("the status line says what is left to check, in words", async () => {
+  reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
+  reads[await colourKey(GREEN)] = "garbage";
+  const { conversation_id } = await say("add these", { images: [asUrl(await solid(RED)), asUrl(await solid(GREEN))] });
+  assert.equal(notes(conversation_id)[0].content.summary, "Photos read: 1 recipe · 1 unreadable");
 });

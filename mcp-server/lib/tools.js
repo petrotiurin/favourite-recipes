@@ -426,7 +426,7 @@ const STAGE_TOOLS = [
         fromRows = read.rows;
         replaces = read.staged;
         if (read.estimated.length) notes.push(`estimated (not in the photo): ${read.estimated.map((e) => e.replace("total_mins", "time")).join(", ")}; say so`);
-        reason ||= `read from ${read.label}`;
+        reason ||= `from photo ${read.label.replace(/^photo-/, "").replace(/\+/g, " + ")}`;
       }
       const parsed = z.object(createFields).safeParse(fields);
       if (!parsed.success) {
