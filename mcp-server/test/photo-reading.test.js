@@ -696,3 +696,16 @@ test("the internal secret is only ever sent to CHAT_INTERNAL_URL, never to the r
   assert.deepEqual(internalHits, [], "no call to a host taken from headers");
   assert.deepEqual(trayItems().map((i) => i.op.title), ["Miso Aubergine"], "the follow-up still ran");
 });
+
+test("joining photos takes their earlier cards out of the tray at once, even when the joined recipe isn't staged (it's a duplicate)", async () => {
+  reads[await colourKey(RED)] = fakeRead("Mushroom Risotto");
+  reads[await colourKey(BLUE)] = fakeRead("Pea And Mint Soup");
+  reads[await colourKey(YELLOW)] = fakeRead("Lemon Chicken Orzo");
+  reads[`together:${await colourKey(BLUE)},${await colourKey(YELLOW)}`] = fakeRead("Mushroom Risotto"); // the re-read matches photo 1's card
+  const { conversation_id } = await say("add these", { images: [asUrl(await solid(RED)), asUrl(await solid(BLUE)), asUrl(await solid(YELLOW))] });
+  assert.deepEqual(trayItems().map((i) => i.op.title).sort(), ["Lemon Chicken Orzo", "Mushroom Risotto", "Pea And Mint Soup"]);
+  await say("2 and 3 are one recipe", { conversation_id });
+  assert.deepEqual(trayItems().map((i) => i.op.title), ["Mushroom Risotto"], "the two halves' cards are gone; the duplicate isn't added twice");
+  assert.match(notes(conversation_id).at(-1).content.summary, /Mushroom Risotto already added/);
+  assert.ok(supabase.tables.photo_reads.filter((r) => r.n > 1).every((r) => !r.tray_item_id));
+});

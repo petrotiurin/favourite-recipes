@@ -623,7 +623,8 @@ export const TOOLS = [
           if (!(await checkRateLimit(ctx.caller)).ok) throw new UserError("You've sent a lot in the last hour, so the photos can't be read again right now. Try again in a while.");
         }
         const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] }, { caller: ctx.caller, origin: ctx.origin });
-        return ok([...lines, "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn."].join("\n"));
+        const rereads = (join?.length || 0) + pairs.length > 0;
+        return ok([...lines, rereads ? "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn." : "Nothing is read again: tell the user what was skipped."].join("\n"));
       }
       const reads = await readsOf(conversationId);
       const queuedPaths = new Set(reads.map((r) => r.path));

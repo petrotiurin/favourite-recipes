@@ -274,6 +274,7 @@ export async function report(conversationId, lot, { origin } = {}) {
   const meta = { pairs: pairs.map(({ a, b, overlap, signals, decision }) => ({ a, b, overlap, signals, decision })), duplicates: [], groups: [] };
   const counts = { ok: 0, check: 0 };
   const why = { duplicate: 0, unsure: 0, unreadable: 0, incomplete: 0 };
+  const dupTitles = [];
   const newNs = lot.map((r) => r.n).sort((a, b) => a - b);
   lines.push(`new since last time: ${newNs.length === 1 ? `photo-${newNs[0]}` : `photo-${newNs[0]} to photo-${newNs[newNs.length - 1]}`}${newNs.length > 1 && newNs[newNs.length - 1] - newNs[0] + 1 !== newNs.length ? ` (${newNs.map((n) => `photo-${n}`).join(", ")})` : ""}`);
   const seenThisLot = [];
@@ -323,7 +324,10 @@ export async function report(conversationId, lot, { origin } = {}) {
     if (status === "ok" && !dup.match && !inLot) counts.ok++;
     else {
       counts.check++;
-      if (dup.match || inLot) why.duplicate++;
+      if (dup.match || inLot) {
+        why.duplicate++;
+        dupTitles.push(fields.title || label);
+      }
       else if (status.startsWith("incomplete")) why.incomplete++;
       else why.unreadable++;
     }
@@ -352,7 +356,7 @@ export async function report(conversationId, lot, { origin } = {}) {
   // the panel's status line says what "to check" is, in plain words
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const checks = [
-    why.duplicate && `${plural(why.duplicate, "already added", "already added")}`,
+    why.duplicate && `${dupTitles.slice(0, 2).join(", ")}${dupTitles.length > 2 ? ` and ${dupTitles.length - 2} more` : ""} already added`,
     why.unsure && plural(why.unsure, "pair that may be one recipe", "pairs that may be one recipe"),
     why.incomplete && plural(why.incomplete, "incomplete", "incomplete"),
     why.unreadable && plural(why.unreadable, "unreadable", "unreadable"),
@@ -385,6 +389,7 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
   const touched = new Map(); // id -> patch
   const touch = (r, patch = {}) => touched.set(r.id, { ...(touched.get(r.id) || {}), reported_at: null, report_lease_until: null, ...patch });
   const groupOf = (r) => (r.group_id ? r.group_id.split("+").map(Number) : [r.n]);
+  const regrouped = new Set(); // rows whose grouping the user changed: their old cards no longer match what they are
   for (const g of join) {
     const ns = [...new Set(g)].sort((a, b) => a - b);
     const missing = ns.filter((n) => !byN.has(n) || byN.get(n).status === "skipped");
@@ -393,6 +398,7 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
       continue;
     }
     ns.forEach((n, i) => touch(byN.get(n), i ? { joined_to: ns[i - 1], split_from_prev: false } : {}));
+    for (const n of ns) for (const m of groupOf(byN.get(n))) if (byN.has(m)) regrouped.add(byN.get(m));
     lines.push(`Joining ${ns.map((n) => `photo-${n}`).join(" + ")}: they are read again together.`);
   }
   for (const pair of split) {
@@ -408,10 +414,19 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
     const rb = byN.get(b);
     for (const n of [...groupOf(byN.get(a)), ...groupOf(rb)]) if (byN.has(n)) touch(byN.get(n));
     touch(rb, { ...(rb.joined_to === a ? { joined_to: null } : {}), ...(b === a + 1 ? { split_from_prev: true } : {}) });
+    for (const n of [...groupOf(byN.get(a)), ...groupOf(rb)]) if (byN.has(n)) regrouped.add(byN.get(n));
     lines.push(`photo-${a} and photo-${b} are now separate recipes.`);
   }
   const { dropItem, loadTray } = await import("./tray.js");
   const trayIds = new Set(((await loadTray().catch(() => null))?.items || []).map((i) => i.id));
+  // A join or split makes the cards staged from those photos wrong (two halves of one recipe, or one card for two): they come out of the tray now,
+  // whatever the re-read finds, so the tray never keeps both the old cards and the new one.
+  const oldCards = [...new Set([...regrouped].map((r) => r.tray_item_id).filter((id) => id && trayIds.has(id)))];
+  if (oldCards.length && caller) {
+    for (const id of oldCards) await dropItem(id, caller).catch(() => null);
+    for (const r of regrouped) if (r.tray_item_id) touch(r, { tray_item_id: null });
+    lines.push(`Took ${oldCards.length === 1 ? "their earlier card" : `their ${oldCards.length} earlier cards`} out of the tray; the new read replaces ${oldCards.length === 1 ? "it" : "them"}.`);
+  }
   for (const n of [...new Set(skip)]) {
     const r = byN.get(n);
     if (!r) {

@@ -190,7 +190,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   const skipAsk = user.match(/skip photo (\d+)/);
   if (joinAsk || splitAsk || skipAsk) {
     if (!lastCall) return tray("read_recipe_photos", joinAsk ? { join: [[Number(joinAsk[1]), Number(joinAsk[2])]] } : splitAsk ? { split: [[Number(splitAsk[1]), Number(splitAsk[2])]] } : { skip: [Number(skipAsk[1])] }, "");
-    return done("Done: I'll come back when they're read again.");
+    return done(skipAsk && !joinAsk && !splitAsk ? `Skipped photo ${skipAsk[1]}.` : "Done: I'll come back when they're read again.");
   }
   // the site's note: photos read. Stage every recipe marked ok (one reply, several calls), ask about the first unsure pair.
   if (/photos read\./.test(full)) {
@@ -204,6 +204,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
       return scriptedStream({ ...opts, text: ok.length ? `Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray.` : "", calls: [{ name: "ask_user", arguments: { question: `Photos ${unsure[1]} and ${unsure[2]} may be one recipe. Are they?`, options: ["Same recipe", "Two recipes"] } }] });
     }
     if (ok.length) return done(`Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray; their photos are being made.`, "Add another", { label: "Finalise list", action: "finalise_plan" });
+    if (/already in the (tray|book)|in this lot/.test(full)) return done("I've read your photos: those recipes are already in the tray or the book, so I didn't add them again. Say \"add mine anyway\" if they're different.", "What's planned?");
     return done("I've read your photos but there was nothing I could add straight away.", "Try again");
   }
   // a link: read it with fetch_url, then stage the recipe from the page's own recipe data

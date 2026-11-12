@@ -2668,7 +2668,7 @@
     var room = MAX_PHOTOS - pending.length;
     var files = picked.slice(0, room);
     picker.value = "";
-    photoNote = picked.length > room ? "Only " + MAX_PHOTOS + " photos per message; added the first " + room + "." : "";
+    photoNote = picked.length > room ? (room ? "Only " + MAX_PHOTOS + " photos per message; added the first " + room + "." : "That's " + MAX_PHOTOS + " photos already, the most for one message: send these first, or remove one.") : "";
     files.reduce(function (chain, file) {
       return chain.then(function () {
         if (!/^image\//.test(file.type || "image/")) { photoNote = (photoNote ? photoNote + " " : "") + "Only photos can be attached."; return; }

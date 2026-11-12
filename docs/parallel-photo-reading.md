@@ -483,6 +483,9 @@ Details decided while building:
   - Kicks restart only work no live lease or running turn covers.
   - A correction made while a report runs isn't overwritten by it.
   - A note no turn can hand over stops the panel's waiting after 10 minutes.
+- **After the second user-flow check:** a join or split takes the cards staged from those photos out of the tray at once (whatever the re-read
+  finds, so the tray never holds both the halves and the whole); the panel's status line names what was already added ("Photos read: 4
+  recipes · Prawn Pad Thai already added"); a skip doesn't promise a re-read.
 - **Uploads on pick** before the first message create the conversation (untitled, so it isn't in the chats list until its first message names it).
   An `image_paths` entry must be this conversation's and not already attached. Old pages keep the data-URL route.
 - **Turn lock:** a busy conversation is refused with 409 `{ busy }` before the rate limit is counted, so the panel's "Sending when I'm done…"
