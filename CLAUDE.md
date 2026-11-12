@@ -3,18 +3,16 @@
 The family's cooking app: the recipe book, this week's and next week's plans, and the shopping list. (It started as a
 migration of a Notion database; it has long outgrown that.) It has three parts:
 
-1. **The site** (GitHub Pages): static HTML/CSS generated at build time from `recipes/*.md` and `shopping-list.json` by
-   the Node build script (`build.js`). Every page is complete and readable with JS off. No framework runtime, no
-   build-time CMS calls at request time, no client-side data fetching to *load* what a page shows.
-2. **Enhancements** (`templates/*.js`): hand-written vanilla JS, copied verbatim into `dist/`. Rules:
-   - No frameworks (React/Vue/etc.), no bundler, no npm packages shipped to `dist/`; hand-written vanilla JS only. Small,
-     pinned CDN libraries are acceptable only if a future feature really needs one.
-   - Optional enhancement: the page's core content (recipe list, recipe pages, shopping list) must already be fully present
-     and readable with JS disabled; JS only adds interactivity on top.
-   - Pages render from data already baked into the HTML at build time (the DOM, or a JSON literal the build script
-     embedded). Runtime network calls are only for **actions**, never to load what the page shows, and only to **our own
-     backend** (part 3) and Supabase Auth, never to third-party APIs directly: saving a stocktake, signing in, and (planned)
-     chatting.
+1. **The site** (GitHub Pages): generated at build time from `recipes/*.md` and `shopping-list.json` by the Node build
+   script (`build.js`) and deployed as static files to GitHub Pages. **The one hard requirement is that it builds in the
+   Pages workflow (GitHub Actions) and is served as static files from GitHub Pages**: no server-side rendering or hosting
+   of the site anywhere else. Today every page is complete with JS off; that is no longer a requirement.
+2. **Client-side JS** (`templates/*.js`): today hand-written vanilla JS, copied verbatim into `dist/`. Rules:
+   - Dynamic JS is allowed: pages may render or load data in the browser, and frameworks, a bundler or npm packages are
+     acceptable as long as the build runs in the Pages workflow and the output is static files. (No longer required: working
+     with JS off, and "pages only render from data baked in at build time".)
+   - Network calls from the browser go only to **our own backend** (part 3), Supabase Auth and the site's own static files,
+     never to third-party APIs directly, and no secrets in the browser: anything that needs a key goes through the backend.
    - The scripts today: `templates/search.js` (client-side title filtering over the already-rendered recipe list),
      `templates/servings.js` (the 1/2/4-servings selector on recipe pages, rescaling ingredient quantities tagged at build time
      by `templates/quantities.js`), `templates/wakelock.js` (the "Keep screen on" toggle on recipe pages, using the Screen Wake
@@ -39,7 +37,7 @@ migration of a Notion database; it has long outgrown that.) It has three parts:
      take the caller and assert the role themselves. A new tool goes in the registry with its access level, and the registry test
      (`mcp-server/test/tools.test.js`) covers it automatically.
 
-The only allowed "moving part" in the build is the Node build script that runs before deploy.
+The build runs in GitHub Actions before deploy (today just the Node build script); whatever it adds must still produce static files for Pages.
 
 ## UI design
 
@@ -104,7 +102,7 @@ panel polls the conversation while photos are read, shows "Reading photos… 4 o
 photos · Sam" for the household. Try it with `npm run dev` (the fake reader reads every photo as one of a few recipes).
 The chat has three off switches (`mcp-server/README.md`): `CHAT_ENABLED=false` (Vercel; every `/chat` route answers 503 `{ disabled: true }`, read per request, needs a redeploy to change), `CHAT_PUBLIC_ENABLED=false` (editors only; 403 `{ signin: true }` for everyone else; `/chat/me` reports `public_enabled`) with the site build variable `CHAT_PUBLIC=false` (`data-public="false"` on the script: bubble only for signed-in visitors), and no `CHAT_API_URL` at build time (no chat at all). The panel shows a calm locked state (switched off / editors only / this account can't use it) with no input, and remembers "switched off" in `sessionStorage` so later pages in the tab have no bubble. Try it all locally with `cd mcp-server && npm run dev` (fake GitHub/OpenRouter/Supabase
 with sign-in accounts, site on :4000; test accounts and ports are at the top of `mcp-server/scripts/dev.js`). Read the design doc before working on any of it; update it (and this file) in the same change when the design moves. The chat must respect the rules above: `templates/chat.js`
-is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), with JS off nothing changes, and auth is
+is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared `auth.js`), and auth is
 enforced on the server by the dispatcher, never by the prompt.
 
 ## Debugging production
@@ -120,7 +118,7 @@ symptoms mapped to their causes (`references/symptoms.md`). Add a symptom there 
 recipes/            source of truth: one .md file per recipe (frontmatter + body)
 images/recipes/     source of truth: one hero image per recipe
 templates/          JS functions that render HTML strings (layout.js, index.js, next-week.js, tiles.js, recipe.js)
-templates/search.js client-side search script, copied verbatim into dist/ (see "Hard constraint" above)
+templates/search.js client-side search script, copied verbatim into dist/ (see "The site" above)
 templates/servings.js client-side servings selector, copied verbatim into dist/; quantities.js tags scalable numbers at build time
 styles/style.css    the one stylesheet, copied verbatim into dist/
 shopping-list.json  combined shopping list for next week's recipes, written by the agent via the MCP server (see "Shopping list")
