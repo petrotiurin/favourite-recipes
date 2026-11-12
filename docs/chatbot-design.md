@@ -126,8 +126,9 @@ Consequences of going through OpenRouter:
   also gives us the photo URL). Not offered to the public model.
 - **Model-agnostic tools.** No reliance on one provider's special tools or response shapes: tool
   schemas are plain JSON Schema, UI tools (§6) are ordinary function calls.
-- **Images** (screenshots in editor mode) go as image content parts, so the editor model must
-  support vision.
+- **Images** (screenshots in editor mode) no longer go to the editor model at all: a separate photo
+  reader (`CHAT_VISION_MODEL`) reads them in the background and the editor model only sees a text
+  report, so it needs no vision. See `docs/parallel-photo-reading.md` (built).
 
 Streaming is needed for the chat UX anyway.
 

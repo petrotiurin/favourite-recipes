@@ -111,7 +111,15 @@ Environment variables, set in Vercel → Project → Settings → Environment Va
 | `OPENROUTER_CHAT_PUBLIC_KEY` | For `/chat`: OpenRouter key for visitors' chats, with its own credit limit (when it runs dry the chat says it's resting for everyone). Falls back to `OPENROUTER_API_KEY` if unset, which is only a convenience: use a separate key so chat can't starve photos |
 | `CHAT_PUBLIC_MODEL` | Optional; the visitors' chat model, defaults to `google/gemini-2.5-flash`. Needs tool calling and streaming |
 | `OPENROUTER_CHAT_EDITOR_KEY` | For signed-in editors' chats: their own OpenRouter key (own credit limit). Falls back to `OPENROUTER_API_KEY` |
-| `CHAT_EDITOR_MODEL` | Optional; the editors' chat model, defaults to `anthropic/claude-sonnet-4.5`. Needs tool calling, streaming and (later) vision |
+| `CHAT_EDITOR_MODEL` | Optional; the editors' chat model, defaults to `anthropic/claude-sonnet-4.5`. Needs tool calling and streaming; it never sees photos, so it doesn't need vision |
+| `CHAT_VISION_MODEL` | **Required for photos** (docs/parallel-photo-reading.md): the OpenRouter model of the photo reader, which reads recipe screenshots into a fixed schema with its own prompt, no tools and nothing from the chat. No default and no fallback: without it `read_recipe_photos` answers "Photo reading isn't set up". To start, the same model id as `CHAT_EDITOR_MODEL` (a vision model). Apply `supabase/migrations/20261112000000_photo_reads.sql` first |
+| `OPENROUTER_CHAT_VISION_KEY` | Optional; the photo reader's own key (own credit limit). Falls back to the editor key |
+| `CHAT_VISION_MAX_TOKENS` / `CHAT_VISION_TIMEOUT_MS` | Optional; per read, default 4000 tokens / 60000 ms |
+| `CHAT_VISION_CONCURRENCY` | Optional; photos read at the same time across the household, default 8 |
+| `CHAT_VISION_LEASE_MS` | Optional; how long a claimed photo (or a report) is held before it goes back on the queue, default 90000 |
+| `CHAT_VISION_SETTLE_MS` | Optional; quiet period after the newest photo before the report, so photos sent seconds apart share one report, default 10000 |
+| `CHAT_INTERNAL_SECRET` | **Required** (server only, a long random string): authenticates the server's own routes `POST /chat/internal/continue` (the follow-up turn after photos are read) and `/chat/internal/drain`. Without it those routes refuse everything and the work runs inside the function that started it instead (it still works, but shares that function's 300s) |
+| `CHAT_INTERNAL_URL` | Optional; where the server reaches its own internal routes, e.g. `https://<project>.vercel.app`. Defaults to the host the request came in on |
 | `CHAT_EDITOR_HOURLY_LIMIT` / `CHAT_EDITOR_DAILY_LIMIT` | Optional; messages per editor (user id) per hour / day, default 200 / 1000 |
 | `BUILD_OUT_DIR` (build.js) / `DEV_DIST` (dev harness) | Optional; build or serve the site somewhere other than `../dist`, so tests and one-off builds leave a running dev site alone |
 | `CHAT_PANEL_HOURLY_LIMIT` | Optional; the panel's own requests (plan tray, publishing status, dropping an item, new photo) per editor per hour, default 600 |
