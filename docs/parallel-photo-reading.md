@@ -163,8 +163,8 @@ conversation's id is "not found").
   it is picked: `POST /chat/uploads` (editor only, same `sanitizeUploads` checks, stored in `chat-uploads`), which returns
   a path; the message sends `image_paths` plus `taken_at`. The uploads run in parallel while the editor types, so sending
   is instant. The data URL route stays for older pages until they reload.
-- Replay: with the reader on, photos are never replayed to the main model (`withReplayImages` turns them into
-  `[photo-3: read as "Dal makhani"]` notes), so `REPLAY_MAX_IMAGES` only matters with the reader off.
+- Replay: photos are never replayed to the main model any more (`withReplayImages` turns them into
+  `[photo-3: read as "Dal makhani"]` notes), so `REPLAY_MAX_IMAGES` and the image parts in the main thread go.
 
 ## 3. Models and settings
 
@@ -172,15 +172,17 @@ The reader is configured on its own, separately from the conversation:
 
 | Setting (Vercel) | Meaning | Default |
 | --- | --- | --- |
-| `CHAT_VISION_MODEL` | OpenRouter model for the photo reader | none: **reader off**, photos go to the editor model as today (phase 5 behaviour) |
+| `CHAT_VISION_MODEL` | OpenRouter model for the photo reader | **required**, no default and no fallback |
 | `OPENROUTER_CHAT_VISION_KEY` | its own key, for its own spend cap | the editor key `OPENROUTER_CHAT_EDITOR_KEY` |
 | `CHAT_VISION_MAX_TOKENS` | per read | 4000 |
 | `CHAT_VISION_TIMEOUT_MS` | per read, so one slow photo can't use up the turn | 60000 |
 | `CHAT_VISION_CONCURRENCY` | reads at the same time | 6 |
 
-- No fallback to `CHAT_EDITOR_MODEL`: the editor model may well be text-only once the reader is on. Unset means off.
-- When the reader is on, `/chat/me` (or the editor prompt) states it, and the editor prompt drops the "read the screenshot
-  yourself" lines and says "call `read_recipe_photos`".
+- `CHAT_VISION_MODEL` must be set (it goes into `mcp-server/README.md` with the other required settings). There is no
+  fallback to `CHAT_EDITOR_MODEL` and no "photos go to the main model" path: the editor model may well be text-only. If it
+  is missing anyway, the server logs it and a message with photos gets a clear error ("Photo reading isn't set up.")
+  instead of a silent fallback.
+- The editor prompt drops the "read the screenshot yourself" lines and says "call `read_recipe_photos`".
 - Limits: each photo read counts toward the editor's rate limit (200 per hour per user) as one call, so 6 photos cost 6 (plus
   one per second-pass group). At most 8 photos per call; `read_recipe_photos` counts as one call in
   `MAX_TOOL_CALLS_PER_TURN`. One photo failing (timeout, refusal, unparseable) doesn't fail the others: its line says why.
@@ -207,7 +209,7 @@ The reader is configured on its own, separately from the conversation:
 | `mcp-server/lib/photo-reader-prompt.js` (new) | the reader's own prompts (single / consecutive), version, schema |
 | `mcp-server/lib/tools.js` | `read_recipe_photos` (read, editor only, `join` / `split`); `from_photo` on `stage_create_recipe` |
 | `mcp-server/lib/chat.js` | per-round limit allowing up to 8 `from_photo` stage calls; status "Reading 6 photos… (4 done)" |
-| `mcp-server/lib/chat-prompt.js` | with the reader on: no image instructions for the main model, "call `read_recipe_photos`" |
+| `mcp-server/lib/chat-prompt.js` | no image instructions for the main model, "call `read_recipe_photos`" |
 | `mcp-server/lib/chat-store.js` | keep reads with the conversation; replay read photos as text notes |
 | `mcp-server/lib/chat-uploads.js`, `api/chat.js` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` + `taken_at` on the message |
 | `mcp-server/lib/config.js` | the `CHAT_VISION_*` settings |
@@ -215,14 +217,14 @@ The reader is configured on its own, separately from the conversation:
 | `mcp-server/workflows/plan-recipes.md` ("In chat") | with photos: call `read_recipe_photos` once, ask about the "unsure" pairs and unreadable photos, stage with `from_photo`; the recipe-writing rules shared with the reader prompt |
 | `mcp-server/scripts/fakes.js` | fake reader responses (with delays) for `npm run dev` |
 | `docs/chatbot-design.md`, `CLAUDE.md`, `mcp-server/README.md` (settings), `design.md` (badges, upload progress) | updated in the same change |
-| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (time + content, neighbours only), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, reader off = today's behaviour |
+| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (time + content, neighbours only), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
 
 ## 6. Phasing
 
 1. **Quick relief (no new tool):** photo limits to 6 everywhere (with a smaller per-photo size so 6 fit in one request),
    `REPLAY_MAX_IMAGES` to 6, and a workflow line "stage each recipe as soon as you've read it, at most 2 per reply". More
    reliable, not faster.
-2. **Parallel reading:** P1–P5, behind `CHAT_VISION_MODEL`. This is the speed-up.
+2. **Parallel reading:** P1–P5, with `CHAT_VISION_MODEL` set before it deploys. This is the speed-up.
 3. **Separate uploads:** P6, up to 8 photos, instant send.
 
 ## 7. Open questions
