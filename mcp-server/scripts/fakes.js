@@ -175,19 +175,36 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     }
     if (lastCall.name === "stage_stocktake") return done("It's in the tray as an At home card. Tap Save now on it when you're ready; it doesn't touch next week.", "What's left to buy?");
   }
-  // a photo the user attached: "read" it (a mock: always the same soup) and stage the recipe; "use this as the photo" keeps their photo
-  const photos = imagesIn(msgs[lastUserIdx]);
-  if (photos) {
-    if (!lastCall) {
-      return tray("stage_create_recipe", {
-        title: "Screenshot Tomato Soup", course: ["Lunch"], tags: ["Soup"], total_mins: 30, serves: 4, calories: 210,
-        ingredients: [{ quantity: "800g", name: "tinned tomatoes" }, { quantity: "1", name: "onion" }, { quantity: "500ml", name: "vegetable stock" }],
-        instructions: ["Soften the **onion** in a pan.", "Add the **tinned tomatoes** and **vegetable stock** and simmer for 15 minutes.", "Blend until smooth."],
-        ...(/use (this|that|it|my|the)\b.*photo|as the photo/.test(user) || user.includes("mock-unasked") ? { photo_from_attachment: 1 } : {}),
-        reason: "read from the screenshot",
-      }, "I read the recipe off your photo and will put it in the tray.");
+  // photos the user attached: the mock never sees them either. It sends them to the photo reader and ends its turn.
+  const full = contentText(msgs[lastUserIdx]);
+  const attached = full.match(/The user attached (\d+) photos? to this message: (photo-\d+)/);
+  if (attached && !/photos read\./.test(full)) {
+    if (!lastCall) return tray("read_recipe_photos", {}, "");
+    if (lastCall.name === "read_recipe_photos") return done(`I'm reading your ${attached[1] === "1" ? "photo" : `${attached[1]} photos`} now. I'll come back when they're done.`, "What's planned?");
+  }
+  // corrections: "3 and 4 are one recipe" / "2 and 3 are different" / "skip photo 4"
+  const pairQ = msgs.slice(0, lastUserIdx).reverse().find((m) => m.role === "assistant" && m.tool_calls)?.tool_calls?.map((c) => { try { return JSON.parse(c.function.arguments).question || ""; } catch { return ""; } }).find((q) => /may be one recipe/.test(q));
+  const pairAsked = pairQ?.match(/Photos (\d+) and (\d+)/);
+  const joinAsk = user.match(/(\d+) and (\d+) are (one|the same) recipe/) || (pairAsked && user === "same recipe" ? pairAsked : null);
+  const splitAsk = user.match(/(\d+) and (\d+) are different/) || (pairAsked && user === "two recipes" ? pairAsked : null);
+  const skipAsk = user.match(/skip photo (\d+)/);
+  if (joinAsk || splitAsk || skipAsk) {
+    if (!lastCall) return tray("read_recipe_photos", joinAsk ? { join: [[Number(joinAsk[1]), Number(joinAsk[2])]] } : splitAsk ? { split: [[Number(splitAsk[1]), Number(splitAsk[2])]] } : { skip: [Number(skipAsk[1])] }, "");
+    return done("Done: I'll come back when they're read again.");
+  }
+  // the site's note: photos read. Stage every recipe marked ok (one reply, several calls), ask about the first unsure pair.
+  if (/photos read\./.test(full)) {
+    const ok = [...full.matchAll(/^(photo-[\d+]+)[^\n]*· ok$/gm)].map((m) => m[1]).filter((id) => !/looks like/.test(full.split("\n").find((l) => l.startsWith(`${id}`)) || ""));
+    const unsure = full.match(/unsure: photo-(\d+) and photo-(\d+) may be one recipe/);
+    if (!lastCall && ok.length) {
+      const dish = full.match(/^(photo-\d+): a photo of a dish/m)?.[1];
+      return scriptedStream({ ...opts, text: "", calls: ok.map((id) => ({ name: "stage_create_recipe", arguments: { from_photo: id, ...(dish && msgs.some((m) => m.role === "user" && /as the photo/.test(userText(m).toLowerCase())) ? { photo_from_attachment: Number(dish.slice(6)) } : {}) } })) });
     }
-    return done("It's in the tray as a draft for next week (serves and calories are my estimate). It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
+    if (unsure && !after.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "ask_user"))) {
+      return scriptedStream({ ...opts, text: ok.length ? `Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray.` : "", calls: [{ name: "ask_user", arguments: { question: `Photos ${unsure[1]} and ${unsure[2]} may be one recipe. Are they?`, options: ["Same recipe", "Two recipes"] } }] });
+    }
+    if (ok.length) return done(`Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray; their photos are being made.`, "Add another", { label: "Finalise list", action: "finalise_plan" });
+    return done("I've read your photos but there was nothing I could add straight away.", "Try again");
   }
   // a link: read it with fetch_url, then stage the recipe from the page's own recipe data
   const link = userText(msgs[lastUserIdx]).match(/https?:\/\/[^\s)]+/)?.[0];
@@ -311,6 +328,36 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   return null;
 }
 
+// --- the photo reader (a separate vision model, lib/photo-reader.js) ----------------------------------------------------------------
+
+/** A reader answer for a whole recipe, in the reader's schema. `over` changes fields (and recipe fields under `recipe`). */
+export function fakeRead(title, over = {}) {
+  const words = title.toLowerCase().split(" ");
+  const main = words[words.length - 1];
+  const read = {
+    kind: "recipe", has_title: true, has_ingredients: true, has_method: true, first_step: 1, last_step: 3, cut_off_at_bottom: false, starts_mid_recipe: false,
+    ingredient_names: [main, "onion", "olive oil"], step_ingredients: [main, "onion", "olive oil"], top_lines: [title], bottom_lines: [`Serve the ${title.toLowerCase()} hot.`],
+    recipe: {
+      title, course: ["Dinner"], tags: [], total_mins: 30, total_mins_estimated: false, serves: 4, serves_estimated: false, calories: 450, calories_estimated: true,
+      ingredients: [{ quantity: "400g", name: main, note: "" }, { quantity: "1", name: "onion", note: "chopped" }, { quantity: "1 tbsp", name: "olive oil", note: "" }],
+      instructions: [`Soften the **onion** in the **olive oil**.`, `Add the **${main}** and cook for 20 minutes.`, `Serve the ${title.toLowerCase()} hot.`],
+      notes: "",
+    },
+    dish_description: "", unreadable: "",
+  };
+  const { recipe, ...rest } = over;
+  return { ...read, ...rest, recipe: { ...read.recipe, ...(recipe || {}) } };
+}
+const DEV_READS = ["Miso Aubergine", "Lemon Chicken Orzo", "Dal Makhani", "Smoky Bean Chilli", "Prawn Pad Thai", "Mushroom Risotto", "Harissa Salmon", "Pea And Mint Soup"];
+
+/** The rounded average colour of a data-URL JPEG ("#c05030"), so tests can tell their solid-colour photos apart after the server re-encodes them. */
+async function colourOf(url) {
+  const { default: sharp } = await import("sharp");
+  const { channels } = await sharp(Buffer.from(String(url).split(",")[1] || "", "base64")).stats();
+  const hex = (c) => (Math.round(c.mean / 16) * 16).toString(16).padStart(2, "0").slice(0, 2);
+  return `#${channels.slice(0, 3).map(hex).join("")}`;
+}
+
 /** A message's text, whether its content is a string or text + image parts. */
 const contentText = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(m.content ?? ""));
 const imagesIn = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url").length : 0);
@@ -341,10 +388,33 @@ const userText = (m) => contentText(m).replace(/\n\n\[Note from the site[\s\S]*$
  *                                         get_tray and stage_update_shopping_list; answers: "Promote it", "Not yet", "Liked", ...
  * `requests` records every request body, so tests can assert on what the server sent.
  */
-export function createMockOpenRouter({ delayMs = 12 } = {}) {
+export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 } = {}) {
   const requests = [];
+  const readerRequests = [];
+  // The photo reader: `mock.readerFor({ colours, consecutive })` may return a reader answer, { status, body } for an HTTP error, or { throws } to
+  // fail the connection; by default every photo is a whole recipe picked by its colour.
+  const mock = { requests, readerRequests, readerFor: null, fetch };
+  async function reader(body, init) {
+    readerRequests.push({ ...body, auth: init.headers.Authorization });
+    const urls = body.messages.flatMap((m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url").map((p) => p.image_url.url) : []));
+    const colours = await Promise.all(urls.map(colourOf));
+    const consecutive = /consecutive screenshots/.test(JSON.stringify(body.messages[1]?.content?.[0] || ""));
+    if (readDelayMs) await new Promise((r) => setTimeout(r, readDelayMs));
+    let out = mock.readerFor ? await mock.readerFor({ colours, consecutive, body }) : null;
+    if (out?.throws) throw new TypeError(out.throws);
+    if (out?.status) return new Response(out.body || "error", { status: out.status });
+    if (!out) {
+      let h = 0;
+      for (const c of colours.join("")) h = (h * 31 + c.charCodeAt(0)) % 9973;
+      out = fakeRead(DEV_READS[h % DEV_READS.length]);
+    }
+    const text = typeof out === "string" ? out : JSON.stringify(out);
+    if (body.tools) return Response.json({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "r1", type: "function", function: { name: "recipe_read", arguments: text } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 1000, completion_tokens: 300 } });
+    return Response.json({ choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop" }], usage: { prompt_tokens: 1000, completion_tokens: 300 } });
+  }
   async function fetch(url, init) {
     const body = JSON.parse(init.body);
+    if (body.response_format?.json_schema?.name === "recipe_read" || body.tools?.some((t) => t.function?.name === "recipe_read")) return reader(body, init);
     requests.push({ ...body, auth: init.headers.Authorization, url: String(url) });
     // the loop may add a "you already told the user" note to the last tool result; the mock reads results without it
     const msgs = body.messages.map((m) => (m.role === "tool" && typeof m.content === "string" ? { ...m, content: m.content.replace(/\n\n\[Note from the site, not a tool result[\s\S]*$/, "") } : m));
@@ -440,7 +510,7 @@ export function createMockOpenRouter({ delayMs = 12 } = {}) {
       calls: [replies("Something quick", "Under 400 kcal", "Use up some chicken")],
     });
   }
-  return { fetch, requests };
+  return mock;
 }
 
 // --- Supabase ---------------------------------------------------------------------------------------------------------
@@ -462,7 +532,7 @@ const HOUR = 3600;
 export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {}, accounts = [], tokenTtlSeconds = HOUR, now = () => Date.now() } = {}) {
   const counters = new Map();
   const calls = [];
-  const tables = { conversations: [], messages: [], trays: [] };
+  const tables = { conversations: [], messages: [], trays: [], photo_reads: [] };
   const objects = new Map(); // storage: "<bucket>/<path>" -> { bytes, type }
   const signed = new Map(); // token -> { key, exp }
   let seq = 0;
@@ -498,9 +568,17 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
   // ----- Auth
   async function auth(u, init, headers) {
     const method = init.method || "GET";
-    if (headers.apikey !== anonKey) return json({ msg: "bad apikey" }, 401);
+    if (headers.apikey !== anonKey && !(headers.apikey === serviceKey && /^\/auth\/v1\/admin\//.test(u.pathname))) return json({ msg: "bad apikey" }, 401);
     const body = init.body ? JSON.parse(init.body) : {};
     const route = u.pathname.replace("/auth/v1/", "");
+    const admin = route.match(/^admin\/users\/([^/]+)$/);
+    if (admin && method === "GET") {
+      // the Auth admin API: service-role key only (the server's follow-up turn looks up a conversation owner's email)
+      if (bearer(headers) !== serviceKey) return json({ msg: "not admin" }, 401);
+      const id = decodeURIComponent(admin[1]);
+      const a = accounts.find((x) => x.id === id) || [...tokens.values()].find((t) => t.id === id);
+      return a ? json({ id, email: a.email }) : json({ msg: "User not found" }, 404);
+    }
     if (route === "user" && method === "GET") {
       const t = tokens.get(bearer(headers));
       return t && t.exp > now() ? json({ id: t.id, email: t.email }) : json({ msg: "invalid JWT" }, 401);
@@ -542,8 +620,9 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
 
   // ----- PostgREST
   const COLUMNS = {
-    conversations: () => ({ id: UUID_V4(), title: null, created_at: new Date(now()).toISOString(), updated_at: new Date(now()).toISOString(), archived: false }),
-    messages: () => ({ id: UUID_V4(), seq: ++seq, turn_id: null, trace_id: null, feedback: null, created_at: new Date(now()).toISOString() }),
+    conversations: () => ({ id: UUID_V4(), title: null, created_at: new Date(now()).toISOString(), updated_at: new Date(now()).toISOString(), archived: false, turn_lock_until: null, turn_lock_id: null, last_reply_at: null }),
+    messages: () => ({ id: UUID_V4(), seq: ++seq, turn_id: null, trace_id: null, feedback: null, created_at: new Date(now()).toISOString(), handled_at: null }),
+    photo_reads: () => ({ id: UUID_V4(), name: null, status: "queued", attempts: 0, lease_until: null, result: null, group_id: null, recipe: null, joined_to: null, split_from_prev: false, tray_item_id: null, error: null, created_at: new Date(now()).toISOString(), read_at: null, report_lease_until: null, reported_at: null }),
     trays: () => ({ id: UUID_V4(), status: "collecting", items: [], list_hash: null, version: 0, created_at: new Date(now()).toISOString(), expires_at: new Date(now() + 7 * 24 * HOUR * 1000).toISOString(), updated_at: new Date(now()).toISOString(), updated_by: null }),
   };
   function matches(row, params) {
@@ -553,6 +632,9 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       const want = rest.join(".");
       const have = row[k];
       if (op === "eq" && String(have) !== want) return false;
+      if (op === "is" && want === "null" && have != null) return false;
+      if (op === "not" && want === "is.null" && have == null) return false;
+      if (op === "lt" && !(have != null && String(have) < want)) return false;
       if (op === "gt" && !(String(have) > want)) return false; // ISO timestamps compare as strings
       if (op === "in" && !want.replace(/^\(|\)$/g, "").split(",").includes(String(have))) return false;
     }
@@ -566,6 +648,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
   function dropConversation(id) {
     tables.conversations = tables.conversations.filter((c) => c.id !== id);
     tables.messages = tables.messages.filter((m) => m.conversation_id !== id); // on delete cascade
+    tables.photo_reads = tables.photo_reads.filter((m) => m.conversation_id !== id);
   }
 
   async function rest(u, init, headers) {
@@ -581,6 +664,40 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       counters.set(k, (counters.get(k) || 0) + 1);
       return json(counters.get(k));
     }
+    const iso = () => new Date(now()).toISOString();
+    const later = (ms) => new Date(now() + ms).toISOString();
+    if (name === "rpc/take_turn_lock") {
+      const c = tables.conversations.find((x) => x.id === body.p_conversation);
+      if (!c || (c.turn_lock_until && c.turn_lock_until > iso())) return json(false);
+      c.turn_lock_until = later(body.p_ms);
+      c.turn_lock_id = body.p_token;
+      calls.push({ lock: body.p_token });
+      return json(true);
+    }
+    if (name === "rpc/claim_photo_reads") {
+      const { p_conversation, p_max, p_cap, p_lease_ms, p_max_attempts = 2 } = body;
+      for (const r of tables.photo_reads) {
+        if (r.status === "reading" && r.lease_until < iso()) {
+          r.status = r.attempts >= p_max_attempts ? "failed" : "queued";
+          if (r.status === "failed") r.error = "The read was cut off twice";
+          r.lease_until = null;
+        }
+      }
+      const free = Math.max(0, p_cap - tables.photo_reads.filter((r) => r.status === "reading").length);
+      const picked = tables.photo_reads.filter((r) => r.conversation_id === p_conversation && r.status === "queued").sort((a, b) => a.n - b.n).slice(0, Math.min(p_max, free));
+      for (const r of picked) Object.assign(r, { status: "reading", attempts: r.attempts + 1, lease_until: later(p_lease_ms) });
+      calls.push({ claimed: picked.map((r) => r.n) });
+      return json(picked.map((r) => ({ ...r })));
+    }
+    if (name === "rpc/claim_photo_report") {
+      const rows = tables.photo_reads.filter((r) => r.conversation_id === body.p_conversation);
+      if (rows.some((r) => r.status === "queued" || r.status === "reading")) return json([]);
+      if (rows.some((r) => !r.reported_at && r.report_lease_until && r.report_lease_until > iso())) return json([]);
+      const lot = rows.filter((r) => (r.status === "read" || r.status === "failed") && !r.reported_at);
+      for (const r of lot) r.report_lease_until = later(body.p_lease_ms);
+      calls.push({ reported: lot.map((r) => r.n) });
+      return json(lot.map((r) => ({ ...r })));
+    }
     if (name === "rpc/purge_old_chats") {
       const cutoff = new Date(now() - 14 * 24 * HOUR * 1000).toISOString();
       const old = tables.conversations.filter((c) => c.updated_at < cutoff);
@@ -593,19 +710,26 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     if (method === "GET") {
       const rows = order(tables[name].filter((r) => matches(r, u.searchParams)), u.searchParams.get("order"));
       const limit = Number(u.searchParams.get("limit")) || rows.length;
-      return json(rows.slice(0, limit));
+      return json(rows.slice(0, limit).map((r) => structuredClone(r))); // a copy, like a real response: callers can't change the table by accident
     }
     if (method === "POST") {
       const inserted = (Array.isArray(body) ? body : [body]).map((r) => ({ ...COLUMNS[name](), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) }));
       if (name === "messages" && inserted.some((m) => !tables.conversations.some((c) => c.id === m.conversation_id))) return json({ message: "foreign key violation", code: "23503" }, 409);
       if (name === "trays" && tables.trays.length) return json({ message: "duplicate key value violates unique constraint trays_one_per_household", code: "23505" }, 409);
-      tables[name].push(...inserted);
-      return wantRows ? json(inserted, 201) : new Response(null, { status: 201 });
+      let added = inserted;
+      if (name === "photo_reads") {
+        const clash = (r) => tables.photo_reads.some((x) => x.conversation_id === r.conversation_id && (x.path === r.path || x.n === r.n));
+        if (/resolution=ignore-duplicates/.test(headers.Prefer || "")) added = inserted.filter((r) => !clash(r));
+        else if (inserted.some(clash)) return json({ message: "duplicate key", code: "23505" }, 409);
+        if (added.some((r) => !tables.conversations.some((c) => c.id === r.conversation_id))) return json({ message: "foreign key violation", code: "23503" }, 409);
+      }
+      tables[name].push(...added);
+      return wantRows ? json(added.map((r) => ({ ...r })), 201) : new Response(null, { status: 201 });
     }
     if (method === "PATCH") {
       const rows = tables[name].filter((r) => matches(r, u.searchParams));
-      rows.forEach((r) => Object.assign(r, body));
-      return wantRows ? json(rows) : new Response(null, { status: 204 });
+      rows.forEach((r) => Object.assign(r, structuredClone(body)));
+      return wantRows ? json(rows.map((r) => structuredClone(r))) : new Response(null, { status: 204 });
     }
     if (method === "DELETE") {
       const rows = tables[name].filter((r) => matches(r, u.searchParams));

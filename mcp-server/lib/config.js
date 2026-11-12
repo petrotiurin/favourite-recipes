@@ -40,6 +40,20 @@ export const config = {
   chatTurnDeadlineMs: Number(process.env.CHAT_TURN_DEADLINE_MS) || 250_000,
   chatPanelHourlyLimit: Number(process.env.CHAT_PANEL_HOURLY_LIMIT) || 600, // the panel's plan / status requests per editor
   chatEditorDailyLimit: Number(process.env.CHAT_EDITOR_DAILY_LIMIT) || 1000,
+  // The photo reader (docs/parallel-photo-reading.md section 3): its own model, prompt and key. CHAT_VISION_MODEL is required for photos:
+  // there is no fallback to the editor model (which may well be text-only).
+  chatVisionModel: process.env.CHAT_VISION_MODEL || "",
+  chatVisionKey: process.env.OPENROUTER_CHAT_VISION_KEY || process.env.OPENROUTER_CHAT_EDITOR_KEY || process.env.OPENROUTER_API_KEY,
+  chatVisionMaxTokens: Number(process.env.CHAT_VISION_MAX_TOKENS) || 4000,
+  chatVisionTimeoutMs: Number(process.env.CHAT_VISION_TIMEOUT_MS) || 60_000,
+  chatVisionConcurrency: Number(process.env.CHAT_VISION_CONCURRENCY) || 8, // reads at the same time, across the household
+  chatVisionLeaseMs: Number(process.env.CHAT_VISION_LEASE_MS) || 90_000,
+  chatVisionSettleMs: /^\d+$/.test(process.env.CHAT_VISION_SETTLE_MS || "") ? Number(process.env.CHAT_VISION_SETTLE_MS) : 10_000, // 0 is allowed (tests)
+  // Authenticates the server's own internal routes (/chat/internal/continue, /chat/internal/drain). Without it those routes refuse
+  // everything and the work runs in the calling function instead.
+  chatInternalSecret: process.env.CHAT_INTERNAL_SECRET || "",
+  // Where the server reaches its own internal routes; defaults to the host the request came in on.
+  chatInternalUrl: (process.env.CHAT_INTERNAL_URL || "").replace(/\/$/, ""),
   // Langfuse tracing: off unless all three are set.
   langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY,
   langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY,
@@ -82,6 +96,7 @@ let keyWarning = false;
 export function warnSharedKeys() {
   if (keyWarning) return;
   const pairs = [["public chat key", config.chatPublicKey], ["editor chat key", config.chatEditorKey], ["image key", config.openrouterKey]];
+  // the vision key defaults to the editor key on purpose (both are editor spend), so it isn't compared
   for (let i = 0; i < pairs.length; i++) {
     for (let j = i + 1; j < pairs.length; j++) {
       if (pairs[i][1] && pairs[i][1] === pairs[j][1]) {

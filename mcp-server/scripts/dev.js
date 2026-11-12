@@ -34,7 +34,9 @@
 //
 //   Links      "https://example.test/recipe" (in a message) makes the editor model read a fake recipe page with fetch_url (JSON-LD + og:image, with a
 //              prompt-injection line in its text) and stage it with the page's photo. Attach any photo (paperclip) to have the mock "read" it as a
-//              soup recipe; say "use this as the photo" with it to keep your own photo on the card. Photos are stored in the fake private bucket chat-uploads.
+//              recipe (the fake photo reader picks one of a few by the photo's colour, after FAKE_READ_DELAY_MS, 2500 by default). The chat says it's reading,
+//              the panel shows "Reading photos…", then the note "Photos read" and the follow-up turn stage them. Send more photos while it reads (no words:
+//              no model call), or say "3 and 4 are one recipe" / "skip photo 2". Photos are stored in the fake private bucket chat-uploads.
 //
 // Switches (try them: they are read per request, the site build var CHAT_PUBLIC is read when the site is built, so restart the harness):
 //   CHAT_ENABLED=false npm run dev                         every /chat route answers 503 { disabled: true }: the panel says it is switched off
@@ -68,11 +70,14 @@ const env = {
   OPENROUTER_CHAT_EDITOR_KEY: "dev-openrouter-editor",
   OPENROUTER_BASE_URL: "http://openrouter.fake/api/v1",
   OPENROUTER_API_KEY: "dev-openrouter-images", // photo generation (the fake image API below)
+  CHAT_VISION_MODEL: "dev/vision-reader", // the photo reader (faked below: every photo reads as one of a few recipes, after FAKE_READ_DELAY_MS)
+  CHAT_INTERNAL_SECRET: "dev-internal-secret",
+  CHAT_INTERNAL_URL: `http://localhost:${Number(process.env.CHAT_API_PORT) || 8787}`, // the follow-up turn runs through the real internal route
 };
 for (const [k, v] of Object.entries(env)) process.env[k] ??= v;
 
 const github = createFakeGitHub();
-const openrouter = createMockOpenRouter({ delayMs: Number(process.env.FAKE_MODEL_DELAY_MS) || 12 }); // FAKE_MODEL_DELAY_MS=300: a slow model (e.g. to drop the connection mid-turn)
+const openrouter = createMockOpenRouter({ delayMs: Number(process.env.FAKE_MODEL_DELAY_MS) || 12, readDelayMs: Number(process.env.FAKE_READ_DELAY_MS ?? 2500) }); // FAKE_MODEL_DELAY_MS=300: a slow model (e.g. to drop the connection mid-turn)
 const images = createFakeImageApi();
 const supabase = createFakeSupabase({
   url: process.env.SUPABASE_URL,

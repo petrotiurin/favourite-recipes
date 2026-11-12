@@ -20,6 +20,7 @@ const MAX_TOOL_RESULT_CHARS = 12000;
 const RESULT_CAPS = { get_tray: 40000, get_shopping_list: 24000, fetch_url: 24000 };
 // Limits on what ONE model reply may ask for, so a single request can't fan out into thousands of GitHub calls or a huge prompt.
 export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
+export const MAX_FROM_PHOTO_CALLS_PER_ROUND = 8; // ...unless they are all stage_create_recipe({ from_photo }) calls: tiny, so six recipes go in one round
 export const MAX_TOOL_CALLS_PER_TURN = 10; // data and write tool calls per user turn (UI tools like suggest_replies don't count)
 export const MAX_RESULT_CHARS_PER_TURN = 80_000; // total tool-result text added to the thread in one turn
 const TEMPERATURE = 0.4;
@@ -317,6 +318,7 @@ const STATUS = {
   list_recipes: "Looking through the recipes…",
   get_recipe: "Reading the recipe…",
   fetch_url: "Reading the link…",
+  read_recipe_photos: "Sending your photos to be read…",
   scale_recipe: "Scaling the recipe…",
   recipes_from_home: "Checking what's at home…",
   get_shopping_list: "Checking the shopping list…",
@@ -332,8 +334,10 @@ export function statusFor(name, { args, raw = "", titles } = {}) {
   const slug = args?.slug || raw.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)?.[1];
   const named = slug && titles?.get(slug);
   switch (name) {
-    case "stage_create_recipe":
-      return title ? `Adding ${title} to the tray…` : "Adding the recipe to the tray…";
+    case "stage_create_recipe": {
+      const fromPhoto = args?.from_photo || raw.match(/"from_photo"\s*:\s*"([^"]+)"/)?.[1];
+      return title ? `Adding ${title} to the tray…` : fromPhoto ? `Adding the recipe from ${String(fromPhoto).slice(0, 30)} to the tray…` : "Adding the recipe to the tray…";
+    }
     case "get_recipe":
       return named ? `Reading ${named}…` : STATUS.get_recipe;
     case "stage_update_recipe":
@@ -435,7 +439,7 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
   const stagedLabels = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
   const emit = (event) => {
@@ -455,7 +459,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     rows = "";
   }
   const lastMsg = messages[messages.length - 1];
-  const userText = Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(lastMsg?.content ?? "");
+  const userText = userTextOverride !== undefined ? userTextOverride : Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(lastMsg?.content ?? "");
   const note = [await pageNote(page), extraNote].filter(Boolean).join("\n");
   const book = await loadBook();
 
@@ -616,9 +620,12 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })),
     });
     let roundCalls = 0;
+    const work = result.toolCalls.filter((c) => !UI_TOOLS.has(c.name));
+    const fromPhotoRound = work.length > 0 && work.every((c) => c.name === "stage_create_recipe" && /"from_photo"\s*:/.test(c.arguments || ""));
+    const roundLimit = fromPhotoRound ? MAX_FROM_PHOTO_CALLS_PER_ROUND + (result.toolCalls.length - work.length) : MAX_CALLS_PER_ROUND;
     for (const call of result.toolCalls) {
-      if (++roundCalls > MAX_CALLS_PER_ROUND) {
-        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls at once (at most ${MAX_CALLS_PER_ROUND} per step). Ask for fewer.` });
+      if (++roundCalls > roundLimit) {
+        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls at once (at most ${roundLimit} per step). Ask for fewer.` });
         continue;
       }
       const key = `${call.name}\n${call.arguments || "{}"}`;
@@ -687,7 +694,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         span.end({ output: content, refused: true });
       } else {
         emit({ type: "status", text: statusFor(call.name, { args, titles }) });
-        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, attachments, userText } });
+        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, conversationId: conversation?.id, attachments, photos, userText } });
         content = resultText(out, RESULT_CAPS[call.name] || MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;

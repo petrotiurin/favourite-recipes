@@ -10,7 +10,7 @@ Object.assign(process.env, {
   GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test",
   SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", EDITORS: "owner@example.com", OPENROUTER_CHAT_PUBLIC_KEY: "or-public-test",
   OPENROUTER_CHAT_EDITOR_KEY: "or-editor-test", OPENROUTER_API_KEY: "or-image-test", CHAT_PUBLIC_HOURLY_LIMIT: "100000", CHAT_EDITOR_HOURLY_LIMIT: "100000",
-  CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000",
+  CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000", CHAT_VISION_MODEL: "vision/test-model", CHAT_VISION_SETTLE_MS: "0",
 });
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.js");
 let github, openrouter, supabase, images, web;
@@ -190,7 +190,7 @@ test("photo validation: not an image, too big, too many, malformed", async () =>
   await bad(["https://example.com/x.jpg"], 400, /wasn't sent properly/);
   await bad([42], 400, /wasn't sent properly/);
   await bad("nope", 400, /must be a list/);
-  await bad([asUrl(photo), asUrl(photo), asUrl(photo), asUrl(photo), asUrl(photo)], 400, /At most 4/);
+  await bad(Array(9).fill(asUrl(photo)), 400, /At most 8/);
   const huge = await sharp(randomBytes(2200 * 2200 * 3), { raw: { width: 2200, height: 2200, channels: 3 } }).png().toBuffer();
   assert.ok(huge.length > uploads.MAX_UPLOAD_BYTES, "the test image is over the limit");
   await bad([asUrl(huge, "image/png")], 413, /too big/);
@@ -198,7 +198,7 @@ test("photo validation: not an image, too big, too many, malformed", async () =>
   assert.equal(supabase.tables.conversations.length, 0, "and no chat was created");
 });
 
-test("an attached photo is re-encoded, stored privately, sent to the editor model as an image part, and shown again on reload", async () => {
+test("an attached photo is re-encoded, stored privately, NEVER sent to the main model (only its number), read by the reader, and shown again on reload", async () => {
   const withExif = await sharp(await jpegOf(3000, 2000)).withMetadata({ exif: { IFD0: { Copyright: "secret-gps-ish" } } }).jpeg().toBuffer();
   const { evs, conversation_id } = await say("here is a recipe", { images: [asUrl(withExif), asUrl(photo, "image/png")] });
   assert.equal(chatObjects().length, 2);
@@ -208,27 +208,30 @@ test("an attached photo is re-encoded, stored privately, sent to the editor mode
   assert.ok(Math.max(meta.width, meta.height) <= 1600, "downscaled");
   assert.equal(meta.exif, undefined, "metadata dropped");
   assert.match(chatObjects()[0], new RegExp(`^chat-uploads/${conversation_id}/[0-9a-f-]{36}\\.jpg$`));
+  for (const req of openrouter.requests) assert.ok(!JSON.stringify(req.messages).includes("\"type\":\"image_url\""), "no image part ever reaches the main model");
   const user = openrouter.requests[0].messages.findLast((m) => m.role === "user");
-  assert.ok(Array.isArray(user.content));
-  assert.equal(user.content.filter((p) => p.type === "image_url").length, 2);
-  assert.match(user.content.find((p) => p.type === "image_url").image_url.url, /^data:image\/jpeg;base64,/);
-  assert.match(user.content[0].text, /here is a recipe[\s\S]*attached 2 photos/);
+  assert.equal(typeof user.content, "string");
+  assert.match(user.content, /here is a recipe[\s\S]*attached 2 photos to this message: photo-1 to photo-2/);
+  assert.equal(openrouter.readerRequests.length, 2, "the reader read each photo on its own");
+  assert.ok(evs.some((e) => e.name === "photos" && JSON.stringify(e.data.numbers) === "[1,2]"), "the panel learns the numbers");
   // the stored row keeps paths, not bytes
   const row = supabase.tables.messages.find((m) => m.role === "user");
   assert.equal(row.content.images.length, 2);
   assert.ok(!JSON.stringify(row.content).includes("base64"));
-  // reload: signed URLs
+  // reload: signed URLs, with their numbers
   const loaded = await (await get(`conversations/${conversation_id}`)).json();
   const first = loaded.messages.find((m) => m.role === "user");
   assert.equal(first.images.length, 2);
+  assert.deepEqual(first.photo_numbers, [1, 2]);
   assert.match(first.images[0], /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/chat-uploads\//);
   assert.equal((await supabase.fetch(first.images[0], {})).status, 200);
   // another user can't open the chat, so can't get the URLs
   assert.equal((await get(`conversations/${conversation_id}`, "stranger-token")).status, 403);
-  // deleting the chat deletes the photos
+  // deleting the chat deletes the photos (and their queue rows)
   const del = await chat.DELETE(new Request(`https://mcp.test/api/chat?route=conversations/${conversation_id}`, { method: "DELETE", headers: { authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.1" } }));
   assert.equal(del.status, 200);
   assert.equal(chatObjects().length, 0);
+  assert.equal(supabase.tables.photo_reads.length, 0);
   assert.ok(evs.some((e) => e.name === "done"));
 });
 
@@ -236,66 +239,42 @@ test("a photo sent with no text still works (and an empty message with no photo 
   assert.equal((await post({ message: "   " })).status, 400);
   await say("", { images: [asUrl(photo)] });
   const user = openrouter.requests[0].messages.findLast((m) => m.role === "user");
-  assert.match(user.content[0].text, /^\(no message, just the photo\)/);
+  assert.match(user.content, /^\(no message, just the photos\)/);
+  assert.equal(supabase.tables.photo_reads.length, 1);
 });
 
-test("the model reads a screenshot and stages the recipe; 'use this as the photo' keeps the editor's own photo on the card", async () => {
-  await say("add this recipe", { images: [asUrl(photo)] });
-  let item = trayItems()[0];
-  assert.equal(item.op.title, "Screenshot Tomato Soup");
-  assert.equal(item.photo.source, "generated", "a screenshot alone: a generated photo");
-  assert.equal(images.requests.length, 1);
-  supabase.tables.trays.length = 0;
-  supabase.objects.clear();
-  images.requests.length = 0;
-  const orange = await jpegOf(1400, 1050, "#ff8800");
-  await say("add this recipe and use this as the photo", { images: [asUrl(orange)] });
-  item = trayItems()[0];
-  assert.equal(item.photo.source, "upload");
-  assert.equal(item.photo.status, "ready");
-  assert.equal(images.requests.length, 0, "nothing generated");
-  const staged = [...supabase.objects.entries()].find(([k]) => k.startsWith("tray-photos/"));
-  const { data } = await sharp(staged[1].bytes).resize(1, 1).raw().toBuffer({ resolveWithObject: true });
-  assert.ok(data[0] > 200 && data[1] > 90 && data[2] < 60, "the card photo is the editor's orange one");
-  const { aspect } = { aspect: (await sharp(staged[1].bytes).metadata()) };
-  assert.ok(Math.abs(aspect.width / aspect.height - 4 / 3) < 0.02, "cropped to the card shape");
-});
-
-test("photo_from_attachment can't point at a photo that isn't on the message, or at a path of the model's choosing", async () => {
-  const none = await tools.dispatch("stage_create_recipe", { title: "X Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ quantity: "1", name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 2 }, editor(), { chat: { emit() {}, attachments: [{ path: `${OWNER}/${OWNER}.jpg` }] } });
+test("photo_from_attachment can't point at a photo that isn't in the chat, or at a path of the model's choosing", async () => {
+  const none = await tools.dispatch("stage_create_recipe", { title: "X Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ quantity: "1", name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 2 }, editor(), { chat: { emit() {}, photos: [{ n: 1, path: `${OWNER}/${OWNER}.jpg` }] } });
   assert.equal(none.isError, true);
-  assert.match(none.content[0].text, /no attached photo 2/);
+  assert.match(none.content[0].text, /no photo-2 in this chat/);
   const shape = tools.toolDefinitions("editor").find((d) => d.function.name === "stage_create_recipe").function.parameters.properties;
   assert.equal(shape.photo_from_attachment.type, "integer");
-  assert.equal(shape.photo_from_attachment.maximum, 4);
 });
 
-// --- history replay -------------------------------------------------------------------------------------------------------------
+// --- history: photos are text for the main model ----------------------------------------------------------------------------------
 
-test("history replay sends photos again only for recent messages and at most four in all; older ones become a placeholder", async () => {
-  const hist = [];
-  for (let i = 0; i < 6; i++) hist.push({ role: "user", content: `m${i}`, images: [`p${i}a`, `p${i}b`] }, { role: "assistant", content: `r${i}` });
-  const loaded = [];
-  const out = await store.withReplayImages(hist, async (path) => (path === "p5b" ? null : (loaded.push(path), Buffer.from(path))), (b) => `data:image/jpeg;base64,${b.toString("base64")}`);
-  const parts = out.flatMap((m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url") : []));
-  assert.equal(parts.length, store.REPLAY_MAX_IMAGES);
-  assert.deepEqual(loaded.length, 4, "bytes are only fetched for the photos that are replayed");
-  assert.ok(out.every((m) => !("images" in m)), "the images key never goes to the model");
-  const last = out.findLast((m) => m.role === "user");
-  assert.ok(Array.isArray(last.content), "the newest photos are replayed");
-  assert.match(last.content[0].text, /m5\n\[photo the user sent earlier\]/, "a photo that is gone becomes the placeholder");
-  assert.match(out[0].content, /m0\n\[photo the user sent earlier\] \[photo the user sent earlier\]/, "old photos are a text placeholder");
-  assert.equal(typeof out[0].content, "string");
-  assert.deepEqual(hist[0].images, ["p0a", "p0b"], "the input isn't changed");
+test("history: earlier photos become one text line with their numbers and what was read; the images key never goes on", () => {
+  const hist = [{ role: "user", content: "m0", images: ["a/1.jpg", "a/2.jpg"] }, { role: "assistant", content: "r0" }, { role: "user", content: "", images: ["a/3.jpg"] }];
+  const photos = [{ n: 1, path: "a/1.jpg" }, { n: 2, path: "a/2.jpg" }, { n: 3, path: "a/3.jpg" }];
+  const reads = [
+    { path: "a/1.jpg", status: "read", result: { kind: "recipe", recipe: { title: "Dal Makhani" } }, group_id: "1+2", tray_item_id: "abcd1234" },
+    { path: "a/2.jpg", status: "read", result: { kind: "recipe", recipe: { title: "" } }, group_id: "1+2" },
+  ];
+  const out = store.withPhotoNotes(hist, photos, reads);
+  assert.ok(out.every((m) => !("images" in m)));
+  assert.equal(out[0].content, 'm0\n[Photos on this message: photo-1 (read as "Dal Makhani", part of photo-1+2, staged), photo-2 (read, part of photo-1+2)]');
+  assert.equal(out[2].content, "[Photos on this message: photo-3 (not read yet)]");
+  assert.deepEqual(hist[0].images, ["a/1.jpg", "a/2.jpg"], "the input isn't changed");
 });
 
-test("a later turn in the same chat replays the earlier photo for the model", async () => {
+test("a later turn in the same chat names the earlier photos as text, never as images", async () => {
   const { conversation_id } = await say("first", { images: [asUrl(photo)] });
   openrouter.requests.length = 0;
   await say("and now?", { conversation_id });
-  const earlier = openrouter.requests[0].messages.find((m) => m.role === "user" && Array.isArray(m.content));
-  assert.ok(earlier, "the earlier message still carries its photo");
-  assert.ok(!openrouter.requests[0].messages.some((m) => "images" in m));
+  const req = openrouter.requests[0];
+  assert.ok(!JSON.stringify(req.messages).includes("\"type\":\"image_url\""));
+  assert.ok(req.messages.some((m) => m.role === "user" && /\[Photos on this message: photo-1 \(read as /.test(m.content)));
+  assert.ok(!req.messages.some((m) => "images" in m));
 });
 
 test("traces keep photos whole (Langfuse uploads data URIs as media) but still clip long text", async () => {
@@ -320,20 +299,23 @@ test("photo_from_attachment is honoured only when the user's message asks for th
   const { asksToUsePhoto } = await import("../lib/tools.js");
   for (const yes of ["use this as the photo", "Use my photo for it", "keep the attached picture", "take this image as its photo", "make this the photo", "add it, with this as the photo"]) assert.ok(asksToUsePhoto(yes), yes);
   for (const no of ["add this recipe", "here is a recipe screenshot", "add these two", "what's in this photo?", ""]) assert.ok(!asksToUsePhoto(no), no);
-  // a model that passes it anyway (mock-unasked): ignored, a photo is generated, the model is told
-  const warn = console.warn;
+  // a model that passes it anyway: ignored, a photo is generated, the model is told
+  const { conversation_id } = await say("first", { images: [asUrl(photo)] });
+  supabase.tables.trays.length = 0;
+  images.requests.length = 0;
   const warned = [];
+  const warn = console.warn;
   console.warn = (...a) => warned.push(a.join(" "));
+  let res;
   try {
-    await say("add this recipe mock-unasked", { images: [asUrl(photo)] });
+    res = await tools.dispatch("stage_create_recipe", { title: "Unasked Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ quantity: "1", name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 1 }, editor(), { chat: { emit() {}, conversationId: conversation_id, photos: [{ n: 1, path: supabase.tables.photo_reads[0].path }], userText: "add this recipe" } });
+    await background.backgroundIdle();
   } finally {
     console.warn = warn;
   }
-  const item = trayItems()[0];
+  const item = trayItems().find((i) => i.op.title === "Unasked Soup");
   assert.equal(item.photo.source, "generated");
   assert.equal(item.photo.upload, undefined);
-  assert.equal(images.requests.length, 1);
   assert.ok(warned.some((w) => /Ignored photo_from_attachment/.test(w)), "logged");
-  const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool").content;
-  assert.match(toolMsg, /note: photo_from_attachment was ignored/);
+  assert.match(res.content[0].text, /note: photo_from_attachment was ignored/);
 });
