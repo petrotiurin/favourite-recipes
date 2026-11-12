@@ -44,37 +44,38 @@ them, in parallel, and the main model only ever sees text: a short summary per r
 ### 2.2 Which photos belong to one recipe (P2)
 
 The main model can't group the photos (it doesn't see them), and titles don't help: screenshots are often of a page with
-no title in view, and file names are only screenshot timestamps. So the server groups them from **when they were taken**
-and **how the content carries on**.
+no title in view, and file names are only screenshot timestamps. So the server groups them from **the order they were
+picked** and **how the content carries on**.
 
 **Signals**
 
-1. **Capture time.** Screenshots of one recipe are usually seconds apart (scrolling); different recipes are usually minutes
-   apart. The browser records the time **before** it shrinks the photo (the canvas redraw drops the metadata) and sends it
-   with the photo as `taken_at`: the EXIF capture time if there is one (a small hand-written reader in `templates/chat.js`,
-   no library), else `file.lastModified`, else nothing (the picked order is used). The server sorts the photos by it.
+1. **Picked order.** Photos keep the order the user picked them in (the phone's picker numbers them in tap order), and
+   messages keep their order, so photo numbers in the conversation (`photo-1`, `photo-2`…) are that order. Only
+   neighbours in it can ever be joined. Capture time is **not** used (decided: we don't rely on what each phone reports as
+   the time a photo was taken), so the browser sends no time and no metadata reader is needed.
 2. **Content that carries on.** The reader reports, for each photo, alongside what it read:
    `has_title`, `has_ingredients`, `has_method`, the first and last step numbers it can see, `cut_off_at_bottom` (a list or
    sentence runs off the edge), `starts_mid_recipe`, the ingredient names it can see, and `kind` (`recipe`, `dish` = a photo
    of the finished food, `other`). Strong signs that B carries on from A: A is cut off at the bottom; B starts at step 4
    where A ended at 3; B has a method but no ingredients and its method uses A's ingredients; B repeats some of A's text
-   (scrolling screenshots overlap).
+   (scrolling screenshots overlap). The overlap is the strongest sign: it's enough on its own.
 
 **Flow (all on the server, on the read queue that `read_recipe_photos` feeds, 2.5)**
 
 1. **First pass:** read every photo on its own, all at the same time. Most recipes are one screenshot, so they are done.
-2. **Group:** in time order, join two neighbouring photos only when **both** signals agree: taken close together (under
-   about a minute, to be tuned on real screenshots) **and** the content carries on. Time alone isn't enough (two recipes
-   can be screenshotted back to back); content alone, with no title, is too risky. Chains of 3+ are fine. Only neighbours
-   are ever joined.
+2. **Group:** in picked order, join two neighbouring photos only when the content clearly carries on: **overlapping text**,
+   or **at least two** of the other strong signs (e.g. A is cut off and B starts at the next step number; B has no title or
+   ingredients and its method uses A's ingredients). With no time signal, one sign alone is not enough: that pair is
+   "unsure" (step 4). Chains of 3+ are fine. Only neighbours are ever joined, also across messages (the first photo of a
+   message and the last of the one before).
 3. **Second pass:** read each joined group again in one call (the "consecutive screenshots" prompt, 2.3), all groups at the
    same time. Reading them together handles the overlap between scrolling screenshots better than gluing text together.
    One extra call per joined group, and only when there is one.
 4. **Doubt goes to the user, through the main model:** a pair where only one signal fits, or a recipe still incomplete
-   after the second pass, is listed in the summary, e.g. "photos 4 and 5 may be one recipe: taken 20s apart, 4 has no
-   method, 5 has no title". The main model asks with `ask_user` (*Same recipe* · *Two recipes*). It doesn't need to see the
+   after the second pass, is listed in the summary, e.g. "photos 4 and 5 may be one recipe: 4 has no method, 5 has no
+   title". The main model asks with `ask_user` (*Same recipe* · *Two recipes*). It doesn't need to see the
    photos for that: the photos on the user's message carry a number badge 1–6 in the panel, so "4 and 5" means something
-   to the user.
+   to the user. Without capture times, expect a few more of these questions than with them.
 5. **Corrections by message:** "3 and 4 are one recipe" / "2 and 3 are different" makes the main model call
    `read_recipe_photos` again with `join: [[3, 4]]` or `split: [2, 3]`, which queues a re-read of only those
    photos.
@@ -156,8 +157,8 @@ report get a report of their own.
 A lightweight queue in Postgres: no new service, no long-running worker. One table in Supabase, **`photo_reads`**
 (service-role only, RLS on with no policies, like `trays`; rows deleted with the chat), one row per photo:
 
-`id`, `conversation_id`, `user_id`, `n` (its number in the conversation: `photo-7`), `path` (in `chat-uploads`),
-`taken_at`, `status` queued / reading / read / failed / skipped, `attempts`, `lease_until`, `result` (what the first pass
+`id`, `conversation_id`, `user_id`, `n` (its number in the conversation, in picked order: `photo-7`), `path` (in
+`chat-uploads`), `status` queued / reading / read / failed / skipped, `attempts`, `lease_until`, `result` (what the first pass
 read, with the flags of 2.2), `group_id` and `recipe` (set by grouping and the second pass), `tray_item_id` (once staged),
 `error`, `created_at`, `report_lease_until`, `reported_at`. Unique on (`conversation_id`, `path`), so the same photo is
 never queued twice.
@@ -171,7 +172,7 @@ the panel show the same numbers, so "7 and 8 are one recipe" is never ambiguous.
 
 1. **Enqueue.** The tool inserts one `photo_reads` row per photo, then starts a **drainer** with `background()`
    (`lib/background.js`, Vercel `waitUntil`, as staged photos are made today).
-2. **Drain.** A drainer repeatedly claims the next queued photos, oldest `taken_at` first, with one Postgres function:
+2. **Drain.** A drainer repeatedly claims the next queued photos, lowest `n` first, with one Postgres function:
    `claim_photo_reads(conversation, max)` (`update … set status = 'reading', lease_until = now() + lease, attempts =
    attempts + 1 … where id in (select id … where status = 'queued' … for update skip locked limit …) returning *`). It never
    lets more than `CHAT_VISION_CONCURRENCY` photos be reading at once **across the household** (all conversations: the site
@@ -190,7 +191,7 @@ the panel show the same numbers, so "7 and 8 are one recipe" is never ambiguous.
      report_lease_until < now()) and not exists (… status in ('queued', 'reading') …) returning *`), so exactly one drainer
      reports. Another drainer gets no rows and exits;
    - runs grouping and the second pass (2.2) over the claimed photos **and** their already-reported neighbours in the same
-     conversation, within the time gap, so a new photo that carries on an older one is joined like any other;
+     conversation (the photo just before the first new one), so a new photo that carries on an older one is joined like any other;
    - runs the checks (a dry run of `create_recipe` through `runOperation` per recipe; a match against the catalogue and the
      **household's tray** for possible duplicates, 2.6; on the server, after the reader, so the reader itself never sees the
      catalogue or the tray);
@@ -270,7 +271,7 @@ and lists the earlier ones in one line so the model always has the whole picture
 new since last time: photo-7 to photo-9
 photo-7: "Miso aubergine" · serves 2 · 540 kcal (estimated) · 35 min · ok
 photo-8: "Lemon chicken orzo" · serves 4 · 610 kcal · 40 min · ok · looks like "Lemon chicken orzo" already in the tray (added by Sam)
-photo-6+9: "Dal makhani" (photo-9 carries on photo-6, 15s apart): re-read together · serves 4 · 480 kcal (estimated) · 60 min · ok · replaces its card
+photo-6+9: "Dal makhani" (photo-9 carries on photo-6): re-read together · serves 4 · 480 kcal (estimated) · 60 min · ok · replaces its card
 unsure: none
 earlier: photo-1 to photo-6, 5 staged, photo-5 unreadable
 ```
@@ -323,7 +324,7 @@ people's turns behind each other and blurs whose sign-in a turn runs under.
 - Raise `MAX_PHOTOS` (client) and `MAX_IMAGES` (server) to **8**, with a number badge on each photo in the panel.
 - Request size: 8 photos don't reliably fit in one 4.3 MB request. Recommended: **upload each photo on its own** as soon as
   it is picked: `POST /chat/uploads` (editor only, same `sanitizeUploads` checks, stored in `chat-uploads`), which returns
-  a path; the message sends `image_paths` plus `taken_at`. The uploads run in parallel while the editor types, so sending
+  a path; the message sends `image_paths` in picked order. The uploads run in parallel while the editor types, so sending
   is instant. The data URL route stays for older pages until they reload.
 - Replay: photos are never replayed to the main model any more (`withReplayImages` turns them into
   `[photo-3: read as "Dal makhani"]` notes), so `REPLAY_MAX_IMAGES` and the image parts in the main thread go.
@@ -334,7 +335,7 @@ The reader is configured on its own, separately from the conversation:
 
 | Setting (Vercel) | Meaning | Default |
 | --- | --- | --- |
-| `CHAT_VISION_MODEL` | OpenRouter model for the photo reader | **required**, no default and no fallback |
+| `CHAT_VISION_MODEL` | OpenRouter model for the photo reader | **required**, no default and no fallback; to start, set to the same model as `CHAT_EDITOR_MODEL` |
 | `OPENROUTER_CHAT_VISION_KEY` | its own key, for its own spend cap | the editor key `OPENROUTER_CHAT_EDITOR_KEY` |
 | `CHAT_VISION_MAX_TOKENS` | per read | 4000 |
 | `CHAT_VISION_TIMEOUT_MS` | per read, so one slow photo can't use up the turn | 60000 |
@@ -347,6 +348,10 @@ The reader is configured on its own, separately from the conversation:
   fallback to `CHAT_EDITOR_MODEL` and no "photos go to the main model" path: the editor model may well be text-only. If it
   is missing anyway, the server logs it and a message with photos gets a clear error ("Photo reading isn't set up.")
   instead of a silent fallback.
+- **Starting model (decided):** `CHAT_VISION_MODEL` starts as the same model as `CHAT_EDITOR_MODEL` (which already reads
+  photos today), set explicitly in its own variable. It still runs with the reader's own prompt and limits, and can be
+  switched later without touching the conversation. If the editor model is ever changed to a text-only one,
+  `CHAT_VISION_MODEL` stays on a vision model.
 - The editor prompt drops the "read the screenshot yourself" lines and says "call `read_recipe_photos`".
 - Limits: each photo read counts toward the editor's rate limit (200 per hour per user) as one call, so 6 photos cost 6 (plus
   one per second-pass group), and the follow-up turn counts as one turn. At most 8 photos per message and 30 not yet reported per conversation; `read_recipe_photos` counts as one call in `MAX_TOOL_CALLS_PER_TURN`. One photo failing (timeout,
@@ -358,6 +363,12 @@ The reader is configured on its own, separately from the conversation:
 - Langfuse: each read is its own trace in the conversation's session (`photo read photo-7`), each report too (`photo report`), with the second-pass reads as generations
   (`photo read 3+4`, model and prompt version recorded), images redacted as today (`redactImages`); the follow-up turn is
   traced like any turn, named `chat follow-up`.
+- **Tuning data (decided: ship with the defaults, then tune):** each report records, as Langfuse metadata, every
+  neighbouring pair's grouping signals and the decision (joined, unsure, separate), and every duplicate check's title and
+  ingredient scores with the outcome. The user's own corrections (`join`, `split`, "add mine anyway" with `keep_both`, and
+  the answers to "same recipe?") are recorded as scores on that report, so they become the labels for tuning the grouping
+  rule and the duplicate threshold. The quiet period, lease and photo limit are tuned from the same traces (how often a
+  second report followed within a minute; leases that ran out).
 
 ## 4. Safety
 
@@ -377,7 +388,6 @@ The reader is configured on its own, separately from the conversation:
   that goes into it is fenced and shortened, like `fetch_url`'s page data.
 - The other editor's photos never reach your chat or its model: the tray shows only their name and how many are being
   read, and the duplicate check returns only the matching card's title and who added it.
-- `taken_at` is a hint from the browser: used only for ordering and grouping, never stored on the site.
 - Nothing commits: reading and staging both stay in the tray until Save, as today.
 
 ## 5. Changes
@@ -395,13 +405,13 @@ The reader is configured on its own, separately from the conversation:
 | `mcp-server/lib/chat.js` | per-round limit allowing up to 8 `from_photo` stage calls; `event` messages become site notes; the "still running" line; the follow-up turn |
 | `mcp-server/lib/chat-prompt.js` | no image instructions for the main model, "call `read_recipe_photos`" |
 | `mcp-server/lib/chat-store.js` | `event` messages; replay read photos as text notes |
-| `mcp-server/lib/chat-uploads.js`, `api/chat.js` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` + `taken_at` on the message |
+| `mcp-server/lib/chat-uploads.js`, `api/chat.js` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` (in picked order) on the message |
 | `mcp-server/lib/config.js` | the `CHAT_VISION_*` settings |
-| `templates/chat.js` | `MAX_PHOTOS` 8; capture time before downscaling; upload on pick with progress on the chip; number badges carrying on through the chat; reading status line; attach stays usable while reading; polling while photos are being read or a follow-up is pending; the tray's "Reading n photos · name" entries and the Save note; unread dot on the bubble; "Sending when I'm done…" |
+| `templates/chat.js` | `MAX_PHOTOS` 8; upload on pick (keeping the picked order) with progress on the chip; number badges carrying on through the chat; reading status line; attach stays usable while reading; polling while photos are being read or a follow-up is pending; the tray's "Reading n photos · name" entries and the Save note; unread dot on the bubble; "Sending when I'm done…" |
 | `mcp-server/workflows/plan-recipes.md` ("In chat") | with photos: call `read_recipe_photos` once, tell the user it's reading and end the turn; when the note arrives, stage every clear recipe with `from_photo`, skip likely duplicates and say who added them, ask about the "unsure" pairs and unreadable photos; the recipe-writing rules shared with the reader prompt |
 | `mcp-server/scripts/fakes.js` | fake reader responses (with delays) for `npm run dev` |
 | `docs/chatbot-design.md`, `CLAUDE.md`, `mcp-server/README.md` (settings), `design.md` (badges, upload progress) | updated in the same change |
-| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (time + content, neighbours only), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, the tool returns at once, the queue (no photo read twice with several drainers, the household cap, leases and retries, a photo queued as a drainer exits is still read, photos added while reading go into the same report, the quiet period, exactly one report per idle point and a dead report is retried, a photo carrying on a reported one is joined and replaces its card, 30 unreported per conversation, skip), the only-photos shortcut makes no model call, exactly-once hand-over (follow-up vs. the user's next turn), two editors (grouping never crosses conversations, duplicates across the tray refused unless `keep_both`, reading entries in the tray, two follow-ups staging at once), the turn lock, the follow-up caller drops to note-only when the owner left `EDITORS`, the internal route refuses without the secret, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
+| tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (picked order, neighbours only, overlap or two signs, one sign is unsure, across messages), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, the tool returns at once, the queue (no photo read twice with several drainers, the household cap, leases and retries, a photo queued as a drainer exits is still read, photos added while reading go into the same report, the quiet period, exactly one report per idle point and a dead report is retried, a photo carrying on a reported one is joined and replaces its card, 30 unreported per conversation, skip), the only-photos shortcut makes no model call, exactly-once hand-over (follow-up vs. the user's next turn), two editors (grouping never crosses conversations, duplicates across the tray refused unless `keep_both`, reading entries in the tray, two follow-ups staging at once), the turn lock, the follow-up caller drops to note-only when the owner left `EDITORS`, the internal route refuses without the secret, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
 
 ## 6. Phasing
 
@@ -415,19 +425,16 @@ The reader is configured on its own, separately from the conversation:
 
 ## 7. Open questions
 
-- **PQ1.** Which model for `CHAT_VISION_MODEL`? Try a few on a set of real screenshots and cookbook pages and compare
-  accuracy (amounts, steps), cost per photo and speed.
-- **PQ2.** 6 or 8 photos per message?
-- **PQ3.** Do the family's phones give the browser a real capture time? On iPhone, photos picked from the library sometimes
-  report when they were picked, not taken. Check the EXIF time and `file.lastModified` on real screenshots from each phone.
-  If neither is usable, grouping falls back to the picked order plus the content signals, and more pairs become questions.
-- **PQ4.** The time gap for "taken together": start at 60s and tune it on real screenshots.
-- **PQ5.** The quiet period (10s), the lease (90s) and the 30-photo limit: tune on real use.
-- **PQ6.** How strict the duplicate match is (title words shared, ingredient overlap): tune on real pairs of screenshots of the
-  same recipe.
+None at the moment. The numbers below start at their defaults and are tuned from real use (section 3, "Tuning data"):
+the quiet period (10s), the lease (90s), the 30-photo limit, and how strict the duplicate match is.
 
 Decided:
 
+- **PQ1.** `CHAT_VISION_MODEL` starts as the same model as `CHAT_EDITOR_MODEL`, set in its own variable (3).
+- **PQ2.** 8 photos per message (2.7).
+- **PQ3.** No capture time: photos are grouped by picked order and content only (2.2).
+- **PQ4–PQ6.** Ship with the defaults and log the signals and the user's corrections to Langfuse; tune after a few weeks.
+  (PQ4, the "taken together" time gap, no longer exists.)
 - The follow-up turn stages every clear recipe straight away and asks only about the doubtful ones (2.5).
 - `read_recipe_photos` is a tool, asynchronous, on a lightweight Postgres queue; photos can be added while it reads (2.5).
 - `CHAT_VISION_MODEL` is required, with no fallback (3).
