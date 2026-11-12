@@ -24,6 +24,10 @@ export const MAX_ATTEMPTS = 2;
 export const DRAIN_BUDGET_MS = 200_000; // a drainer stops claiming after this and hands over to a fresh one (Vercel stops a function at 300s)
 const SLOT_WAIT_MS = 1500; // the household cap is full: try again after this
 const KICK_THROTTLE_MS = 10_000;
+// A lease must outlast the work it covers, or a kick hands the same work to a second drainer (double spend, a second note): a read can take two
+// calls (no structured output -> forced tool) of CHAT_VISION_TIMEOUT_MS each; a report runs its second passes side by side, plus the checks.
+const readLeaseMs = () => Math.max(config.chatVisionLeaseMs, 2 * config.chatVisionTimeoutMs + 30_000);
+const reportLeaseMs = () => Math.max(config.chatVisionLeaseMs, 2 * config.chatVisionTimeoutMs + 120_000);
 export const deps = { sleep: (ms) => new Promise((r) => setTimeout(r, ms)) }; // tests can make waiting instant
 
 // --- the table ----------------------------------------------------------------------------------------------------------------------
@@ -34,11 +38,6 @@ export async function readsOf(conversationId) {
 
 async function patchRead(id, patch, extra = {}) {
   return rest("photo_reads", { method: "PATCH", prefer: "return=representation", query: q({ id: `eq.${id}`, ...extra }), body: patch });
-}
-
-async function patchReads(ids, patch) {
-  if (!ids.length) return;
-  await rest("photo_reads", { method: "PATCH", query: q({ id: `in.(${ids.join(",")})` }), body: patch });
 }
 
 /** Photos being read or waiting, across the household: [{ user_id, name, conversation_id }]. For the tray's "Reading 3 photos · Sam". */
@@ -131,7 +130,7 @@ export async function drain(conversationId, { origin, startedAt = clock.now() } 
         startDrainer(conversationId, { origin, fresh: true });
         return;
       }
-      const claimed = (await rest("rpc/claim_photo_reads", { method: "POST", body: { p_conversation: conversationId, p_max: config.chatVisionConcurrency, p_cap: config.chatVisionConcurrency, p_lease_ms: config.chatVisionLeaseMs, p_max_attempts: MAX_ATTEMPTS } })) || [];
+      const claimed = (await rest("rpc/claim_photo_reads", { method: "POST", body: { p_conversation: conversationId, p_max: config.chatVisionConcurrency, p_cap: config.chatVisionConcurrency, p_lease_ms: readLeaseMs(), p_max_attempts: MAX_ATTEMPTS } })) || [];
       if (claimed.length) {
         await Promise.all(claimed.map((row) => readOne(row)));
         continue;
@@ -154,7 +153,7 @@ export async function drain(conversationId, { origin, startedAt = clock.now() } 
         await deps.sleep(Math.min(wait, 5000)); // the quiet period: photos sent a few seconds apart go into one report
         continue;
       }
-      const lot = (await rest("rpc/claim_photo_report", { method: "POST", body: { p_conversation: conversationId, p_lease_ms: config.chatVisionLeaseMs } })) || [];
+      const lot = (await rest("rpc/claim_photo_report", { method: "POST", body: { p_conversation: conversationId, p_lease_ms: reportLeaseMs() } })) || [];
       if (!lot.length) return; // someone else is reporting
       await report(conversationId, lot, { origin });
       // photos queued while the report was being built wait for the next one
@@ -279,15 +278,17 @@ export async function report(conversationId, lot, { origin } = {}) {
   lines.push(`new since last time: ${newNs.length === 1 ? `photo-${newNs[0]}` : `photo-${newNs[0]} to photo-${newNs[newNs.length - 1]}`}${newNs.length > 1 && newNs[newNs.length - 1] - newNs[0] + 1 !== newNs.length ? ` (${newNs.map((n) => `photo-${n}`).join(", ")})` : ""}`);
   const seenThisLot = [];
   const updates = []; // [id, patch]
-  for (const g of groups) {
+  const changed = groups.filter((g) => g.members.some(isNew) || !g.members.every((n) => byN.get(n).group_id === g.id)); // the rest is unchanged and already reported
+  const groupReads = await Promise.all(changed.map((g) => groupRead(g, byN, trace))); // second passes side by side
+  for (const [gi, g] of changed.entries()) {
     const members = g.members;
-    if (!members.some(isNew) && members.every((n) => byN.get(n).group_id === g.id)) continue; // unchanged and already reported
     const label = photoLabel(members);
-    const { read, pass, fresh, glued } = await groupRead(g, byN, trace);
+    const { read, pass, fresh, glued } = groupReads[gi];
     for (const n of members) {
       const r = byN.get(n);
       const patch = { group_id: g.id };
-      if (n === members[0] && members.length > 1 && fresh) patch.recipe = read;
+      // a joined group's recipe is kept on its first photo, whether the second pass read it or it was pieced together (from_photo stages from it)
+      if (n === members[0] && members.length > 1 && (fresh || glued)) patch.recipe = read;
       if (r.group_id !== g.id || patch.recipe) updates.push([r.id, patch]);
     }
     const carries = members.length > 1 && members.some((n) => !isNew(n)) ? ` (${members.filter(isNew).map((n) => `photo-${n}`).join(", ")} carries on ${members.filter((n) => !isNew(n)).map((n) => `photo-${n}`).join(", ")})` : "";
@@ -362,7 +363,8 @@ export async function report(conversationId, lot, { origin } = {}) {
 
   const eventId = await appendEvent(conversationId, { content, summary, kind: "photos" });
   for (const [id, patch] of updates) await patchRead(id, patch).catch((e) => console.error("Storing a group failed:", e.message));
-  await patchReads([...newIds], { reported_at: new Date(clock.now()).toISOString(), report_lease_until: null });
+  // only rows still holding this report's lease: a correction made meanwhile cleared it, and that photo comes back in the next report
+  await rest("photo_reads", { method: "PATCH", query: q({ id: `in.(${[...newIds].join(",")})`, report_lease_until: "not.is.null" }), body: { reported_at: new Date(clock.now()).toISOString(), report_lease_until: null } });
   trace.event({ name: "photo-report", metadata: meta });
   trace.finish(summary, { report: content });
   if (caller) startFollowUp(eventId, { origin });
@@ -381,7 +383,7 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
   const byN = new Map(rows.map((r) => [r.n, r]));
   const lines = [];
   const touched = new Map(); // id -> patch
-  const touch = (r, patch = {}) => touched.set(r.id, { ...(touched.get(r.id) || {}), reported_at: null, ...patch });
+  const touch = (r, patch = {}) => touched.set(r.id, { ...(touched.get(r.id) || {}), reported_at: null, report_lease_until: null, ...patch });
   const groupOf = (r) => (r.group_id ? r.group_id.split("+").map(Number) : [r.n]);
   for (const g of join) {
     const ns = [...new Set(g)].sort((a, b) => a - b);
@@ -395,6 +397,10 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
   }
   for (const pair of split) {
     const [a, b] = [...new Set(pair)].sort((x, y) => x - y);
+    if (b === undefined) {
+      lines.push(`Can't split photo-${a} from itself: give two different photos.`);
+      continue;
+    }
     if (!byN.has(a) || !byN.has(b)) {
       lines.push(`Can't split photo-${a} and photo-${b}: not photos in this chat.`);
       continue;
@@ -446,18 +452,21 @@ export async function kick(conversationId, { origin, force = false } = {}) {
   lastKick.set(conversationId, now);
   try {
     const rows = await readsOf(conversationId);
+    // Only work nobody is doing: a live lease (a read or a report in progress) means a drainer is alive, and a running turn means the drainer is
+    // waiting for it on purpose. Photos waiting for a free slot while others are being read are normal, not stuck.
     const old = (r, ms) => now - (Date.parse(r.created_at) || 0) > ms;
     const st = statusOf(rows);
+    const convo = await conversationById(conversationId);
+    const busyTurn = lockHeld(convo, now);
+    const liveRead = rows.some((r) => r.status === "reading" && Date.parse(r.lease_until) > now);
+    const liveReport = rows.some((r) => !r.reported_at && Date.parse(r.report_lease_until) > now);
     const stuck =
-      rows.some((r) => r.status === "queued" && old(r, 15_000)) ||
       rows.some((r) => r.status === "reading" && Date.parse(r.lease_until) < now) ||
-      (st.unreported && !st.queued && !st.reading && now - st.newestAt > config.chatVisionSettleMs + 20_000 && !rows.some((r) => !r.reported_at && Date.parse(r.report_lease_until) > now));
+      (!liveRead && rows.some((r) => r.status === "queued" && old(r, 30_000))) ||
+      (!busyTurn && !liveReport && st.unreported && !st.queued && !st.reading && now - st.newestAt > config.chatVisionSettleMs + 20_000);
     if (stuck) startDrainer(conversationId, { origin });
     const events = await unhandledEvents(conversationId);
-    if (events.length && now - Date.parse(events[0].created_at) > 30_000) {
-      const convo = await conversationById(conversationId);
-      if (convo && !lockHeld(convo, now)) startFollowUp(events[0].id, { origin });
-    }
+    if (events.length && now - Date.parse(events[0].created_at) > 30_000 && convo && !busyTurn) startFollowUp(events[0].id, { origin });
   } catch (err) {
     console.error("Kicking the photo queue failed:", err.message);
   }
@@ -472,13 +481,14 @@ export function startFollowUp(eventId, { origin } = {}) {
   });
 }
 
-const internalBase = (origin) => config.chatInternalUrl || origin || "";
-export const internalReachable = (origin) => !!config.chatInternalSecret && !!internalBase(origin);
+// The secret only ever goes to CHAT_INTERNAL_URL, never to a host taken from a request's headers; without it the work runs in this function.
+const internalBase = () => config.chatInternalUrl || "";
+export const internalReachable = () => !!config.chatInternalSecret && !!internalBase();
 
 /** POSTs to one of the server's own internal routes; true when it was accepted. */
 export async function internalCall(route, body, origin) {
   try {
-    const res = await fetch(`${internalBase(origin)}/chat/${route}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Chat-Internal-Secret": config.chatInternalSecret }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(`${internalBase()}/chat/${route}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Chat-Internal-Secret": config.chatInternalSecret }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
     if (res.ok) return true;
     console.error(`The internal route ${route} answered ${res.status}`);
   } catch (err) {

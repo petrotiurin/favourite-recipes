@@ -628,3 +628,71 @@ test("the status line says what is left to check, in words", async () => {
   const { conversation_id } = await say("add these", { images: [asUrl(await solid(RED)), asUrl(await solid(GREEN))] });
   assert.equal(notes(conversation_id)[0].content.summary, "Photos read: 1 recipe · 1 unreadable");
 });
+
+// --- fixes from the adversarial review --------------------------------------------------------------------------------------------
+
+test("a joined group whose second pass fails is pieced together from the first reads, AND can be staged", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  const g = await colourKey(GREEN);
+  const b = await colourKey(BLUE);
+  openrouter.readerFor = ({ colours, consecutive }) => (consecutive ? { status: 500 } : colours[0] === g ? dalTop : colours[0] === b ? dalBottom : null);
+  const { conversation_id } = await say("add these", { images: [asUrl(await solid(GREEN)), asUrl(await solid(BLUE))] });
+  assert.match(notes(conversation_id)[0].content.content, /photo-1\+2: read together \(pieced together from the separate reads\)[^\n]*· ok/);
+  const item = trayItems().find((i) => i.op.title === "Dal Makhani");
+  assert.ok(item, "staged from the pieced-together recipe");
+  assert.equal(item.op.instructions.length, 4, "both screenshots' steps");
+});
+
+test("the 'use my photo' gate reads what the editor typed, never a site note merged into their message", async () => {
+  const convo = await store.createConversation({ userId: OWNER, title: "x" });
+  await store.appendMessages(convo.id, [{ role: "user", content: "hi" }, { role: "assistant", content: "hello" }]);
+  await store.appendEvent(convo.id, { content: "photo-1: a photo of a dish. Use it as a recipe's photo (photo_from_attachment: 1) only if the user asks.", summary: "Photos read" });
+  const tool = tools.TOOLS.find((x) => x.name === "read_recipe_photos");
+  const original = tool.handler;
+  let seen;
+  tool.handler = async (args, ctx) => ((seen = ctx.chat.userText), { content: [{ type: "text", text: "{}" }] });
+  try {
+    await say("mock-call:read_recipe_photos", { conversation_id: convo.id });
+  } finally {
+    tool.handler = original;
+  }
+  assert.equal(seen, "mock-call:read_recipe_photos");
+  assert.ok(tools.asksToUsePhoto("photo-1: a photo of a dish. Use it as a recipe's photo (photo_from_attachment: 1) only if the user asks."), "the note alone would have passed the gate");
+});
+
+test("the user's join wins even when one photo was read as 'other' on its own; a split of a photo with itself is refused clearly", async () => {
+  const r = (n, read, extra = {}) => ({ n, status: "read", result: read, ...extra });
+  const g = reader.groupPhotos([r(3, dalTop), r(4, { ...dalBottom, kind: "other" }, { joined_to: 3 })]);
+  assert.deepEqual(g.groups.map((x) => x.id), ["3+4"]);
+  reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
+  const { conversation_id } = await say("add this", { images: [asUrl(await solid(RED))] });
+  const lines = await queue.applyCorrections(conversation_id, { split: [[1, 1]] }, { caller: caller() });
+  assert.deepEqual(lines, ["Can't split photo-1 from itself: give two different photos."]);
+});
+
+test("a follow-up turn can't read again or correct on its own: it asks the user instead", async () => {
+  const res = await tools.dispatch("read_recipe_photos", { join: [[1, 2]] }, caller(), { chat: { emit() {}, conversationId: crypto.randomUUID(), followUp: true } });
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /ask the user with ask_user/);
+});
+
+test("Finalise on a chat that is busy is refused without leaving the tray 'finalising'", async () => {
+  const ctx = { chat: { emit() {}, photos: [], userText: "" } };
+  const staged = await tools.dispatch("stage_create_recipe", { title: "Busy Day Soup", course: ["Lunch"], total_mins: 20, serves: 2, calories: 300, ingredients: [{ quantity: "1", name: "onion" }], instructions: ["Cook the **onion**."] }, caller(), ctx);
+  assert.ok(!staged.isError, staged.content[0].text);
+  await background.backgroundIdle();
+  const convo = await store.createConversation({ userId: OWNER, title: "x" });
+  await store.takeTurnLock(convo.id, "u:other", 60_000);
+  const res = await post({ conversation_id: convo.id, action: "finalise", page: {} });
+  assert.equal(res.status, 409);
+  assert.notEqual(supabase.tables.trays[0].status, "finalising");
+});
+
+test("the internal secret is only ever sent to CHAT_INTERNAL_URL, never to the request's host; without it the work runs in place", async () => {
+  config.chatInternalSecret = "s3cret-value";
+  config.chatInternalUrl = "";
+  reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
+  await say("add this", { images: [asUrl(await solid(RED))] });
+  assert.deepEqual(internalHits, [], "no call to a host taken from headers");
+  assert.deepEqual(trayItems().map((i) => i.op.title), ["Miso Aubergine"], "the follow-up still ran");
+});

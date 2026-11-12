@@ -468,8 +468,21 @@ Details decided while building:
   and the report says "pieced together from the separate reads".
 - **The follow-up's "user words"** for the `photo_from_attachment` gate are the user's last own message (the one that usually carried the photos):
   "use this as the photo" sent with the photos still counts; the note itself never does.
-- **The internal routes** answer 404 without the secret (no probing), take only an id, and do the work after a 202. Without
-  `CHAT_INTERNAL_SECRET` the follow-up and the fresh drainer run inside the calling function instead.
+- **The internal routes** answer 404 without the secret (no probing), take only an id, and do the work after a 202. The secret is only
+  sent to `CHAT_INTERNAL_URL`, never to a host taken from a request's headers. Without the secret or that URL, the follow-up and the
+  fresh drainer run inside the calling function instead.
+- **Hardening after the adversarial review:**
+  - A pieced-together group recipe is stored like a second-pass one, so it can be staged.
+  - The `photo_from_attachment` gate reads only what the editor typed, never a site note merged into their message.
+  - A user turn reads the chat again once it holds the lock, so the notes it claims are the notes its model gets, and photo numbers can't collide.
+  - The user's join wins whatever each photo was read as on its own.
+  - A follow-up turn can't call `read_recipe_photos` at all: no new reads and no corrections without the user's own words.
+  - Each join or split counts toward the editor's hourly limit.
+  - Finalise starts only once the turn holds the lock.
+  - Leases are at least the worst case of the work they cover, and second passes run side by side.
+  - Kicks restart only work no live lease or running turn covers.
+  - A correction made while a report runs isn't overwritten by it.
+  - A note no turn can hand over stops the panel's waiting after 10 minutes.
 - **Uploads on pick** before the first message create the conversation (untitled, so it isn't in the chats list until its first message names it).
   An `image_paths` entry must be this conversation's and not already attached. Old pages keep the data-URL route.
 - **Turn lock:** a busy conversation is refused with 409 `{ busy }` before the rate limit is counted, so the panel's "Sending when I'm done…"

@@ -439,7 +439,7 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
+export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, followUp = false, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
   const stagedLabels = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
   const emit = (event) => {
@@ -694,7 +694,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         span.end({ output: content, refused: true });
       } else {
         emit({ type: "status", text: statusFor(call.name, { args, titles }) });
-        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, conversationId: conversation?.id, attachments, photos, userText } });
+        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, conversationId: conversation?.id, attachments, photos, userText, followUp } });
         content = resultText(out, RESULT_CAPS[call.name] || MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;

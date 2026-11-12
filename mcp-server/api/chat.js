@@ -186,7 +186,9 @@ export async function GET(request) {
       const reads = await readsOf(convo.id).catch(() => []);
       const st = statusOf(reads);
       const pendingNotes = await unhandledEvents(convo.id).catch(() => []);
-      const followUp = pendingNotes.length > 0 || (lockHeld(convo) && String(convo.turn_lock_id || "").startsWith("f:"));
+      // a note waiting for its follow-up counts for 10 minutes; one that can never be handed over (its owner left EDITORS) doesn't keep the panel polling
+      const fresh = pendingNotes.filter((e) => Date.now() - Date.parse(e.created_at) < 10 * 60_000);
+      const followUp = fresh.length > 0 || (lockHeld(convo) && String(convo.turn_lock_id || "").startsWith("f:"));
       if (st.active || pendingNotes.length) background(() => kick(convo.id, { origin: originOf(request) })); // restarts what a dead instance left behind
       return reply({
         id: convo.id,
@@ -489,7 +491,7 @@ export async function POST(request) {
         const view = await trayView(await loadTray(), caller);
         if (!view?.count) return reply({ error: "The tray is empty." }, 400);
         if (!view.needs_list) return reply({ error: "No shopping list is needed: the tray can be saved as it is." }, 409);
-        await startFinalise(caller);
+        // startFinalise runs once this turn holds the chat's lock (below): a busy chat must not leave the tray "finalising"
       } catch (err) {
         console.error("Starting Finalise failed:", err.message);
         return reply({ error: "The tray isn't available right now." }, 502);
@@ -554,7 +556,19 @@ export async function POST(request) {
       if (!(await takeTurnLock(convo.id, lockToken, TURN_LOCK_MS()))) {
         return reply({ busy: true, error: "I'm still working on the last answer. Your message goes as soon as I'm done." }, 409);
       }
-      await claimEvents(convo.id); // any note from the site not handed over yet goes to the model in THIS turn (it is in the history)
+      await claimEvents(convo.id); // any note from the site not handed over yet goes to the model in THIS turn
+      if (body?.conversation_id !== undefined && body?.conversation_id !== null) {
+        // read the chat again now that this turn holds the lock: a note stored while this request was being checked (uploads re-encoded, limits
+        // counted) is in the history the model gets, and the photo numbers can't collide with a turn that just finished in another tab
+        rows = await getMessages(convo.id);
+        history = historyForModel(rows);
+        const used = new Set(photoList(rows).map((p) => p.path));
+        if (imagePaths.some((p) => used.has(p))) {
+          await afterTurn(convo.id, lockToken, { origin: originOf(request) });
+          return reply({ error: "Those photos were already sent. Attach them again." }, 400);
+        }
+      }
+      if (finalise) await startFinalise(caller);
       const before = photoList(rows);
       const stored = images.length ? await storeUploads(convo.id, images) : [];
       attachments = [...imagePaths.map((path) => ({ path })), ...stored].map((a, i) => ({ ...a, n: before.length + i + 1 }));
@@ -571,6 +585,7 @@ export async function POST(request) {
       else messages.push({ role: "user", content: newText });
     } catch (err) {
       console.error("Saving the chat failed:", err.message);
+      if (finalise) await settleFinalise(caller);
       if (lockToken && convo) await afterTurn(convo.id, lockToken, { origin: originOf(request) });
       return reply({ error: "The chat isn't available right now." }, 502);
     }
@@ -687,6 +702,7 @@ export async function POST(request) {
             signal: isEditor ? undefined : request.signal,
             attachments,
             photos,
+            ...(isEditor ? { userText: storedUser.content } : {}), // "use this as the photo" counts only in the editor's own words, never a merged note
             model,
             apiKey: isEditor ? config.chatEditorKey : config.chatPublicKey,
             origin: isEditor ? originOf(request) : host ? `https://${host}` : new URL(request.url).origin,

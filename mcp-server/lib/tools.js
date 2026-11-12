@@ -612,8 +612,16 @@ export const TOOLS = [
         console.error("Photo reading isn't set up: CHAT_VISION_MODEL (and a key) must be set");
         throw new UserError("Photo reading isn't set up. Tell the user, and ask them to paste the recipe text or a link instead.");
       }
+      if (ctx.chat?.followUp) {
+        // a turn the server started has no words from the user: it asks (Same recipe / Two recipes) instead of reading again on its own
+        throw new UserError("Not in this turn: ask the user with ask_user, and their answer will come back as their next message.");
+      }
       const pairs = split === undefined ? [] : Array.isArray(split[0]) ? split : [split];
       if (join?.length || pairs.length || skip?.length) {
+        // a join or split means another paid read: each counts as one message toward the editor's limit, like a new photo
+        for (let i = 0; i < (join?.length || 0) + pairs.length; i++) {
+          if (!(await checkRateLimit(ctx.caller)).ok) throw new UserError("You've sent a lot in the last hour, so the photos can't be read again right now. Try again in a while.");
+        }
         const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] }, { caller: ctx.caller, origin: ctx.origin });
         return ok([...lines, "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn."].join("\n"));
       }

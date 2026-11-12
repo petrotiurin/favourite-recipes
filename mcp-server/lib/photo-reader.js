@@ -196,15 +196,16 @@ export function groupPhotos(rows) {
   const pairs = [];
   for (const b of live) {
     const a = byN.get(b.n - 1);
-    if (a && a.result.kind === "recipe" && b.result.kind === "recipe") {
+    const recipes = a && a.result.kind === "recipe" && b.result.kind === "recipe";
+    if (recipes && b.joined_to !== a.n) {
       const s = pairSignals(a.result, b.result);
       let decision = pairDecision(s);
       if (b.split_from_prev) decision = "split_by_user";
-      if (b.joined_to === a.n) decision = "joined_by_user";
       pairs.push({ a: a.n, b: b.n, ...s, decision, why: decision === "unsure" ? `${lacks(a.result, a.n)}, ${lacks(b.result, b.n)}` : "" });
-      if (decision === "joined" || decision === "joined_by_user") union(a.n, b.n);
+      if (decision === "joined") union(a.n, b.n);
     }
-    if (b.joined_to && b.joined_to !== b.n - 1 && byN.has(b.joined_to)) {
+    // the user's word wins, neighbours or not, whatever each photo was read as on its own (a step list can read as "other")
+    if (b.joined_to && byN.has(b.joined_to)) {
       union(b.joined_to, b.n);
       pairs.push({ a: b.joined_to, b: b.n, overlap: false, signals: [], newTitle: false, decision: "joined_by_user", why: "" });
     }

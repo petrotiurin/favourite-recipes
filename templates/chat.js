@@ -1009,8 +1009,12 @@
   }
 
   /** Photos are being read (or the follow-up is on its way): ask the conversation again in a while, and show the line under it. */
+  var photoChangedAt = 0; // the last time the reading moved on: after 10 quiet minutes the panel stops waiting (the server can't finish it)
   function schedulePhotoPoll(photos, soon) {
     clearTimeout(photoTimer);
+    var was = photoState;
+    if (soon || !was || !photos || was.read !== photos.read || was.reading !== photos.reading) photoChangedAt = Date.now();
+    if (photos && Date.now() - photoChangedAt > 10 * 60 * 1000) photos = null;
     photoState = photos || null;
     paintPhotoLine();
     paintNotice();
@@ -1035,6 +1039,7 @@
           var next = cleanServerMessages(j.messages, origin, photoBase);
           var photos = cleanPhotos(j.photos);
           if (!sameMessages(next, chat.messages)) {
+            photoChangedAt = Date.now();
             var grew = next.length > chat.messages.length;
             chat.messages = next;
             photoState = photos;

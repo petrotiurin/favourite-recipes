@@ -76,6 +76,7 @@ export async function runFollowUp(eventId, { origin } = {}) {
         photos,
         // the user's own words are their last message (this turn has none): "use this as the photo" with the photos still counts, nothing else does
         userText: String(rows.findLast((r) => r.role === "user")?.content?.content || ""),
+        followUp: true, // no corrections and no new reads from here: those wait for the user's own answer
       });
       output = result.reply;
       await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
