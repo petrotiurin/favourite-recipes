@@ -13,6 +13,9 @@ import { scaleLine, ingredientLines } from "./scaling.js";
 import { recipesFromHome } from "./at-home.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
+import { readsOf, enqueuePhotos, applyCorrections, readerConfigured } from "./photo-queue.js";
+import { parsePhotoId, photoLabel, fieldsFromRead, findDuplicate } from "./photo-reader.js";
+import { checkRateLimit } from "./rate-limit.js";
 import {
   listRecipes,
   recipeSummaries,
@@ -285,9 +288,10 @@ export async function stagedLabel(item) {
   }
 }
 
-async function staged(spec, ctx) {
+async function staged(spec, ctx, onStaged) {
   needChat(ctx);
   const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
+  if (onStaged) await onStaged(out);
   ctx.chat.emit?.({ type: "tray", added: out.item ? [out.item.id] : [], label: await stagedLabel(out.item).catch(() => "") });
   const n = out.tray?.items?.length ?? 0;
   const lines = [`${out.message}. The tray (not the site yet) now has ${n} change${n === 1 ? "" : "s"}.`];
@@ -303,9 +307,9 @@ const attachmentSchema = z
   .number()
   .int()
   .min(1)
-  .max(4)
+  .max(10_000)
   .optional()
-  .describe("Use the photo the user attached to THIS message as the recipe's photo: its number (1 = the first attached photo). Only when the user said to use their photo for this recipe; it wins over image_url.");
+  .describe("Use a photo the user attached in this chat as the recipe's photo: its number (photo-6 -> 6). Only when the user said to use their photo for this recipe (usually a photo of the dish); it wins over image_url.");
 
 /** The stored path of attached photo `n` (1-based) of the current message, or a UserError the model can read. */
 export const asksToUsePhoto = (text) =>
@@ -320,8 +324,9 @@ export const asksToUsePhoto = (text) =>
  */
 const attachedPath = (n, ctx) => {
   if (n === undefined) return {};
-  const path = ctx.chat?.attachments?.[n - 1]?.path;
-  if (!path) throw new UserError(`There is no attached photo ${n} in the user's latest message.`);
+  // the conversation's photo numbers (photo-6), as the panel's badges show them
+  const path = ctx.chat?.photos?.length ? ctx.chat.photos.find((p) => p.n === n)?.path : ctx.chat?.attachments?.[n - 1]?.path;
+  if (!path) throw new UserError(`There is no photo-${n} in this chat.`);
   if (!asksToUsePhoto(ctx.chat?.userText)) {
     console.warn("Ignored photo_from_attachment: the user's message didn't ask to use their photo as the recipe's photo");
     return { ignored: "photo_from_attachment was ignored: the user didn't ask to use their photo as this recipe's photo, so its photo is made (or taken from image_url) instead. Don't tell them their photo is used." };
@@ -334,8 +339,15 @@ const asAttachment = (n, ctx) => {
   return { uploadPath: path, ...(ignored ? { notes: [ignored] } : {}) };
 };
 
+const createFields = Object.fromEntries(Object.entries(createShape).filter(([k]) => !["image", "week"].includes(k)));
 const stageCreateShape = {
-  ...Object.fromEntries(Object.entries(createShape).filter(([k]) => !["image", "week"].includes(k))),
+  from_photo: z
+    .string()
+    .max(80)
+    .optional()
+    .describe('Stage the recipe the photo reader read off the user\'s photos, by its id from the site\'s "photos read" note, e.g. "photo-3" or "photo-3+4" (screenshots read together). Then pass only what the user changed (course, serves, a corrected title…): every other field comes from the photo.'),
+  keep_both: z.boolean().optional().describe("With from_photo: stage it even though it looks like a recipe already in the tray or the book. Only when the user said to add theirs anyway."),
+  ...Object.fromEntries(Object.entries(createFields).map(([k, v]) => [k, v.optional()])),
   image_url: z.string().url().optional().describe("A link to the recipe's page or straight to its photo (http/https). Its photo (og:image) is used; leave out to have a photo generated."),
   photo_from_attachment: attachmentSchema,
   next_week: z.boolean().optional().describe("Default true: the recipe is planned for next week. false only to add it to the book without planning it."),
@@ -350,16 +362,98 @@ const stageUpdateShape = {
 };
 delete stageUpdateShape.image;
 
+async function recipeIngredientsSafe() {
+  const { recipeIngredients } = await import("./recipes.js");
+  return recipeIngredients().catch(() => []);
+}
+
+async function markStaged(rows, itemId) {
+  const { rest, q } = await import("./chat-store.js");
+  await rest("photo_reads", { method: "PATCH", query: q({ id: `in.(${rows.map((r) => r.id).join(",")})` }), body: { tray_item_id: itemId } });
+}
+
+/**
+ * What the photo reader read for `from_photo` ("photo-3+4") in THIS conversation: { fields, estimated, rows, staged (tray item ids staged from
+ * them before), label }. Only the conversation the turn belongs to can resolve its photo ids; anything else is "not in this chat".
+ */
+async function photoRecipe(id, ctx) {
+  const ns = parsePhotoId(id);
+  if (!ns) throw new UserError(`"${id}" isn't a photo id: use the id from the site's note, like "photo-3" or "photo-3+4".`);
+  const conversationId = ctx.chat?.conversationId;
+  const rows = conversationId ? await readsOf(conversationId) : [];
+  const byN = new Map(rows.map((r) => [r.n, r]));
+  const label = photoLabel(ns);
+  const gone = ns.filter((n) => !byN.has(n));
+  if (gone.length) throw new UserError(`${gone.map((n) => `photo-${n}`).join(", ")} isn't a photo that was read in this chat.`);
+  const members = ns.map((n) => byN.get(n));
+  if (members.some((r) => r.status === "queued" || r.status === "reading")) throw new UserError(`${label} is still being read: wait for the site's note.`);
+  const bad = members.find((r) => r.status !== "read");
+  if (bad) throw new UserError(`photo-${bad.n} ${bad.status === "skipped" ? "was skipped" : `couldn't be read (${bad.error || "the reader failed"})`}: ask the user for a clearer photo or the text.`);
+  const group = members[0].group_id;
+  if (!group) throw new UserError(`${label} hasn't been reported yet: wait for the site's note.`);
+  if (members.some((r) => r.group_id !== group) || group !== ns.join("+")) {
+    const actual = members[0].group_id;
+    throw new UserError(actual && actual !== ns.join("+") ? `photo-${ns[0]} is read as part of "photo-${actual}": use that id. To read photos together or apart differently, call read_recipe_photos with join or split first.` : `${label} were read as separate recipes. If they are one recipe, call read_recipe_photos({ join: [[${ns.join(", ")}]] }) first.`);
+  }
+  const read = ns.length > 1 ? members[0].recipe : members[0].result;
+  if (!read) throw new UserError(`${label} hasn't been read together yet: wait for the site's note.`);
+  if (read.kind === "dish") throw new UserError(`${label} is a photo of a dish, not a recipe. It can be a recipe's photo (photo_from_attachment) if the user asks.`);
+  if (read.kind !== "recipe") throw new UserError(`${label} isn't a recipe.`);
+  const { fields, estimated } = fieldsFromRead(read);
+  for (const k of Object.keys(fields)) if (Array.isArray(fields[k]) && !fields[k].length && k !== "tags") delete fields[k];
+  if (!fields.title) delete fields.title;
+  return { fields, estimated, rows: members, staged: [...new Set(members.map((r) => r.tray_item_id).filter(Boolean))], label };
+}
+
 const STAGE_TOOLS = [
   {
     name: "stage_create_recipe",
     title: "Stage a new recipe",
     description:
-      "Add a NEW recipe to the plan tray (not to the site: a person saves it). Same fields and rules as create_recipe (structured ingredients with quantities, bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
+      "Add a NEW recipe to the plan tray (not to the site: a person saves it). For a recipe read off the user's photos pass from_photo (its id from the site's note) and only the fields the user changed. Otherwise the same fields and rules as create_recipe (structured ingredients with quantities, bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
       "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
     inputSchema: stageCreateShape,
     access: "stage",
-    handler: safe(async ({ image_url, photo_from_attachment, next_week, reason, ...fields }, ctx) => staged({ op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, ...asAttachment(photo_from_attachment, ctx), reason }, ctx)),
+    handler: safe(async ({ from_photo, keep_both, image_url, photo_from_attachment, next_week, reason, ...given }, ctx) => {
+      needChat(ctx);
+      let fields = given;
+      let fromRows = null;
+      let replaces = [];
+      const notes = [];
+      if (from_photo !== undefined) {
+        const read = await photoRecipe(from_photo, ctx);
+        fields = { ...read.fields, ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)) };
+        fromRows = read.rows;
+        replaces = read.staged;
+        if (read.estimated.length) notes.push(`estimated (not in the photo): ${read.estimated.map((e) => e.replace("total_mins", "time")).join(", ")}; say so`);
+        reason = `from photo ${read.label.replace(/^photo-/, "").replace(/\+/g, " + ")}`; // the card names its photos (a model's own reason can be made up)
+      }
+      const parsed = z.object(createFields).safeParse(fields);
+      if (!parsed.success) {
+        const missing = parsed.error.issues.map((i) => i.path.join(".") || "(root)");
+        throw new UserError(from_photo !== undefined ? `The photo doesn't give everything a recipe needs (${[...new Set(missing)].join(", ")}). Ask the user for the missing part (another screenshot, or the text), or pass it yourself if they told you.` : `Invalid arguments: ${parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}`);
+      }
+      fields = parsed.data;
+      const tray = await loadTray();
+      if (from_photo !== undefined && !keep_both) {
+        const trayNew = (tray?.items || []).filter((i) => i.kind === "new").map((i) => ({ id: i.id, title: i.op.title, ingredients: (i.op.ingredients || []).map((x) => x.name), added_by: i.added_by?.name || "Someone" }));
+        const book = (await recipeIngredientsSafe()).map((r) => ({ slug: r.slug, title: r.title, ingredients: r.ingredients }));
+        const { match } = findDuplicate({ title: fields.title, ingredients: fields.ingredients.map((i) => i.name) }, { tray: trayNew, book, skipIds: replaces });
+        if (match?.kind === "tray") return ok(`Not staged: it looks like "${match.title}", which ${match.added_by} already added to the tray ${JSON.stringify({ duplicate_of: match.id, added_by: match.added_by })}. Tell the user; stage it with keep_both: true only if they say to add theirs anyway.`);
+        if (match?.kind === "book") return ok(`Not staged: it looks like "${match.title}" (${match.slug}), already in the book. Add that one to next week with stage_set_week_recipes instead, or stage with keep_both: true if the user says it's a different recipe.`);
+      }
+      // a re-read group replaces the card staged from its photos before, whatever its title
+      const { slugify } = await import("./recipe-format.js");
+      for (const id of replaces) {
+        const old = tray?.items.find((i) => i.id === id);
+        if (old && !(old.kind === "new" && slugify(old.op.title) === slugify(fields.title))) await dropItem(id, ctx.caller, { trace: ctx.chat.trace });
+      }
+      const spec = { op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, ...asAttachment(photo_from_attachment, ctx), reason };
+      spec.notes = [...(spec.notes || []), ...notes];
+      return staged(spec, ctx, async (out) => {
+        if (fromRows && out.item) await markStaged(fromRows, out.item.id).catch((e) => console.error("Remembering the staged card failed:", e.message));
+      });
+    }),
   },
   {
     name: "stage_update_recipe",
@@ -494,7 +588,69 @@ const STAGE_TOOLS = [
   },
 ];
 
+const photoNums = z.number().int().min(1).max(10_000);
 export const TOOLS = [
+  {
+    name: "read_recipe_photos",
+    title: "Read the user's photos",
+    description:
+      "Send the photos the user attached to their latest message to the photo reader (a separate model reads them in the background; you never see the photos). It returns at once: tell the user the photos are being read and end your turn. The result arrives later as a note from the site (\"photos read\"), with an id per recipe to stage with stage_create_recipe({ from_photo }). " +
+      "Also takes the user's corrections: join ([[3, 4]]: these photos are one recipe, read them again together), split ([[2, 3]]: these are different recipes), skip ([4]: leave this photo out). Photo numbers are the ones on the photos in the chat.",
+    inputSchema: {
+      join: z.array(z.array(photoNums).min(2).max(8)).max(6).optional().describe('Groups of photos that are one recipe, e.g. [[3, 4]]'),
+      split: z.union([z.array(photoNums).length(2), z.array(z.array(photoNums).length(2)).max(6)]).optional().describe('Pairs of photos that are different recipes, e.g. [[2, 3]]'),
+      skip: z.array(photoNums).max(30).optional().describe("Photos to leave out, e.g. [4]"),
+    },
+    access: "read",
+    editorOnly: true, // reading uses the editor's photos and spends on the vision model: signed-in editors only (dispatch, offeredTools and the handler check)
+    chatOnly: true,
+    handler: safe(async ({ join, split, skip }, ctx) => {
+      if (ctx?.caller?.role !== "editor") throw new UserError('Not allowed: "read_recipe_photos" needs a signed-in editor.');
+      const conversationId = ctx.chat?.conversationId;
+      if (!conversationId) throw new UserError("That tool only works inside the chat.");
+      if (!readerConfigured()) {
+        console.error("Photo reading isn't set up: CHAT_VISION_MODEL (and a key) must be set");
+        throw new UserError("Photo reading isn't set up. Tell the user, and ask them to paste the recipe text or a link instead.");
+      }
+      if (ctx.chat?.followUp) {
+        // a turn the server started has no words from the user: it asks (Same recipe / Two recipes) instead of reading again on its own
+        throw new UserError("Not in this turn: ask the user with ask_user, and their answer will come back as their next message.");
+      }
+      const pairs = split === undefined ? [] : Array.isArray(split[0]) ? split : [split];
+      if (join?.length || pairs.length || skip?.length) {
+        // a join or split means another paid read: each counts as one message toward the editor's limit, like a new photo
+        for (let i = 0; i < (join?.length || 0) + pairs.length; i++) {
+          if (!(await checkRateLimit(ctx.caller)).ok) throw new UserError("You've sent a lot in the last hour, so the photos can't be read again right now. Try again in a while.");
+        }
+        const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] }, { caller: ctx.caller, origin: ctx.origin });
+        const rereads = (join?.length || 0) + pairs.length > 0;
+        return ok([...lines, rereads ? "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn." : "Nothing is read again: tell the user what was skipped."].join("\n"));
+      }
+      const reads = await readsOf(conversationId);
+      const queuedPaths = new Set(reads.map((r) => r.path));
+      const all = ctx.chat?.photos || [];
+      const latest = (ctx.chat?.attachments || []).map((a) => all.find((p) => p.path === a.path)).filter(Boolean);
+      let todo = latest.filter((p) => !queuedPaths.has(p.path));
+      if (!latest.length) todo = all.filter((p) => !queuedPaths.has(p.path));
+      const active = reads.filter((r) => r.status === "queued" || r.status === "reading").length;
+      if (!todo.length) {
+        return ok(JSON.stringify({ queued: 0, reading: active, note: active ? "Those photos are already being read: the result arrives as a note from the site. Tell the user and end your turn." : "There are no new photos to read in this chat. Ask the user to attach them." }));
+      }
+      let allowed = 0;
+      for (; allowed < todo.length; allowed++) if (!(await checkRateLimit(ctx.caller)).ok) break; // each photo read counts as one message toward the editor's limit
+      if (!allowed) throw new UserError("You've sent a lot in the last hour, so the photos can't be read right now. Try again in a while.");
+      const out = await enqueuePhotos({ conversationId, caller: ctx.caller, photos: todo.slice(0, allowed), origin: ctx.origin });
+      const ns = out.queued.map((r) => r.n).sort((a, b) => a - b);
+      const refused = out.refused + (todo.length - allowed);
+      return ok(JSON.stringify({
+        queued: ns.length,
+        photos: ns.length ? (ns.length === 1 ? `photo-${ns[0]}` : `photo-${ns[0]} to photo-${ns[ns.length - 1]}`) : "none",
+        reading: out.status.queued + out.status.reading,
+        ...(refused ? { not_queued: refused, why: out.refused ? "at most 30 photos can wait to be read in one chat" : "the hourly limit" } : {}),
+        note: "Reading in the background. Tell the user, then end your turn: the result arrives as a note from the site.",
+      }));
+    }),
+  },
   {
     name: "fetch_url",
     title: "Read a web page",

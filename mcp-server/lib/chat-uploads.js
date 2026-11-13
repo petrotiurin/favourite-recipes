@@ -11,7 +11,7 @@ import { storage, objectPath, SIGNED_URL_SECONDS } from "./tray-store.js";
 import { config } from "./config.js";
 
 export const UPLOAD_BUCKET = "chat-uploads";
-export const MAX_IMAGES = 4; // per message
+export const MAX_IMAGES = 8; // per message (docs/parallel-photo-reading.md P7)
 export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024; // per image, as sent by the browser (it downscales first, so this is generous)
 export const MAX_UPLOAD_PIXELS = 40_000_000; // refuses decompression bombs
 const FORMATS = new Set(["jpeg", "png", "webp", "gif", "heif", "avif"]);

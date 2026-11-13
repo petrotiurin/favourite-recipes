@@ -1,7 +1,7 @@
 # Reading several recipe photos at once in the chat: design
 
-Status: **proposal, not built**. Follows on from phase 5 of `docs/chatbot-design.md` (photo attachments in the editor chat).
-Decisions are marked **P1, P2…** with a recommendation; open questions are at the end.
+Status: **built** (all four phases of section 6). Follows on from phase 5 of `docs/chatbot-design.md` (photo attachments in the editor chat).
+Decisions are marked **P1, P2…**; open questions are at the end. Where the build differs from or adds to the text below, section 8 says so.
 
 ## 1. The problem
 
@@ -444,3 +444,60 @@ Decided:
 - No batches: one row per photo, a report whenever the conversation's queue is idle (2.5).
 - Two editors: per-person chats and queues, meeting in the household tray, with duplicates caught across the tray and
   "Reading n photos · name" entries (2.6).
+
+## 8. As built
+
+Where the code lives: `lib/photo-reader.js` (the reader call, normalising its answer, grouping, duplicates), `lib/photo-reader-prompt.js` (prompt,
+schema, `PHOTO_READER_PROMPT_VERSION`), `lib/photo-queue.js` (enqueue, drainers, report, corrections, kick), `lib/follow-up.js` (the follow-up turn,
+`afterTurn`), `read_recipe_photos` and `from_photo` / `keep_both` in `lib/tools.js`, the routes in `api/chat.js`, migration
+`supabase/migrations/20261112000000_photo_reads.sql`, tests in `test/photo-reading.test.js`.
+
+Details decided while building:
+
+- **Photo numbers come from the stored messages**, not from enqueueing: every photo attached in the conversation is numbered in order (messages in
+  order, picked order within a message), `photoList()` in `lib/chat-store.js`. The panel gets `photo_numbers` with each user message and an SSE
+  `photos` event for a message being sent; `photo_reads.n` uses the same numbers. `photo_from_attachment` takes these numbers too.
+- **What `read_recipe_photos` queues:** the photos of the user's latest message; when that message has none, any photo of the chat never queued.
+  Each turn's note also lists attached photos that were never handed to the reader, so a model that forgot gets reminded.
+- **Overlap** is a line from the top of B equal to one at the bottom of A (or containing it, when the shorter part is 30+ characters): a title
+  inside a sentence doesn't count. A title on B makes signs alone at most "unsure".
+- **Duplicates:** title words (stop words such as "easy", "best" dropped, plurals folded) shared ≥ 0.6 of the longer title, and ingredient names
+  shared ≥ 0.6 of the shorter list (`TITLE_MATCH`, `INGREDIENT_MATCH`). A match in the book is refused too ("add it to next week instead"), not only
+  one in the tray; `keep_both` overrides both. Two photos in one report that look alike are marked "looks like photo-2 in this lot".
+- **A second pass that fails** (timeout, unparseable) falls back to gluing the first-pass reads together (title from the first, lists in order),
+  and the report says "pieced together from the separate reads".
+- **The follow-up's "user words"** for the `photo_from_attachment` gate are the user's last own message (the one that usually carried the photos):
+  "use this as the photo" sent with the photos still counts; the note itself never does.
+- **The internal routes** answer 404 without the secret (no probing), take only an id, and do the work after a 202. The secret is only
+  sent to `CHAT_INTERNAL_URL`, never to a host taken from a request's headers. Without the secret or that URL, the follow-up and the
+  fresh drainer run inside the calling function instead.
+- **Hardening after the adversarial review:**
+  - A pieced-together group recipe is stored like a second-pass one, so it can be staged.
+  - The `photo_from_attachment` gate reads only what the editor typed, never a site note merged into their message.
+  - A user turn reads the chat again once it holds the lock, so the notes it claims are the notes its model gets, and photo numbers can't collide.
+  - The user's join wins whatever each photo was read as on its own.
+  - A follow-up turn can't call `read_recipe_photos` at all: no new reads and no corrections without the user's own words.
+  - Each join or split counts toward the editor's hourly limit.
+  - Finalise starts only once the turn holds the lock.
+  - Leases are at least the worst case of the work they cover, and second passes run side by side.
+  - Kicks restart only work no live lease or running turn covers.
+  - A correction made while a report runs isn't overwritten by it.
+  - A note no turn can hand over stops the panel's waiting after 10 minutes.
+- **After the second user-flow check:** a join or split takes the cards staged from those photos out of the tray at once (whatever the re-read
+  finds, so the tray never holds both the halves and the whole); the panel's status line names what was already added ("Photos read: 4
+  recipes · Prawn Pad Thai already added"); a skip doesn't promise a re-read.
+- **After running against real Qwen models** (`REAL_MODELS=1` in the dev harness: real OpenRouter, everything else faked):
+  - The reader asks for no thinking by default (`CHAT_VISION_REASONING=off`). Thinking models (Qwen 3.7 Plus) otherwise spent the whole token
+    budget thinking on a full page and never answered.
+  - Reader calls set `provider.require_parameters`, so OpenRouter only routes to providers that honour the schema. Without it Qwen 3.5 397B
+    sometimes looped, inventing fields until the limit.
+  - A malformed answer, an answer cut off by a provider error, or one that ran out of room is tried once more (two attempts in all). It
+    usually lands on another provider.
+  - The parser accepts an object wrapped in a one-item array, a code fence, or a line of prose around it.
+  - A card staged from photos always says "from photo N", whatever reason the model passed.
+- **Uploads on pick** before the first message create the conversation (untitled, so it isn't in the chats list until its first message names it).
+  An `image_paths` entry must be this conversation's and not already attached. Old pages keep the data-URL route.
+- **Turn lock:** a busy conversation is refused with 409 `{ busy }` before the rate limit is counted, so the panel's "Sending when I'm done…"
+  retries (every 4s, up to 5 minutes) don't use up the editor's quota.
+- **Not built:** `?after=` on `GET /chat/conversations/:id` (the panel reloads the whole conversation; fine at our size), and recording the user's
+  corrections as Langfuse scores (the report trace records every pair's signals and decision and every duplicate check, as metadata).

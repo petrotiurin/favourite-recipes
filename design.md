@@ -285,10 +285,22 @@ On the **At home** tab every row is a fill bar:
 - **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
   tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
 - **Photo attachments** (`.chat-attach`, editors only): a 44px round outline icon button (the stroke "picture" icon, `--text-muted`) to the left of the
-  input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 4 photos;
-  the button disables at 4. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
-  round × on the corner; they're downscaled to 1600px JPEG in the browser first. A muted line says when a file couldn't be read. A sent message
-  shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened. Visitors have no button.
+  input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 8 photos;
+  the button disables at 8. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
+  round × on the corner; they're downscaled to 1600px JPEG in the browser first and **uploaded at once, one by one** (`POST /chat/uploads`) while the
+  editor types: an uploading thumbnail is dimmed with a small "Uploading…" label, a failed one is faded with a **Retry** button on it. Sending while
+  uploads run says "Sending as soon as the photos are uploaded…" and sends when they're up. A muted line says when a file couldn't be read. A sent
+  message shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened.
+  Visitors have no button.
+- **Photo numbers** (`.chat-photo-num`): every photo carries its number in the chat as a small round badge bottom-left (white `--surface` pill,
+  `--shadow`, 0.75rem semibold, tabular figures), on the waiting thumbnails and the sent ones. Numbers run on through the whole conversation
+  (the second message's photos are 7, 8…), because the chat talks about them by number ("photos 4 and 5 may be one recipe"). Neutral, never a week colour.
+- **Notes from the site** (`.chat-event`): a short line the server adds to the conversation ("Photos read: 5 recipes, 1 to check"): centred, a
+  `--track` pill, `--text-muted` 0.8rem, no bubble and no thumbs. The bot's answer to it follows as a normal reply.
+- **Reading progress** (`.chat-reading`, a `.chat-status` line, last in the conversation): "Reading photos… 4 of 6", then "Adding them to the tray…"
+  while the follow-up runs. While photos are being read the panel checks the conversation every 5s (15s with the panel closed; the bubble's ring
+  turns meanwhile and the dot shows when the answer arrives), and a new page load shows the dot if a reply came while away. A message sent while the
+  follow-up answers waits with "Sending when I'm done…" and goes when it's finished.
 - **Action chips that commit** (`.chat-chip.is-action`: Save to site, Finalise list): solid `--accent-strong` like the primary button, fixed text
   drawn by the panel ("Save to site (3)"), never the model's wording.
 - Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.
@@ -307,6 +319,10 @@ On the **At home** tab every row is a fill bar:
   previews it by aisle. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
   the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
   button that applies.
+- **Reading entries in the tray** (`.tray-reading`): photos being read anywhere in the household show above the cards as quiet italic `--text-muted`
+  lines, "Reading 3 photos · Sam" (or "· you"). They aren't tray items: nothing to save, never in the shopping list's hash, and the other editor's
+  photos are never shown, only the count and the name. With nothing staged yet, the strip shows just these lines. While another editor's photos are
+  being read, a line above Save says "Sam has 3 photos still being read." (Save still works).
 - **Week balance** (`.tray-balance`): one muted 0.82rem line under the tray's head, "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each ·
   2 h 15 min in all", from numbers the server computed; hidden while the tray is folded. **At home card**: kicker "At home" (muted, like Edit), title
   "At home: 2 items", sub "Eggs 6, Basmati rice"; tapping opens the list of what was recorded; **Save now** works on it.

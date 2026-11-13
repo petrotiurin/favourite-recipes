@@ -85,3 +85,21 @@ export async function verifyEditor(request) {
   if (!user.isEditor) return { status: 403, error: `${user.email || "This account"} isn't allowed to edit the shopping list.` };
   return { email: user.email, userId: user.userId };
 }
+
+/**
+ * The email of a Supabase user, by id, through the Auth admin API (service-role key, server only), lower-cased; null if there is no such
+ * user or it can't be asked. The server's own follow-up turn uses it to check that a conversation's owner is still in EDITORS.
+ */
+export async function userEmail(userId) {
+  if (!userId || !config.supabaseUrl || !config.supabaseServiceKey) return null;
+  try {
+    const res = await fetch(`${config.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+      headers: { apikey: config.supabaseServiceKey, Authorization: `Bearer ${config.supabaseServiceKey}` },
+    });
+    if (!res.ok) return null;
+    const user = await res.json();
+    return String(user?.email || "").toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}

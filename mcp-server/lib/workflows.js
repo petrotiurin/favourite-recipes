@@ -61,3 +61,15 @@ export function chatGuide() {
   };
   return [between("### Writing a recipe that passes first time", "**Photos.**"), between("## 3. Build the shopping list (always)", "## 4."), between("## In chat")].join("\n\n");
 }
+
+/**
+ * The recipe-writing rules ("Writing a recipe that passes first time", rules 1-5) on their own, for the photo reader's prompt
+ * (lib/photo-reader-prompt.js): one source with the chat guide, so the two can't drift.
+ */
+export function recipeRules() {
+  const text = WORKFLOWS["plan-recipes"].text;
+  const i = text.indexOf("**1. Every ingredient");
+  const j = text.indexOf("**Photos.**", i);
+  if (i === -1 || j === -1) throw new Error('plan-recipes.md has no recipe-writing rules ("**1. Every ingredient" … "**Photos.**")');
+  return text.slice(i, j).trim();
+}
