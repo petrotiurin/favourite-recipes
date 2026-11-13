@@ -307,6 +307,14 @@ On the **At home** tab every row is a fill bar:
 - **Questions** (`.chat-question`, `ask_user`): the question in bold, then **solid** chips (`--accent-strong`, `--on-accent`; a suggestion is an
   outline chip). The input's placeholder reads "Or type an answer" while one is live. `multi` chips toggle (`--current-soft` with an accent
   inset border) and a solid "Done" sends them together. Only the last message's question is live.
+- **Drafts review card** (`.chat-review`, editors, at Finalise after *Promote it*): one card (`--surface`, 1px `--border`, 14px radius, rows
+  divided by `--line`) listing every draft of this week. Each row is the recipe's 44px photo, its title (a link to the recipe) and a muted
+  meta line ("Also planned for next week" when it is), then a 2 × 2 segmented control (`.seg` on `--track`, 44px segments, the picked one
+  `--raised` and bold): *Liked* · *Not for us* · *Keep this week* · *Back to the book* (three segments for a draft also in next week, the last
+  spanning the row). A row starts on the answer the tray already holds. A solid "Done" under the rows reads "3 drafts left to answer" (disabled)
+  until every row has an answer, and sends them all in one message. While it is open the input says "Or type an answer", the tray folds to its
+  head line on a phone, and the tray's Finalise list button scrolls to the card instead of starting again. Once answered it fades to 40% like
+  an old question; its recipe links still work.
 - **Plan tray** (`.chat-tray`, editors only, between the log and the input): a hairline-topped strip. A small-caps head line "Tray · 8 changes ·
   until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
   week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button

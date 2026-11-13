@@ -259,10 +259,11 @@ export function messagesForPanel(rows) {
       if (ui.nav) turn.nav = ui.nav;
       if (ui.replies?.length) turn.replies = ui.replies;
       if (ui.question) turn.question = ui.question;
+      if (ui.review) turn.review = ui.review;
       if (row.feedback) turn.feedback = row.feedback;
     }
   }
-  return out.filter((m) => m.role === "user" || m.role === "event" || m.content || m.cards?.length || m.question);
+  return out.filter((m) => m.role === "user" || m.role === "event" || m.content || m.cards?.length || m.question || m.review);
 }
 
 /**

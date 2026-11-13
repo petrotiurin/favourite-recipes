@@ -302,7 +302,8 @@ tray (§7). One `apply_plan` turns the tray into a single `batch_changes` commit
 | `show_recipes({ slugs, reason? })` | A row of recipe cards (photo, kicker, name, "20 min · 412 kcal"), each linking to its page. |
 | `offer_navigation({ slug \| page, label })` | A button "Open Steamed rice". Never navigates by itself. |
 | `suggest_replies({ replies[] })` | Tappable suggested replies under the bot's message (see 6.1). |
-| `ask_user({ question, options[], multi? })` | A question that needs an answer before going on; the chat version of `AskUserQuestion`, which the plan-recipes guide relies on ("Did you like the harissa pitta? Liked / Not for us / Not cooked yet"). |
+| `ask_user({ question, options[], multi? })` | A question that needs an answer before going on; the chat version of `AskUserQuestion`, which the plan-recipes guide relies on ("Photos 4 and 5 may be one recipe: Same recipe / Two recipes"). |
+| `review_drafts()` (editors) | The drafts review card (7.1): one row per draft of this week, built by the server from the book, each with a segmented *Liked* · *Not for us* · *Keep this week* · *Back to the book*, and one **Done**. Done is answered by the server, not the model. |
 
 These return immediately with `{ shown: true }`, and the tapped reply arrives as the next user
 message, so the loop never waits on the browser in the middle of a turn.
@@ -406,10 +407,23 @@ plain button with no model in it. So the list is built **before** Save becomes a
      site (an earlier plan). The tray itself is built without asking: it just collects. The
      question comes here, at Finalise, with that week's recipe cards:
      *"Next week has 4 recipes. Is it ready to become this week?"*
-     - **Promote it** → stages `start_next_week` (first in the batch, so the tray's additions
-       land in the fresh next week), then one `ask_user` per draft in this week (*Liked* ·
-       *Not for us* · *Not tried yet*, with the recipe's card; not tried → *Keep it this week* ·
-       *Back to the book*), staging the answers. The list is built for the tray's recipes only.
+     - **Promote it** → answered by the server with no model call (`lib/draft-review.js`, next to the
+       *Not yet* shortcut): it stages `start_next_week` (first in Save order, so the tray's additions
+       land in the fresh next week) and shows the **drafts review card**: every draft of this week in
+       one card, each row a segmented *Liked* · *Not for us* · *Keep this week* · *Back to the book*
+       (a draft also planned for next week offers *Liked* · *Not for us* · *Not tried yet*, and is
+       never removed), starting on any answer already in the tray, then one **Done**. (It used to be
+       one `ask_user` per draft, and every tap waited for a model call: 8 drafts meant 8 pauses.)
+       Done is `POST /chat { action: "review_drafts", answers: { slug: "liked" | "remove" | "keep" |
+       "book" } }`: only while that card is the chat's open question (a second Done is a 409), every
+       draft answered, slugs checked against the book. The server stores the answers as the editor's
+       message in words ("Liked: A. Not for us: B."), stages them all in ONE tray write (`stageMany`
+       in `lib/tray.js`: the switch's carry-over, a promote per liked draft, a removal per draft not
+       for us; earlier answers for those drafts are replaced) and says what it staged. If a list is
+       needed it then hands the turn to the model for step 2 only (the tray shows "Building the
+       list…"); otherwise it offers Save. The model can show the same card with `review_drafts` if it
+       stages the switch itself, and is told never to ask about the drafts one by one. The list is
+       built for the tray's recipes only.
      - **Not yet** → **nothing happens.** Finalise stops, nothing is staged, the tray stays as
        it was, and next week and its shopping list are untouched. The bot says so and offers to
        come back to it later.

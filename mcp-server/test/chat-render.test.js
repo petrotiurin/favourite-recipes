@@ -240,3 +240,29 @@ test("photo reading in the panel: numbers line up with the photos, notes from th
   assert.equal(chat.readingSaveNote(entries), "Sam has 3 photos still being read.");
   assert.equal(chat.readingSaveNote([entries[1]]), "");
 });
+
+test("the drafts review card: rows from the server, on our origin only, known answers only; Done's message in words", () => {
+  const review = chat.cleanReview(
+    {
+      drafts: [
+        { slug: "pea-soup", title: " Pea Soup ", url: "https://site.test/favourite-recipes/recipes/pea-soup.html", image: "https://evil.test/x.jpg", meta: "20 min", also_next: false, answer: "keep", options: [{ value: "liked", label: "Liked" }, { value: "remove", label: "Not for us" }, { value: "keep", label: "Keep this week" }, { value: "book", label: "Back to the book" }, { value: "drop", label: "Drop the repo" }] },
+        { slug: "Bad Slug", title: "x", options: [{ value: "liked", label: "Liked" }, { value: "book", label: "Not tried yet" }] },
+        { slug: "rice", title: "Rice", url: "javascript:alert(1)", also_next: true, answer: "keep", options: [{ value: "liked", label: "Liked" }, { value: "book", label: "Not tried yet" }] },
+        { slug: "one-option", title: "One", options: [{ value: "liked", label: "Liked" }] },
+      ],
+    },
+    ORIGIN
+  );
+  assert.deepEqual(review.drafts.map((d) => d.slug), ["pea-soup", "rice"]);
+  const [pea, rice] = review.drafts;
+  assert.equal(pea.title, "Pea Soup");
+  assert.equal(pea.image, "", "a photo off our origin is dropped");
+  assert.deepEqual(pea.options.map((o) => o.value), ["liked", "remove", "keep", "book"]);
+  assert.equal(pea.answer, "keep");
+  assert.equal(rice.url, "");
+  assert.equal(rice.alsoNext, true);
+  assert.equal(rice.answer, "", "an answer the row doesn't offer isn't kept");
+  assert.equal(chat.cleanReview({ drafts: [] }, ORIGIN), null);
+  assert.equal(chat.cleanReview(null, ORIGIN), null);
+  assert.equal(chat.reviewText(review, { "pea-soup": "keep", rice: "book" }), "Keep this week: Pea Soup. Not tried yet: Rice.");
+});

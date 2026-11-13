@@ -2842,6 +2842,91 @@ button.chat-attachment-state {
   opacity: 0.4;
 }
 
+/* The drafts review card (review_drafts): every draft of this week in one card, a segmented answer per row, one Done. */
+.chat-review {
+  flex: none; /* the log is a flex column: with overflow hidden the card would otherwise shrink to nothing */
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.chat-review-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+.chat-review-row + .chat-review-row {
+  border-top: 1px solid var(--line);
+}
+
+.chat-review-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.chat-review-img {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--track);
+}
+
+.chat-review-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-review-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-review-sub {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Four answers don't fit one line in the panel: a 2 x 2 segmented control on the same track. */
+.chat-review-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.chat-review-seg button {
+  min-width: 0;
+  height: 2.75rem;
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+.chat-review-seg button:only-child,
+.chat-review-seg button:nth-child(3):last-child {
+  grid-column: 1 / -1;
+}
+
+.chat-review-done {
+  justify-content: center;
+  margin: 0.25rem 0.75rem 0.75rem;
+}
+
+.chat-review.is-old {
+  opacity: 0.4;
+}
+
 .chat-card.is-publishing {
   opacity: 0.6;
   cursor: default;

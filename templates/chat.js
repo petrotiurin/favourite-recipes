@@ -215,6 +215,51 @@
     return options.length >= 2 ? { question: q.question.trim().slice(0, 240), options: options, multi: q.multi === true } : null;
   }
 
+  var REVIEW_VALUES = ["liked", "remove", "keep", "book"];
+  var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+  /**
+   * The drafts review card (review_drafts / "Promote it"): { drafts: [{ slug, title, url, image, meta, alsoNext, options: [{ value, label }],
+   * answer }] }, or null. Built by the server from the book; links and photos only on this site's origin, at most 20 rows.
+   */
+  function cleanReview(r, origin) {
+    if (!r || typeof r !== "object" || !Array.isArray(r.drafts)) return null;
+    var drafts = [];
+    r.drafts.forEach(function (d) {
+      if (drafts.length >= 20 || !d || typeof d !== "object" || typeof d.slug !== "string" || !SLUG_RE.test(d.slug) || typeof d.title !== "string" || !d.title.trim()) return;
+      if (drafts.some(function (x) { return x.slug === d.slug; })) return;
+      var options = [];
+      (Array.isArray(d.options) ? d.options : []).forEach(function (o) {
+        if (!o || typeof o !== "object" || REVIEW_VALUES.indexOf(o.value) === -1 || typeof o.label !== "string" || !o.label.trim()) return;
+        if (options.length < 4 && !options.some(function (x) { return x.value === o.value; })) options.push({ value: o.value, label: o.label.trim().slice(0, 30) });
+      });
+      if (options.length < 2) return;
+      drafts.push({
+        slug: d.slug,
+        title: d.title.trim().slice(0, 120),
+        url: (typeof d.url === "string" && safeHref(d.url, origin)) || "",
+        image: (typeof d.image === "string" && d.image && safeHref(d.image, origin)) || "",
+        meta: typeof d.meta === "string" ? d.meta.slice(0, 40) : "",
+        alsoNext: d.also_next === true || d.alsoNext === true,
+        options: options,
+        answer: options.some(function (o) { return o.value === d.answer; }) ? d.answer : "",
+      });
+    });
+    return drafts.length ? { drafts: drafts } : null;
+  }
+
+  /** The editor's answers as their message in the chat: "Liked: A, B. Not for us: C." (the server stores its own copy of the same words). */
+  function reviewText(review, answers) {
+    var groups = [];
+    review.drafts.forEach(function (d) {
+      var opt = d.options.filter(function (o) { return o.value === answers[d.slug]; })[0];
+      if (!opt) return;
+      var g = groups.filter(function (x) { return x.label === opt.label; })[0];
+      if (!g) groups.push((g = { label: opt.label, titles: [] }));
+      g.titles.push(d.title);
+    });
+    return groups.map(function (g) { return g.label + ": " + g.titles.join(", ") + "."; }).join(" ");
+  }
+
   var TRAY_KINDS = {
     switch: { label: "Switch", cls: "kicker-current" },
     promote: { label: "Promote", cls: "" },
@@ -435,6 +480,8 @@
         if (replies.length) msg.replies = replies;
         var question = cleanQuestion(m.question);
         if (question) msg.question = question;
+        var review = cleanReview(m.review, origin);
+        if (review) msg.review = review;
         var cards = cleanCards(m.cards, origin);
         if (cards.length) msg.cards = cards;
         var nav = cleanNav(m.nav, origin);
@@ -448,7 +495,7 @@
           };
         }
       }
-      if (msg.content || msg.cards || msg.question || msg.images) out.push(msg);
+      if (msg.content || msg.cards || msg.question || msg.review || msg.images) out.push(msg);
     });
     return out;
   }
@@ -502,6 +549,8 @@
     cleanCards: cleanCards,
     cleanNav: cleanNav,
     cleanQuestion: cleanQuestion,
+    cleanReview: cleanReview,
+    reviewText: reviewText,
     cleanTray: cleanTray,
     cleanNumbers: cleanNumbers,
     cleanPhotos: cleanPhotos,
@@ -931,14 +980,78 @@
     return box;
   }
 
+  /**
+   * The drafts review card: one row per draft of this week (photo, title, a segmented Liked / Not for us / Keep this week / Back to the book),
+   * then one Done that sends every answer at once. The server stages them all; no model call per answer.
+   */
+  function reviewEl(review) {
+    var box = el("div", "chat-review", { role: "group", "aria-label": "This week's drafts" });
+    var answers = {};
+    var done = el("button", "chat-chip is-done chat-review-done", { type: "button" });
+    function left() {
+      return review.drafts.filter(function (d) { return !answers[d.slug]; }).length;
+    }
+    function paintDone() {
+      var n = left();
+      done.disabled = n > 0 || box.classList.contains("is-old");
+      done.textContent = n ? n + (n === 1 ? " draft" : " drafts") + " left to answer" : "Done";
+    }
+    review.drafts.forEach(function (d) {
+      var row = el("div", "chat-review-row");
+      var head = el(d.url ? "a" : "div", "chat-review-head", d.url ? { href: d.url } : null);
+      var img = el(d.image ? "img" : "span", "chat-review-img", d.image ? { src: d.image, alt: "", loading: "lazy" } : { "aria-hidden": "true" });
+      head.appendChild(img);
+      var words = el("span", "chat-review-words");
+      var name = el("span", "chat-review-title");
+      name.textContent = d.title;
+      words.appendChild(name);
+      var subText = d.alsoNext ? "Also planned for next week" : d.meta;
+      if (subText) {
+        var sub = el("span", "chat-review-sub");
+        sub.textContent = subText;
+        words.appendChild(sub);
+      }
+      head.appendChild(words);
+      row.appendChild(head);
+      var seg = el("div", "seg chat-review-seg", { role: "group", "aria-label": d.title });
+      d.options.forEach(function (o) {
+        var b = el("button", "", { type: "button", "aria-pressed": d.answer === o.value ? "true" : "false" });
+        b.textContent = o.label;
+        b.addEventListener("click", function () {
+          if (box.classList.contains("is-old")) return;
+          answers[d.slug] = o.value;
+          d.answer = o.value; // kept on the message, so a redraw of the panel keeps the picks
+          Array.prototype.forEach.call(seg.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+          paintDone();
+        });
+        seg.appendChild(b);
+      });
+      if (d.answer) answers[d.slug] = d.answer;
+      row.appendChild(seg);
+      box.appendChild(row);
+    });
+    done.addEventListener("click", function () {
+      if (box.classList.contains("is-old") || left()) return;
+      send(reviewText(review, answers), { action: "review_drafts", answers: answers });
+    });
+    box.appendChild(done);
+    paintDone();
+    return box;
+  }
+
   /** The input invites a typed answer while a question is live. */
   function paintPlaceholder() {
-    var live = log.querySelector(".chat-question:not(.is-old)");
+    var live = log.querySelector(".chat-question:not(.is-old), .chat-review:not(.is-old)");
     input.setAttribute("placeholder", live ? "Or type an answer" : "Ask about our recipes");
   }
 
   /** Only the last message's chips and button are live; older ones fade and stop responding. */
   function retireChips() {
+    // an answered review card fades and its buttons stop; its recipe links still open the recipes
+    Array.prototype.forEach.call(log.querySelectorAll(".chat-review"), function (box) {
+      box.classList.add("is-old");
+      Array.prototype.forEach.call(box.querySelectorAll("button"), function (b) { b.disabled = true; });
+    });
     Array.prototype.forEach.call(log.querySelectorAll(".chat-chips, .chat-nav, .chat-question"), function (row) {
       row.classList.add("is-old");
       row.setAttribute("aria-disabled", "true");
@@ -1097,6 +1210,7 @@
       log.appendChild(messageEl(m, last));
       if (mode === "editor" && chat.server && m.role === "assistant" && m.turn_id) log.appendChild(feedbackEl(m, !last));
       if (m.question && last) log.appendChild(questionEl(m.question));
+      if (m.review && last && mode === "editor" && chat.server) log.appendChild(reviewEl(m.review));
       if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
     paintPhotoLine();
@@ -1271,7 +1385,7 @@
       autoFold = false; // the turn is over: the tray opens again (loadTray below redraws it)
       if (editorTurn) loadTray({ highlight: true });
       else if (trayData) renderTray();
-      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question)) {
+      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question || reply.review)) {
         chat.messages.push(reply);
         saveChat();
         if (reply.nav) {
@@ -1280,6 +1394,7 @@
         }
         if (editorTurn && reply.turn_id) log.appendChild(feedbackEl(reply, false));
         if (reply.question) log.appendChild(questionEl(reply.question));
+        else if (reply.review && editorTurn) log.appendChild(reviewEl(reply.review));
         else if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
         paintPlaceholder();
         watchPublishing();
@@ -1300,6 +1415,7 @@
           message: text,
           page: pageState(),
           action: action || undefined,
+          answers: action === "review_drafts" && opts.answers ? opts.answers : undefined,
           image_paths: byPath ? photos.map(function (p) { return p.path; }) : undefined,
           images: photos.length && !byPath ? photos.map(function (p) { return p.data; }) : undefined,
         }
@@ -1383,6 +1499,7 @@
               }
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
               else if (ev.name === "question") reply.question = cleanQuestion(ev.data) || reply.question;
+              else if (ev.name === "review") reply.review = cleanReview(ev.data, origin) || reply.review;
               else if (ev.name === "tray") { /* the tray is loaded once, when the turn ends (finish) */ }
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
@@ -2037,8 +2154,12 @@
     autoFold = on;
     if (trayData) renderTray();
   }
+  /** An unanswered drafts review card: on a phone the tray folds while it is open, so its rows have the room. */
+  function reviewLive() {
+    return !!log.querySelector(".chat-review:not(.is-old)");
+  }
   function trayFolded() {
-    return trayManualFold || (keyboardOpen && !keyboardForcedOpen) || (autoFold && !autoFoldSuppressed && narrowScreen());
+    return trayManualFold || (keyboardOpen && !keyboardForcedOpen) || ((autoFold || reviewLive()) && !autoFoldSuppressed && narrowScreen());
   }
   function keyboardUnfold() {
     if (keyboardOpen) keyboardForcedOpen = true; // a fold the reader chose themselves stays
@@ -2233,7 +2354,7 @@
     head.appendChild(chev);
     head.addEventListener("click", function () {
       if (folded) {
-        if (autoFold) autoFoldSuppressed = true; // tapped open while it was folded on its own
+        if (autoFold || reviewLive()) autoFoldSuppressed = true; // tapped open while it was folded on its own
         if (keyboardOpen) keyboardForcedOpen = true;
         setManualFold(false);
       } else {
@@ -2386,6 +2507,14 @@
     if (streaming || !trayData) return;
     if (action === "finalise_plan") {
       if (trayData.state === "finalising") return;
+      // the drafts review card is still open: answering it is the next step of Finalise, so take them there instead of starting over
+      var openReview = log.querySelector(".chat-review:not(.is-old)");
+      if (openReview) {
+        openReview.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        var first = openReview.querySelector('.chat-review-seg button[aria-pressed="false"]');
+        if (first) first.focus({ preventScroll: true });
+        return;
+      }
       trayData.state = "finalising";
       renderTray();
       send("Finalise list", { action: "finalise" });
