@@ -42,6 +42,9 @@
 //   CHAT_ENABLED=false npm run dev                         every /chat route answers 503 { disabled: true }: the panel says it is switched off
 //   CHAT_PUBLIC_ENABLED=false CHAT_PUBLIC=false npm run dev  editors only: no bubble for visitors (CHAT_PUBLIC), 403 { signin: true } if one asks anyway
 //
+// Real models: REAL_MODELS=1 with CHAT_EDITOR_MODEL / CHAT_VISION_MODEL (and their keys) sends the chat and the photo reader to the real
+// OpenRouter while GitHub, Supabase and photo generation stay faked (nothing real is written). Behind an HTTPS proxy, Node's fetch needs
+// NODE_USE_ENV_PROXY=1 (and NODE_EXTRA_CA_CERTS for the proxy's CA).
 // Env you can override: CHAT_API_PORT (8787), SITE_PORT (4000), SUPABASE_PORT (54321), FAKE_TOKEN_TTL, FAKE_MODEL_DELAY_MS (12; try 300 and
 // switch the browser offline mid-answer: the editor panel waits and shows the stored answer once it is back). Later phases extend this file.
 import http from "node:http";
@@ -68,7 +71,9 @@ const env = {
   EDITORS: "editor@example.com",
   OPENROUTER_CHAT_PUBLIC_KEY: "dev-openrouter",
   OPENROUTER_CHAT_EDITOR_KEY: "dev-openrouter-editor",
-  OPENROUTER_BASE_URL: "http://openrouter.fake/api/v1",
+  // REAL_MODELS=1: the chat and the photo reader go to the real OpenRouter (CHAT_EDITOR_MODEL / CHAT_VISION_MODEL / CHAT_PUBLIC_MODEL, keys
+  // from the environment); GitHub, Supabase and photo generation stay faked, so nothing real is written anywhere.
+  ...(process.env.REAL_MODELS === "1" ? {} : { OPENROUTER_BASE_URL: "http://openrouter.fake/api/v1" }),
   OPENROUTER_API_KEY: "dev-openrouter-images", // photo generation (the fake image API below)
   CHAT_VISION_MODEL: "dev/vision-reader", // the photo reader (faked below: every photo reads as one of a few recipes, after FAKE_READ_DELAY_MS)
   CHAT_INTERNAL_SECRET: "dev-internal-secret",
@@ -116,7 +121,8 @@ globalThis.fetch = async (input, init) => {
   const url = String(input instanceof Request ? input.url : input);
   if (new URL(url).hostname === "example.test") return exampleSite(url);
   if (url.startsWith("https://api.github.com/")) return github.fetch(url, init);
-  if (url.startsWith(process.env.OPENROUTER_BASE_URL) || url.startsWith("https://openrouter.ai/api/v1/chat/completions")) return openrouter.fetch(url, init);
+  if (process.env.REAL_MODELS === "1" && url.startsWith("https://openrouter.ai/api/v1/chat/completions")) return realFetch(input, init);
+  if (url.startsWith(process.env.OPENROUTER_BASE_URL || "http://openrouter.fake/") || url.startsWith("https://openrouter.ai/api/v1/chat/completions")) return openrouter.fetch(url, init);
   if (url.startsWith("https://openrouter.ai/api/v1/images")) return images.fetch(url, init);
   if (url.startsWith(process.env.SUPABASE_URL)) return supabase.fetch(url, init);
   return realFetch(input, init);
