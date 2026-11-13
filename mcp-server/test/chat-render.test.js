@@ -240,3 +240,29 @@ test("photo reading in the panel: numbers line up with the photos, notes from th
   assert.equal(chat.readingSaveNote(entries), "Sam has 3 photos still being read.");
   assert.equal(chat.readingSaveNote([entries[1]]), "");
 });
+
+test("the drafts review card: rows from the server, on our origin only, thumbs only; Done's message in words", () => {
+  const review = chat.cleanReview(
+    {
+      drafts: [
+        { slug: "pea-soup", title: " Pea Soup ", url: "https://site.test/favourite-recipes/recipes/pea-soup.html", image: "https://evil.test/x.jpg", meta: "20 min", answer: "liked" },
+        { slug: "Bad Slug", title: "x" },
+        { slug: "rice", title: "Rice", url: "javascript:alert(1)", also_next: true, answer: "keep" },
+        { slug: "stew", title: "Stew" },
+      ],
+    },
+    ORIGIN
+  );
+  assert.deepEqual(review.drafts.map((d) => d.slug), ["pea-soup", "rice", "stew"]);
+  const [pea, rice] = review.drafts;
+  assert.equal(pea.title, "Pea Soup");
+  assert.equal(pea.image, "", "a photo off our origin is dropped");
+  assert.equal(pea.answer, "liked");
+  assert.equal(rice.url, "");
+  assert.equal(rice.alsoNext, true);
+  assert.equal(rice.answer, "", "only a thumb is an answer");
+  assert.equal(chat.cleanReview({ drafts: [] }, ORIGIN), null);
+  assert.equal(chat.cleanReview(null, ORIGIN), null);
+  assert.equal(chat.reviewText(review, { "pea-soup": "remove" }), "Not for us: Pea Soup. Kept for the coming week: Rice, Stew.");
+  assert.equal(chat.reviewText(review, { "pea-soup": "liked", rice: "liked", stew: "remove" }), "Liked: Pea Soup, Rice. Not for us: Stew.");
+});

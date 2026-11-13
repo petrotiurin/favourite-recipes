@@ -3,9 +3,11 @@ import { verifyUser } from "../lib/auth.js";
 import { makeCaller } from "../lib/tools.js";
 import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";
+import { UserError } from "../lib/recipes.js";
 import { PROMPT_VERSION } from "../lib/chat-prompt.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
-import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent } from "../lib/tray.js";
+import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent, stageOp } from "../lib/tray.js";
+import { thisWeeksDrafts, reviewCard, parseAnswers, answersText, stageReview, reviewOpen, isPromoteIt } from "../lib/draft-review.js";
 import { chatEnabled, publicChatEnabled, DISABLED_BODY, SIGNIN_BODY } from "../lib/chat-switch.js";
 import { isNotYet, promoteQuestionOpen, NOT_YET_REPLY } from "../lib/shortcuts.js";
 import { applyPlan, pagesLive, PlanError } from "../lib/plan-apply.js";
@@ -56,6 +58,10 @@ import {
 //                                     never a model tool: the token and EDITORS are checked afresh on this request
 //   GET    /chat/status?slugs=a,b     which of these recipe pages are live yet (a HEAD to the Pages URL, server-side), for "Publishing…"
 //   POST   /chat { action: "finalise" } the Finalise list button: a fixed request to the agent (editors only)
+//   POST   /chat { action: "review_drafts", answers: { slug: "liked" | "remove" }, conversation_id }
+//                                     Done on the drafts review card (thumbs; a draft left out is kept for the coming week): the server
+//                                     stages every answer at once (no model), then the model
+//                                     builds the shopping list if one is needed. Only while that card is the open question of the chat
 //   POST   /chat/uploads              one photo, uploaded as soon as it is picked ({ image: data URL, conversation_id? }): checked and re-encoded like
 //                                     `images`, stored, answered with { path, conversation_id } (a new conversation is made for a first message).
 //                                     The message then sends `image_paths` (picked order) instead of the photos themselves
@@ -80,6 +86,7 @@ import {
 //   event: status       data: { text }        what the bot is doing, in plain words
 //   event: suggestions  data: { replies }     tappable suggested replies: strings, or { label, url } chips that open a site page
 //   event: question     data: { question, options, multi }   ask_user: solid answer chips; the tapped answer is the next message
+//   event: review       data: { drafts }                      the drafts review card: one answer per draft of this week, then Done
 //   event: tray         data: { added }                       the plan tray changed: the panel reloads it
 //   event: cards        data: { cards }       recipe cards built from our own data (show_recipes)
 //   event: navigation   data: { label, url }  a button that opens one site page (offer_navigation); never navigates by itself
@@ -472,19 +479,37 @@ export async function POST(request) {
   let convo = null; // an editor's conversation (existing, or null until created below)
   let storedUser; // the editor's new user message, as stored
   let finalise = false;
+  let review = false; // Done on the drafts review card
+  let reviewDrafts = [];
+  let reviewAnswers = null;
   let history = [];
   let rows = []; // the conversation's stored rows (an editor's)
   let imagePaths = []; // photos uploaded on pick (POST /chat/uploads), in picked order
   if (isEditor) {
     finalise = body?.action === "finalise";
-    const hasImages = Array.isArray(body?.images) && body.images.length > 0 && !finalise;
+    review = body?.action === "review_drafts";
+    if (review) {
+      if ((Array.isArray(body?.images) && body.images.length) || (Array.isArray(body?.image_paths) && body.image_paths.length)) return reply({ error: "Photos can't go with the drafts' answers." }, 400);
+      if (!isUuid(body?.conversation_id)) return reply({ error: "That question isn't in a chat." }, 400);
+      try {
+        reviewDrafts = await thisWeeksDrafts();
+      } catch (err) {
+        console.error("Reading this week's drafts failed:", err.message);
+        return reply({ error: "The chat isn't available right now." }, 502);
+      }
+      if (!reviewDrafts.length) return reply({ error: "This week has no drafts any more." }, 409);
+      const parsed = parseAnswers(body?.answers, reviewDrafts);
+      if (parsed.error) return reply({ error: parsed.error }, 400);
+      reviewAnswers = parsed.answers;
+    }
+    const hasImages = Array.isArray(body?.images) && body.images.length > 0 && !finalise && !review;
     if (body?.images !== undefined && body?.images !== null && !Array.isArray(body.images)) return reply({ error: "Photos must be a list." }, 400);
     if (body?.image_paths !== undefined && body?.image_paths !== null && !(Array.isArray(body.image_paths) && body.image_paths.every(isUploadPath) && new Set(body.image_paths).size === body.image_paths.length)) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
     if (Array.isArray(body?.image_paths) && body.image_paths.length && finalise) return reply({ error: "Photos can't go with Finalise." }, 400);
     imagePaths = Array.isArray(body?.image_paths) ? body.image_paths : [];
     if ((Array.isArray(body?.images) ? body.images.length : 0) + imagePaths.length > MAX_IMAGES) return reply({ error: `At most ${MAX_IMAGES} photos per message.` }, 400);
     if (imagePaths.length && !isUuid(body?.conversation_id)) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
-    const text = finalise ? "Finalise list" : typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
+    const text = finalise ? "Finalise list" : review ? answersText(reviewDrafts, reviewAnswers).slice(0, MAX_USER_CHARS) : typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
     if (!text && !hasImages && !imagePaths.length) return reply({ error: "Send a message to start the chat." }, 400);
     if (finalise) {
       try {
@@ -515,6 +540,7 @@ export async function POST(request) {
       if (imagePaths.some((p) => !p.startsWith(`${convo.id}/`) || used.has(p))) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
       // another turn of this chat is running (a follow-up, usually): say so before anything is counted; the panel sends again when it's done
       if (lockHeld(convo)) return reply({ busy: true, error: "I'm still working on the last answer. Your message goes as soon as I'm done." }, 409);
+      if (review && !reviewOpen(rows)) return reply({ error: "Those drafts were already answered." }, 409);
     }
     // `messages` is built after the photos are checked and stored (below)
   } else {
@@ -536,7 +562,9 @@ export async function POST(request) {
     }
   }
 
-  const notYet = isEditor && !finalise && !images.length && !imagePaths.length && promoteQuestionOpen(history) && isNotYet(storedUser.content);
+  const shortcutOk = isEditor && !finalise && !review && !images.length && !imagePaths.length && promoteQuestionOpen(history);
+  const notYet = shortcutOk && isNotYet(storedUser.content);
+  const promoteIt = shortcutOk && isPromoteIt(storedUser.content); // the switch and the drafts review card, no model call
   const turnId = newId();
   let title;
   let attachments = []; // [{ path, n }] stored for this message, numbered on from the conversation's earlier photos
@@ -566,6 +594,11 @@ export async function POST(request) {
         if (imagePaths.some((p) => used.has(p))) {
           await afterTurn(convo.id, lockToken, { origin: originOf(request) });
           return reply({ error: "Those photos were already sent. Attach them again." }, 400);
+        }
+        // answered once only: a second Done (another tab, a double tap that got past the button) finds the card answered
+        if (review && !reviewOpen(rows)) {
+          await afterTurn(convo.id, lockToken, { origin: originOf(request) });
+          return reply({ error: "Those drafts were already answered." }, 409);
         }
       }
       if (finalise) await startFinalise(caller);
@@ -648,6 +681,42 @@ export async function POST(request) {
         const emit = ({ type, ...data }) => send(type, data);
         let output;
         let shown; // cards, chips, a question: recorded on the trace next to the text
+        let listTurn = false; // the drafts are answered and this turn builds the list: the tray shows "finalising" meanwhile
+        const store = async (msgs) => {
+          try {
+            await appendMessages(convo.id, msgs, { turnId, traceId: trace.traceId });
+          } catch (err) {
+            console.error("Saving the answer failed:", err.message);
+          }
+        };
+        // After the drafts (answered on the card, or none to ask about): the shopping list is the one step that needs the model. With no list
+        // needed the server finishes the turn itself and offers Save.
+        const afterDrafts = async (line) => {
+          const view = await trayView(await loadTray(), caller);
+          if (view?.needs_list && !view.list_current) {
+            listTurn = true;
+            await startFinalise(caller);
+            emit({ type: "text", delta: `${line}\n\n` });
+            const note = `${await trayNote(await loadTray(), caller)}\nThe site already staged the switch and the answers about this week's drafts, and told the user: "${line}" Don't repeat that, and don't ask about this week's drafts again: nothing is left to ask. Go straight to Finalise step (2): build the shopping list now.`;
+            const result = await runChat({ caller, messages, page, emit, trace, model, apiKey: config.chatEditorKey, origin: originOf(request), extraNote: note, userText: storedUser.content, conversation: { id: convo.id, title: convo.title || title } });
+            output = `${line}\n\n${result.reply}`;
+            shown = result.shown;
+            const produced = result.produced.map((m) => ({ ...m }));
+            const first = produced.findIndex((m) => m.role === "assistant");
+            if (first === -1) produced.unshift({ role: "assistant", content: line });
+            else produced[first].content = produced[first].content ? `${line}\n\n${produced[first].content}` : line;
+            await store(produced);
+            return;
+          }
+          const save = trayAction(view) === "apply_plan";
+          const text = save ? `${line} No shopping list is needed: tap Save to site when you're ready.` : line;
+          const chips = save ? [{ label: "Save to site", action: "apply_plan" }] : [];
+          emit({ type: "text", delta: text });
+          if (chips.length) emit({ type: "suggestions", replies: chips });
+          emit({ type: "done", suggestions: chips.length > 0 });
+          output = text;
+          await store([{ role: "assistant", content: text, ...(chips.length ? { ui: { replies: chips } } : {}) }]);
+        };
         try {
           if (isEditor) {
             send("meta", { conversation_id: convo.id, turn_id: turnId });
@@ -671,6 +740,58 @@ export async function POST(request) {
             emit({ type: "done", suggestions: false });
             output = line;
             await appendMessages(convo.id, [{ role: "assistant", content: line }], { turnId, traceId: trace.traceId }).catch((err) => console.error("Saving the answer failed:", err.message));
+            return;
+          }
+          if (promoteIt) {
+            // "Promote it": the switch goes in the tray, then ONE card asks about every draft of this week (design 7.1), with no model call
+            const now = await loadTray();
+            try {
+              if (!now?.items?.some((i) => i.kind === "switch")) await stageOp({ op: { action: "start_next_week" } }, caller, { conversationTitle: convo.title || title, trace });
+            } catch (err) {
+              if (err instanceof UserError) throw new ChatError(`Couldn't stage the switch: ${err.message}`);
+              throw err;
+            }
+            emit({ type: "tray", added: [] });
+            const drafts = await thisWeeksDrafts();
+            const card = reviewCard(drafts, (await loadTray())?.items || []);
+            if (!card) {
+              await afterDrafts("In the tray: the switch to a new week. This week has no drafts to ask about.");
+              return;
+            }
+            const line = `The switch is in the tray: next week becomes this week. How did this week's ${drafts.length === 1 ? "draft" : `${drafts.length} drafts`} go? Thumbs up if you liked it, thumbs down if it's not for us; a draft with no thumb stays for the coming week. Then Done.`;
+            emit({ type: "text", delta: line });
+            emit({ type: "review", ...card });
+            emit({ type: "done", suggestions: false });
+            output = line;
+            shown = { review: card.drafts.map((d) => d.slug) };
+            await store([{ role: "assistant", content: line, ui: { review: card } }]);
+            return;
+          }
+          if (review) {
+            // Done on the review card: every answer staged in one tray write, no model call; then the list (the model) or Save
+            emit({ type: "status", text: "Adding your answers to the tray…" });
+            let staged;
+            try {
+              staged = await stageReview(reviewDrafts, reviewAnswers, caller, { trace });
+            } catch (err) {
+              // nothing was staged: the card comes back with their answers on it, so Done can be tapped again
+              console.error("Staging the drafts' answers failed:", err.message);
+              const line = `I couldn't add your answers to the tray${err instanceof UserError ? `: ${err.message}` : ""}. Tap Done to try again.`;
+              const card = reviewCard(reviewDrafts, []);
+              for (const d of card.drafts) {
+                const a = reviewAnswers.get(d.slug);
+                if (a === "liked" || a === "remove") d.answer = a;
+                else delete d.answer;
+              }
+              emit({ type: "text", delta: line });
+              emit({ type: "review", ...card });
+              emit({ type: "done", suggestions: false });
+              output = line;
+              await store([{ role: "assistant", content: line, ui: { review: card } }]);
+              return;
+            }
+            emit({ type: "tray", added: staged.items.map((i) => i.id) });
+            await afterDrafts(staged.line);
             return;
           }
           if (notYet) {
@@ -733,7 +854,7 @@ export async function POST(request) {
         } finally {
           clearInterval(heartbeat);
           if (!content && !closed) send("error", { message: "The chat didn't answer. Try again in a moment." }); // a stream is never empty
-          if (finalise) {
+          if (finalise || listTurn) {
             await settleFinalise(caller);
             trayEvent("tray-finalise", { trace, userId: caller.userId });
           }

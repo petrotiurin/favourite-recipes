@@ -371,6 +371,44 @@ export async function stageOp(spec, caller, ctx = {}) {
   return { ...outcome, error: outcome.item?.error || null, tray };
 }
 
+/**
+ * Stages several changes in ONE read-modify-write and ONE dry run (the drafts review card, lib/draft-review.js), instead of a stageOp per
+ * change. `clear(item)` drops existing items first (an earlier answer that changed). Only ops without photos. Same checks as stageOp: the
+ * real remove rule up front, a clash base per recipe, the dry run's problems on the cards. Resolves { items (the staged ones), needs, tray }.
+ */
+export async function stageMany(ops, caller, { clear, reason = "", trace } = {}) {
+  assertCanStage(caller);
+  for (const op of ops) {
+    if (!kindOf(op) || ["create_recipe", "update_recipe"].includes(op.action)) throw new UserError(`Can't stage "${op?.action}" together`);
+    if (op.action === "remove_draft") await removeDraft(op.slug, new ChangeSet(await warmReads()), caller);
+  }
+  const bases = await Promise.all(ops.map(baseFor));
+  const reads = await warmReads();
+  let outcome = { items: [], needs: false };
+  const { tray } = await mutate(caller, async (tray) => {
+    let items = (tray?.items || []).filter((i) => !clear?.(i));
+    const ids = new Set();
+    ops.forEach((op, k) => {
+      const planned = planChange(items, op, { caller, reason, base: bases[k], photo: null });
+      items = planned.items;
+      if (planned.item) ids.add(planned.item.id);
+    });
+    if (items.length > MAX_ITEMS) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
+    if (!items.length) {
+      outcome = { items: [], needs: false };
+      return { items: [], result: null };
+    }
+    const { results, nextSlugs } = await replay(items, caller, reads);
+    const checked = items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
+    const needs = needsList(checked, nextSlugs);
+    const listHash = checked.some((i) => i.kind === "list") ? tray?.list_hash ?? null : null;
+    outcome = { items: checked.filter((i) => ids.has(i.id)), needs };
+    return { items: checked, listHash, status: statusFor({ ...(tray || { status: "collecting" }), list_hash: listHash }, checked, needs), result: null };
+  });
+  trayEvent("tray-staged-many", { count: ops.length, kinds: outcome.items.map((i) => i.kind).join(","), error: outcome.items.some((i) => i.error), trace });
+  return { ...outcome, tray };
+}
+
 /** Drops an item (and its staged photo). Returns the dropped item, or null if it isn't there. */
 export async function dropItem(id, caller, ctx = {}) {
   assertCanStage(caller);

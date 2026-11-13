@@ -299,6 +299,8 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     return null;
   };
   if (lastCall && ["get_tray", "stage_update_shopping_list"].includes(lastCall.name)) return buildStep();
+  // the drafts review card was answered: the site staged the answers and hands over for the list
+  if (/already staged the switch and the answers about this week's drafts/.test(String(note || "")) && !lastCall) return tray("get_tray", {}, "Now I'll read next week's recipes and build the list.");
   const answer = user;
   if (finaliseTap && !lastCall) {
     if (nextN > 0) {
@@ -313,6 +315,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     if (answer === "not yet") return done("Okay: nothing changes, and next week and its list stay as they are. Say the word when you want to finalise.", { label: "Finalise list", action: "finalise_plan" });
     if (answer === "promote it") {
       if (!lastCall) return tray("stage_start_next_week", {}, "I'll stage the switch first.");
+      if (lastCall.name === "stage_start_next_week" && drafts.length) return tray("review_drafts", {}, "How did this week's drafts go?");
       return nextStep();
     }
   }
