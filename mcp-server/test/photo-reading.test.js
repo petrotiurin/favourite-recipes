@@ -167,6 +167,7 @@ test("the reader's request is limited: its own prompt, one user message with the
   assert.equal(req.tools, undefined);
   assert.equal(req.response_format.type, "json_schema");
   assert.ok(req.temperature <= 0.2);
+  assert.deepEqual(req.provider, { require_parameters: true }, "only providers that honour the schema");
   assert.equal(req.max_tokens, config.chatVisionMaxTokens);
   assert.deepEqual(req.reasoning, { enabled: false }, "no thinking for transcription (CHAT_VISION_REASONING, default off)");
 });
@@ -184,7 +185,7 @@ test("a provider without response_format: one forced tool with the schema, and n
   assert.equal(last.response_format, undefined);
 });
 
-test("one photo failing doesn't sink the others: a transient error is retried once, then the photo is reported as unreadable; garbage fails at once", async (t) => {
+test("one photo failing doesn't sink the others: a 503 or a malformed answer is retried once, then the photo is reported as unreadable", async (t) => {
   t.mock.method(console, "warn", () => {});
   reads[await colourKey(RED)] = fakeRead("Miso Aubergine");
   const g = await colourKey(GREEN);
@@ -198,7 +199,7 @@ test("one photo failing doesn't sink the others: a transient error is retried on
   };
   const { conversation_id } = await say("add these", { images: [asUrl(await solid(RED)), asUrl(await solid(GREEN)), asUrl(await solid(YELLOW))] });
   assert.equal(greenTries, 2, "a 503 is tried twice");
-  assert.equal(yellowTries, 1, "an answer that doesn't parse is a failed read, not a retry");
+  assert.equal(yellowTries, 2, "a malformed answer is tried once more (another provider), then given up");
   const content = notes(conversation_id)[0].content.content;
   assert.match(content, /photo-2: couldn't be read/);
   assert.match(content, /photo-3: couldn't be read \(the reader's answer didn't make sense\)/);

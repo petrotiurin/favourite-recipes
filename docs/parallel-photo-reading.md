@@ -486,6 +486,15 @@ Details decided while building:
 - **After the second user-flow check:** a join or split takes the cards staged from those photos out of the tray at once (whatever the re-read
   finds, so the tray never holds both the halves and the whole); the panel's status line names what was already added ("Photos read: 4
   recipes · Prawn Pad Thai already added"); a skip doesn't promise a re-read.
+- **After running against real Qwen models** (`REAL_MODELS=1` in the dev harness: real OpenRouter, everything else faked):
+  - The reader asks for no thinking by default (`CHAT_VISION_REASONING=off`). Thinking models (Qwen 3.7 Plus) otherwise spent the whole token
+    budget thinking on a full page and never answered.
+  - Reader calls set `provider.require_parameters`, so OpenRouter only routes to providers that honour the schema. Without it Qwen 3.5 397B
+    sometimes looped, inventing fields until the limit.
+  - A malformed answer, an answer cut off by a provider error, or one that ran out of room is tried once more (two attempts in all). It
+    usually lands on another provider.
+  - The parser accepts an object wrapped in a one-item array, a code fence, or a line of prose around it.
+  - A card staged from photos always says "from photo N", whatever reason the model passed.
 - **Uploads on pick** before the first message create the conversation (untitled, so it isn't in the chats list until its first message names it).
   An `image_paths` entry must be this conversation's and not already attached. Old pages keep the data-URL route.
 - **Turn lock:** a busy conversation is refused with 409 `{ busy }` before the rate limit is counted, so the panel's "Sending when I'm done…"

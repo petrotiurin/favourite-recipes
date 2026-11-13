@@ -25,7 +25,9 @@ export function readerRequest(imageUrls, { consecutive = false, forcedTool = fal
   ];
   const r = config.chatVisionReasoning;
   const reasoning = r === "off" ? { reasoning: { enabled: false } } : ["low", "medium", "high"].includes(r) ? { reasoning: { effort: r } } : {};
-  const base = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens, ...reasoning };
+  // require_parameters: OpenRouter only routes to providers that honour response_format / the forced tool. Some providers of a model ignore the
+  // schema, and a model left free can loop and invent fields until it runs out of tokens (seen with Qwen 3.5 397B).
+  const base = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens, ...reasoning, provider: { require_parameters: true } };
   if (forcedTool) {
     // for providers without response_format: one forced tool with the same schema, and nothing else
     return { ...base, tools: [{ type: "function", function: { name: "recipe_read", description: "Report what the photo(s) show.", parameters: READER_SCHEMA } }], tool_choice: { type: "function", function: { name: "recipe_read" } } };
@@ -86,16 +88,18 @@ export async function readPhotos(imageUrls, { consecutive = imageUrls.length > 1
     }
     const choice = out.json?.choices?.[0];
     const raw = body.tools ? choice?.message?.tool_calls?.[0]?.function?.arguments : choice?.message?.content;
+    if (choice?.finish_reason === "error") throw new ReaderError("The photo reader's provider failed mid-answer", { kind: "upstream", transient: true });
     if (choice?.finish_reason === "length") {
       const u = out.json?.usage;
       console.warn(`The photo reader ran out of room: ${u?.completion_tokens ?? "?"} tokens (${u?.completion_tokens_details?.reasoning_tokens ?? 0} thinking) of max ${config.chatVisionMaxTokens}`);
-      throw new ReaderError("The photo reader ran out of room", { kind: "unparseable" });
+      throw new ReaderError("The photo reader ran out of room", { kind: "unparseable", transient: true });
     }
     const parsed = parseReaderJson(raw);
     const read = normaliseRead(parsed);
     if (!read) {
       if (choice?.message?.refusal) throw new ReaderError("The photo reader refused this photo", { kind: "refused" });
-      throw new ReaderError("The photo reader's answer didn't fit the schema", { kind: "unparseable" });
+      // tried once more (MAX_ATTEMPTS in photo-queue.js): the same prompt usually lands on another provider and comes back well-formed
+      throw new ReaderError("The photo reader's answer didn't fit the schema", { kind: "unparseable", transient: true });
     }
     gen?.end?.({ output: read, usage: out.json?.usage, finishReason: choice?.finish_reason });
     return { read, usage: out.json?.usage, ms: Date.now() - started, request: body };
