@@ -432,8 +432,8 @@ the quiet period (10s), the lease (90s), the 30-photo limit, and how strict the 
 
 Decided:
 
-- **PQ1.** `CHAT_VISION_MODEL` starts with the same model ID as `CHAT_EDITOR_MODEL`, in its own variable; it runs only the
-  reader prompt, never the conversation (3).
+- **PQ1.** `CHAT_VISION_MODEL` is its own variable (`z-ai/glm-5.3-flash` with `CHAT_VISION_REASONING=medium`; never a Claude model, which
+  we use on the subscription only, not through OpenRouter); it runs only the reader prompt, never the conversation (3).
 - **PQ2.** 8 photos per message (2.7).
 - **PQ3.** No capture time: photos are grouped by picked order and content only (2.2).
 - **PQ4–PQ6.** Ship with the defaults and log the signals and the user's corrections to Langfuse; tune after a few weeks.
