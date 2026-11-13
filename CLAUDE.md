@@ -112,6 +112,14 @@ For "why are we getting errors", "what happened in my last chat" and similar, **
 (kept only about an hour on the Hobby plan) through the connected MCP servers, read-only, with the project ids and the common
 symptoms mapped to their causes (`references/symptoms.md`). Add a symptom there when a new kind of failure turns up.
 
+## Calling real APIs from Node in a cloud session
+
+In a Claude Code cloud session, API keys (e.g. OpenRouter) are added by the session's HTTPS proxy, not kept in environment variables.
+`curl` goes through the proxy, but Node's built-in `fetch` ignores `HTTPS_PROXY` and connects directly, so the key is never added: OpenRouter
+answers 401 ("No cookie auth credentials found"), which the photo reader reports as "out of credit". Run such scripts with
+`NODE_USE_ENV_PROXY=1` and give the code a placeholder key (e.g. `OPENROUTER_CHAT_VISION_KEY=proxy-injected`) so it doesn't skip the call;
+the proxy replaces the `Authorization` header.
+
 ## Directory layout
 
 ```

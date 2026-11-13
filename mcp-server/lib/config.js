@@ -31,7 +31,7 @@ export const config = {
   ipHashSalt: process.env.IP_HASH_SALT,
   // Signed-in editors (phase 3): their own OpenRouter key (falls back to OPENROUTER_API_KEY), model and generous limits, keyed by user id.
   chatEditorKey: process.env.OPENROUTER_CHAT_EDITOR_KEY || process.env.OPENROUTER_API_KEY,
-  chatEditorModel: process.env.CHAT_EDITOR_MODEL || "anthropic/claude-sonnet-4.5",
+  chatEditorModel: process.env.CHAT_EDITOR_MODEL || "qwen/qwen3.5-397b-a17b", // no Claude models through OpenRouter: we use Claude on the subscription only
   chatEditorHourlyLimit: Number(process.env.CHAT_EDITOR_HOURLY_LIMIT) || 200,
   // A chat turn that has run this long (ms) stops between model calls with a clear line, however many tool rounds are left.
   chatTurnBudgetMs: Number(process.env.CHAT_TURN_BUDGET_MS) || 200_000,
