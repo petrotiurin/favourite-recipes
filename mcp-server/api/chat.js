@@ -58,8 +58,9 @@ import {
 //                                     never a model tool: the token and EDITORS are checked afresh on this request
 //   GET    /chat/status?slugs=a,b     which of these recipe pages are live yet (a HEAD to the Pages URL, server-side), for "Publishing…"
 //   POST   /chat { action: "finalise" } the Finalise list button: a fixed request to the agent (editors only)
-//   POST   /chat { action: "review_drafts", answers: { slug: "liked" | "remove" | "keep" | "book" }, conversation_id }
-//                                     Done on the drafts review card: the server stages every answer at once (no model), then the model
+//   POST   /chat { action: "review_drafts", answers: { slug: "liked" | "remove" }, conversation_id }
+//                                     Done on the drafts review card (thumbs; a draft left out is kept for the coming week): the server
+//                                     stages every answer at once (no model), then the model
 //                                     builds the shopping list if one is needed. Only while that card is the open question of the chat
 //   POST   /chat/uploads              one photo, uploaded as soon as it is picked ({ image: data URL, conversation_id? }): checked and re-encoded like
 //                                     `images`, stored, answered with { path, conversation_id } (a new conversation is made for a first message).
@@ -757,7 +758,7 @@ export async function POST(request) {
               await afterDrafts("In the tray: the switch to a new week. This week has no drafts to ask about.");
               return;
             }
-            const line = `The switch is in the tray: next week becomes this week. How did this week's ${drafts.length === 1 ? "draft" : `${drafts.length} drafts`} go? Pick an answer for ${drafts.length === 1 ? "it" : "each"}, then Done.`;
+            const line = `The switch is in the tray: next week becomes this week. How did this week's ${drafts.length === 1 ? "draft" : `${drafts.length} drafts`} go? Thumbs up if you liked it, thumbs down if it's not for us; a draft with no thumb stays for the coming week. Then Done.`;
             emit({ type: "text", delta: line });
             emit({ type: "review", ...card });
             emit({ type: "done", suggestions: false });
@@ -777,7 +778,11 @@ export async function POST(request) {
               console.error("Staging the drafts' answers failed:", err.message);
               const line = `I couldn't add your answers to the tray${err instanceof UserError ? `: ${err.message}` : ""}. Tap Done to try again.`;
               const card = reviewCard(reviewDrafts, []);
-              for (const d of card.drafts) d.answer = reviewAnswers.get(d.slug);
+              for (const d of card.drafts) {
+                const a = reviewAnswers.get(d.slug);
+                if (a === "liked" || a === "remove") d.answer = a;
+                else delete d.answer;
+              }
               emit({ type: "text", delta: line });
               emit({ type: "review", ...card });
               emit({ type: "done", suggestions: false });

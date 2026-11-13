@@ -215,11 +215,12 @@
     return options.length >= 2 ? { question: q.question.trim().slice(0, 240), options: options, multi: q.multi === true } : null;
   }
 
-  var REVIEW_VALUES = ["liked", "remove", "keep", "book"];
+  var REVIEW_THUMBS = ["liked", "remove"];
+  var REVIEW_LABELS = { liked: "Liked", remove: "Not for us", keep: "Kept for the coming week" };
   var SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
   /**
-   * The drafts review card (review_drafts / "Promote it"): { drafts: [{ slug, title, url, image, meta, alsoNext, options: [{ value, label }],
-   * answer }] }, or null. Built by the server from the book; links and photos only on this site's origin, at most 20 rows.
+   * The drafts review card (review_drafts / "Promote it"): { drafts: [{ slug, title, url, image, meta, alsoNext, answer }] }, or null. Built
+   * by the server from the book; links and photos only on this site's origin, at most 20 rows. answer: "liked" | "remove" | "" (no thumb).
    */
   function cleanReview(r, origin) {
     if (!r || typeof r !== "object" || !Array.isArray(r.drafts)) return null;
@@ -227,12 +228,6 @@
     r.drafts.forEach(function (d) {
       if (drafts.length >= 20 || !d || typeof d !== "object" || typeof d.slug !== "string" || !SLUG_RE.test(d.slug) || typeof d.title !== "string" || !d.title.trim()) return;
       if (drafts.some(function (x) { return x.slug === d.slug; })) return;
-      var options = [];
-      (Array.isArray(d.options) ? d.options : []).forEach(function (o) {
-        if (!o || typeof o !== "object" || REVIEW_VALUES.indexOf(o.value) === -1 || typeof o.label !== "string" || !o.label.trim()) return;
-        if (options.length < 4 && !options.some(function (x) { return x.value === o.value; })) options.push({ value: o.value, label: o.label.trim().slice(0, 30) });
-      });
-      if (options.length < 2) return;
       drafts.push({
         slug: d.slug,
         title: d.title.trim().slice(0, 120),
@@ -240,24 +235,23 @@
         image: (typeof d.image === "string" && d.image && safeHref(d.image, origin)) || "",
         meta: typeof d.meta === "string" ? d.meta.slice(0, 40) : "",
         alsoNext: d.also_next === true || d.alsoNext === true,
-        options: options,
-        answer: options.some(function (o) { return o.value === d.answer; }) ? d.answer : "",
+        answer: REVIEW_THUMBS.indexOf(d.answer) !== -1 ? d.answer : "",
       });
     });
     return drafts.length ? { drafts: drafts } : null;
   }
 
-  /** The editor's answers as their message in the chat: "Liked: A, B. Not for us: C." (the server stores its own copy of the same words). */
+  /**
+   * The editor's thumbs as their message in the chat: "Liked: A. Not for us: B. Kept for the coming week: C." (a draft with no thumb is kept;
+   * the server stores its own copy of the same words).
+   */
   function reviewText(review, answers) {
     var groups = [];
-    review.drafts.forEach(function (d) {
-      var opt = d.options.filter(function (o) { return o.value === answers[d.slug]; })[0];
-      if (!opt) return;
-      var g = groups.filter(function (x) { return x.label === opt.label; })[0];
-      if (!g) groups.push((g = { label: opt.label, titles: [] }));
-      g.titles.push(d.title);
+    ["liked", "remove", "keep"].forEach(function (a) {
+      var titles = review.drafts.filter(function (d) { return (REVIEW_THUMBS.indexOf(answers[d.slug]) !== -1 ? answers[d.slug] : "keep") === a; }).map(function (d) { return d.title; });
+      if (titles.length) groups.push(REVIEW_LABELS[a] + ": " + titles.join(", ") + ".");
     });
-    return groups.map(function (g) { return g.label + ": " + g.titles.join(", ") + "."; }).join(" ");
+    return groups.join(" ");
   }
 
   var TRAY_KINDS = {
@@ -981,21 +975,12 @@
   }
 
   /**
-   * The drafts review card: one row per draft of this week (photo, title, a segmented Liked / Not for us / Keep this week / Back to the book),
-   * then one Done that sends every answer at once. The server stages them all; no model call per answer.
+   * The drafts review card: one row per draft of this week (photo, title, thumbs up / down), a line saying a draft with no thumb is kept for
+   * the coming week, then one Done that sends them all at once. The server stages them; no model call per answer.
    */
   function reviewEl(review) {
     var box = el("div", "chat-review", { role: "group", "aria-label": "This week's drafts" });
     var answers = {};
-    var done = el("button", "chat-chip is-done chat-review-done", { type: "button" });
-    function left() {
-      return review.drafts.filter(function (d) { return !answers[d.slug]; }).length;
-    }
-    function paintDone() {
-      var n = left();
-      done.disabled = n > 0 || box.classList.contains("is-old");
-      done.textContent = n ? n + (n === 1 ? " draft" : " drafts") + " left to answer" : "Done";
-    }
     review.drafts.forEach(function (d) {
       var row = el("div", "chat-review-row");
       var head = el(d.url ? "a" : "div", "chat-review-head", d.url ? { href: d.url } : null);
@@ -1013,29 +998,41 @@
       }
       head.appendChild(words);
       row.appendChild(head);
-      var seg = el("div", "seg chat-review-seg", { role: "group", "aria-label": d.title });
-      d.options.forEach(function (o) {
-        var b = el("button", "", { type: "button", "aria-pressed": d.answer === o.value ? "true" : "false" });
-        b.textContent = o.label;
-        b.addEventListener("click", function () {
-          if (box.classList.contains("is-old")) return;
-          answers[d.slug] = o.value;
-          d.answer = o.value; // kept on the message, so a redraw of the panel keeps the picks
-          Array.prototype.forEach.call(seg.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
-          paintDone();
-        });
-        seg.appendChild(b);
-      });
+      var thumbs = el("div", "chat-review-thumbs", { role: "group", "aria-label": d.title });
+      var up = iconButton("chat-review-thumb", "Liked " + d.title, ICON.up);
+      var down = iconButton("chat-review-thumb", "Not for us: " + d.title, ICON.down);
+      function paint() {
+        up.setAttribute("aria-pressed", answers[d.slug] === "liked" ? "true" : "false");
+        down.setAttribute("aria-pressed", answers[d.slug] === "remove" ? "true" : "false");
+      }
+      function pick(a) {
+        if (box.classList.contains("is-old")) return;
+        if (answers[d.slug] === a) delete answers[d.slug]; // tapping the chosen thumb again takes it back: kept for the coming week
+        else answers[d.slug] = a;
+        d.answer = answers[d.slug] || ""; // kept on the message, so a redraw of the panel keeps the thumbs
+        paint();
+      }
+      up.addEventListener("click", function () { pick("liked"); });
+      down.addEventListener("click", function () { pick("remove"); });
       if (d.answer) answers[d.slug] = d.answer;
-      row.appendChild(seg);
+      paint();
+      thumbs.appendChild(up);
+      thumbs.appendChild(down);
+      row.appendChild(thumbs);
       box.appendChild(row);
     });
+    var foot = el("div", "chat-review-foot");
+    var hint = el("p", "chat-review-hint");
+    hint.textContent = "No thumb: kept for the coming week.";
+    foot.appendChild(hint);
+    var done = el("button", "chat-chip is-done chat-review-done", { type: "button" });
+    done.textContent = "Done";
     done.addEventListener("click", function () {
-      if (box.classList.contains("is-old") || left()) return;
+      if (box.classList.contains("is-old")) return;
       send(reviewText(review, answers), { action: "review_drafts", answers: answers });
     });
-    box.appendChild(done);
-    paintDone();
+    foot.appendChild(done);
+    box.appendChild(foot);
     return box;
   }
 
@@ -2511,7 +2508,7 @@
       var openReview = log.querySelector(".chat-review:not(.is-old)");
       if (openReview) {
         openReview.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        var first = openReview.querySelector('.chat-review-seg button[aria-pressed="false"]');
+        var first = openReview.querySelector(".chat-review-done");
         if (first) first.focus({ preventScroll: true });
         return;
       }

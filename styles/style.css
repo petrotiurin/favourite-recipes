@@ -2842,7 +2842,7 @@ button.chat-attachment-state {
   opacity: 0.4;
 }
 
-/* The drafts review card (review_drafts): every draft of this week in one card, a segmented answer per row, one Done. */
+/* The drafts review card (review_drafts): every draft of this week in one card, thumbs up / down per row, one Done. */
 .chat-review {
   flex: none; /* the log is a flex column: with overflow hidden the card would otherwise shrink to nothing */
   display: flex;
@@ -2855,9 +2855,9 @@ button.chat-attachment-state {
 
 .chat-review-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
+  padding: 0.6rem 0.5rem 0.6rem 0.75rem;
 }
 
 .chat-review-row + .chat-review-row {
@@ -2865,6 +2865,7 @@ button.chat-attachment-state {
 }
 
 .chat-review-head {
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.65rem;
@@ -2900,27 +2901,60 @@ button.chat-attachment-state {
   font-size: 0.8rem;
 }
 
-/* Four answers don't fit one line in the panel: a 2 x 2 segmented control on the same track. */
-.chat-review-seg {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* The same thumbs as the feedback row, at full tap size: muted outline, the picked one filled in the accent. */
+.chat-review-thumbs {
+  flex: none;
+  display: flex;
 }
 
-.chat-review-seg button {
-  min-width: 0;
+.chat-review-thumb {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
   height: 2.75rem;
-  padding: 0 0.4rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--icon-muted);
+  cursor: pointer;
+}
+
+.chat-review-thumb:hover:not(:disabled) {
+  background: var(--track);
+}
+
+.chat-review-thumb .icon {
+  width: 1.3rem;
+  height: 1.3rem;
+}
+
+.chat-review-thumb[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.chat-review-thumb[aria-pressed="true"] .icon {
+  fill: currentColor;
+}
+
+.chat-review-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.chat-review-hint {
+  flex: 1;
+  margin: 0;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
-.chat-review-seg button:only-child,
-.chat-review-seg button:nth-child(3):last-child {
-  grid-column: 1 / -1;
-}
-
 .chat-review-done {
+  flex: none;
   justify-content: center;
-  margin: 0.25rem 0.75rem 0.75rem;
 }
 
 .chat-review.is-old {

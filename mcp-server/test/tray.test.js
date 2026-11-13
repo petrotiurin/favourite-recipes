@@ -425,7 +425,7 @@ test("Finalise > Promote it: the server stages the switch and shows ONE review c
   assert.equal(openrouter.requests.length, calls, "Promote it needs no model call");
   const card = r.evs.find((e) => e.name === "review").data;
   assert.deepEqual(card.drafts.map((d) => d.slug), [draft]);
-  assert.deepEqual(card.drafts[0].options.map((o) => o.value), ["liked", "remove", "keep", "book"]);
+  assert.equal(card.drafts[0].answer, undefined, "no thumb yet");
   assert.ok(!r.evs.some((e) => e.name === "question"), "no per-draft question");
   assert.deepEqual((await plan()).items.map((i) => i.kind), ["switch", "new"], "the switch is staged at once");
   const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
@@ -451,42 +451,53 @@ test("Finalise > Promote it: the server stages the switch and shows ONE review c
   assert.match(files["test-pasta"], /next: true/, "the new recipe is in the fresh next week");
 });
 
-test("the review card: every answer at once (liked, not for us, keep, back to the book), a draft also in next week is kept, a second Done is refused", async () => {
-  const [nextOne, a, b, c, d, e] = [0, 1, 2, 3, 4, 5].map((n) => anySlug(n));
+test("the review card: thumbs up promotes, thumbs down removes, no thumb keeps it for the coming week; a draft also in next week is kept; a second Done is refused", async () => {
+  const [nextOne, a, b, c, e] = [0, 1, 2, 3, 5].map((n) => anySlug(n));
   setFlag(nextOne, "next: true");
-  for (const s of [a, b, c, d]) setFlag(s, "current: true\ndraft: true");
+  for (const s of [a, b, c]) setFlag(s, "current: true\ndraft: true");
   setFlag(e, "current: true\nnext: true\ndraft: true");
   const { conversation_id } = await say("add a new recipe: test pasta");
   await say("x", { conversation_id, action: "finalise" });
   const r = await say("yes", { conversation_id });
   const card = r.evs.find((ev) => ev.name === "review").data;
-  assert.equal(card.drafts.length, 5);
-  const also = card.drafts.find((x) => x.slug === e);
-  assert.equal(also.also_next, true);
-  assert.deepEqual(also.options.map((o) => o.value), ["liked", "remove", "book"], "one also in next week can't be kept or sent back");
+  assert.equal(card.drafts.length, 4);
+  assert.equal(card.drafts.find((x) => x.slug === e).also_next, true);
 
-  // a missing answer, an answer it can't have, and photos are refused before anything is stored
+  // only thumbs are answers; photos and a non-object are refused before anything is stored
   const bad = (body) => call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_drafts", page: { page: "index" }, ...body } });
-  assert.equal((await bad({ answers: { [a]: "liked" } })).status, 400);
-  assert.equal((await bad({ answers: { [a]: "liked", [b]: "remove", [c]: "keep", [d]: "book", [e]: "keep" } })).status, 400);
-  assert.equal((await bad({ answers: { [a]: "liked", [b]: "remove", [c]: "keep", [d]: "drop-all", [e]: "liked" } })).status, 400);
+  assert.equal((await bad({ answers: { [a]: "keep" } })).status, 400);
+  assert.equal((await bad({ answers: { [a]: "book" } })).status, 400);
   assert.equal((await bad({ answers: "liked" })).status, 400);
-  const answers = { [a]: "liked", [b]: "remove", [c]: "keep", [d]: "book", [e]: "remove", "not-a-draft": "remove" };
+  const answers = { [a]: "liked", [b]: "remove", [e]: "remove", "not-a-draft": "remove" }; // c: no thumb
   assert.equal((await call("POST", "/chat", { token: "partner-token", body: { conversation_id, action: "review_drafts", answers, page: {} } })).status, 404, "someone else's chat");
+
   const done = await say("x", { conversation_id, action: "review_drafts", answers });
   const text = done.evs.filter((ev) => ev.name === "text").map((ev) => ev.data.delta).join("");
+  assert.match(text, /stays? for the coming week/);
   assert.match(text, /stays: it's on next week's plan/);
-  const t = await plan();
-  const of = (kind) => t.items.filter((i) => i.kind === kind);
-  assert.equal(of("promote").length, 1);
-  assert.equal(of("remove").length, 1, "only the draft that isn't planned for next week is removed");
-  assert.deepEqual(trayRow().items.find((i) => i.kind === "switch").op.carry_over, [c], "the kept draft is carried over");
-  assert.equal(trayRow().items.filter((i) => i.kind === "promote")[0].op.slug, a);
-  assert.equal(trayRow().items.filter((i) => i.kind === "remove")[0].op.slug, b);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m) => m.role === "user").at(-1);
+  assert.match(user.content, /^Liked: .+\. Not for us: .+\. Kept for the coming week: .+\.$/);
+  const items = trayRow().items;
+  assert.deepEqual(items.filter((i) => i.kind === "promote").map((i) => i.op.slug), [a]);
+  assert.deepEqual(items.filter((i) => i.kind === "remove").map((i) => i.op.slug), [b], "only the draft that isn't planned for next week is removed");
+  assert.deepEqual(items.find((i) => i.kind === "switch").op.carry_over, [c], "the draft with no thumb is carried over (the one also in next week needs no carry-over)");
 
-  const again = await bad({ answers });
-  assert.equal(again.status, 409, "answered once only");
+  assert.equal((await bad({ answers })).status, 409, "answered once only");
   assert.equal(github.commitLog.length, 0, "nothing commits before Save");
+});
+
+test("Done with no thumbs at all keeps every draft for the coming week", async () => {
+  const [nextOne, a, b] = [0, 1, 2].map((n) => anySlug(n));
+  setFlag(nextOne, "next: true");
+  setFlag(a, "current: true\ndraft: true");
+  setFlag(b, "current: true\ndraft: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  await say("x", { conversation_id, action: "finalise" });
+  await say("Promote it", { conversation_id });
+  await say("x", { conversation_id, action: "review_drafts", answers: {} });
+  const items = trayRow().items;
+  assert.deepEqual([...items.find((i) => i.kind === "switch").op.carry_over].sort(), [a, b].sort());
+  assert.ok(!items.some((i) => i.kind === "promote" || i.kind === "remove"));
 });
 
 test("the review card replaces earlier answers in the tray, starts on them, and the model can show it with review_drafts", async () => {
@@ -499,15 +510,15 @@ test("the review card replaces earlier answers in the tray, starts on them, and 
   await tray.stageMany([{ action: "start_next_week", carry_over: [a] }, { action: "promote_recipe", slug: b }], caller);
   const drafts = await thisWeeksDrafts();
   const card = reviewCard(drafts, trayRow().items);
-  assert.deepEqual(Object.fromEntries(card.drafts.map((d) => [d.slug, d.answer])), { [a]: "keep", [b]: "liked" }, "the card starts on what the tray holds");
+  assert.deepEqual(Object.fromEntries(card.drafts.map((d) => [d.slug, d.answer])), { [a]: undefined, [b]: "liked" }, "the card starts on the thumbs the tray holds");
   assert.equal(reviewCard([], []), null);
-  const { answers } = parseAnswers({ [a]: "liked", [b]: "book" }, drafts);
-  assert.match(answersText(drafts, answers), /^Liked: .+\. Back to the book: .+\.$/);
+  const { answers } = parseAnswers({ [a]: "liked" }, drafts);
+  assert.match(answersText(drafts, answers), /^Liked: .+\. Kept for the coming week: .+\.$/);
   const { stageReview } = await import("../lib/draft-review.js");
   await stageReview(drafts, answers, caller);
   const items = trayRow().items;
-  assert.deepEqual(items.filter((i) => i.kind === "promote").map((i) => i.op.slug), [a], "b's promotion went (back to the book), a is promoted");
-  assert.equal(items.find((i) => i.kind === "switch").op.carry_over, undefined, "a is no longer carried over");
+  assert.deepEqual(items.filter((i) => i.kind === "promote").map((i) => i.op.slug), [a], "b's thumb was taken back (kept), a is promoted");
+  assert.deepEqual(items.find((i) => i.kind === "switch").op.carry_over, [b], "b is carried over, a no longer is");
   assert.equal(items.filter((i) => i.kind === "switch").length, 1);
   assert.ok(reviewOpen([{ role: "user" }, { role: "assistant", content: { content: "x", ui: { review: card } } }]));
   assert.ok(!reviewOpen([{ role: "assistant", content: { ui: { review: card } } }, { role: "user" }]));
