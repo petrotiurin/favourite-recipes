@@ -1992,7 +1992,32 @@
   var revealDetail = false; // scroll the detail into view once, right after it was opened
   var trayDetail = null; // id of the card whose staged recipe / list is open
   var traySeen = null; // ids already shown, to highlight what's new
-  var trayManualFold = false;
+  // Folded by the reader (a tap on the head): it stays folded for the rest of the tab's visit, across turns and pages, until they open it
+  // again. While it is, a change to the tray shows as a dot on the head line instead of opening it.
+  var TRAY_FOLD_KEY = "recipes-chat-tray-fold";
+  var trayFoldState = (function () {
+    try {
+      var v = JSON.parse(sessionStorage.getItem(TRAY_FOLD_KEY));
+      return v && v.folded === true ? { folded: true, changed: v.changed === true } : { folded: false, changed: false };
+    } catch (e) {
+      return { folded: false, changed: false };
+    }
+  })();
+  var trayManualFold = trayFoldState.folded;
+  var trayChanged = trayFoldState.changed; // the tray changed while folded by hand: the dot on the head
+  function saveTrayFold() {
+    try {
+      if (trayManualFold) sessionStorage.setItem(TRAY_FOLD_KEY, JSON.stringify({ folded: true, changed: trayChanged }));
+      else sessionStorage.removeItem(TRAY_FOLD_KEY);
+    } catch (e) {
+      // not remembered: it opens again on the next page
+    }
+  }
+  function setManualFold(on) {
+    trayManualFold = on;
+    if (!on) trayChanged = false;
+    saveTrayFold();
+  }
   var keyboardOpen = false;
   var keyboardForcedOpen = false; // unfolded by a tap or a sent message while the keyboard is up, until it closes
   var trayTimer = null;
@@ -2016,8 +2041,7 @@
     return trayManualFold || (keyboardOpen && !keyboardForcedOpen) || (autoFold && !autoFoldSuppressed && narrowScreen());
   }
   function keyboardUnfold() {
-    if (keyboardOpen) keyboardForcedOpen = true;
-    trayManualFold = false;
+    if (keyboardOpen) keyboardForcedOpen = true; // a fold the reader chose themselves stays
     if (trayData) renderTray();
   }
 
@@ -2196,17 +2220,25 @@
     var head = el("button", "tray-head", { type: "button", "aria-expanded": folded ? "false" : "true" });
     var label = el("span", "tray-head-label");
     label.textContent = trayLine(trayData, folded);
+    if (folded && trayManualFold && trayChanged) {
+      var dot = el("span", "tray-dot", { title: "Changed since you folded it" });
+      var sr = el("span", "sr-only");
+      sr.textContent = " · changed";
+      label.appendChild(dot);
+      label.appendChild(sr);
+    }
     var chev = el("span", "tray-chev");
     chev.innerHTML = ICON.chevron; // our own constant markup
     head.appendChild(label);
     head.appendChild(chev);
     head.addEventListener("click", function () {
-      if (autoFold && folded) {
-        autoFoldSuppressed = true; // tapped open while it was folded on its own
-        trayManualFold = false;
+      if (folded) {
+        if (autoFold) autoFoldSuppressed = true; // tapped open while it was folded on its own
+        if (keyboardOpen) keyboardForcedOpen = true;
+        setManualFold(false);
       } else {
-        if (keyboardOpen) keyboardForcedOpen = folded ? true : false;
-        trayManualFold = keyboardOpen ? false : !trayManualFold;
+        keyboardForcedOpen = false;
+        setManualFold(true); // stays folded for this tab until tapped open again
       }
       renderTray();
     });
@@ -2320,7 +2352,13 @@
       if (next) next.items.forEach(function (i) { traySeen[i.id] = true; });
       if (!wasSeen && opts && opts.highlight === undefined) opts = {};
       trayData = next;
-      if (wasSeen && next && next.items.some(function (i) { return !wasSeen[i.id]; })) autoFold = false; // something new landed: show it
+      var landed = wasSeen && next && next.items.some(function (i) { return !wasSeen[i.id]; });
+      var gone = wasSeen && Object.keys(wasSeen).some(function (id) { return !traySeen[id]; });
+      if (landed) autoFold = false; // something new landed: show it (unless the reader folded it: then the dot says so)
+      if ((landed || gone) && trayManualFold && !trayChanged) {
+        trayChanged = true;
+        saveTrayFold();
+      }
       if (trayDetail && (!next || !next.items.some(function (i) { return i.id === trayDetail; }))) trayDetail = null;
       renderTray(opts && opts.highlight && wasSeen ? { highlight: true, seen: wasSeen } : null); // compared with what was shown BEFORE this load
       scheduleTrayPoll();
