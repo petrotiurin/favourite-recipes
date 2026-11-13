@@ -6,7 +6,7 @@ course: [Dinner]
 total_mins: 55
 serves: 4
 calories: 550
-next: true
+current: true
 draft: true
 ---
 

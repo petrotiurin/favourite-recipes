@@ -6,7 +6,7 @@ course: [Lunch]
 total_mins: 25
 serves: 2
 calories: 350
-next: true
+current: true
 draft: true
 ---
 

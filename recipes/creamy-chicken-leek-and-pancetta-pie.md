@@ -7,8 +7,6 @@ tags: [High Protein, Comfort Food]
 total_mins: 55
 serves: 4
 calories: 560
-current: true
-draft: true
 ---
 
 ## Ingredients

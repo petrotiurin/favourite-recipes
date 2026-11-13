@@ -6,7 +6,7 @@ course: [Breakfast]
 total_mins: 10
 serves: 1
 calories: 287
-next: true
+current: true
 draft: true
 ---
 
