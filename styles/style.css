@@ -2909,6 +2909,17 @@ button.chat-attachment-state {
   padding-bottom: 0;
 }
 
+/* Folded by hand and the tray changed since: one small accent dot after "Tray · n changes" (tap the head to open it). */
+.tray-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
 .tray-notice {
   display: flex;
   align-items: center;
