@@ -403,6 +403,13 @@ export async function turnChips({ page, editor, ui, fixReplies, staged }) {
 
 const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
+/**
+ * A chip that pairs a photo with a recipe ("Use photo 5 for Caesar Salad", "Make photo 2 the soup's photo"): the model never sees the photos, so
+ * that pairing is a guess, and a misleading chip is worse than none. Dropped; the user can still say it in their own words.
+ */
+export const photoPairingChip = (text) =>
+  /\b(use|set|make|put|keep|take)\b[^]*\b(photo|picture|pic|image)s?\b/i.test(text) || /\b(photo|picture|pic|image)[-\s]?\d+\b[^]*\b(for|as|on)\b/i.test(text);
+
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user"]);
 
 const resultText = (result, max = MAX_TOOL_RESULT_CHARS) => {
@@ -513,6 +520,10 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         continue;
       }
       if (oldOptions.has(normText(r))) continue; // a leftover answer of an earlier question
+      if (caller.role === "editor" && photoPairingChip(r)) {
+        console.warn(`Dropped a chip that pairs a photo with a recipe: ${JSON.stringify(r.slice(0, 60))}`);
+        continue;
+      }
       out.push(r);
     }
     return out;

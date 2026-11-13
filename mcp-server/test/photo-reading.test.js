@@ -722,3 +722,9 @@ test("the reader's answer is accepted wrapped in a one-item array, fenced, or wi
   assert.equal(reader.parseReaderJson("not json"), null);
   assert.equal(reader.parseReaderJson(JSON.stringify([obj, obj])), null);
 });
+
+test("chips that pair a photo with a recipe are dropped (the model can't see photos); other photo chips stay", async () => {
+  const { photoPairingChip } = await import("../lib/chat.js");
+  for (const yes of ["Use photo 5 for Caesar Salad", "Use my photo for it", "Make photo 2 the soup's photo", "Photo 5 as the stew's photo", "Set this picture"]) assert.ok(photoPairingChip(yes), yes);
+  for (const no of ["Send a clearer photo", "Paste the recipe text", "Finalise list", "What's in the tray?", "Skip it", "Add more recipes"]) assert.ok(!photoPairingChip(no), no);
+});

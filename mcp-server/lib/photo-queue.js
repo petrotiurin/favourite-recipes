@@ -296,7 +296,7 @@ export async function report(conversationId, lot, { origin } = {}) {
     const together = members.length > 1 ? `: read together${glued ? " (pieced together from the separate reads)" : ""}` : "";
     const stagedIds = [...new Set(members.map((n) => byN.get(n).tray_item_id).filter(Boolean))];
     if (read.kind === "dish") {
-      lines.push(`${label}: a photo of a dish, not a recipe${read.dish_description ? ` (${quote(read.dish_description, 120)})` : ""}. Use it as a recipe's photo (photo_from_attachment: ${members[0]}) only if the user asks.`);
+      lines.push(`${label}: a photo of a dish, not a recipe${read.dish_description ? ` (${quote(read.dish_description, 120)})` : ""}. You can't see it, so don't guess which recipe it belongs to and don't offer that as a chip; mention it once, and use it as a recipe's photo (photo_from_attachment: ${members[0]}) only when the user names the recipe.`);
       continue;
     }
     if (read.kind === "other") {
