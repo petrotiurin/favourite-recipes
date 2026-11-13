@@ -168,6 +168,7 @@ test("the reader's request is limited: its own prompt, one user message with the
   assert.equal(req.response_format.type, "json_schema");
   assert.ok(req.temperature <= 0.2);
   assert.equal(req.max_tokens, config.chatVisionMaxTokens);
+  assert.deepEqual(req.reasoning, { enabled: false }, "no thinking for transcription (CHAT_VISION_REASONING, default off)");
 });
 
 test("a provider without response_format: one forced tool with the schema, and nothing else", async () => {
@@ -708,4 +709,15 @@ test("joining photos takes their earlier cards out of the tray at once, even whe
   assert.deepEqual(trayItems().map((i) => i.op.title), ["Mushroom Risotto"], "the two halves' cards are gone; the duplicate isn't added twice");
   assert.match(notes(conversation_id).at(-1).content.summary, /Mushroom Risotto already added/);
   assert.ok(supabase.tables.photo_reads.filter((r) => r.n > 1).every((r) => !r.tray_item_id));
+});
+
+test("the reader's answer is accepted wrapped in a one-item array, fenced, or with prose around it (providers don't all enforce the schema)", () => {
+  const obj = { kind: "dish" };
+  assert.deepEqual(reader.parseReaderJson(JSON.stringify([obj])), obj);
+  assert.deepEqual(reader.parseReaderJson("```json\n" + JSON.stringify(obj) + "\n```"), obj);
+  assert.deepEqual(reader.parseReaderJson("Here is the result:\n" + JSON.stringify(obj) + "\nDone."), obj);
+  assert.deepEqual(reader.parseReaderJson([obj]), obj);
+  assert.equal(reader.parseReaderJson("[1, 2]"), null);
+  assert.equal(reader.parseReaderJson("not json"), null);
+  assert.equal(reader.parseReaderJson(JSON.stringify([obj, obj])), null);
 });

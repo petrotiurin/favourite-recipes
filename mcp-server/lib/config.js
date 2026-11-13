@@ -46,6 +46,9 @@ export const config = {
   chatVisionKey: process.env.OPENROUTER_CHAT_VISION_KEY || process.env.OPENROUTER_CHAT_EDITOR_KEY || process.env.OPENROUTER_API_KEY,
   chatVisionMaxTokens: Number(process.env.CHAT_VISION_MAX_TOKENS) || 4000,
   chatVisionTimeoutMs: Number(process.env.CHAT_VISION_TIMEOUT_MS) || 60_000,
+  // Thinking for the photo reader: "off" (default: reading a screenshot is transcription, and a thinking model can spend its whole budget
+  // thinking and never answer), "low" | "medium" | "high", or "model" to leave it to the model's own default.
+  chatVisionReasoning: (process.env.CHAT_VISION_REASONING || "off").toLowerCase(),
   chatVisionConcurrency: Number(process.env.CHAT_VISION_CONCURRENCY) || 8, // reads at the same time, across the household
   chatVisionLeaseMs: Number(process.env.CHAT_VISION_LEASE_MS) || 90_000,
   chatVisionSettleMs: /^\d+$/.test(process.env.CHAT_VISION_SETTLE_MS || "") ? Number(process.env.CHAT_VISION_SETTLE_MS) : 10_000, // 0 is allowed (tests)

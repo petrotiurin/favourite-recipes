@@ -23,7 +23,9 @@ export function readerRequest(imageUrls, { consecutive = false, forcedTool = fal
     { role: "system", content: readerSystemPrompt() },
     { role: "user", content: [{ type: "text", text: readerInstruction(consecutive) }, ...imageUrls.map((url) => ({ type: "image_url", image_url: { url } }))] },
   ];
-  const base = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens };
+  const r = config.chatVisionReasoning;
+  const reasoning = r === "off" ? { reasoning: { enabled: false } } : ["low", "medium", "high"].includes(r) ? { reasoning: { effort: r } } : {};
+  const base = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens, ...reasoning };
   if (forcedTool) {
     // for providers without response_format: one forced tool with the same schema, and nothing else
     return { ...base, tools: [{ type: "function", function: { name: "recipe_read", description: "Report what the photo(s) show.", parameters: READER_SCHEMA } }], tool_choice: { type: "function", function: { name: "recipe_read" } } };
@@ -44,7 +46,14 @@ async function call(body, signal) {
     if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
     throw new ReaderError("Couldn't reach the photo reader", { transient: true });
   }
-  const text = await res.text().catch(() => "");
+  let text;
+  try {
+    text = await res.text();
+  } catch (err) {
+    // the time limit can run out while the answer is still arriving: that's a timeout, not a garbled answer
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
+    throw new ReaderError("The photo reader's answer was cut off", { transient: true });
+  }
   if (!res.ok) {
     if (res.status === 402 || res.status === 401 || res.status === 403 || /insufficient|credit/i.test(text)) throw new ReaderError("The photo reader is resting (out of credit)", { kind: "out-of-credit" });
     if (res.status === 400 && /response_format|json_schema|structured/i.test(text)) throw new ReaderError("no structured output", { kind: "no-schema" });
@@ -77,13 +86,12 @@ export async function readPhotos(imageUrls, { consecutive = imageUrls.length > 1
     }
     const choice = out.json?.choices?.[0];
     const raw = body.tools ? choice?.message?.tool_calls?.[0]?.function?.arguments : choice?.message?.content;
-    if (choice?.finish_reason === "length") throw new ReaderError("The photo reader ran out of room", { kind: "unparseable" });
-    let parsed;
-    try {
-      parsed = typeof raw === "string" ? JSON.parse(raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "")) : raw;
-    } catch {
-      parsed = null;
+    if (choice?.finish_reason === "length") {
+      const u = out.json?.usage;
+      console.warn(`The photo reader ran out of room: ${u?.completion_tokens ?? "?"} tokens (${u?.completion_tokens_details?.reasoning_tokens ?? 0} thinking) of max ${config.chatVisionMaxTokens}`);
+      throw new ReaderError("The photo reader ran out of room", { kind: "unparseable" });
     }
+    const parsed = parseReaderJson(raw);
     const read = normaliseRead(parsed);
     if (!read) {
       if (choice?.message?.refusal) throw new ReaderError("The photo reader refused this photo", { kind: "refused" });
@@ -95,6 +103,30 @@ export async function readPhotos(imageUrls, { consecutive = imageUrls.length > 1
     gen?.end?.({ error: err.message });
     throw err;
   }
+}
+
+/**
+ * The reader's answer as an object. Providers don't all enforce the schema strictly: a model may wrap the object in a one-item array (Qwen does),
+ * fence it in ```json, or put a line of prose around it. Anything else is null (a failed read).
+ */
+export function parseReaderJson(raw) {
+  let value = raw;
+  if (typeof raw === "string") {
+    const text = raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "").trim();
+    try {
+      value = JSON.parse(text);
+    } catch {
+      const start = text.search(/[[{]/);
+      const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+      try {
+        value = start !== -1 && end > start ? JSON.parse(text.slice(start, end + 1)) : null;
+      } catch {
+        value = null;
+      }
+    }
+  }
+  if (Array.isArray(value) && value.length === 1) value = value[0];
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 // --- normalising what the reader returned (it is untrusted: shapes and lengths are enforced here) ------------------------------------
