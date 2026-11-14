@@ -139,9 +139,11 @@ On a phone the pill wraps under the servings, both flush left. The bar is hidden
 run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
 Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
 in an accent-ink kicker.
-From 720px the ingredients and the instructions sit side by side as two independent panes, each
-one screen tall with its own scroll: scrolling one never moves the other, and either can reach its
-end. The page snaps to the panes once the header has scrolled away.
+From 720px the ingredients and the instructions sit side by side, with no scroll snapping. The page
+scrolls normally and carries the instructions. The cook bar sticks to the top of the screen once it
+gets there (opaque, ruled off underneath), so the servings and "Keep screen on" are always one tap
+away. The ingredients pane sticks just under it, at most one screen tall with its own scroll, so a long
+list scrolls to its end without moving the steps; a pane at its end hands the scroll back to the page.
 
 ## Components
 
