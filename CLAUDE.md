@@ -145,6 +145,7 @@ mcp-server/         separate backend on Vercel: MCP server for adding/editing re
 mcp-server/lib/tools.js  the tool registry (access levels) + dispatch() + toolDefinitions(role) (OpenAI-style function tools from the zod schemas)
 mcp-server/lib/cache.js  short in-memory cache (60s, cleared on commit) behind search_recipes and the chat catalogue
 docs/chatbot-design.md  design of the recipe chat assistant (phased; see "Chat")
+docs/ocado-pi-setup.md  planned: a Raspberry Pi at home, logged in to Ocado by hand, reads use-by dates of delivered orders for a pantry (setup guide; reader + /pantry not built yet)
 templates/chat.js        the chat bubble + panel, vanilla JS, talks only to /chat; included on every page only when CHAT_API_URL is set at build time
 templates/auth.js        the sign-in sheet and session handling (window.RecipeAuth) shared by the shopping page and the chat; copied to dist/ only when SUPABASE_URL + SUPABASE_ANON_KEY are set at build time
 mcp-server/lib/photo-queue.js  photo reading: the photo_reads queue, drainers, the report, corrections; lib/photo-reader.js the vision call + grouping + duplicates; lib/follow-up.js the follow-up turn
