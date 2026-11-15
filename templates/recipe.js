@@ -12,6 +12,37 @@ function escapeHtml(str) {
 
 const DEFAULT_SERVINGS = 4;
 
+// The recipe as plain text for the "Cook with Claude" prompt (templates/cook-claude.js):
+// the Markdown body without bold, links or heading marks, so it reads cleanly in a chat.
+function recipePlainText(recipe) {
+  const facts = `Serves ${recipe.serves} · ${recipe.total_mins} min · ${recipe.calories} kcal per serving`;
+  const body = String(recipe.body || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return `${facts}\n\n${body}`;
+}
+
+// Data for cook-claude.js, as JSON in a script element: "<" and friends escaped so no value can close it.
+function cookJson(recipe, scalable) {
+  return JSON.stringify({
+    title: recipe.title,
+    slug: recipe.slug,
+    serves: Number(recipe.serves),
+    scalable,
+    text: recipePlainText(recipe),
+  })
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
 function renderRecipe(recipe, bodyHtml) {
   // Small-caps line above the name: the week(s) it's planned for, then course and tags.
   // (A draft says so in the line under the title, not here.)
@@ -73,10 +104,13 @@ ${recipe.draft === true ? `      <p class="recipe-lede">A draft: we haven't trie
       ${meta}
     </div>
     <div class="cook-bar" hidden>${servingsPicker}
+      <div class="cook-actions"></div>
     </div>
 ${bodyHtmlOut}
   </main>${scalable ? '\n  <script src="../servings.js" defer></script>' : ""}
-  <script src="../wakelock.js" defer></script>`;
+  <script src="../wakelock.js" defer></script>
+  <script type="application/json" id="cook-recipe">${cookJson(recipe, scalable)}</script>
+  <script src="../cook-claude.js" defer></script>`;
 
   return layout({
     title: `${recipe.title} — Our Favourite Recipes`,
@@ -87,4 +121,4 @@ ${bodyHtmlOut}
   });
 }
 
-module.exports = { renderRecipe };
+module.exports = { renderRecipe, recipePlainText };

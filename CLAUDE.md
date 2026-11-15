@@ -16,7 +16,9 @@ migration of a Notion database; it has long outgrown that.) It has three parts:
    - The scripts today: `templates/search.js` (client-side title filtering over the already-rendered recipe list),
      `templates/servings.js` (the 1/2/4-servings selector on recipe pages, rescaling ingredient quantities tagged at build time
      by `templates/quantities.js`), `templates/wakelock.js` (the "Keep screen on" toggle on recipe pages, using the Screen Wake
-     Lock API while cooking) and `templates/shopping.js` (below).
+     Lock API while cooking), `templates/cook-claude.js` (the "Cook with Claude" link in the cook bar: a plain link to a new
+     claude.ai chat whose prompt carries the whole recipe at the servings picked, from the `#cook-recipe` JSON the build writes;
+     a link the user taps, not a network call) and `templates/shopping.js` (below).
    - `templates/shopping.js` on the shopping page lets the signed-in editor save a **stocktake** (what's already at home). It
      signs in with Supabase Auth: email + password, or an email code as the fallback (the same email also carries a magic link;
      plain `fetch` to its REST API, no client library) and POSTs the stocktake to the MCP server's `/stocktake` endpoint. It still
@@ -135,6 +137,7 @@ templates/servings.js client-side servings selector, copied verbatim into dist/;
 styles/style.css    the one stylesheet, copied verbatim into dist/
 shopping-list.json  combined shopping list for next week's recipes, written by the agent via the MCP server (see "Shopping list")
 templates/wakelock.js client-side "Keep screen on" toggle (Screen Wake Lock API), copied verbatim into dist/
+templates/cook-claude.js client-side "Cook with Claude" link in the recipe cook bar (prompt = the recipe as plain text, from recipePlainText in recipe.js), copied verbatim into dist/
 templates/shopping-list.js  renders shopping-list.html (the list, or a blank page) + the JSON shopping.js works from
 templates/shopping.js       shopping page: planned/per-recipe servings, local ticks, editor sign-in sheet + "At home" tab (stocktake)
 design.md           UI design notes: palette tokens, the house icon language, components and interaction rules
