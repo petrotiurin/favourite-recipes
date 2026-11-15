@@ -10,7 +10,7 @@
   btn.type = "button";
   btn.className = "pill wakelock-toggle";
   btn.setAttribute("aria-pressed", "false");
-  bar.appendChild(btn);
+  (bar.querySelector(".cook-actions") || bar).appendChild(btn);
   bar.hidden = false;
 
   function acquire() {

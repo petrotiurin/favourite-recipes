@@ -88,7 +88,7 @@ The **house** tells how much of an item is at home:
 | Solid house (`--accent`) | Enough at home |
 | House with a cross | Clear everything at home |
 
-Others: **cart** (the list / left to buy), **↔ arrows** (slide), **check** (ticked, saved),
+Others: **arrow out of a box** (opens in another app or site: "Cook with Claude"), **cart** (the list / left to buy), **↔ arrows** (slide), **check** (ticked, saved),
 **− / +** (fewer / more servings),
 **undo arrow** (drop unsaved changes), **person** (sign in), **×** (close).
 
@@ -133,9 +133,15 @@ drafts one italic serif line in plum saying it's a draft (the only place a draft
 3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
 each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
 the segmented control (1/2/4, the same `.seg` as the shopping page; it opens on 4, whatever
-the recipe serves) on the left, and the "Keep
-screen on" pill (sun icon; filled `--accent-strong` with "Screen stays on" when on) on the right.
-On a phone the pill wraps under the servings, both flush left. The bar is hidden until its scripts
+the recipe serves) on the left, and two pills on the right (`.cook-actions`): "Keep
+screen on" (sun icon; filled `--accent-strong` with "Screen stays on" when on), then **"Cook with
+Claude"** (the same pill in `--accent-ink` text with an `--accent` outline and the "opens elsewhere"
+arrow; a `--current-soft` tint on hover). It is a plain link (`templates/cook-claude.js`) to a new
+Claude chat (`claude.ai/new?q=…`, new tab) whose prompt holds the whole recipe as plain text at the
+servings picked, asks Claude to go through the ingredients and then the steps one at a time, short
+enough for voice, and names the slug for `get_recipe` in case the Favourite recipes connector is
+there. On a recipe without the servings control the prompt has Claude ask how many people first.
+On a phone the pills wrap under the servings, side by side, flush left. The bar is hidden until its scripts
 run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
 Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
 in an accent-ink kicker.

@@ -536,6 +536,39 @@ main:has(.tile-grid.is-searching) .week-label {
   border-bottom: 1px solid var(--border);
 }
 
+/* The cook bar's pills ("Keep screen on", "Cook with Claude"), side by side on the right;
+   on a phone they wrap under the servings, flush left. */
+.cook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cook-actions:empty {
+  display: none;
+}
+
+/* Opens a new Claude chat with the recipe (templates/cook-claude.js): the same pill as
+   "Keep screen on", in accent ink with the "opens elsewhere" arrow. */
+.pill.cook-claude {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.cook-claude .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.pill.cook-claude:hover {
+  background: var(--current-soft);
+}
+
 .wakelock-toggle {
   min-height: 2.75rem;
   padding: 0 1rem;
@@ -672,6 +705,10 @@ main:has(.tile-grid.is-searching) .week-label {
     flex-wrap: nowrap;
     padding: 0.625rem 0;
     background: var(--bg);
+  }
+
+  .recipe-page main > .cook-bar .cook-actions {
+    flex-wrap: nowrap;
   }
 
   .recipe-body {
