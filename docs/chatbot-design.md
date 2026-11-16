@@ -441,7 +441,16 @@ plain button with no model in it. So the list is built **before** Save becomes a
   button becomes **Save to site (n)**.
 - **Any later change** to the tray (adding, dropping or editing an item) marks the list out of
   date: the List card says so, Save goes away and **Finalise list** comes back. The list stores a
-  hash of the tray items it was built from, so "out of date" is exact, not guessed.
+  hash of the tray items it was built from, so "out of date" is exact, not guessed. Planned servings
+  and what's at home don't count: they are applied on top of the list (always written for 2
+  servings), so changing them never needs it rebuilt.
+- **Servings asked for before the list exists** ("breakfasts for 2, the rest for 4") are not
+  staged: the saved list is the old week's, so there is nothing real to check them against. The
+  tool refuses a recipe that won't be in next week, and otherwise tells the model to say they'll be
+  applied after Finalise list (`servingsBeforeList` in `lib/tools.js`; no card, so nothing blocks
+  Finalise). When Finalise has staged the new list, the list tool's result names those servings
+  (found in the chat's stored tool results, `servingsFromRows`) and the bot asks with `ask_user`
+  whether to apply them; on yes it stages them against the staged list, checked like any change.
 - **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
   has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
   stays a tap by a person (below).

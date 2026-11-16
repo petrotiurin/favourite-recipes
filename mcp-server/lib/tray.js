@@ -45,9 +45,12 @@ export const saveOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind]
 /** The order cards are shown in: the same groups, newest first within a group. */
 export const displayOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(b, a));
 
-/** A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. */
+/**
+ * A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. Planned servings and
+ * what's at home don't count: they are applied on top of the list (it is always written for 2 servings), so changing them never needs it rebuilt.
+ */
 export function itemsHash(items) {
-  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake").map((i) => [i.id, i.op]);
+  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake" && i.kind !== "servings").map((i) => [i.id, i.op]);
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
 }
 
@@ -581,6 +584,8 @@ export async function trayView(tray, caller) {
     const stale = item.photo.status === "pending" && clock.now() - (item.photo.started || 0) > PHOTO_STALE_MS;
     return { status: stale ? "failed" : item.photo.status, error: stale ? "The photo took too long" : item.photo.error || item.photo.note || null };
   };
+  const newTitles = new Map(items.filter((i) => i.kind === "new").map((i) => [slugOf(i), i.op.title]));
+  const afterSaveTitle = (slug) => newTitles.get(slug) || slug;
   const cards = [];
   for (const item of displayOrder(items)) {
     const slug = slugOf(item);
@@ -645,7 +650,7 @@ export async function trayView(tray, caller) {
       }
       case "servings":
         card.title = "Planned servings";
-        card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || s}: ${n}`).join(", ");
+        card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || afterSaveTitle(s)}: ${n}`).join(", ");
         break;
     }
     if (recipe && item.kind !== "new" && item.kind !== "list" && item.kind !== "switch" && item.kind !== "servings" && item.kind !== "stocktake") {
