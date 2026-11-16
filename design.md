@@ -302,6 +302,9 @@ On the **At home** tab every row is a fill bar:
   editor types: an uploading thumbnail is dimmed with a small "Uploading…" label, a failed one is faded with a **Retry** button on it. Sending while
   uploads run says "Sending as soon as the photos are uploaded…" and sends when they're up. A muted line says when a file couldn't be read. A sent
   message shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened.
+  Tapping one enlarges it (`.chat-viewer`): the photo whole, `object-fit: contain`, on a near-black backdrop covering the panel, with its number
+  badge bottom-left; tapping anywhere on it (or Escape) goes back to the chat, focus on the thumbnail. It stays open while the conversation is
+  redrawn (a photo-reading poll) and closes with a different chat or the panel.
   Visitors have no button.
 - **Photo numbers** (`.chat-photo-num`): every photo carries its number in the chat as a small round badge bottom-left (white `--surface` pill,
   `--shadow`, 0.75rem semibold, tabular figures), on the waiting thumbnails and the sent ones. Numbers run on through the whole conversation

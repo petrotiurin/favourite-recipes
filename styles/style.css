@@ -2403,10 +2403,55 @@ body.chat-open {
   border-radius: 10px;
 }
 
-/* Each photo carries its number in the chat (photo-7 is "7"), so "4 and 5 are one recipe" means something. Neutral, not a week colour. */
+/* Each photo carries its number in the chat (photo-7 is "7"), so "4 and 5 are one recipe" means something. Neutral, not a week colour.
+   A sent photo is a button: tapping it enlarges it (.chat-viewer). */
 .chat-shot {
   position: relative;
   display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  cursor: zoom-in;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-shot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A sent photo enlarged: covers the whole panel, the photo whole on a dark backdrop, its number kept; tap anywhere to go back. */
+.chat-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  border: 0;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: zoom-out;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chat-viewer-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.chat-viewer .chat-photo-num {
+  left: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  min-width: 1.75rem;
+  height: 1.75rem;
+  line-height: 1.75rem;
+  font-size: 0.9rem;
 }
 
 .chat-photo-num {
