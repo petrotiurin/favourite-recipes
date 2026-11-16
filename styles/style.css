@@ -2092,37 +2092,42 @@ body.chat-open {
 .chat-status {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;
   font-style: italic;
 }
 
-/* Something is happening: three accent dots pulse in turn before the line ("Thinking…", "Reading photos… 2 of 5"). */
+/* Something is happening: a small segmented spinner (eight ticks fading round, in the accent) before the line ("Thinking…"). */
 .chat-status::before {
   content: "";
   flex: none;
-  width: 6px;
-  height: 6px;
-  margin: 0 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  animation: chat-status-dots 1.2s ease-in-out infinite;
+  background: conic-gradient(
+    from -22.5deg,
+    var(--accent-strong) 0 12.5%,
+    color-mix(in srgb, var(--accent-strong) 80%, transparent) 0 25%,
+    color-mix(in srgb, var(--accent-strong) 60%, transparent) 0 37.5%,
+    color-mix(in srgb, var(--accent-strong) 45%, transparent) 0 50%,
+    color-mix(in srgb, var(--accent-strong) 32%, transparent) 0 62.5%,
+    color-mix(in srgb, var(--accent-strong) 22%, transparent) 0 75%,
+    color-mix(in srgb, var(--accent-strong) 15%, transparent) 0 87.5%,
+    color-mix(in srgb, var(--accent-strong) 10%, transparent) 0 100%
+  );
+  /* Cut the disc into eight ticks: wedges, minus the middle. */
+  -webkit-mask-image: repeating-conic-gradient(from -11deg, #000 0 22deg, transparent 0 45deg), radial-gradient(circle, transparent 0 3.5px, #000 4px);
+  -webkit-mask-composite: source-in;
+  mask-image: repeating-conic-gradient(from -11deg, #000 0 22deg, transparent 0 45deg), radial-gradient(circle, transparent 0 3.5px, #000 4px);
+  mask-composite: intersect;
+  animation: chat-status-spin 0.9s steps(8) infinite;
 }
 
-@keyframes chat-status-dots {
-  0%,
-  100% {
-    background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
-    box-shadow: -11px 0 0 var(--accent-strong), 11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent);
-  }
-  33% {
-    background: var(--accent-strong);
-    box-shadow: -11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent), 11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent);
-  }
-  66% {
-    background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
-    box-shadow: -11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent), 11px 0 0 var(--accent-strong);
+@keyframes chat-status-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -2618,8 +2623,6 @@ button.chat-attachment-state {
 
   .chat-status::before {
     animation: none;
-    background: var(--accent-strong);
-    box-shadow: -11px 0 0 var(--accent-strong), 11px 0 0 var(--accent-strong);
   }
 
   .chat-bubble.is-working::after {
