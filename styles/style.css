@@ -2090,10 +2090,40 @@ body.chat-open {
 }
 
 .chat-status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin: 0;
   color: var(--text-muted);
   font-size: 0.85rem;
   font-style: italic;
+}
+
+/* Something is happening: three accent dots pulse in turn before the line ("Thinking…", "Reading photos… 2 of 5"). */
+.chat-status::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 12px;
+  border-radius: 50%;
+  animation: chat-status-dots 1.2s ease-in-out infinite;
+}
+
+@keyframes chat-status-dots {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
+    box-shadow: -11px 0 0 var(--accent-strong), 11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent);
+  }
+  33% {
+    background: var(--accent-strong);
+    box-shadow: -11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent), 11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent);
+  }
+  66% {
+    background: color-mix(in srgb, var(--accent-strong) 25%, transparent);
+    box-shadow: -11px 0 0 color-mix(in srgb, var(--accent-strong) 25%, transparent), 11px 0 0 var(--accent-strong);
+  }
 }
 
 .chat-status[hidden] {
@@ -2584,6 +2614,12 @@ button.chat-attachment-state {
 @media (prefers-reduced-motion: reduce) {
   .chat-bubble {
     transition: none;
+  }
+
+  .chat-status::before {
+    animation: none;
+    background: var(--accent-strong);
+    box-shadow: -11px 0 0 var(--accent-strong), 11px 0 0 var(--accent-strong);
   }
 
   .chat-bubble.is-working::after {

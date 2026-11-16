@@ -263,7 +263,8 @@ On the **At home** tab every row is a fill bar:
 - **Messages:** the user's in a `--current-soft` bubble on the right; the bot's as plain text on the surface (no box), at most paragraphs,
   bold, bullet/numbered lists and links. Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
   origin (anything else is shown as plain text).
-- **Status line** (`.chat-status`): one quiet muted italic line while it works ("Thinking…", "Looking through the recipes…"), never tool names;
+- **Status line** (`.chat-status`): one quiet muted italic line while it works ("Thinking…", "Looking through the recipes…"), never tool names,
+  led by three `--accent-strong` dots pulsing in turn so it's plain something is moving (steady dots with reduced motion);
   gone when the answer is done. Errors are the muted red box (`.chat-error`).
 - **Suggested replies** (`.chat-chip`): outline pills (1px `--border`, 44px tall, sentence case, no emoji) under the last bot message. Only the
   last message's chips are live; older rows fade to 40% and are disabled.
