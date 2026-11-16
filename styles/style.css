@@ -2127,7 +2127,7 @@ body.chat-open {
 
 @keyframes chat-status-spin {
   to {
-    transform: rotate(360deg);
+    transform: rotate(-360deg); /* anticlockwise: the bright tick leads, the fading ones trail behind it */
   }
 }
 
