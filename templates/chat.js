@@ -868,7 +868,49 @@
       shot.appendChild(badge);
       var img = shot.querySelector("img");
       if (img) img.setAttribute("alt", "Photo " + n + " you sent");
+      shot.setAttribute("aria-label", "Enlarge photo " + n);
     });
+  }
+
+  // A sent photo, tapped, fills the panel (the photo whole, on a dark backdrop, its number kept); tapping it again, or Escape, goes back.
+  var viewer = null;
+  var viewerFrom = null; // the thumbnail it opened from: focus goes back there
+  var viewerChat = null; // the conversation it belongs to
+  var viewerIndex = -1; // and its place among the chat's photos
+  function openViewer(shot) {
+    var img = shot.querySelector("img");
+    if (!img) return;
+    closeViewer();
+    viewer = el("button", "chat-viewer", { type: "button", "aria-label": "Back to the chat" });
+    var big = el("img", "chat-viewer-img", { src: img.getAttribute("src"), alt: img.getAttribute("alt") || "A photo you sent", decoding: "async" });
+    viewer.appendChild(big);
+    var num = shot.querySelector(".chat-photo-num");
+    if (num) {
+      var badge = el("span", "chat-photo-num", { "aria-hidden": "true" });
+      badge.textContent = num.textContent;
+      viewer.appendChild(badge);
+    }
+    viewer.addEventListener("click", function () { closeViewer(true); });
+    viewerFrom = shot;
+    viewerChat = chat.id;
+    viewerIndex = Array.prototype.indexOf.call(log.querySelectorAll(".chat-shot"), shot);
+    shot.setAttribute("aria-expanded", "true");
+    panel.appendChild(viewer);
+    viewer.focus({ preventScroll: true });
+  }
+  function closeViewer(refocus) {
+    if (!viewer) return;
+    if (viewer.parentNode) viewer.parentNode.removeChild(viewer);
+    viewer = null;
+    var from = viewerFrom;
+    viewerFrom = null;
+    if (from && !from.isConnected) {
+      from = log.querySelectorAll(".chat-shot")[viewerIndex] || null; // the log was redrawn while it was open: the same photo's new thumbnail
+    }
+    if (from) {
+      from.setAttribute("aria-expanded", "false");
+      if (refocus && from.isConnected) from.focus({ preventScroll: true });
+    }
   }
 
   function messageEl(m, live) {
@@ -883,8 +925,9 @@
       if (m.images && m.images.length) {
         var strip = el("div", "chat-photos");
         m.images.forEach(function (u) {
-          var shot = el("span", "chat-shot");
+          var shot = el("button", "chat-shot", { type: "button", "aria-label": "Enlarge photo", "aria-expanded": "false" });
           shot.appendChild(el("img", "chat-photo", { src: u, alt: "A photo you sent", loading: "lazy", decoding: "async" }));
+          shot.addEventListener("click", function () { openViewer(shot); });
           strip.appendChild(shot);
         });
         body.appendChild(strip);
@@ -1188,6 +1231,7 @@
   }
 
   function renderAll() {
+    if (viewer && (locked || viewerChat !== chat.id)) closeViewer(); // a poll redraws the same chat: the enlarged photo stays open
     while (log.firstChild) log.removeChild(log.firstChild);
     statusEl = null;
     panel.classList.toggle("is-locked", !!locked);
@@ -2631,6 +2675,7 @@
   }
   function close() {
     if (panel.hidden) return;
+    closeViewer();
     panel.hidden = true;
     bubble.setAttribute("aria-expanded", "false");
     doc.body.classList.remove("chat-open");
@@ -2666,7 +2711,9 @@
   newBtn.addEventListener("click", newChat);
   ctxClose.addEventListener("click", function () { contextDismissed = true; paintContext(); });
   doc.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !panel.hidden && !doc.body.classList.contains("sheet-open")) close();
+    if (e.key !== "Escape" || panel.hidden || doc.body.classList.contains("sheet-open")) return;
+    if (viewer) closeViewer(true); // an enlarged photo goes back to the chat first
+    else close();
   });
 
   form.addEventListener("submit", function (e) {
