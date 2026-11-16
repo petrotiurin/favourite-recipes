@@ -282,6 +282,46 @@ test("a tray that doesn't change next week needs no list: Save is available stra
   assert.equal(github.commitLog.length, 1);
 });
 
+test("servings asked for before the list is built wait for it: no problem on the card, Finalise isn't blocked, the list gets them, and changing them later keeps the list current", async () => {
+  const editor = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const ctx = { chat: { emit() {} } };
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  // the saved list is last week's: "test-pasta" isn't on it, which used to leave a PROBLEM card that blocked Finalise
+  const res = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  const text = res.content[0].text;
+  assert.doesNotMatch(text, /PROBLEM/, text);
+  assert.match(text, /wait for the new shopping list/);
+  let t = await plan();
+  const card = t.items.find((i) => i.kind === "servings");
+  assert.equal(card.error, null);
+  assert.equal(card.waiting, true);
+  assert.match(card.sub, /Test Pasta: 2 · applied when Finalise list builds the list/);
+  assert.equal(tray.trayAction(t), "finalise_plan", "Finalise is offered with the servings card in the tray");
+
+  // a recipe that won't be in next week is still a problem
+  const bad = await tools.dispatch("stage_set_shopping_servings", { servings: { "not-a-recipe": 1 } }, editor, ctx);
+  assert.match(bad.content[0].text, /PROBLEM on the card: servings: "not-a-recipe" is not in next week/);
+  await tools.dispatch("drop_tray_item", { id: trayRow().items.find((i) => i.kind === "servings").id }, editor, ctx);
+  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+
+  await say("ignored", { conversation_id, action: "finalise" });
+  t = await plan();
+  assert.equal(t.list_current, true);
+  assert.equal(t.can_save, true, JSON.stringify(t.items.map((i) => [i.kind, i.error])));
+  assert.equal(t.items.find((i) => i.kind === "servings").waiting, undefined, "applied on top of the staged list now");
+
+  // a change of servings after the list is built doesn't make it out of date
+  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 1 } }, editor, ctx);
+  t = await plan();
+  assert.equal(t.list_current, true);
+  assert.equal(t.can_save, true);
+
+  const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(github.commitLog.length, 1, "one commit");
+  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 1);
+});
+
 // --- Save now ----------------------------------------------------------------------------------------------------------------
 
 test("Save now: a quick fix commits alone; new recipes and next-week changes can't be saved on their own; ingredient edits to a next-week recipe wait", async () => {

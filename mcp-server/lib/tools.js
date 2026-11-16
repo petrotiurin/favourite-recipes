@@ -296,6 +296,7 @@ async function staged(spec, ctx, onStaged) {
   const n = out.tray?.items?.length ?? 0;
   const lines = [`${out.message}. The tray (not the site yet) now has ${n} change${n === 1 ? "" : "s"}.`];
   if (out.item?.photo) lines.push("Its photo is being made in the background; the card shows it when ready.");
+  if (out.waiting) lines.push("These servings wait for the new shopping list: next week changes in this tray, so the list is built by Finalise list and these servings are applied to it then (nothing more to do; don't pass them again or drop the card). Tell the user they're noted for the list.");
   if (out.error) lines.push(`PROBLEM on the card: ${out.error}`, "Stage it again with the problem fixed (the same title or slug replaces it), or drop it with drop_tray_item.");
   for (const w of out.warnings || []) lines.push(`warning: ${w}`);
   for (const note of spec.notes || []) lines.push(`note: ${note}`);
@@ -514,7 +515,7 @@ const STAGE_TOOLS = [
   {
     name: "stage_set_shopping_servings",
     title: "Stage planned servings",
-    description: "Stage a change to how many people individual recipes on the saved shopping list are planned for. Only recipes on the saved list.",
+    description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"). With no next-week changes in the tray it changes the saved list's plan (only recipes on it). When the tray changes next week, the card waits and is applied to the list Finalise list builds (any recipe that will be in next week); after the list is built it is applied on top of it without making it out of date. Staging again merges into the same card.",
     inputSchema: { servings: servingsSchema, reason: reasonSchema },
     access: "stage",
     handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),

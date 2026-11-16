@@ -45,9 +45,12 @@ export const saveOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind]
 /** The order cards are shown in: the same groups, newest first within a group. */
 export const displayOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(b, a));
 
-/** A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. */
+/**
+ * A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. Planned servings and
+ * what's at home don't count: they are applied on top of the list (it is always written for 2 servings), so changing them never needs it rebuilt.
+ */
 export function itemsHash(items) {
-  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake").map((i) => [i.id, i.op]);
+  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake" && i.kind !== "servings").map((i) => [i.id, i.op]);
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
 }
 
@@ -124,6 +127,10 @@ export async function replay(items, caller, { reads = new Map(), ref, photoBytes
   for (const item of saveOrder(items)) {
     const snapshot = cs.snapshot();
     try {
+      if (item.kind === "servings" && (await servingsWaitForList(items, cs))) {
+        results.set(item.id, { ok: true, result: { waiting: true }, warnings: [] });
+        continue;
+      }
       const op = applicableOp(item, cs, photoBytes(item));
       const result = await runOperation(op, cs, caller);
       results.set(item.id, { ok: true, result, warnings: result.warnings || [] });
@@ -136,6 +143,25 @@ export async function replay(items, caller, { reads = new Map(), ref, photoBytes
   const nextSlugs = (await listRecipes(cs)).filter(isNextWeek).map((r) => r.slug);
   return { cs, results, nextSlugs };
 }
+
+/**
+ * Planned servings staged while the tray changes next week but has no list yet wait for the list Finalise builds: the saved list is for
+ * the old week, so they can't be checked against it (a new recipe "is not on the shopping list"). They are checked against next week
+ * as the tray leaves it instead (`cs` has every earlier item applied) and run on top of the staged list once there is one (Save order:
+ * the list, then servings). Resolves true when the item waits; throws UserError for a recipe that won't be in next week.
+ */
+async function servingsWaitForList(items, cs) {
+  if (items.some((i) => i.kind === "list")) return false;
+  const nextNow = (await listRecipes(cs)).filter(isNextWeek).map((r) => r.slug);
+  if (!needsList(items.filter((i) => i.kind !== "servings"), nextNow)) return false;
+  const item = items.find((i) => i.kind === "servings");
+  const missing = Object.keys(item.op.servings || {}).filter((slug) => !nextNow.includes(slug));
+  if (missing.length) throw new UserError(`servings: ${missing.map((s) => `"${s}"`).join(", ")} ${missing.length === 1 ? "is" : "are"} not in next week (next week after Save: ${nextNow.join(", ") || "none"})`);
+  return true;
+}
+
+/** True while the tray's planned servings wait for the list Finalise will build (see servingsWaitForList). */
+export const servingsWaiting = (items, results) => items.some((i) => i.kind === "servings" && results.get(i.id)?.result?.waiting);
 
 /**
  * Does Save need a shopping list built first (design 7.1 Finalise)? Yes when the tray changes next week's recipes or the servings and
@@ -363,7 +389,7 @@ export async function stageOp(spec, caller, ctx = {}) {
     const needs = needsList(checked, nextSlugs);
     const listHash = item?.kind === "list" ? itemsHash(checked) : checked.some((i) => i.kind === "list") ? tray?.list_hash ?? null : null;
     const next = { ...(tray || { status: "collecting" }), list_hash: listHash, items: checked };
-    outcome = { item, message: planned.message, warnings: item ? results.get(item.id)?.warnings || [] : [], needs };
+    outcome = { item, message: planned.message, warnings: item ? results.get(item.id)?.warnings || [] : [], needs, waiting: !!(item && results.get(item.id)?.result?.waiting) };
     return { items: checked, listHash, status: statusFor(next, checked, needs), result: null };
   });
   if (outcome.item && wantsPhoto && tray) startPhotoJob(tray.id, outcome.item.id);
@@ -581,6 +607,8 @@ export async function trayView(tray, caller) {
     const stale = item.photo.status === "pending" && clock.now() - (item.photo.started || 0) > PHOTO_STALE_MS;
     return { status: stale ? "failed" : item.photo.status, error: stale ? "The photo took too long" : item.photo.error || item.photo.note || null };
   };
+  const newTitles = new Map(items.filter((i) => i.kind === "new").map((i) => [slugOf(i), i.op.title]));
+  const afterSaveTitle = (slug) => newTitles.get(slug) || slug;
   const cards = [];
   for (const item of displayOrder(items)) {
     const slug = slugOf(item);
@@ -645,7 +673,11 @@ export async function trayView(tray, caller) {
       }
       case "servings":
         card.title = "Planned servings";
-        card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || s}: ${n}`).join(", ");
+        card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || afterSaveTitle(s)}: ${n}`).join(", ");
+        if (results.get(item.id)?.result?.waiting) {
+          card.waiting = true;
+          card.sub += " · applied when Finalise list builds the list";
+        }
         break;
     }
     if (recipe && item.kind !== "new" && item.kind !== "list" && item.kind !== "switch" && item.kind !== "servings" && item.kind !== "stocktake") {

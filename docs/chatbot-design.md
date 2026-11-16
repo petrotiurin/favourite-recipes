@@ -441,7 +441,15 @@ plain button with no model in it. So the list is built **before** Save becomes a
   button becomes **Save to site (n)**.
 - **Any later change** to the tray (adding, dropping or editing an item) marks the list out of
   date: the List card says so, Save goes away and **Finalise list** comes back. The list stores a
-  hash of the tray items it was built from, so "out of date" is exact, not guessed.
+  hash of the tray items it was built from, so "out of date" is exact, not guessed. Planned servings
+  and what's at home don't count: they are applied on top of the list (always written for 2
+  servings), so changing them never needs it rebuilt.
+- **Servings asked for before the list exists** ("breakfasts for 2, the rest for 4") go on a
+  **Planned servings** card that waits for the list: while the tray changes next week and has no
+  list yet, the card is checked against next week as the tray leaves it (not against the old saved
+  list, which doesn't have the new recipes) and says "applied when Finalise list builds the list".
+  Finalise is not blocked by it, and Save applies it after the new list (`servingsWaitForList` in
+  `lib/tray.js`). Nothing for the user to drop or repeat.
 - **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
   has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
   stays a tap by a person (below).

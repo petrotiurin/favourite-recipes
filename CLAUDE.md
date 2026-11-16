@@ -84,7 +84,9 @@ logic (`lib/operations.js` `runOperation`, shared with `batch_changes`) over a t
 expiry, optimistic `version`) with staged photos in the private `tray-photos` bucket (`lib/tray-store.js`), RLS on with no policies. A new
 recipe's photo is made in the background (`lib/tray-photos.js`: the source page's og:image / JSON-LD image, fetched with an SSRF guard, else
 generated). Finalise list (`POST /chat { action: "finalise" }`) has the agent build the shopping list; any later change makes it out of date (hash
-of the other items). **Save is `POST /chat/plan/apply`, never a model tool**: fresh token + `EDITORS`, re-validation, clash detection, ONE commit
+of the other items, planned servings and the stocktake excepted). Servings staged before the list exists (`stage_set_shopping_servings`
+while the tray changes next week) wait for the list Finalise builds and are applied on top of it at Save (`servingsWaitForList` in
+`lib/tray.js`), never checked against the old saved list. **Save is `POST /chat/plan/apply`, never a model tool**: fresh token + `EDITORS`, re-validation, clash detection, ONE commit
 (`lib/plan-apply.js`) with the photos, then the tray is emptied and a summary is posted into the chat (new recipes "Publishing…" until
 `GET /chat/status` sees their page). "Save now" (`{ item_id }`) is for quick fixes only (`saveNowRule`). Other routes: `GET /chat/plan`,
 `DELETE /chat/plan/items/:id`, `POST /chat/plan/items/:id/photo`. Migrations: `20261108000000_trays.sql`, `20261108000100_tray_photos_bucket.sql`.
