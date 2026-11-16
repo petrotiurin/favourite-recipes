@@ -194,7 +194,7 @@ agents) returns the items in, soonest first, so "what should we cook tonight?" a
 ### 5.3 The Pi's health
 
 When the latest heartbeat is `logged_out` (or no heartbeat for 48 hours), the Fridge tab and the editor chat show a calm notice:
-"The Ocado reader on the Pi is logged out. Log in again over VNC (see the setup guide)." It disappears with the next `ok`. That is
+"The Ocado reader on the Pi is logged out. Log in again through Raspberry Pi Connect (see the setup guide)." It disappears with the next `ok`. That is
 the only way the Pi talks to people.
 
 ### 5.4 Look (to be added to `design.md` when built)

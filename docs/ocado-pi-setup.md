@@ -10,10 +10,10 @@ sends the dates to our backend.
 Raspberry Pi 4 (8 GB), at home                     Vercel backend           Supabase
 ┌──────────────────────────────────┐  HTTPS out    ┌──────────────┐         ┌──────────────┐
 │ Chromium, own profile, logged in │ ────────────▶ │ POST /pantry │ ──────▶ │ pantry_items │
-│ to Ocado (by you, over VNC)      │  Pi token     └──────────────┘         └──────────────┘
+│ to Ocado (by you, via Pi Connect)│  Pi token     └──────────────┘         └──────────────┘
 │ systemd timer: reader script     │                                               ▲
 └──────────────────────────────────┘                       site / chat read ───────┘
-      ▲ Tailscale: SSH + VNC, only from your devices; nothing opened on the router
+      ▲ Raspberry Pi Connect: desktop + shell in your browser; nothing opened on the router
 ```
 
 Rules this keeps:
@@ -63,49 +63,63 @@ Check that SSH refuses passwords (Imager normally sets this already):
 grep -E '^PasswordAuthentication' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null   # want: no
 ```
 
-## 4. Tailscale (private remote access)
+## 4. Desktop autologin and Raspberry Pi Connect (remote access)
 
-Tailscale gives the Pi a private address that only your own devices can reach, from anywhere, without forwarding any ports on
-the router.
+**Raspberry Pi Connect** is Raspberry Pi's own remote-access service. It gives you the Pi's desktop (screen sharing) and a terminal
+(remote shell) in any browser, on your laptop or phone, from anywhere. There's nothing to install on your devices, no ports to
+forward on the router, and it works behind CGNAT. Its connections are encrypted end to end (WebRTC). They go directly between the
+browser and the Pi where possible, and through Raspberry Pi's relay otherwise. It's free, and the only account is a Raspberry Pi ID.
 
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up            # open the printed link and approve the Pi in your Tailscale account
-tailscale ip -4              # note the 100.x.y.z address
-```
-
-Install Tailscale on your laptop and phone too, with the same account. In the Tailscale admin console, turn on **Disable key
-expiry** for `pantry-pi` so it doesn't drop off after 180 days.
-
-Then the firewall: allow only Tailscale traffic in, plus SSH on the home network as a fallback:
-
-```bash
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow in on tailscale0
-sudo ufw allow from 192.168.0.0/16 to any port 22 proto tcp   # adjust to your home subnet
-sudo ufw enable
-```
-
-From now on, use `ssh kitchen@pantry-pi` (Tailscale's MagicDNS name) or the 100.x address.
-
-## 5. Desktop autologin and VNC
-
-VNC shares a running desktop session, so the Pi has to log in to its desktop by itself at boot.
+Screen sharing shares a running desktop session, so first make the Pi log in to its desktop by itself at boot:
 
 ```bash
 sudo raspi-config
 #   System Options → Boot / Auto Login → Desktop Autologin
-#   Interface Options → VNC → Enable        (wayvnc on the Wayland desktop)
+#   (Advanced Options → Wayland: keep the default, Wayland. Screen sharing needs it.)
 sudo reboot
 ```
 
-On your laptop, install a VNC viewer (RealVNC Viewer or TigerVNC) and connect to `pantry-pi:5900` over Tailscale, using the Pi
-username and password. You should see the Pi desktop. The firewall above means VNC is only reachable through Tailscale and your
-home network.
+Then turn Pi Connect on and link the Pi to your Raspberry Pi ID:
 
-(Alternative: **Raspberry Pi Connect** does browser-based screen sharing without a VNC client. It works too, but it's one more
-account; Tailscale also covers SSH.)
+```bash
+sudo apt install -y rpi-connect   # already there on recent desktop images; this just makes sure
+rpi-connect on
+rpi-connect signin                # open the printed link, sign in (or create a Raspberry Pi ID), name the device pantry-pi
+loginctl enable-linger            # keeps the remote shell available even if the desktop session ends
+rpi-connect status                # want: signed in, screen sharing and remote shell allowed
+```
+
+On your Raspberry Pi ID (id.raspberrypi.com), **turn on two-factor authentication**. That account now opens your Pi's desktop,
+and the desktop holds a signed-in Ocado session.
+
+To use it, go to **connect.raspberrypi.com**, pick `pantry-pi` and choose **Screen sharing** (the desktop, for the Ocado login) or
+**Remote shell** (a terminal, for upkeep). If it won't connect, `rpi-connect doctor` on the Pi checks the network path.
+
+The firewall can now refuse everything inbound, because Pi Connect, like the reader, only makes outgoing connections. Keep SSH
+open on the home network for copying files and as a fallback:
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow from 192.168.0.0/16 to any port 22 proto tcp   # adjust to your home subnet
+sudo ufw enable
+```
+
+## 5. Optional: Tailscale (SSH and VNC from your own tools, anywhere)
+
+Pi Connect covers the login and the upkeep. Add Tailscale only if you want ordinary `ssh` / `scp` / a VNC client from outside
+the home network, e.g. to copy captures while away. Tailscale gives the Pi a private address that only your own devices can reach.
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up            # open the printed link and approve the Pi in your Tailscale account
+sudo ufw allow in on tailscale0
+```
+
+Install Tailscale on your laptop and phone too, with the same account. In the Tailscale admin console, turn on **Disable key
+expiry** for `pantry-pi` so it doesn't drop off after 180 days. Then `ssh kitchen@pantry-pi` (Tailscale's MagicDNS name) works
+from anywhere. For a VNC client too, enable it with `sudo raspi-config` → Interface Options → VNC, and connect to `pantry-pi:5900`
+(RealVNC Viewer or TigerVNC). The firewall keeps VNC reachable only through Tailscale.
 
 ## 6. Chromium, Node and a dedicated profile
 
@@ -137,9 +151,9 @@ EOF
 chmod +x ~/ocado-reader/ocado-login.sh
 ```
 
-## 7. Log in to Ocado (by hand, over VNC)
+## 7. Log in to Ocado (by hand, through Pi Connect)
 
-1. Connect over VNC, open a terminal on the Pi desktop and run `~/ocado-reader/ocado-login.sh`.
+1. Open **Screen sharing** for `pantry-pi` on connect.raspberrypi.com, open a terminal on the Pi desktop and run `~/ocado-reader/ocado-login.sh`.
 2. Accept or decline the cookie banner. Log in with your email and password, and type in the one-time code from your email.
    If there's a "Remember me" / "Keep me signed in" box, tick it.
 3. Open **My orders** and check that a delivered order's details page shows the use-by dates.
@@ -183,7 +197,7 @@ try {
   await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
   await page.waitForTimeout(3000);
   if (/sso\.ocado\.com|\/login/.test(page.url())) {
-    console.error("Not logged in (landed on " + page.url() + "). Log in again over VNC (step 7).");
+    console.error("Not logged in (landed on " + page.url() + "). Log in again through Pi Connect (step 7).");
     process.exit(2);
   }
   writeFileSync(join(out, "page.html"), await page.content());
@@ -198,12 +212,12 @@ cd ~/ocado-reader && node capture-order.mjs <order number>
 
 The order number is in the "Your receipt and updates for today's delivery" email. If the headless run is blocked or comes back
 empty, run it on the desktop instead: `HEADED=1 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) node capture-order.mjs <no>`
-(the window shows up in VNC). That tells us whether the real reader must run headed.
+(the window shows up in screen sharing). That tells us whether the real reader must run headed.
 
 ## 9. Hand the capture over
 
-Copy the capture to your laptop (`scp -r kitchen@pantry-pi:ocado-captures/<timestamp> .`) and share it in a Claude Code
-session, or connect the Pi to a session through Remote Control so the session can read it directly. The page has your name,
+Copy the capture to your laptop at home (`scp -r kitchen@pantry-pi.local:ocado-captures/<timestamp> .`, or `pantry-pi`
+over Tailscale) and share it in a Claude Code session, or connect the Pi to a session through Remote Control so the session can read it directly. The page has your name,
 address and order. Keep it out of the repo: the code gets built from it, but the capture itself isn't committed.
 
 ## 10. Next: the reader (to be built)
@@ -241,4 +255,4 @@ to be on. Things to plan for when we do it:
 - **Still never checks out.** That rule doesn't change with the machine. You review the basket and pay yourself, on your phone or
   laptop. The session cookies are the same account, so the basket the Pi filled is the one you see.
 - **Memory.** An 8 GB Pi 4 runs Chromium plus Claude Code comfortably. The 4 GB board would be tight with a long favourites page.
-- **Sainsbury's** could move the same way later, with its own profile (`~/sainsburys-profile`) and its own login over VNC.
+- **Sainsbury's** could move the same way later, with its own profile (`~/sainsburys-profile`) and its own login by hand through Pi Connect.
