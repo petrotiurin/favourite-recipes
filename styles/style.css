@@ -2108,14 +2108,14 @@ body.chat-open {
   border-radius: 50%;
   background: conic-gradient(
     from -22.5deg,
-    var(--accent-strong) 0 12.5%,
-    color-mix(in srgb, var(--accent-strong) 80%, transparent) 0 25%,
-    color-mix(in srgb, var(--accent-strong) 60%, transparent) 0 37.5%,
-    color-mix(in srgb, var(--accent-strong) 45%, transparent) 0 50%,
-    color-mix(in srgb, var(--accent-strong) 32%, transparent) 0 62.5%,
-    color-mix(in srgb, var(--accent-strong) 22%, transparent) 0 75%,
-    color-mix(in srgb, var(--accent-strong) 15%, transparent) 0 87.5%,
-    color-mix(in srgb, var(--accent-strong) 10%, transparent) 0 100%
+    color-mix(in srgb, var(--accent-strong) 10%, transparent) 0 12.5%,
+    color-mix(in srgb, var(--accent-strong) 15%, transparent) 0 25%,
+    color-mix(in srgb, var(--accent-strong) 22%, transparent) 0 37.5%,
+    color-mix(in srgb, var(--accent-strong) 32%, transparent) 0 50%,
+    color-mix(in srgb, var(--accent-strong) 45%, transparent) 0 62.5%,
+    color-mix(in srgb, var(--accent-strong) 60%, transparent) 0 75%,
+    color-mix(in srgb, var(--accent-strong) 80%, transparent) 0 87.5%,
+    var(--accent-strong) 0 100%
   );
   /* Cut the disc into eight ticks: wedges, minus the middle. */
   -webkit-mask-image: repeating-conic-gradient(from -11deg, #000 0 22deg, transparent 0 45deg), radial-gradient(circle, transparent 0 3.5px, #000 4px);
@@ -2127,7 +2127,7 @@ body.chat-open {
 
 @keyframes chat-status-spin {
   to {
-    transform: rotate(-360deg); /* anticlockwise: the bright tick leads, the fading ones trail behind it */
+    transform: rotate(360deg); /* clockwise; the gradient fades anticlockwise, so the bright tick leads and the rest trail behind it */
   }
 }
 
