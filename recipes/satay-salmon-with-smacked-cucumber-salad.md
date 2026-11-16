@@ -2,7 +2,7 @@
 title: Satay Salmon with Smacked Cucumber Salad
 slug: satay-salmon-with-smacked-cucumber-salad
 image: /images/recipes/satay-salmon-with-smacked-cucumber-salad.jpg
-course: [Lunch]
+course: [Dinner]
 tags: [High Protein]
 total_mins: 45
 serves: 2
