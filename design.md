@@ -49,7 +49,7 @@ Defined on `:root` in `styles/style.css`, with dark-mode values under
 | `--line` | `#efedea` | Dividers between rows inside a card |
 | `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
 | `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a44617` | Accent-coloured text: "This week" kickers and tab, "Step n", active wake lock |
+| `--accent-ink` | `#a44617` | Accent-coloured text: this week's kickers (the meal on the home page, "This week" on recipe pages) and tab, "Step n", active wake lock |
 | `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
 | `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
 | `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
@@ -69,8 +69,9 @@ Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks
   aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
 - **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-current` accent ink ("This week"), `.kicker-next` teal ("Next week"). Kickers name the week, never
-  the draft status.
+  `.kicker-current` accent ink (this week), `.kicker-next` teal ("Next week"). On the home page this week's
+  kickers say the meal ("Lunch") in accent ink, since the "This week" heading already names the section; on
+  recipe pages the kicker says "This week". Kickers never name the draft status.
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
@@ -109,9 +110,11 @@ course is picked or a search is typed, the "This week" label hides (the grid isn
 more) but the link stays.
 
 The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
-Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the week,
-else the course; never "draft" or "To try"), serif name, then "20 min · 412 kcal". This week's recipes come
-first; a "The rest of the book" divider spans the grid where the others start; it hides while a
+Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the course,
+in accent ink for this week's recipes and muted for the rest; never "draft" or "To try"), serif name, then
+"20 min · 412 kcal". This week's recipes come first, **sorted by meal** in the filters' order (Breakfast,
+Lunch, Dinner, Snack; a recipe with two courses goes by its first), drafts first inside each meal, so the
+week reads as lunches next to lunches with no extra dividers; a "The rest of the book" divider spans the grid where the others start; it hides while a
 filter or a search is active.
 
 **Next week stays out of the way.** Home tiles never say "Next week": next week's recipes sit in

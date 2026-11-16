@@ -9,6 +9,13 @@ const ICON_SEARCH =
 const ICON_ARROW =
   '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>';
 
+// This week's tiles sit together by meal, in the filters' order (a recipe with two courses goes by its first);
+// the order the recipes arrived in (drafts first) holds inside each meal.
+const courseRank = (r) => {
+  const i = COURSES.indexOf((r.course || [])[0]);
+  return i === -1 ? COURSES.length : i;
+};
+
 const courseClasses = (r) => (r.course || []).map((c) => `course-${String(c).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
 
 /**
@@ -30,14 +37,19 @@ function weekHead(thisWeekCount, nextWeekCount) {
 function renderIndex(recipes) {
   // Drafts planned only for next week aren't on the home page at all (search can't find them either)
   // until the switch: they live on the Next week page. Recipes arrive with this week first (drafts first),
-  // then the rest; a divider marks where the rest begins (hidden while filtering or searching). Next week's
-  // other recipes sit in the rest, unmarked.
-  const shown = recipes.filter((r) => !isHiddenUntilNextWeek(r));
+  // then the rest; this week is regrouped by meal, and a divider marks where the rest begins (hidden while
+  // filtering or searching). Next week's other recipes sit in the rest, unmarked.
+  const visible = recipes.filter((r) => !isHiddenUntilNextWeek(r));
+  const shown = [
+    ...visible.filter(isThisWeek).sort((a, b) => courseRank(a) - courseRank(b)),
+    ...visible.filter((r) => !isThisWeek(r)),
+  ];
   const restStart = shown.findIndex((r) => !isThisWeek(r));
   const tiles = shown
     .map((r, i) => {
       const divider = i === restStart && i > 0 ? `      <p class="tile-divider">The rest of the book</p>\n` : "";
-      const kicker = isThisWeek(r) ? { cls: "kicker-current", label: "This week" } : { label: courseLabel(r) };
+      // The "This week" heading names the section, so this week's kickers name the meal, in the accent ink.
+      const kicker = isThisWeek(r) ? { cls: "kicker-current", label: courseLabel(r) } : { label: courseLabel(r) };
       return divider + tile(r, { kicker, cls: courseClasses(r).concat(isThisWeek(r) ? ["is-current"] : []).join(" ") });
     })
     .join("\n");
