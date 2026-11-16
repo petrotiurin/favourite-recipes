@@ -12,7 +12,8 @@ import { readPage, formatPage } from "./page-reader.js";
 import { scaleLine, ingredientLines } from "./scaling.js";
 import { recipesFromHome } from "./at-home.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
-import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads } from "./tray.js";
+import { stageOp, dropItem, resolveClash, loadTray, replay, needsList, trayNote, assertCanStage, warmReads } from "./tray.js";
+import { getMessages } from "./chat-store.js";
 import { readsOf, enqueuePhotos, applyCorrections, readerConfigured } from "./photo-queue.js";
 import { parsePhotoId, photoLabel, fieldsFromRead, findDuplicate } from "./photo-reader.js";
 import { checkRateLimit } from "./rate-limit.js";
@@ -288,6 +289,49 @@ export async function stagedLabel(item) {
   }
 }
 
+const SERVINGS_EARLY = "servings asked before the list:";
+
+/**
+ * Planned servings asked for while the tray changes next week and has no list yet can't be checked against a real list (the saved one is
+ * the old week's), so they aren't staged: the result tells the model to say they'll be applied after Finalise list, and carries them (after
+ * SERVINGS_EARLY) so the list tool can ask about them once the list is built (servingsAskedEarlier). A recipe that won't be in next week is
+ * refused at once. Resolves null when servings can be staged now.
+ */
+async function servingsBeforeList(servings, caller) {
+  const tray = await loadTray();
+  const items = tray?.items || [];
+  if (!items.length || items.some((i) => i.kind === "list")) return null;
+  const { nextSlugs } = await replay(items, caller, await warmReads());
+  if (!needsList(items.filter((i) => i.kind !== "servings"), nextSlugs)) return null;
+  const missing = Object.keys(servings).filter((slug) => !nextSlugs.includes(slug));
+  if (missing.length) throw new UserError(`Not staged: ${missing.map((s) => `"${s}"`).join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} in next week after Save (${nextSlugs.join(", ") || "none"}). Use those slugs.`);
+  return ok(
+    `Not staged yet: the tray changes next week, so next week's shopping list hasn't been built, and servings are set on the list. ` +
+      `Tell the user you'll apply them once they tap Finalise list and the list is built (you'll ask them then); nothing to drop or redo. ` +
+      `Don't pass them to stage_update_shopping_list either. ${SERVINGS_EARLY} ${JSON.stringify(servings)}`
+  );
+}
+
+/** The servings this chat asked for before the list was built and hasn't applied since (null if none): the latest SERVINGS_EARLY result, cleared by a staged servings card or a Save. */
+export function servingsFromRows(rows) {
+  let asked = null;
+  for (const row of rows) {
+    const m = row.content || {};
+    const text = typeof m.content === "string" ? m.content : "";
+    if (m.role === "tool" && text.includes(SERVINGS_EARLY)) {
+      try {
+        asked = { ...(asked || {}), ...JSON.parse(text.slice(text.indexOf(SERVINGS_EARLY) + SERVINGS_EARLY.length).trim()) };
+      } catch {
+        /* not ours */
+      }
+    } else if (m.role === "tool" && /^(Staged the planned servings|Updated the staged servings)/.test(text)) asked = null;
+    else if (m.role === "assistant" && /^Saved /.test(text)) asked = null;
+  }
+  return asked;
+}
+
+const servingsAskedEarlier = async (conversationId) => servingsFromRows(await getMessages(conversationId));
+
 async function staged(spec, ctx, onStaged) {
   needChat(ctx);
   const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
@@ -296,7 +340,6 @@ async function staged(spec, ctx, onStaged) {
   const n = out.tray?.items?.length ?? 0;
   const lines = [`${out.message}. The tray (not the site yet) now has ${n} change${n === 1 ? "" : "s"}.`];
   if (out.item?.photo) lines.push("Its photo is being made in the background; the card shows it when ready.");
-  if (out.waiting) lines.push("These servings wait for the new shopping list: next week changes in this tray, so the list is built by Finalise list and these servings are applied to it then (nothing more to do; don't pass them again or drop the card). Tell the user they're noted for the list.");
   if (out.error) lines.push(`PROBLEM on the card: ${out.error}`, "Stage it again with the problem fixed (the same title or slug replaces it), or drop it with drop_tray_item.");
   for (const w of out.warnings || []) lines.push(`warning: ${w}`);
   for (const note of spec.notes || []) lines.push(`note: ${note}`);
@@ -510,15 +553,28 @@ const STAGE_TOOLS = [
     description: "Stage the combined shopping list for ALL the recipes that will be in next week after Save (read them with get_tray). Same rules and fields as update_shopping_list. Stage it LAST: any later change to the tray marks it out of date. Staging it again replaces it.",
     inputSchema: { sections: sectionsSchema, servings: servingsSchema.optional(), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ sections, servings, reason }, ctx) => staged({ op: { action: "update_shopping_list", sections, ...(servings ? { servings } : {}) }, reason }, ctx)),
+    handler: safe(async ({ sections, servings, reason }, ctx) => {
+      const out = await staged({ op: { action: "update_shopping_list", sections, ...(servings ? { servings } : {}) }, reason }, ctx);
+      if (/PROBLEM on the card/.test(out.content[0].text) || !ctx.chat?.conversationId) return out;
+      const asked = await servingsAskedEarlier(ctx.chat.conversationId).catch((err) => (console.error("Looking for servings asked before the list failed:", err.message), null));
+      const left = asked && Object.entries(asked).filter(([slug, n]) => servings?.[slug] !== n);
+      if (!left?.length) return out;
+      const plan = Object.fromEntries(left);
+      return ok(`${out.content[0].text}\nBefore the list was built the user asked for these planned servings, which were NOT staged: ${JSON.stringify(plan)}. Now ask them with ask_user whether to apply them to this list (say which recipes and numbers), options "Apply the servings" and "Not now". On "Apply the servings", stage_set_shopping_servings with exactly these. Don't stage them before they answer.`);
+    }),
   },
   {
     name: "stage_set_shopping_servings",
     title: "Stage planned servings",
-    description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"). With no next-week changes in the tray it changes the saved list's plan (only recipes on it). When the tray changes next week, the card waits and is applied to the list Finalise list builds (any recipe that will be in next week); after the list is built it is applied on top of it without making it out of date. Staging again merges into the same card.",
+    description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"): the list on the site, or the list staged in the tray once Finalise list has built it (changing servings then doesn't make it out of date). While the tray changes next week and has no list yet it is NOT staged: tell the user you'll apply them once Finalise list has built the list; the site asks them then. Staging again merges into the same card.",
     inputSchema: { servings: servingsSchema, reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
+    handler: safe(async ({ servings, reason }, ctx) => {
+      needChat(ctx);
+      const early = await servingsBeforeList(servings, ctx.caller);
+      if (early) return early;
+      return staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx);
+    }),
   },
   {
     name: "stage_stocktake",

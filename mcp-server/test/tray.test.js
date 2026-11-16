@@ -282,44 +282,48 @@ test("a tray that doesn't change next week needs no list: Save is available stra
   assert.equal(github.commitLog.length, 1);
 });
 
-test("servings asked for before the list is built wait for it: no problem on the card, Finalise isn't blocked, the list gets them, and changing them later keeps the list current", async () => {
+test("servings asked for before the list is built aren't staged (nothing blocks Finalise); once Finalise stages the list the bot is told to ask, and they're staged against the new list without making it out of date", async () => {
   const editor = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
-  const ctx = { chat: { emit() {} } };
   const { conversation_id } = await say("add a new recipe: test pasta");
-  // the saved list is last week's: "test-pasta" isn't on it, which used to leave a PROBLEM card that blocked Finalise
-  const res = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
-  const text = res.content[0].text;
-  assert.doesNotMatch(text, /PROBLEM/, text);
-  assert.match(text, /wait for the new shopping list/);
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  // the saved list is last week's: "test-pasta" isn't on it, which used to leave a PROBLEM card that hid Finalise
+  const early = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  const text = early.content[0].text;
+  assert.equal(early.isError, undefined);
+  assert.match(text, /^Not staged yet/);
+  assert.match(text, /servings asked before the list: \{"test-pasta":2\}/);
   let t = await plan();
-  const card = t.items.find((i) => i.kind === "servings");
-  assert.equal(card.error, null);
-  assert.equal(card.waiting, true);
-  assert.match(card.sub, /Test Pasta: 2 · applied when Finalise list builds the list/);
-  assert.equal(tray.trayAction(t), "finalise_plan", "Finalise is offered with the servings card in the tray");
+  assert.deepEqual(t.items.map((i) => i.kind), ["new"], "no servings card");
+  assert.equal(tray.trayAction(t), "finalise_plan");
 
-  // a recipe that won't be in next week is still a problem
+  // a recipe that won't be in next week is refused at once
   const bad = await tools.dispatch("stage_set_shopping_servings", { servings: { "not-a-recipe": 1 } }, editor, ctx);
-  assert.match(bad.content[0].text, /PROBLEM on the card: servings: "not-a-recipe" is not in next week/);
-  await tools.dispatch("drop_tray_item", { id: trayRow().items.find((i) => i.kind === "servings").id }, editor, ctx);
-  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /"not-a-recipe" isn't in next week/);
 
+  // the chat stores the tool result; Finalise's list tool finds it and tells the model to ask
+  await store.appendMessages(conversation_id, [{ role: "tool", tool_call_id: "t1", content: text }]);
   await say("ignored", { conversation_id, action: "finalise" });
-  t = await plan();
-  assert.equal(t.list_current, true);
-  assert.equal(t.can_save, true, JSON.stringify(t.items.map((i) => [i.kind, i.error])));
-  assert.equal(t.items.find((i) => i.kind === "servings").waiting, undefined, "applied on top of the staged list now");
+  const rows = await store.getMessages(conversation_id);
+  const listResult = rows.map((r) => r.content).filter((m) => m.role === "tool" && /^Staged the shopping list/.test(m.content)).at(-1);
+  assert.match(listResult.content, /asked for these planned servings, which were NOT staged: \{"test-pasta":2\}/);
+  assert.match(listResult.content, /ask_user/);
+  assert.deepEqual(tools.servingsFromRows(rows), { "test-pasta": 2 });
 
-  // a change of servings after the list is built doesn't make it out of date
-  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 1 } }, editor, ctx);
+  // "Apply the servings": staged against the staged list, checked for real, and the list stays current
+  const applied = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  assert.match(applied.content[0].text, /^Staged the planned servings/);
+  assert.doesNotMatch(applied.content[0].text, /PROBLEM/);
   t = await plan();
+  assert.equal(t.items.find((i) => i.kind === "servings").error, null);
   assert.equal(t.list_current, true);
   assert.equal(t.can_save, true);
+  assert.equal(tools.servingsFromRows([...rows, { content: { role: "tool", content: applied.content[0].text } }]), null, "applied: not asked again");
 
   const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
   assert.equal(saved.status, 200, await saved.clone().text());
   assert.equal(github.commitLog.length, 1, "one commit");
-  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 1);
+  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 2);
 });
 
 // --- Save now ----------------------------------------------------------------------------------------------------------------
