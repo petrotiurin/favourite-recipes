@@ -6,35 +6,33 @@ course: [Dinner]
 total_mins: 105
 serves: 6
 calories: 390
+ingredients:
+  - { amount: 2, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 1, name: red pepper, note: "bell, cored, deseeded and diced", item: red-pepper }
+  - { amount: 1, name: carrot, note: diced, item: carrot }
+  - { amount: 1, name: leek, note: "trimmed, cleaned and diced", item: leek }
+  - { amount: 1, name: red onion, note: diced, item: red-onion }
+  - { amount: 1, name: courgette, note: "zucchini, diced", item: courgette }
+  - { amount: 2, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 400, unit: g, name: chicken leg meat, note: "cooked, shredded", item: chicken-leg-meat }
+  - { amount: 10, name: sun-dried tomatoes, note: "in oil, drained and diced", item: sundried-tomatoes }
+  - { amount: 1, unit: tsp, name: smoked paprika, note: heaped, item: smoked-paprika }
+  - { amount: 1, unit: pinch, name: dried oregano, item: dried-oregano }
+  - { amount: 1, unit: tbsp, name: tomato purée, note: paste, item: tomato-puree }
+  - { amount: 500, unit: g, name: passata, note: puréed canned tomatoes, item: passata }
+  - { amount: 1, name: chicken stock cube, note: crumbled, item: stock-cubes }
+  - { amount: 2, unit: tbsp, name: balsamic vinegar, item: balsamic-vinegar }
+  - { amount: [9, 12], name: dried lasagne sheets, item: lasagne-sheets }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 2, unit: tbsp, name: extra virgin olive oil, note: for the béchamel, item: olive-oil }
+  - { amount: 2, unit: tbsp, name: plain flour, note: "all-purpose, for the béchamel", item: plain-flour }
+  - { amount: 800, unit: ml, name: semi-skimmed milk, note: for the béchamel, item: milk }
+  - { amount: 50, unit: g, name: Parmesan cheese, note: "grated, plus extra to assemble", item: parmesan }
+  - { amount: 50, unit: g, name: mature Cheddar cheese, note: "grated, plus extra to assemble", item: cheddar }
+  - { amount: 1, unit: tsp, name: American mustard, item: american-mustard }
+  - { amount: 1, unit: handful, name: tarragon, note: "large, chopped, or use basil", item: tarragon }
 ---
-
-## Ingredients
-
-- 2 tsp **olive oil**
-- 1 **red pepper**, bell, cored, deseeded and diced
-- 1 **carrot**, diced
-- 1 **leek**, trimmed, cleaned and diced
-- 1 **red onion**, diced
-- 1 **courgette**, zucchini, diced
-- 2 **garlic cloves**, minced
-- 400g (14oz) **chicken leg meat**, cooked, shredded
-- 10 **sun-dried tomatoes**, in oil, drained and diced
-- 1 heaped tsp **smoked paprika**
-- Pinch of **dried oregano**
-- 1 tbsp **tomato purée**, paste
-- 500g (generous 2 cups) **passata**, puréed canned tomatoes
-- 1 **chicken stock cube**, crumbled
-- 2 tbsp **balsamic vinegar**
-- 9–12 **dried lasagne sheets**
-- **salt**, to taste
-- **pepper**, to taste
-- 2 tbsp **extra virgin olive oil**, for the béchamel
-- 2 tbsp **plain flour**, all-purpose, for the béchamel
-- 800ml (3⅓ cups) **semi-skimmed milk**, for the béchamel
-- 50g (1¾oz) **Parmesan cheese**, grated, plus extra to assemble
-- 50g (1¾oz) **mature Cheddar cheese**, grated, plus extra to assemble
-- 1 tsp **American mustard**
-- Large handful of **tarragon**, chopped, or use basil
 
 ## Instructions
 

@@ -5,15 +5,13 @@ image: /images/recipes/jacket-potato.jpg
 total_mins: 16
 serves: 1
 calories: 650
+ingredients:
+  - { name: Tuna, note: "in sunflower oil if available, to serve", item: tuna }
+  - { name: Red onion, note: to serve, item: red-onion }
+  - { name: Sweetcorn, note: to serve, item: sweetcorn }
+  - { amount: 1, name: potato, note: large, item: potato }
+  - { name: Mayo, note: to serve, item: mayo }
 ---
-
-## Ingredients
-
-- **Tuna** (in sunflower oil if available)
-- **Red onion**
-- **Sweetcorn**
-- 1 large **potato**
-- **Mayo**
 
 ## Instructions
 

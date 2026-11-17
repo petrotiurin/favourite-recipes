@@ -7,18 +7,16 @@ tags: [Vegetarian]
 total_mins: 10
 serves: 1
 calories: 355
+ingredients:
+  - { amount: 1, unit: tsp, name: flaked almonds, note: slivered, item: flaked-almonds }
+  - { amount: 1, unit: tbsp, name: ground almonds, item: ground-almonds }
+  - { amount: 40, unit: g, name: jumbo oats, item: jumbo-oats }
+  - { amount: 150, unit: ml, name: semi-skimmed milk, note: plus a splash to loosen if using protein powder, item: milk }
+  - { amount: 0.5, unit: tsp, name: almond extract, item: almond-extract }
+  - { amount: 1, unit: pinch, name: salt, item: salt }
+  - { amount: 1, unit: tsp, name: honey, note: "or brown sugar or maple syrup, to taste", item: honey }
+  - { amount: 30, unit: g, name: protein powder, note: vanilla or unflavoured, optional: true, item: protein-powder }
 ---
-
-## Ingredients
-
-- 1 tsp **flaked almonds**, slivered
-- 1 tbsp **ground almonds**
-- 40g (½ cup) **jumbo oats**
-- 150ml (⅔ cup) **semi-skimmed milk**, plus a splash to loosen if using protein powder
-- ½ tsp **almond extract**
-- Pinch of **salt**
-- 1 tsp **honey**, or brown sugar or maple syrup, to taste
-- 30g (1oz) **protein powder**, vanilla or unflavoured, optional
 
 ## Instructions
 

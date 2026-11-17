@@ -6,25 +6,21 @@ course: [Breakfast]
 total_mins: 15
 serves: 2
 calories: 510
+ingredients:
+  - { amount: 8, name: chicken chipolata sausages, note: skinned, item: chipolata-sausages }
+  - { amount: 4, name: tortilla wraps, note: "corn or wheat, small", item: tortillas }
+  - { name: Olive oil, note: "for frying, to taste", item: olive-oil }
+  - { name: Dried chilli flakes, note: to serve, optional: true, item: chilli-flakes }
+  - { amount: 1, name: lime, note: "cut into wedges, to serve", optional: true, item: lime }
+  - { amount: 0.5, name: avocado, note: "ripe, medium, peeled, pitted and diced", item: avocado }
+  - { amount: 2, name: tomatoes, note: "medium, diced", item: tomato }
+  - { amount: 2, name: spring onions (scallions), note: finely chopped, item: spring-onion }
+  - { amount: 1, unit: tsp, name: chopped herbs, note: "parsley, coriander/cilantro or basil", item: parsley }
+  - { name: Tabasco, note: "a few dashes, or to taste", item: tabasco }
+  - { amount: 40, unit: g, name: feta cheese, note: crumbled, item: feta }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 8 **chicken chipolata sausages**, skinned
-- 4 small corn or wheat **tortilla wraps**
-- **Olive oil**, for frying
-- **Dried chilli flakes**, to serve (optional)
-- 1 **lime**, cut into wedges, to serve (optional)
-
-**For the Salsa**
-
-- ½ medium ripe **avocado**, peeled, pitted and diced
-- 2 medium **tomatoes**, diced
-- 2 **spring onions (scallions)**, finely chopped
-- 1 tsp **chopped herbs** (parsley, coriander/cilantro or basil)
-- A few dashes of **Tabasco**, or to taste
-- 40g (1½oz) **feta cheese**, crumbled
-- **Salt and pepper**, to taste
 
 ## Instructions
 

@@ -7,17 +7,15 @@ tags: [High Protein]
 total_mins: 10
 serves: 1
 calories: 290
+ingredients:
+  - { amount: 2, name: eggs, note: "medium, free-range", item: eggs }
+  - { amount: 1, unit: handful, name: baby spinach, note: "large, leaves", item: spinach }
+  - { amount: 1, unit: tbsp, name: garlic and herb cream cheese, note: "heaped, either low-fat or regular", item: herb-cream-cheese }
+  - { amount: 1, unit: tsp, name: chives, note: finely chopped, item: chives }
+  - { amount: 50, unit: g, name: smoked salmon, note: cut into strips, item: smoked-salmon }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 2 **eggs**, medium, free-range
-- Large handful of **baby spinach**, leaves
-- 1 heaped tbsp **garlic and herb cream cheese**, either low-fat or regular
-- 1 tsp **chives**, finely chopped
-- 50g (1¾oz) **smoked salmon**, cut into strips
-- **salt**, to taste
-- **pepper**, to taste
 
 ## Instructions
 

@@ -7,29 +7,28 @@ tags: [High Protein]
 total_mins: 14
 serves: 2
 calories: 435
+ingredients:
+  - { amount: 1, unit: tsp, name: smoked paprika, item: smoked-paprika }
+  - { amount: 0.5, unit: tsp, name: ground cumin, item: ground-cumin }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 0.5, unit: tsp, name: sugar, item: sugar }
+  - { amount: 0.25, unit: tsp, name: cayenne pepper, optional: true, item: cayenne }
+  - { amount: 250, unit: g, name: white fish fillets, note: such as cod or haddock, item: white-fish }
+  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 6, name: small corn tortillas, note: to serve, item: tortillas }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 150, unit: g, name: mango, note: "ripe, diced", item: mango }
+  - { amount: 100, unit: g, name: avocado, note: "ripe, diced", item: avocado }
+  - { amount: 0.5, name: red onion, note: "small, finely chopped", item: red-onion }
+  - { amount: 0.5, name: red chilli, note: finely chopped, optional: true, item: red-chilli }
+  - { amount: 1, unit: juice, name: lime, note: plus the zest, item: lime }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 1, unit: handful, name: coriander, note: "large, chopped", item: coriander }
+  - { name: Greek yogurt, note: "0% or full-fat, to serve", item: greek-yogurt }
+  - { name: Lime wedges, note: to serve, optional: true, item: lime }
+  - { name: Feta cheese, note: to serve, optional: true, item: feta }
 ---
-
-## Ingredients
-
-- 1 tsp, **smoked paprika**
-- ½ tsp, **ground cumin**
-- 1 tsp, **garlic granules**
-- ½ tsp, **sugar**
-- ¼ tsp, **cayenne pepper**, optional
-- 250g (9oz), **white fish fillets** (such as cod or haddock)
-- 1 tsp, **olive oil**
-- 6, **small corn tortillas**, to serve
-- **Salt and black pepper**, to taste
-- 150g (5½oz), **mango**, ripe, diced
-- 100g (3½oz), **avocado**, ripe, diced
-- ½, **red onion**, small, finely chopped
-- ½, **red chilli**, finely chopped, optional
-- Zest and juice of 1, **lime**
-- 1 tsp, **honey**
-- Large handful of, **coriander**, chopped
-- **Greek yogurt** (0% or full-fat), to serve
-- **Lime wedges**, to serve, optional
-- **Feta cheese**, to serve, optional
 
 ## Instructions
 

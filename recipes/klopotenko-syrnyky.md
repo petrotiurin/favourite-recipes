@@ -6,17 +6,15 @@ course: [Breakfast]
 total_mins: 20
 serves: 2
 calories: 810
+ingredients:
+  - { amount: [400, 500], unit: g, name: кисломолочного сиру 9%, item: cottage-cheese }
+  - { amount: 1, name: яйце, item: eggs }
+  - { amount: 3, unit: tbsp, name: цукру, item: sugar }
+  - { amount: 10, unit: g, name: ванільного цукру, item: vanilla-sugar }
+  - { amount: 1, unit: pinch, name: солі, item: salt }
+  - { amount: 3, unit: tbsp, name: борошна, note: "з великою гіркою (або 100 г), +додатково для панірування", item: plain-flour }
+  - { amount: [3, 4], unit: tbsp, name: соняшникової олії, note: для смаження, item: vegetable-oil }
 ---
-
-## Ingredients
-
-- 400-500 г **кисломолочного сиру 9%**
-- 1 **яйце**
-- 3 ст. л. **цукру**
-- 10 г **ванільного цукру**
-- дрібка **солі**
-- 3 ст. л. (або 100 г) **борошна** з великою гіркою (+додатково для панірування)
-- 3-4 ст. л. **соняшникової олії** для смаження
 
 ## Instructions
 

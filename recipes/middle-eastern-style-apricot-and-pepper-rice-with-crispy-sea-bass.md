@@ -8,28 +8,27 @@ total_mins: 17
 serves: 4
 calories: 591
 current: true
+ingredients:
+  - { amount: 4, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 2, name: red bell pepper, note: deseeded and diced, item: red-pepper }
+  - { amount: 2, name: yellow bell pepper, note: deseeded and diced, item: yellow-pepper }
+  - { amount: 2, name: red onion, note: "small, diced", item: red-onion }
+  - { amount: 60, unit: g, name: dried apricots, note: roughly chopped, item: dried-apricots }
+  - { amount: 2, unit: tbsp, name: Middle Eastern or Moroccan spice blend, item: middle-eastern-spice }
+  - { amount: 500, unit: g, name: cooked brown rice, note: pouch, item: cooked-rice }
+  - { amount: 4, name: sea bass fillets, note: "about 140g each, skin on", item: sea-bass }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 2, unit: tbsp, name: tahini, item: tahini }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 200, unit: g, name: Greek yogurt, note: 0% fat, item: greek-yogurt }
+  - { amount: 2, unit: juice, name: lemon, item: lemon }
+  - { amount: 2, unit: tsp, name: honey or maple syrup, item: honey }
+  - { amount: [2, 4], unit: tbsp, name: water, item: water }
+  - { amount: 80, unit: g, name: feta cheese, note: "crumbled, to serve", item: feta }
+  - { amount: 4, unit: tbsp, name: pomegranate seeds, note: to serve, item: pomegranate-seeds }
+  - { amount: 1, unit: handful, name: parsley, note: "small, to serve", item: parsley }
 ---
-
-## Ingredients
-
-- 4 tsp **olive oil**
-- 2 **red bell pepper**, deseeded and diced
-- 2 **yellow bell pepper**, deseeded and diced
-- 2 **red onion**, small, diced
-- 60g **dried apricots**, roughly chopped
-- 2 tbsp **Middle Eastern or Moroccan spice blend**
-- 500g **cooked brown rice**, pouch
-- 4 **sea bass fillets**, about 140g each, skin on
-- **salt and black pepper**, to taste
-- 2 tbsp **tahini**
-- 1 tsp **garlic granules**
-- 200g **Greek yogurt**, 0% fat
-- 2 **lemon**, juiced
-- 2 tsp **honey or maple syrup**
-- 2-4 tbsp **water**
-- 80g **feta cheese**, crumbled, to serve
-- 4 tbsp **pomegranate seeds**, to serve
-- Small handful of **parsley**, to serve
 
 ## Instructions
 

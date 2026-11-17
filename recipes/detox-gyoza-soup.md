@@ -7,19 +7,17 @@ tags: [High Protein]
 total_mins: 10
 serves: 1
 calories: 400
+ingredients:
+  - { amount: 300, unit: ml, name: water, item: water }
+  - { amount: 1, unit: tbsp, name: light soy sauce, item: soy-sauce }
+  - { amount: 1, name: miso soup sachet, note: 20g, item: miso-sachet }
+  - { amount: 1, name: carrot, note: peeled into ribbons, item: carrot }
+  - { amount: 1, name: bok choy, note: "1 head, base cut off", item: bok-choy }
+  - { amount: 6, name: gyoza, note: frozen (I use chicken), item: gyoza }
+  - { amount: 1, name: egg, item: eggs }
+  - { amount: 1, unit: tsp, name: crispy chilli oil, item: chilli-oil }
+  - { amount: 1, name: spring onion, note: "scallion, finely sliced", item: spring-onion }
 ---
-
-## Ingredients
-
-- 300ml (1¼ cups) **water**
-- 1 tbsp **light soy sauce**
-- 1 x 20g (¾oz) **miso soup sachet**
-- 1 **carrot**, peeled into ribbons
-- 1 head of **bok choy**, base cut off
-- 6 **gyoza**, frozen (I use chicken)
-- 1 **egg**
-- 1 tsp **crispy chilli oil**
-- 1 **spring onion** (scallion), finely sliced
 
 ## Instructions
 

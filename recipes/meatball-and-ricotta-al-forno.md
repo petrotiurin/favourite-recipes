@@ -8,34 +8,32 @@ serves: 4
 calories: 550
 current: true
 draft: true
+ingredients:
+  - { amount: 500, unit: g, name: minced beef, note: 5% fat, item: minced-beef }
+  - { amount: 2, unit: tbsp, name: ricotta cheese, note: heaped, item: ricotta }
+  - { amount: 1, name: lemon, note: "unwaxed, zested", item: lemon }
+  - { amount: 80, unit: g, name: fresh wholemeal breadcrumbs, note: made from blitzed stale bread, item: breadcrumbs }
+  - { amount: 30, unit: g, name: Parmesan cheese, note: grated, item: parmesan }
+  - { amount: 1, name: egg, note: medium free-range, item: eggs }
+  - { amount: 1, unit: handful, name: basil, note: "large, leaves chopped, save stems for sauce", item: basil }
+  - { amount: 1, unit: tbsp, name: olive oil, item: olive-oil }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 1, name: courgette, note: "medium, diced", item: courgette }
+  - { amount: 1, name: red pepper, note: "cored, deseeded and diced", item: red-pepper }
+  - { amount: 1, name: red onion, note: diced, item: red-onion }
+  - { amount: 1, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 1, unit: tbsp, name: sun-dried tomato paste, item: sundried-tomato-paste }
+  - { amount: 1, unit: tbsp, name: tomato purée, item: tomato-puree }
+  - { amount: 1, unit: handful, name: basil stems, note: "small, chopped", item: basil }
+  - { amount: 400, unit: g, name: butter beans, note: "can, drained and rinsed", item: butter-beans }
+  - { amount: 1, unit: tsp, name: smoked paprika, item: smoked-paprika }
+  - { amount: 500, unit: g, name: passata, note: puréed canned tomatoes, item: passata }
+  - { amount: 1, name: chicken stock cube, note: crumbled, item: stock-cubes }
+  - { amount: 2, unit: tbsp, name: balsamic vinegar, item: balsamic-vinegar }
+  - { amount: 20, unit: g, name: Parmesan cheese, note: "grated, to finish", item: parmesan }
+  - { amount: 5, unit: tbsp, name: ricotta cheese, note: to finish, item: ricotta }
 ---
-
-## Ingredients
-
-- 500g **minced beef**, 5% fat
-- 2 tbsp **ricotta cheese**, heaped
-- 1 **lemon**, unwaxed, zested
-- 80g **fresh wholemeal breadcrumbs**, made from blitzed stale bread
-- 30g **Parmesan cheese**, grated
-- 1 **egg**, medium free-range
-- Large handful of **basil**, leaves chopped, save stems for sauce
-- 1 tbsp **olive oil**
-- **salt**, to taste
-- **black pepper**, to taste
-- 1 **courgette**, medium, diced
-- 1 **red pepper**, cored, deseeded and diced
-- 1 **red onion**, diced
-- 1 **garlic clove**, minced
-- 1 tbsp **sun-dried tomato paste**
-- 1 tbsp **tomato purée**
-- Small handful of **basil stems**, chopped
-- 400g **butter beans**, can, drained and rinsed
-- 1 tsp **smoked paprika**
-- 500g **passata**, puréed canned tomatoes
-- 1 **chicken stock cube**, crumbled
-- 2 tbsp **balsamic vinegar**
-- 20g **Parmesan cheese**, grated, to finish
-- 5 tbsp **ricotta cheese**, to finish
 
 ## Instructions
 

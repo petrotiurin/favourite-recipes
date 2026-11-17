@@ -1,0 +1,1631 @@
+{
+  "almond-extract": {
+    "name": "Almond extract",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "american-mustard": {
+    "name": "American mustard",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "anchovies": {
+    "name": "Anchovies",
+    "section": "Tins & jars",
+    "unit": "count"
+  },
+  "avocado": {
+    "name": "Avocados",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "g": 0.0067
+    }
+  },
+  "bacon": {
+    "name": "Bacon",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "baking-powder": {
+    "name": "Baking powder",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 4
+    }
+  },
+  "balsamic-vinegar": {
+    "name": "Balsamic vinegar",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "banana": {
+    "name": "Bananas",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "basil": {
+    "name": "Basil",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "handful": 0.5,
+      "g": 0.033
+    },
+    "aliases": [
+      "basil leaves",
+      "basil stems"
+    ]
+  },
+  "bbq-spice": {
+    "name": "BBQ smokehouse spice blend",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    },
+    "aliases": [
+      "mixed bbq smokehouse spice blend"
+    ]
+  },
+  "beef-steak": {
+    "name": "Beef steak",
+    "section": "Meat & fish",
+    "unit": "g",
+    "aliases": [
+      "lean beef steak"
+    ]
+  },
+  "beetroot": {
+    "name": "Beetroot",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "black-beans": {
+    "name": "Black beans",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "can": 400
+    }
+  },
+  "black-pepper": {
+    "name": "Black pepper",
+    "section": "Pantry",
+    "unit": "g",
+    "staple": true,
+    "aliases": [
+      "pepper"
+    ]
+  },
+  "bok-choy": {
+    "name": "Bok choy",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "bunch": 1
+    }
+  },
+  "bread": {
+    "name": "Bread",
+    "section": "Bakery",
+    "unit": "slice",
+    "aliases": [
+      "toast or pitta",
+      "wholemeal bread"
+    ]
+  },
+  "breadcrumbs": {
+    "name": "Fresh wholemeal breadcrumbs",
+    "section": "Bakery",
+    "unit": "g"
+  },
+  "brioche": {
+    "name": "Brioche",
+    "section": "Bakery",
+    "unit": "slice"
+  },
+  "broccoli": {
+    "name": "Broccoli",
+    "section": "Fresh produce",
+    "unit": "g",
+    "aliases": [
+      "broccoli florets"
+    ]
+  },
+  "brown-rice": {
+    "name": "Brown rice",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "brown-sugar": {
+    "name": "Soft light brown sugar",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 4
+    }
+  },
+  "burger-rolls": {
+    "name": "Burger rolls",
+    "section": "Bakery",
+    "unit": "count"
+  },
+  "burratta": {
+    "name": "Burratta",
+    "section": "Dairy & eggs",
+    "unit": "count"
+  },
+  "butter": {
+    "name": "Butter",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "butter-beans": {
+    "name": "Butter beans",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "can": 400
+    }
+  },
+  "butternut-squash": {
+    "name": "Butternut squash",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "capers": {
+    "name": "Capers",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 10,
+      "tsp": 3
+    }
+  },
+  "carrot": {
+    "name": "Carrots",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "cayenne": {
+    "name": "Cayenne pepper",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2
+    }
+  },
+  "celery": {
+    "name": "Celery (sticks)",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "celery sticks"
+    ]
+  },
+  "cheddar": {
+    "name": "Mature Cheddar cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "aliases": [
+      "cheddar"
+    ]
+  },
+  "cheese": {
+    "name": "Cheese",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "cherry-tomatoes": {
+    "name": "Cherry tomatoes",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "handful": 80
+    }
+  },
+  "chestnut-mushrooms": {
+    "name": "Chestnut mushrooms",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "handful": 40
+    }
+  },
+  "chia-seeds": {
+    "name": "Chia seeds",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 12,
+      "tsp": 4
+    }
+  },
+  "chicken-bone-broth": {
+    "name": "Chicken bone broth",
+    "section": "Tins & jars",
+    "unit": "ml"
+  },
+  "chicken-breast": {
+    "name": "Chicken breasts",
+    "section": "Meat & fish",
+    "unit": "count",
+    "per": {
+      "g": 0.0083
+    },
+    "aliases": [
+      "boneless, skinless chicken breasts"
+    ]
+  },
+  "chicken-leg-meat": {
+    "name": "Chicken leg meat",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "chicken-stock": {
+    "name": "Chicken stock",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "chickpeas": {
+    "name": "Chickpeas",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "can": 400
+    }
+  },
+  "chilli-flakes": {
+    "name": "Chilli flakes",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "pinch": 0.3,
+      "tsp": 2
+    },
+    "aliases": [
+      "dried chilli flakes"
+    ]
+  },
+  "chilli-oil": {
+    "name": "Chilli oil",
+    "section": "Pantry",
+    "unit": "ml",
+    "aliases": [
+      "chili oil",
+      "crispy chilli oil"
+    ]
+  },
+  "chipolata-sausages": {
+    "name": "Chicken chipolata sausages",
+    "section": "Meat & fish",
+    "unit": "count"
+  },
+  "chives": {
+    "name": "Chives",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "tsp": 0.02
+    }
+  },
+  "chorizo": {
+    "name": "Chorizo",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "cinnamon": {
+    "name": "Cinnamon",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2.6
+    }
+  },
+  "cocoa": {
+    "name": "Unsweetened cocoa powder",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2.5
+    }
+  },
+  "coconut-milk": {
+    "name": "Coconut milk",
+    "section": "Tins & jars",
+    "unit": "ml",
+    "per": {
+      "can": 400
+    }
+  },
+  "cooked-chicken": {
+    "name": "Cooked chicken",
+    "section": "Meat & fish",
+    "unit": "g",
+    "per": {
+      "count": 150
+    },
+    "aliases": [
+      "cooked chicken breast",
+      "grilled chicken breast",
+      "roasted chicken breast"
+    ]
+  },
+  "cooked-quinoa": {
+    "name": "Cooked quinoa",
+    "section": "Pantry",
+    "unit": "g",
+    "aliases": [
+      "cooked quinoa or rice"
+    ]
+  },
+  "cooked-rice": {
+    "name": "Cooked rice (pouches)",
+    "section": "Pantry",
+    "unit": "g",
+    "aliases": [
+      "cooked brown rice",
+      "cooked rice"
+    ]
+  },
+  "coriander": {
+    "name": "Coriander",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "handful": 0.5
+    },
+    "aliases": [
+      "coriander (cilantro)",
+      "fresh coriander"
+    ]
+  },
+  "corn-tacos": {
+    "name": "Corn tacos",
+    "section": "Bakery",
+    "unit": "count"
+  },
+  "cornflour": {
+    "name": "Cornflour",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 8,
+      "tsp": 3
+    }
+  },
+  "cornichons": {
+    "name": "Cornichons",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "handful": 40
+    }
+  },
+  "cottage-cheese": {
+    "name": "Cottage cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    },
+    "aliases": [
+      "low-fat cottage cheese",
+      "кисломолочного сиру 9%"
+    ]
+  },
+  "courgette": {
+    "name": "Courgettes",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "courgette (zucchini)"
+    ]
+  },
+  "cream-cheese": {
+    "name": "Cream cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    }
+  },
+  "cucumber": {
+    "name": "Cucumbers",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "g": 0.003
+    }
+  },
+  "curry-paste": {
+    "name": "Curry paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 16
+    },
+    "aliases": [
+      "red or green curry paste"
+    ]
+  },
+  "curry-powder": {
+    "name": "Curry powder",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2
+    },
+    "aliases": [
+      "medium curry powder",
+      "mild curry powder"
+    ]
+  },
+  "dark-chocolate": {
+    "name": "Dark chocolate",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "dijon-mustard": {
+    "name": "Dijon mustard",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "dill": {
+    "name": "Dill",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "tbsp": 0.05,
+      "handful": 0.5
+    }
+  },
+  "double-cream": {
+    "name": "Double cream",
+    "section": "Dairy & eggs",
+    "unit": "ml",
+    "aliases": [
+      "cream"
+    ]
+  },
+  "dried-apricots": {
+    "name": "Dried apricots",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "dried-oregano": {
+    "name": "Dried oregano",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "pinch": 0.3,
+      "tsp": 1
+    }
+  },
+  "dried-pasta": {
+    "name": "Dried pasta",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "dried-rosemary": {
+    "name": "Dried rosemary",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 1.5
+    }
+  },
+  "egg-noodles": {
+    "name": "Egg noodle nests",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "eggs": {
+    "name": "Eggs",
+    "section": "Dairy & eggs",
+    "unit": "count",
+    "aliases": [
+      "egg yolks",
+      "free-range eggs",
+      "large eggs",
+      "яйце"
+    ]
+  },
+  "fajita-spice": {
+    "name": "Fajita spice blend",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    }
+  },
+  "feta": {
+    "name": "Feta cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "aliases": [
+      "feta"
+    ]
+  },
+  "firm-tofu": {
+    "name": "Firm tofu",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "fish-sauce": {
+    "name": "Fish sauce",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "flaked-almonds": {
+    "name": "Flaked almonds",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    }
+  },
+  "fresh-berries": {
+    "name": "Fresh berries",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "frozen-peas": {
+    "name": "Frozen peas",
+    "section": "Frozen",
+    "unit": "g"
+  },
+  "frozen-raspberries": {
+    "name": "Frozen raspberries",
+    "section": "Frozen",
+    "unit": "g"
+  },
+  "garlic": {
+    "name": "Garlic",
+    "section": "Fresh produce",
+    "unit": "clove"
+  },
+  "garlic-granules": {
+    "name": "Garlic granules",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    },
+    "aliases": [
+      "garlic powder"
+    ]
+  },
+  "garlic-paste": {
+    "name": "Garlic paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tsp": 5,
+      "tbsp": 15
+    }
+  },
+  "ginger": {
+    "name": "Fresh ginger",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "tbsp": 8,
+      "tsp": 3
+    },
+    "aliases": [
+      "fresh root ginger"
+    ]
+  },
+  "ginger-garlic-paste": {
+    "name": "Ginger and garlic paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tsp": 5,
+      "tbsp": 15
+    }
+  },
+  "ginger-paste": {
+    "name": "Ginger paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tsp": 5,
+      "tbsp": 15
+    }
+  },
+  "greek-yogurt": {
+    "name": "Greek yogurt",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    },
+    "aliases": [
+      "full fat greek yoghurt",
+      "greek yoghurt",
+      "plain or vanilla greek yogurt",
+      "thick greek yogurt"
+    ]
+  },
+  "green-olives": {
+    "name": "Green olives",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "handful": 40
+    }
+  },
+  "green-pepper": {
+    "name": "Green peppers",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "green (bell) pepper"
+    ]
+  },
+  "greens": {
+    "name": "Greens",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "ground-almonds": {
+    "name": "Ground almonds",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 7
+    }
+  },
+  "ground-cumin": {
+    "name": "Ground cumin",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2
+    }
+  },
+  "gyoza": {
+    "name": "Gyoza",
+    "section": "Frozen",
+    "unit": "count"
+  },
+  "halloumi": {
+    "name": "Halloumi",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "harissa": {
+    "name": "Harissa paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tsp": 5
+    }
+  },
+  "herb-cream-cheese": {
+    "name": "Garlic and herb cream cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    }
+  },
+  "honey": {
+    "name": "Honey",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 7,
+      "tbsp": 21
+    },
+    "aliases": [
+      "honey or maple syrup",
+      "runny honey"
+    ]
+  },
+  "horseradish": {
+    "name": "Horseradish",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tsp": 5
+    }
+  },
+  "hot-smoked-salmon": {
+    "name": "Hot smoked salmon",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "icing-sugar": {
+    "name": "Icing sugar",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 8
+    },
+    "aliases": [
+      "powdered sugar"
+    ]
+  },
+  "instant-coffee": {
+    "name": "Instant coffee granules",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2
+    }
+  },
+  "jalapenos": {
+    "name": "Jalapeños",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 15,
+      "tsp": 5,
+      "count": 8
+    },
+    "aliases": [
+      "jalapeño brine"
+    ]
+  },
+  "jasmine-rice": {
+    "name": "Jasmine rice",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "jumbo-oats": {
+    "name": "Jumbo oats",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "kalamata-olives": {
+    "name": "Kalamata olives",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "count": 4
+    }
+  },
+  "kale": {
+    "name": "Kale",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "handful": 30
+    }
+  },
+  "kefir": {
+    "name": "Kefir",
+    "section": "Dairy & eggs",
+    "unit": "ml",
+    "aliases": [
+      "thick kefir"
+    ]
+  },
+  "ketchup": {
+    "name": "Tomato ketchup",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "lasagne-sheets": {
+    "name": "Dried lasagne sheets",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "leek": {
+    "name": "Leeks",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "lemon": {
+    "name": "Lemons",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "juice": 1,
+      "zest": 1
+    },
+    "aliases": [
+      "lemon juice",
+      "lemon wedges"
+    ]
+  },
+  "lime": {
+    "name": "Limes",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "juice": 1,
+      "zest": 1,
+      "tbsp": 0.5
+    },
+    "aliases": [
+      "lime juice",
+      "lime wedges"
+    ]
+  },
+  "little-gem-lettuce": {
+    "name": "Little gem lettuce",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "mango": {
+    "name": "Mangoes",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "g": 0.0033
+    },
+    "aliases": [
+      "ripe mango"
+    ]
+  },
+  "mango-chutney": {
+    "name": "Mango chutney",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 20
+    }
+  },
+  "maple-syrup": {
+    "name": "Maple syrup",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "mayo": {
+    "name": "Mayonnaise",
+    "section": "Pantry",
+    "unit": "g",
+    "aliases": [
+      "mayo"
+    ]
+  },
+  "medjool-dates": {
+    "name": "Medjool dates",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "middle-eastern-spice": {
+    "name": "Middle Eastern spice blend",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 7,
+      "tsp": 2.3
+    },
+    "aliases": [
+      "middle eastern or moroccan spice blend"
+    ]
+  },
+  "mild-mustard": {
+    "name": "Mild mustard",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "milk": {
+    "name": "Milk",
+    "section": "Dairy & eggs",
+    "unit": "ml",
+    "aliases": [
+      "semi-skimmed milk"
+    ]
+  },
+  "minced-beef": {
+    "name": "Minced beef",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "minced-chicken": {
+    "name": "Minced chicken",
+    "section": "Meat & fish",
+    "unit": "g",
+    "aliases": [
+      "minced (ground) chicken"
+    ]
+  },
+  "minced-lamb": {
+    "name": "Minced lamb",
+    "section": "Meat & fish",
+    "unit": "g",
+    "aliases": [
+      "minced (ground) lamb"
+    ]
+  },
+  "mint": {
+    "name": "Mint",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "tbsp": 0.05,
+      "handful": 0.5
+    },
+    "aliases": [
+      "mint leaves"
+    ]
+  },
+  "miso-sachet": {
+    "name": "Miso soup sachets",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "mozzarella": {
+    "name": "Mozzarella",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "natural-yogurt": {
+    "name": "Natural yogurt",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    },
+    "aliases": [
+      "thick natural yogurt",
+      "yogurt"
+    ]
+  },
+  "nori": {
+    "name": "Nori sheets",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "nut-butter": {
+    "name": "Nut butter",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "nutritional-yeast": {
+    "name": "Nutritional yeast",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 5
+    }
+  },
+  "olive-oil": {
+    "name": "Olive oil",
+    "section": "Pantry",
+    "unit": "ml",
+    "staple": true,
+    "aliases": [
+      "extra virgin olive oil"
+    ]
+  },
+  "onion": {
+    "name": "Onions",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "onion-granules": {
+    "name": "Onion granules",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    }
+  },
+  "oyster-sauce": {
+    "name": "Oyster sauce",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "pancetta": {
+    "name": "Smoked pancetta rashers",
+    "section": "Meat & fish",
+    "unit": "count"
+  },
+  "panko": {
+    "name": "Panko breadcrumbs",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "paprika": {
+    "name": "Paprika",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2.5
+    }
+  },
+  "parma-ham": {
+    "name": "Parma ham",
+    "section": "Meat & fish",
+    "unit": "slice",
+    "aliases": [
+      "prosciutto"
+    ]
+  },
+  "parmesan": {
+    "name": "Parmesan cheese",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "parsley": {
+    "name": "Parsley",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "tbsp": 0.05,
+      "tsp": 0.02,
+      "handful": 0.5
+    },
+    "aliases": [
+      "chopped herbs",
+      "fresh parsley"
+    ]
+  },
+  "passata": {
+    "name": "Passata",
+    "section": "Tins & jars",
+    "unit": "g"
+  },
+  "pasta-sauce": {
+    "name": "Pasta sauce",
+    "section": "Tins & jars",
+    "unit": "g"
+  },
+  "peanut-butter": {
+    "name": "Peanut butter",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 16
+    },
+    "aliases": [
+      "smooth peanut butter"
+    ]
+  },
+  "peanuts": {
+    "name": "Peanuts",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "handful": 30,
+      "tbsp": 9
+    },
+    "aliases": [
+      "chopped peanuts",
+      "roasted peanuts",
+      "roasted salted peanuts"
+    ]
+  },
+  "pecans": {
+    "name": "Pecans",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "pesto": {
+    "name": "Pesto",
+    "section": "Tins & jars",
+    "unit": "g"
+  },
+  "pitta": {
+    "name": "Wholemeal pitta",
+    "section": "Bakery",
+    "unit": "count",
+    "aliases": [
+      "wholemeal (wholewheat) pitta"
+    ]
+  },
+  "plain-flour": {
+    "name": "Plain flour",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 8,
+      "tsp": 3
+    },
+    "aliases": [
+      "all-purpose flour",
+      "flour",
+      "борошна"
+    ]
+  },
+  "pomegranate-seeds": {
+    "name": "Pomegranate seeds",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "tbsp": 10
+    }
+  },
+  "potato": {
+    "name": "Potatoes",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "count": 300
+    },
+    "aliases": [
+      "skin-on potatoes"
+    ]
+  },
+  "protein-powder": {
+    "name": "Protein powder",
+    "section": "Pantry",
+    "unit": "g",
+    "aliases": [
+      "vanilla protein powder"
+    ]
+  },
+  "puff-pastry": {
+    "name": "Ready-rolled puff pastry",
+    "section": "Bakery",
+    "unit": "g"
+  },
+  "radishes": {
+    "name": "Radishes",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "raisins": {
+    "name": "Raisins",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "red-apple": {
+    "name": "Red apples",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "red-cabbage": {
+    "name": "Red cabbage",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "red-chilli": {
+    "name": "Red chillies",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "red-onion": {
+    "name": "Red onions",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "g": 0.0067
+    }
+  },
+  "red-pepper": {
+    "name": "Red peppers",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "bell pepper",
+      "red (bell) pepper",
+      "red bell pepper",
+      "red or green pepper"
+    ]
+  },
+  "red-wine-vinegar": {
+    "name": "Red wine vinegar",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "rice": {
+    "name": "Rice",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "rice-vinegar": {
+    "name": "Rice vinegar",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "ricotta": {
+    "name": "Ricotta cheese",
+    "section": "Dairy & eggs",
+    "unit": "g",
+    "per": {
+      "tbsp": 15
+    }
+  },
+  "rocket": {
+    "name": "Rocket",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "rolled-oats": {
+    "name": "Rolled oats",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "cup": 90
+    }
+  },
+  "romaine-lettuce": {
+    "name": "Romaine lettuce",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "rosemary": {
+    "name": "Rosemary",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "sprig": 0.1
+    }
+  },
+  "salad-potatoes": {
+    "name": "Salad potatoes",
+    "section": "Fresh produce",
+    "unit": "g",
+    "aliases": [
+      "waxy baby potatoes"
+    ]
+  },
+  "salmon-fillet": {
+    "name": "Salmon fillets",
+    "section": "Meat & fish",
+    "unit": "count",
+    "aliases": [
+      "skinless salmon fillets"
+    ]
+  },
+  "salt": {
+    "name": "Salt",
+    "section": "Pantry",
+    "unit": "g",
+    "staple": true,
+    "aliases": [
+      "солі"
+    ]
+  },
+  "sea-bass": {
+    "name": "Sea bass fillets",
+    "section": "Meat & fish",
+    "unit": "count"
+  },
+  "sesame-oil": {
+    "name": "Sesame oil",
+    "section": "Pantry",
+    "unit": "ml",
+    "aliases": [
+      "toasted sesame oil"
+    ]
+  },
+  "sesame-seeds": {
+    "name": "Sesame seeds",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 9,
+      "tsp": 3,
+      "pinch": 0.5
+    },
+    "aliases": [
+      "black sesame seeds",
+      "white sesame seeds"
+    ]
+  },
+  "sirloin-steak": {
+    "name": "Sirloin steaks",
+    "section": "Meat & fish",
+    "unit": "count"
+  },
+  "smoked-mackerel": {
+    "name": "Smoked mackerel fillets",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "smoked-paprika": {
+    "name": "Smoked paprika",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2.5
+    },
+    "aliases": [
+      "sweet smoked paprika"
+    ]
+  },
+  "smoked-salmon": {
+    "name": "Smoked salmon",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "sour-cream": {
+    "name": "Sour cream",
+    "section": "Dairy & eggs",
+    "unit": "g"
+  },
+  "sourdough": {
+    "name": "Sourdough",
+    "section": "Bakery",
+    "unit": "slice"
+  },
+  "soy-sauce": {
+    "name": "Soy sauce",
+    "section": "Pantry",
+    "unit": "ml",
+    "aliases": [
+      "light soy sauce"
+    ]
+  },
+  "spinach": {
+    "name": "Spinach",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "handful": 20
+    },
+    "aliases": [
+      "baby spinach",
+      "baby spinach leaves"
+    ]
+  },
+  "spray-oil": {
+    "name": "Spray oil",
+    "section": "Pantry",
+    "unit": "ml",
+    "staple": true,
+    "aliases": [
+      "neutral spray oil"
+    ]
+  },
+  "spring-onion": {
+    "name": "Spring onions",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "scallion",
+      "spring onions (scallions)"
+    ]
+  },
+  "sriracha": {
+    "name": "Sriracha",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "star-anise": {
+    "name": "Ground star anise",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 2
+    }
+  },
+  "stock-cubes": {
+    "name": "Chicken stock cubes",
+    "section": "Pantry",
+    "unit": "count"
+  },
+  "strawberries": {
+    "name": "Strawberries",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "sugar": {
+    "name": "Sugar",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 4,
+      "tbsp": 12
+    },
+    "aliases": [
+      "caster sugar",
+      "цукру"
+    ]
+  },
+  "sugar-snap-peas": {
+    "name": "Sugar snap peas",
+    "section": "Fresh produce",
+    "unit": "g",
+    "per": {
+      "handful": 50
+    }
+  },
+  "sundried-tomato-oil": {
+    "name": "Sun-dried tomato oil (from the jar)",
+    "section": "Tins & jars",
+    "unit": "ml",
+    "skip": true,
+    "aliases": [
+      "sundried tomato oil"
+    ]
+  },
+  "sundried-tomato-paste": {
+    "name": "Sun-dried tomato paste",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 16
+    }
+  },
+  "sundried-tomatoes": {
+    "name": "Sun-dried tomatoes",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "count": 8
+    },
+    "aliases": [
+      "sundried tomatoes"
+    ]
+  },
+  "sweet-potato": {
+    "name": "Sweet potatoes",
+    "section": "Fresh produce",
+    "unit": "count"
+  },
+  "sweetcorn": {
+    "name": "Sweetcorn",
+    "section": "Tins & jars",
+    "unit": "g"
+  },
+  "tabasco": {
+    "name": "Tabasco",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "tahini": {
+    "name": "Tahini",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tbsp": 15,
+      "tsp": 5
+    }
+  },
+  "tarragon": {
+    "name": "Tarragon",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "tbsp": 0.05,
+      "handful": 0.5
+    }
+  },
+  "tenderstem-broccoli": {
+    "name": "Tenderstem broccoli",
+    "section": "Fresh produce",
+    "unit": "g"
+  },
+  "thyme": {
+    "name": "Thyme",
+    "section": "Fresh produce",
+    "unit": "bunch",
+    "per": {
+      "sprig": 0.1
+    }
+  },
+  "tomato": {
+    "name": "Tomatoes",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "vine-ripened tomatoes"
+    ]
+  },
+  "tomato-puree": {
+    "name": "Tomato purée",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "tbsp": 16
+    },
+    "aliases": [
+      "tomato purée (paste)"
+    ]
+  },
+  "tortilla-chips": {
+    "name": "Tortilla chips",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "tortillas": {
+    "name": "Tortillas",
+    "section": "Bakery",
+    "unit": "count",
+    "aliases": [
+      "small corn tortillas",
+      "tortilla wraps"
+    ]
+  },
+  "tuna": {
+    "name": "Tuna",
+    "section": "Tins & jars",
+    "unit": "g",
+    "per": {
+      "can": 145
+    }
+  },
+  "turmeric": {
+    "name": "Ground turmeric",
+    "section": "Pantry",
+    "unit": "g",
+    "per": {
+      "tsp": 3
+    }
+  },
+  "vanilla-extract": {
+    "name": "Vanilla extract",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "vanilla-sugar": {
+    "name": "Vanilla sugar",
+    "section": "Pantry",
+    "unit": "g",
+    "aliases": [
+      "ванільного цукру"
+    ]
+  },
+  "vegetable-oil": {
+    "name": "Vegetable oil",
+    "section": "Pantry",
+    "unit": "ml",
+    "staple": true,
+    "aliases": [
+      "neutral oil",
+      "oil",
+      "sunflower oil",
+      "соняшникової олії"
+    ]
+  },
+  "vermicelli": {
+    "name": "Vermicelli noodles",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "water": {
+    "name": "Water",
+    "section": "Pantry",
+    "unit": "ml",
+    "skip": true
+  },
+  "white-cabbage": {
+    "name": "White cabbage",
+    "section": "Fresh produce",
+    "unit": "count",
+    "per": {
+      "g": 0.0011
+    }
+  },
+  "white-fish": {
+    "name": "White fish fillets",
+    "section": "Meat & fish",
+    "unit": "g"
+  },
+  "white-vinegar": {
+    "name": "White vinegar",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "white-wine-vinegar": {
+    "name": "White wine vinegar",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "wholegrain-mustard": {
+    "name": "Wholegrain mustard",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "wholewheat-pasta": {
+    "name": "Wholewheat pasta",
+    "section": "Pantry",
+    "unit": "g"
+  },
+  "worcestershire": {
+    "name": "Worcestershire sauce",
+    "section": "Pantry",
+    "unit": "ml"
+  },
+  "yellow-pepper": {
+    "name": "Yellow peppers",
+    "section": "Fresh produce",
+    "unit": "count",
+    "aliases": [
+      "yellow (bell) pepper",
+      "yellow bell pepper"
+    ]
+  }
+}

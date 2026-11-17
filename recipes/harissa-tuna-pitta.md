@@ -7,20 +7,19 @@ tags: [High Protein]
 total_mins: 8
 serves: 1
 calories: 436
+ingredients:
+  - { amount: 20, unit: g, name: red onion, note: thinly sliced, item: red-onion }
+  - { amount: 0.5, unit: juice, name: lemon, item: lemon }
+  - { amount: 160, unit: g, name: tuna, note: "1 can, in spring water or brine, 120g drained weight", item: tuna }
+  - { amount: 2, unit: tbsp, name: Greek yogurt, note: "heaped, 0% or full-fat", item: greek-yogurt }
+  - { amount: 1, unit: tsp, name: harissa paste, item: harissa }
+  - { amount: 40, unit: g, name: cucumber, note: finely diced, item: cucumber }
+  - { amount: 1, unit: handful, name: parsley, note: "small, chopped", item: parsley }
+  - { amount: 0.25, name: avocado, note: diced, item: avocado }
+  - { amount: 1, name: wholemeal (wholewheat) pitta, note: about 60g, item: pitta }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 20g (¾oz) **red onion**, thinly sliced
-- Juice of ½ **lemon**
-- 160g (5¾oz) can of **tuna** in spring water or brine (120g/4¼oz drained weight)
-- 2 heaped tbsp **Greek yogurt** (0% or full-fat)
-- 1 tsp **harissa paste**
-- 40g (1½oz) **cucumber**, finely diced
-- Small handful of **parsley**, chopped
-- ¼ **avocado**, diced
-- 1 **wholemeal (wholewheat) pitta** (about 60g/2¼oz)
-- **Salt and black pepper**, to taste
 
 ## Instructions
 

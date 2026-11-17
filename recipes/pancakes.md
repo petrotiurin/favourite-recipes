@@ -6,16 +6,14 @@ course: [Breakfast]
 total_mins: 15
 serves: 4
 calories: 295
+ingredients:
+  - { amount: 2, name: eggs, item: eggs }
+  - { amount: 2, unit: tbsp, name: sugar, item: sugar }
+  - { amount: 0.33, unit: tsp, name: salt, item: salt }
+  - { amount: 2, unit: tbsp, name: sunflower oil, note: plus extra for frying, item: vegetable-oil }
+  - { amount: 400, unit: ml, name: milk, item: milk }
+  - { amount: 130, unit: g, name: all-purpose flour, item: plain-flour }
 ---
-
-## Ingredients
-
-- 2 **eggs**
-- 2 tbsp **sugar**
-- ⅓ tsp **salt**
-- 2 tbsp **sunflower oil**, plus extra for frying
-- 400 ml **milk**
-- 130 g **all-purpose flour**
 
 Any temperature ingredients are fine — either room temperature or fridge-cold.
 

@@ -7,21 +7,20 @@ tags: [High Protein]
 total_mins: 15
 serves: 4
 calories: 550
+ingredients:
+  - { amount: 4, name: salmon fillets, item: salmon-fillet }
+  - { amount: 4, unit: tsp, name: mixed bbq smokehouse spice blend, note: "or use smoked paprika, cayenne, black pepper, garlic, chilli + a little sugar/honey for the blackened effect", item: bbq-spice }
+  - { amount: 2, name: ripe mango, note: "approx. 400-440g flesh, diced", item: mango }
+  - { amount: 2, name: avocado, note: "medium, diced", item: avocado }
+  - { amount: 1, name: red onion, note: "small, finely chopped", item: red-onion }
+  - { amount: 1, name: red chilli, item: red-chilli }
+  - { amount: 2, unit: can, name: chickpeas, note: drained and rinsed, item: chickpeas }
+  - { amount: 1, unit: juice, name: lime, item: lime }
+  - { amount: 1, unit: handful, name: fresh parsley, note: "large, finely chopped", item: parsley }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 4 **salmon fillets**
-- 4 tsp **mixed bbq smokehouse spice blend**, or use smoked paprika, cayenne, black pepper, garlic, chilli + a little sugar/honey for the blackened effect
-- 2 **ripe mango**, approx. 400-440g flesh, diced
-- 2 **avocado**, medium, diced
-- 1 **red onion**, small, finely chopped
-- 1 **red chilli**
-- 2 tins **chickpeas**, drained and rinsed
-- Juice of 1 **lime**
-- Large handful **fresh parsley**, finely chopped
-- 1 tsp **garlic granules**
-- **salt and black pepper**, to taste
 
 ## Instructions
 

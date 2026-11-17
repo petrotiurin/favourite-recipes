@@ -7,26 +7,26 @@ tags: [High Protein]
 total_mins: 15
 serves: 2
 calories: 500
+ingredients:
+  - { amount: 100, unit: g, name: vermicelli noodles, note: dried, item: vermicelli }
+  - { amount: 2, name: sirloin steaks, note: "150g each, trimmed", item: sirloin-steak }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 0.5, name: cucumber, note: finely sliced, item: cucumber }
+  - { amount: 0.5, name: red onion, note: "small, finely sliced", item: red-onion }
+  - { amount: 2, unit: tbsp, name: rice vinegar, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: sugar, item: sugar }
+  - { amount: 2, unit: tbsp, name: fish sauce, item: fish-sauce }
+  - { amount: 2, unit: tbsp, name: lime juice, item: lime }
+  - { amount: 2, unit: tbsp, name: water, item: water }
+  - { amount: 2, unit: tsp, name: honey, note: scant, item: honey }
+  - { amount: 1, unit: clove, name: garlic, note: finely grated, item: garlic }
+  - { amount: 1, unit: pinch, name: dried chilli flakes, item: chilli-flakes }
+  - { name: coriander (cilantro), note: to serve, item: coriander }
+  - { name: mint, note: to serve, item: mint }
+  - { name: Lime wedges, note: to serve, item: lime }
+  - { name: chopped peanuts, note: "or sesame seeds, to serve", optional: true, item: peanuts }
 ---
-
-## Ingredients
-
-- 100g (3½oz) dried **vermicelli noodles**
-- 2 x 150g (5½oz) **sirloin steaks**, trimmed
-- **Salt and black pepper**, to taste
-- ½ **cucumber**, finely sliced
-- ½ small **red onion**, finely sliced
-- 2 tbsp **rice vinegar**
-- 1 tsp **sugar**
-- 2 tbsp **fish sauce**
-- 2 tbsp **lime juice**
-- 2 tbsp **water**
-- 2 scant tsp **honey**
-- 1 **garlic clove**, finely grated
-- Pinch of **dried chilli flakes**
-- **Coriander (cilantro) and mint**, to serve
-- **Lime wedges**, to serve
-- **Chopped peanuts or sesame seeds**, to serve (optional)
 
 ## Instructions
 

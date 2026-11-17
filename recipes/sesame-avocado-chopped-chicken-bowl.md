@@ -7,23 +7,21 @@ tags: [High Protein]
 total_mins: 6
 serves: 1
 calories: 391
+ingredients:
+  - { amount: 0.25, name: cucumber, note: "large, thinly sliced", item: cucumber }
+  - { amount: 1, name: spring onion, note: "large, scallion, thinly sliced", item: spring-onion }
+  - { amount: 1, unit: handful, name: cherry tomatoes, note: "about 80g, halved", item: cherry-tomatoes }
+  - { amount: 0.5, name: avocado, note: "medium, about 60g, diced", item: avocado }
+  - { amount: 2, unit: handful, name: spinach, note: "large, roughly chopped", item: spinach }
+  - { amount: 1, unit: handful, name: coriander, note: "small, cilantro, roughly chopped", item: coriander }
+  - { amount: 100, unit: g, name: chicken breast, note: "cooked, shredded", item: chicken-breast }
+  - { amount: 1, unit: tbsp, name: Greek yogurt, note: "heaped, 0% or full-fat, for the dressing", item: greek-yogurt }
+  - { amount: 1, unit: tsp, name: sesame oil, note: for the dressing, item: sesame-oil }
+  - { amount: 2, unit: tsp, name: sriracha, note: for the dressing, item: sriracha }
+  - { amount: 2, unit: tsp, name: light soy sauce, note: for the dressing, item: soy-sauce }
+  - { amount: 1, unit: tsp, name: honey, note: "runny, for the dressing", item: honey }
+  - { amount: 0.5, unit: tsp, name: ginger paste, note: for the dressing, item: ginger-paste }
 ---
-
-## Ingredients
-
-- ¼ large **cucumber**, thinly sliced
-- 1 large **spring onion**, scallion, thinly sliced
-- Handful of **cherry tomatoes**, about 80g/2¾oz, halved
-- ½ medium **avocado**, about 60g/2¼oz, diced
-- 2 large handfuls of **spinach**, roughly chopped
-- Small handful of **coriander**, cilantro, roughly chopped
-- 100g (3½oz) **chicken breast**, cooked, shredded
-- 1 heaped tbsp **Greek yogurt**, 0% or full-fat, for the dressing
-- 1 tsp **sesame oil**, for the dressing
-- 2 tsp **sriracha**, for the dressing
-- 2 tsp **light soy sauce**, for the dressing
-- 1 tsp **honey**, runny, for the dressing
-- ½ tsp **ginger paste**, for the dressing
 
 ## Instructions
 

@@ -7,25 +7,23 @@ tags: [High Protein, Meal Prep]
 total_mins: 20
 serves: 1
 calories: 447
+ingredients:
+  - { amount: 1, name: sweet potato, item: sweet-potato }
+  - { amount: 1, unit: can, name: tuna, item: tuna }
+  - { amount: 1, unit: tbsp, name: Greek yoghurt, item: greek-yogurt }
+  - { amount: 0.25, name: red onion, note: finely diced, item: red-onion }
+  - { amount: 1, unit: bunch, name: dill, note: "small, finely diced, plus extra to serve", item: dill }
+  - { amount: 0.5, unit: tbsp, name: sriracha, item: sriracha }
+  - { amount: 0.5, unit: tbsp, name: white wine vinegar, item: white-wine-vinegar }
+  - { name: jalapeños, note: "a few, to taste (depending on how spicy you like it)", item: jalapenos }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 0.5, name: avocado, item: avocado }
+  - { amount: 0.25, unit: juice, name: lime, item: lime }
+  - { name: pesto, note: "a drizzle, plus extra to serve", item: pesto }
+  - { name: feta, note: "crumbled, to serve", item: feta }
+  - { name: chilli flakes, note: to serve, item: chilli-flakes }
 ---
-
-## Ingredients
-
-- 1 **sweet potato**
-- 1 tin **tuna**
-- 1 tbsp **Greek yoghurt**
-- ¼ **red onion**, finely diced
-- Small bunch **dill**, finely diced, plus extra to serve
-- ½ tbsp **sriracha**
-- ½ tbsp **white wine vinegar**
-- A few **jalapeños**, depending on how spicy you like it
-- **salt**, to taste
-- **black pepper**, to taste
-- ½ **avocado**
-- ¼ **lime**, juice only
-- **pesto**, drizzle, plus extra to serve
-- **feta**, crumbled, to serve
-- **chilli flakes**, to serve
 
 ## Instructions
 

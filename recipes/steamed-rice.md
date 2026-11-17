@@ -7,16 +7,11 @@ total_mins: 23
 serves: 2
 calories: 215
 scalable: false
+ingredients:
+  - { amount: 120, unit: g, name: rice, note: "60g for one person, 90g for two medium hungry people", item: rice }
+  - { amount: 180, unit: ml, name: water, note: "90ml for one person, 135ml for two medium hungry people", item: water }
+  - { name: Salt, note: to taste, item: salt }
 ---
-
-## Ingredients
-
-Ratio 1:1.5 rice to water:
-
-- One person: 60g **rice**, 90ml **water**
-- Two medium hungry people: 90g **rice**, 135ml **water**
-- Two people: 120g **rice**, 180ml **water**
-- **Salt**, to taste
 
 ## Instructions
 

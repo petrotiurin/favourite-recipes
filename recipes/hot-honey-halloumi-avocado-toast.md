@@ -6,21 +6,19 @@ course: [Breakfast]
 total_mins: 15
 serves: 2
 calories: 450
+ingredients:
+  - { amount: 0.5, name: avocado, note: ripe, item: avocado }
+  - { amount: 3, unit: tbsp, name: parsley, note: "finely chopped, split: 2 tbsp for the avocado + 1 tbsp for the topping, if using", item: parsley }
+  - { amount: 1, unit: juice, name: lemon, item: lemon }
+  - { amount: 2, name: spring onions, note: "scallions, finely chopped", item: spring-onion }
+  - { amount: 5, unit: tsp, name: honey, note: "split: 4 tsp for the honey-chilli mix + 1 tsp for the topping, if using", item: honey }
+  - { amount: 3, unit: tsp, name: dried chilli flakes, note: "split: 2 tsp for the honey-chilli mix + 1 tsp for the topping, if using", item: chilli-flakes }
+  - { amount: 2, name: eggs, note: "medium, free-range, at room temperature", item: eggs }
+  - { amount: 100, unit: g, name: halloumi, note: sliced about 1cm thick, item: halloumi }
+  - { amount: 2, unit: slice, name: sourdough, note: or bread of choice, item: sourdough }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- ½ **avocado**, ripe
-- 3 tbsp **parsley**, finely chopped, split: 2 tbsp for the avocado + 1 tbsp optional topping
-- Juice of 1 **lemon**
-- 2 **spring onions**, scallions, finely chopped
-- 5 tsp **honey**, split: 4 tsp for the honey-chilli mix + 1 tsp optional topping
-- 3 tsp **dried chilli flakes**, split: 2 tsp for the honey-chilli mix + 1 tsp optional topping
-- 2 **eggs**, medium, free-range, at room temperature
-- 100g (3¼oz) **halloumi**, sliced about 1cm (½ inch) thick
-- 2 slices of **sourdough**, or bread of choice
-- **salt**, to taste
-- **pepper**, to taste
 
 ## Instructions
 

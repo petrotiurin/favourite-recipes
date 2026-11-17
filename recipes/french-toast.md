@@ -6,17 +6,15 @@ course: [Breakfast]
 total_mins: 10
 serves: 2
 calories: 520
+ingredients:
+  - { amount: 2, name: eggs, item: eggs }
+  - { amount: 80, unit: ml, name: milk, note: whole, item: milk }
+  - { amount: 40, unit: ml, name: cream, note: double, item: double-cream }
+  - { amount: 1, unit: tsp, name: vanilla extract, item: vanilla-extract }
+  - { amount: 0.5, unit: tsp, name: cinnamon, item: cinnamon }
+  - { amount: 4, unit: slice, name: brioche, note: thick, item: brioche }
+  - { name: Icing sugar, note: to serve, item: icing-sugar }
 ---
-
-## Ingredients
-
-- 2 **eggs**
-- 80ml whole **milk**
-- 40ml double **cream**
-- 1 tsp **vanilla extract**
-- ½ tsp **cinnamon**
-- 4 thick slices **brioche**
-- **Icing sugar**, to serve
 
 ## Instructions
 

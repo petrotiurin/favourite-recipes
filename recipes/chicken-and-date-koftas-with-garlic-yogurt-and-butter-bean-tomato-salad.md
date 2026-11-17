@@ -7,26 +7,25 @@ tags: [High Protein]
 total_mins: 22
 serves: 4
 calories: 464
+ingredients:
+  - { amount: 6, name: Medjool dates, note: pitted, item: medjool-dates }
+  - { amount: 1, name: red onion, note: "small, roughly chopped", item: red-onion }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, unit: handful, name: parsley, note: small, item: parsley }
+  - { amount: 1, unit: handful, name: coriander (cilantro), note: small, item: coriander }
+  - { amount: 500, unit: g, name: minced (ground) chicken, note: 5% fat, item: minced-chicken }
+  - { amount: 1.5, unit: tbsp, name: Middle Eastern or Moroccan spice blend, note: e.g. ras el hanout or baharat, item: middle-eastern-spice }
+  - { name: olive oil, note: "for brushing, to taste", item: olive-oil }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 200, unit: g, name: Greek yogurt, note: "0% or full-fat, for the garlic yogurt", item: greek-yogurt }
+  - { amount: 0.5, unit: tsp, name: garlic granules, note: for the garlic yogurt, item: garlic-granules }
+  - { amount: 400, unit: g, name: butter beans, note: "can, drained and rinsed", item: butter-beans }
+  - { amount: 200, unit: g, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
+  - { amount: 1, unit: tbsp, name: olive oil, note: for the salad, item: olive-oil }
+  - { amount: 0.5, unit: juice, name: lemon, note: plus wedges to serve, item: lemon }
+  - { amount: 1, unit: handful, name: parsley, note: "small, for the salad", item: parsley }
 ---
-
-## Ingredients
-
-- 6 **Medjool dates**, pitted
-- 1 **red onion**, small, roughly chopped
-- 1 tsp **garlic granules**
-- Small handful of **parsley**
-- Small handful of **coriander (cilantro)**
-- 500g **minced (ground) chicken**, 5% fat
-- 1½ tbsp **Middle Eastern or Moroccan spice blend**, e.g. ras el hanout or baharat
-- **olive oil**, for brushing, to taste
-- **salt and black pepper**, to taste
-- 200g **Greek yogurt**, 0% or full-fat, for the garlic yogurt
-- ½ tsp **garlic granules**, for the garlic yogurt
-- 400g can **butter beans**, drained and rinsed
-- 200g **cherry tomatoes**, halved
-- 1 tbsp **olive oil**, for the salad
-- Juice of ½ **lemon**, plus wedges to serve
-- Small handful of **parsley**, for the salad
 
 ## Instructions
 

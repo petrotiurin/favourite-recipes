@@ -7,21 +7,19 @@ tags: [Vegetarian]
 total_mins: 15
 serves: 1
 calories: 480
+ingredients:
+  - { amount: 2, unit: slice, name: bread, note: of your choice, item: bread }
+  - { amount: 0.5, name: avocado, note: small, item: avocado }
+  - { amount: 0.25, name: red onion, note: finely diced, item: red-onion }
+  - { amount: 1, unit: handful, name: basil, note: chopped, item: basil }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 1, unit: pinch, name: chilli flakes, item: chilli-flakes }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 2, unit: tbsp, name: low-fat cottage cheese, note: heaped, item: cottage-cheese }
+  - { amount: 5, name: sundried tomatoes, note: drained and chopped, item: sundried-tomatoes }
+  - { amount: 1, unit: tbsp, name: sundried tomato oil, note: "from the jar, for brushing", item: sundried-tomato-oil }
 ---
-
-## Ingredients
-
-- 2 slices **bread**, of your choice
-- ½ small **avocado**
-- ¼ **red onion**, finely diced
-- Handful of **basil**, chopped
-- 1 tsp **honey**
-- Pinch of **chilli flakes**
-- **salt**, to taste
-- **black pepper**, to taste
-- 2 heaped tbsp **low-fat cottage cheese**
-- 5 **sundried tomatoes**, drained and chopped
-- 1 tbsp **sundried tomato oil**, from the jar, for brushing
 
 ## Instructions
 

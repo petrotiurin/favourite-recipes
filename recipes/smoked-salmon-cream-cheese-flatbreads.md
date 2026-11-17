@@ -6,26 +6,19 @@ course: [Breakfast]
 total_mins: 25
 serves: 2
 calories: 415
+ingredients:
+  - { amount: 120, unit: g, name: flour, note: "plain (all-purpose), plus extra for dusting", item: plain-flour }
+  - { amount: 120, unit: g, name: Greek yogurt, note: 0% or full fat, item: greek-yogurt }
+  - { amount: 0.5, unit: tsp, name: baking powder, item: baking-powder }
+  - { amount: 0.25, unit: tsp, name: salt, item: salt }
+  - { amount: 1, unit: tbsp, name: sesame seeds, item: sesame-seeds }
+  - { amount: 2, unit: tbsp, name: cream cheese, item: cream-cheese }
+  - { amount: 100, unit: g, name: smoked salmon, item: smoked-salmon }
+  - { amount: 0.25, name: red onion, note: finely sliced, item: red-onion }
+  - { amount: 1, unit: tbsp, name: capers, note: drained, item: capers }
+  - { name: Dill, note: "to garnish, to serve", optional: true, item: dill }
+  - { name: Lemon wedges, note: to serve, item: lemon }
 ---
-
-## Ingredients
-
-**For the Flatbreads**
-
-- 120g (1 cup) plain (all-purpose) **flour**, plus extra for dusting
-- 120g (½ cup) **Greek yogurt** (0% or full fat)
-- ½ tsp **baking powder**
-- ¼ tsp **salt**
-- 1 tbsp **sesame seeds**
-
-**For the Filling**
-
-- 2 tbsp **cream cheese**
-- 100g (3½oz) **smoked salmon**
-- ¼ **red onion**, finely sliced
-- 1 tbsp **capers**, drained
-- **Dill**, to garnish (optional)
-- **Lemon wedges**, to serve
 
 ## Instructions
 

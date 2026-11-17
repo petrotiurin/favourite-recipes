@@ -6,26 +6,24 @@ course: [Dinner]
 total_mins: 20
 serves: 2
 calories: 500
+ingredients:
+  - { amount: 100, unit: g, name: brown rice, item: brown-rice }
+  - { amount: 2, unit: tsp, name: neutral oil, note: "split: 1 tsp + 1 tsp", item: vegetable-oil }
+  - { amount: 300, unit: g, name: firm tofu, note: "pressed and cut into cubes (or use chicken, raw peeled prawns or raw beef)", item: firm-tofu }
+  - { amount: 3, unit: tbsp, name: light soy sauce, note: "split: 1 tbsp for the tofu + 2 tbsp for the sauce", item: soy-sauce }
+  - { amount: 3, name: spring onions, note: "sliced into chunks, plus extra thin slices to serve", item: spring-onion }
+  - { amount: 0.5, name: red chilli, note: deseeded and finely diced, item: red-chilli }
+  - { amount: 2, unit: clove, name: garlic, note: "minced, split: 1 for the stir-fry + 1 for the sauce", item: garlic }
+  - { amount: 1, name: carrot, note: cut into matchsticks, item: carrot }
+  - { amount: 1, name: red pepper, note: "cored, deseeded and cut into thin strips", item: red-pepper }
+  - { amount: 150, unit: g, name: Tenderstem broccoli, note: each stem cut into 3, item: tenderstem-broccoli }
+  - { amount: 2, unit: tbsp, name: roasted salted peanuts, item: peanuts }
+  - { name: salt, note: to taste, item: salt }
+  - { amount: 1, unit: tbsp, name: peanut butter, item: peanut-butter }
+  - { amount: 1, unit: tsp, name: rice vinegar, item: rice-vinegar }
+  - { amount: 0.5, unit: juice, name: lime, note: plus the zest, item: lime }
+  - { amount: 1, unit: tsp, name: honey, note: heaped, item: honey }
 ---
-
-## Ingredients
-
-- 100g **brown rice**
-- 2 tsp **neutral oil**, split: 1 tsp + 1 tsp
-- 300g **firm tofu**, pressed and cut into cubes (or use chicken, raw peeled prawns or raw beef)
-- 3 tbsp **light soy sauce**, split: 1 tbsp for the tofu + 2 tbsp for the sauce
-- 3 **spring onions**, sliced into chunks, plus extra thin slices to serve
-- ½ **red chilli**, deseeded and finely diced
-- 2 **garlic cloves**, minced, split: 1 for the stir-fry + 1 for the sauce
-- 1 **carrot**, cut into matchsticks
-- 1 **red pepper**, cored, deseeded and cut into thin strips
-- 150g **Tenderstem broccoli**, each stem cut into 3
-- 2 tbsp **roasted salted peanuts**
-- **salt**, to taste
-- 1 tbsp **peanut butter**
-- 1 tsp **rice vinegar**
-- Zest and juice of ½ **lime**
-- 1 heaped tsp **honey**
 
 ## Instructions
 

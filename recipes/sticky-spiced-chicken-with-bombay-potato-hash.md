@@ -7,30 +7,29 @@ tags: [High Protein]
 total_mins: 25
 serves: 2
 calories: 410
+ingredients:
+  - { amount: 2, name: "boneless, skinless chicken breasts", note: about 120g each, item: chicken-breast }
+  - { amount: 2, unit: tbsp, name: pomegranate seeds, item: pomegranate-seeds }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 1, unit: tbsp, name: mango chutney, item: mango-chutney }
+  - { amount: 1, unit: tbsp, name: thick Greek yogurt, note: "heaped, 0% or full-fat", item: greek-yogurt }
+  - { amount: 0.5, unit: juice, name: lemon, item: lemon }
+  - { amount: 1, unit: clove, name: garlic, note: minced (or ½ tsp garlic granules), item: garlic }
+  - { amount: 1, unit: tsp, name: mild curry powder, item: curry-powder }
+  - { amount: 150, unit: g, name: thick Greek yogurt, note: "0% or full-fat, for the raita", item: greek-yogurt }
+  - { amount: 0.25, name: cucumber, note: deseeded and diced, item: cucumber }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 0.5, unit: juice, name: lemon, note: for the raita, item: lemon }
+  - { amount: 1, unit: tbsp, name: mint leaves, note: chopped, item: mint }
+  - { amount: 300, unit: g, name: potatoes, note: cut into small dice (skins on), item: potato }
+  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 0.5, name: red onion, note: finely sliced, item: red-onion }
+  - { amount: 1, name: red bell pepper, note: deseeded and diced, item: red-pepper }
+  - { amount: 1, unit: tsp, name: mild curry powder, note: for the hash, item: curry-powder }
+  - { amount: 0.5, unit: tsp, name: ground turmeric, item: turmeric }
+  - { amount: 1, unit: handful, name: coriander, note: "chopped, plus extra to serve", item: coriander }
 ---
-
-## Ingredients
-
-- 2, **boneless, skinless chicken breasts** (about 120g/4¼oz each)
-- 2 tbsp, **pomegranate seeds**
-- **Salt and black pepper**, to taste
-- 1 tbsp, **mango chutney**
-- 1 heaped tbsp, **thick Greek yogurt** (0% or full-fat)
-- Juice of ½, **lemon**
-- 1 clove, **garlic**, minced (or ½ tsp garlic granules)
-- 1 tsp, **mild curry powder**
-- 150g (⅔ cup), **thick Greek yogurt** (0% or full-fat), for the raita
-- ¼, **cucumber**, deseeded and diced
-- 1 tsp, **garlic granules**
-- Juice of ½, **lemon**, for the raita
-- 1 tbsp, **mint leaves**, chopped
-- 300g (10½oz), **potatoes**, cut into small dice (skins on)
-- 1 tsp, **olive oil**
-- ½, **red onion**, finely sliced
-- 1, **red bell pepper**, deseeded and diced
-- 1 tsp, **mild curry powder**, for the hash
-- ½ tsp, **ground turmeric**
-- Handful of, **coriander**, chopped, plus extra to serve
 
 ## Instructions
 

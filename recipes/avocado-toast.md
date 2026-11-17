@@ -7,11 +7,8 @@ tags: [Low Carb]
 total_mins: 5
 serves: 2
 calories: 280
+ingredients: []
 ---
-
-## Ingredients
-
-*Ingredients not yet recorded in the source — update this recipe with quantities via the `add-recipe` skill.*
 
 ## Instructions
 

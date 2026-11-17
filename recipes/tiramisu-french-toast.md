@@ -8,19 +8,17 @@ serves: 1
 calories: 388
 current: true
 draft: true
+ingredients:
+  - { amount: 1, name: egg, note: large, item: eggs }
+  - { amount: 60, unit: ml, name: semi-skimmed milk, note: or any milk of choice, item: milk }
+  - { amount: 1, unit: tsp, name: instant coffee granules, note: scant, item: instant-coffee }
+  - { amount: 0.5, unit: tsp, name: vanilla extract, item: vanilla-extract }
+  - { amount: 1, unit: tsp, name: honey, note: "heaped, or maple syrup, plus extra to serve", item: honey }
+  - { amount: 1, unit: pinch, name: salt, item: salt }
+  - { amount: 2, unit: slice, name: wholemeal bread, note: 80g in total, item: bread }
+  - { amount: 75, unit: g, name: Greek yogurt, note: 0% or full-fat, item: greek-yogurt }
+  - { amount: 0.5, unit: tsp, name: unsweetened cocoa powder, item: cocoa }
 ---
-
-## Ingredients
-
-- 1 **egg**, large
-- 60ml **semi-skimmed milk**, or any milk of choice
-- 1 scant tsp **instant coffee granules**
-- ½ tsp **vanilla extract**
-- 1 tsp **honey**, heaped, or maple syrup, plus extra to serve
-- Pinch of **salt**
-- 2 slices **wholemeal bread**, 80g in total
-- 75g **Greek yogurt**, 0% or full-fat
-- ½ tsp **unsweetened cocoa powder**
 
 ## Instructions
 

@@ -7,24 +7,22 @@ tags: [Meal Prep]
 total_mins: 20
 serves: 4
 calories: 250
+ingredients:
+  - { amount: 0.25, name: red cabbage, item: red-cabbage }
+  - { amount: 50, unit: g, name: cooked quinoa or rice, item: cooked-quinoa }
+  - { amount: 2, unit: handful, name: sugar snap peas, note: "cupped, sliced diagonally", item: sugar-snap-peas }
+  - { amount: 3, name: spring onions, note: "scallions, finely sliced", item: spring-onion }
+  - { amount: 1, unit: handful, name: mint leaves, note: large, item: mint }
+  - { amount: 1, name: red pepper, note: "bell, cored, deseeded and diced", item: red-pepper }
+  - { amount: 1, unit: handful, name: roasted peanuts, note: "small, roughly chopped", item: peanuts }
+  - { amount: 2, unit: tbsp, name: smooth peanut butter, note: for the satay dressing, item: peanut-butter }
+  - { amount: 2, unit: tbsp, name: light soy sauce, note: for the satay dressing, item: soy-sauce }
+  - { amount: 2, unit: juice, name: limes, note: for the satay dressing, item: lime }
+  - { amount: 2, unit: tsp, name: ginger paste, note: for the satay dressing, item: ginger-paste }
+  - { amount: 2, unit: tsp, name: garlic paste, note: for the satay dressing, item: garlic-paste }
+  - { amount: 2, unit: tsp, name: honey, note: for the satay dressing, item: honey }
+  - { amount: 1, unit: pinch, name: salt, note: "for the satay dressing, plus extra to taste", item: salt }
 ---
-
-## Ingredients
-
-- ¼ **red cabbage**
-- 50g (1¾oz) **cooked quinoa or rice**
-- 2 cupped handfuls **sugar snap peas**, sliced diagonally
-- 3 **spring onions**, scallions, finely sliced
-- Large fistful of **mint leaves**
-- 1 **red pepper**, bell, cored, deseeded and diced
-- Small handful of **roasted peanuts**, roughly chopped
-- 2 tbsp **smooth peanut butter**, for the satay dressing
-- 2 tbsp **light soy sauce**, for the satay dressing
-- Juice of 2 **limes**, for the satay dressing
-- 2 tsp **ginger paste**, for the satay dressing
-- 2 tsp **garlic paste**, for the satay dressing
-- 2 tsp **honey**, for the satay dressing
-- Pinch of **salt**, for the satay dressing, plus extra to taste
 
 ## Instructions
 

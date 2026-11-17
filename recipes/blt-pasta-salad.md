@@ -7,23 +7,22 @@ tags: [High Protein]
 total_mins: 25
 serves: 2
 calories: 427
+ingredients:
+  - { amount: 120, unit: g, name: dried pasta, note: of choice (wholegrain rigatoni recommended), item: dried-pasta }
+  - { amount: 4, unit: slice, name: Parma ham, item: parma-ham }
+  - { amount: [160, 200], unit: g, name: cooked chicken breast, note: or any protein of choice, item: cooked-chicken }
+  - { amount: 150, unit: g, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
+  - { amount: 8, name: sun-dried tomatoes, note: drained and roughly chopped, item: sundried-tomatoes }
+  - { amount: 1, name: little gem lettuce, note: leaves shredded, item: little-gem-lettuce }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 3, unit: tbsp, name: Greek yogurt, note: "heaped, 0% or full fat", item: greek-yogurt }
+  - { amount: 1, unit: tbsp, name: wholegrain mustard, item: wholegrain-mustard }
+  - { amount: 1, unit: zest, name: lemon, note: and juice of ½ lemon, item: lemon }
+  - { amount: 1, unit: handful, name: basil leaves, note: "small, chopped", item: basil }
+  - { amount: 2, name: spring onions (scallions), note: finely chopped, item: spring-onion }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
 ---
-
-## Ingredients
-
-- 120g (4oz) **dried pasta** of choice (wholegrain rigatoni recommended)
-- 4 slices of **Parma ham**
-- 160-200g (5¾-7oz) **cooked chicken breast** (or any protein of choice)
-- 150g (5½oz) **cherry tomatoes**, halved
-- 8 **sun-dried tomatoes**, drained and roughly chopped
-- 1 **little gem lettuce**, leaves shredded
-- **Salt and pepper**, to taste
-- 3 heaped tbsp **Greek yogurt** (0% or full fat)
-- 1 tbsp **wholegrain mustard**
-- Zest of 1 **lemon** and juice of ½ **lemon**
-- Small handful of **basil leaves**, chopped
-- 2 **spring onions (scallions)**, finely chopped
-- 1 tsp **honey**
 
 ## Instructions
 
