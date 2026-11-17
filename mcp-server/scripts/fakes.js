@@ -215,13 +215,14 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     return scriptedStream({ ...opts });
   }
   // a new recipe
-  const created = user.match(/add a new recipe:\s*(.+)$/);
+  const created = user.match(/add a new recipe( with a garnish)?:\s*(.+)$/);
   if (created) {
     if (!lastResult) {
-      const title = titleCase(created[1].trim());
+      const title = titleCase(created[2].trim());
+      const garnish = created[1] ? [{ name: "sesame seeds", note: "to serve", optional: true }, { name: "chilli oil", note: "to serve", optional: true }] : [];
       return tray("stage_create_recipe", {
         title, course: ["Dinner"], tags: ["Quick"], total_mins: 20, serves: 2, calories: 450,
-        ingredients: [{ amount: 200, unit: "g", name: "pasta" }, { amount: 2, unit: "clove", name: "garlic" }, { amount: 2, unit: "tbsp", name: "olive oil" }, { name: "parmesan", note: "to serve" }],
+        ingredients: [{ amount: 200, unit: "g", name: "pasta" }, { amount: 2, unit: "clove", name: "garlic" }, { amount: 2, unit: "tbsp", name: "olive oil" }, { name: "parmesan", note: "to serve" }, ...garnish],
         instructions: ["Boil the **pasta** until al dente.", "Fry the **garlic cloves** in the **olive oil** for a minute.", "Toss the **pasta** in the pan and top with **parmesan**."],
         reason: "from this chat",
       }, `I'll put ${title} in the tray.`);

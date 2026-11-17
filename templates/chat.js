@@ -254,6 +254,33 @@
     return groups.join(" ");
   }
 
+  /**
+   * The optional items card (docs/structured-ingredients.md 6): { items: [{ item, name, quantity, recipes: [{ slug, title, image }], answer }] },
+   * or null. Built by the server from the tray's list; photos only on this site's origin, at most 30 rows. answer: "drop" | "" (ticked = kept).
+   */
+  function cleanOptional(o, origin) {
+    if (!o || typeof o !== "object" || !Array.isArray(o.items)) return null;
+    var items = [];
+    o.items.forEach(function (i) {
+      if (items.length >= 30 || !i || typeof i !== "object" || typeof i.item !== "string" || !SLUG_RE.test(i.item) || typeof i.name !== "string" || !i.name.trim()) return;
+      if (items.some(function (x) { return x.item === i.item; })) return;
+      var recipes = [];
+      (Array.isArray(i.recipes) ? i.recipes : []).forEach(function (r) {
+        if (recipes.length >= 6 || !r || typeof r !== "object" || typeof r.slug !== "string" || !SLUG_RE.test(r.slug)) return;
+        recipes.push({ slug: r.slug, title: (typeof r.title === "string" && r.title.trim().slice(0, 120)) || r.slug.replace(/-/g, " "), image: (typeof r.image === "string" && r.image && safeHref(r.image, origin)) || "" });
+      });
+      items.push({ item: i.item, name: i.name.trim().slice(0, 60), quantity: typeof i.quantity === "string" ? i.quantity.slice(0, 20) : "", recipes: recipes, answer: i.answer === "drop" ? "drop" : "" });
+    });
+    return items.length ? { items: items } : null;
+  }
+
+  /** The editor's ticks as their message: "Leaving off: sesame seeds and chilli oil." / "Keeping all the optional items." (the server stores the same words). */
+  function optionalText(card, answers) {
+    var off = card.items.filter(function (i) { return answers[i.item] === "drop"; }).map(function (i) { return i.name.toLowerCase(); });
+    if (!off.length) return "Keeping all the optional items.";
+    return "Leaving off: " + (off.length === 1 ? off[0] : off.slice(0, -1).join(", ") + " and " + off[off.length - 1]) + ".";
+  }
+
   var TRAY_KINDS = {
     switch: { label: "Switch", cls: "kicker-current" },
     promote: { label: "Promote", cls: "" },
@@ -261,6 +288,7 @@
     new: { label: "New", cls: "kicker-draft" },
     next: { label: "Next week", cls: "kicker-next" },
     edit: { label: "Edit", cls: "" },
+    catalogue: { label: "Catalogue", cls: "" },
     list: { label: "List", cls: "" },
     servings: { label: "Servings", cls: "" },
     stocktake: { label: "At home", cls: "" },
@@ -310,6 +338,10 @@
           notes: str(i.detail.notes, 800),
         };
       }
+      if (i.kind === "list") {
+        item.edits = (Array.isArray(i.edits) ? i.edits : []).slice(0, 30).map(function (x) { return str(x, 120); }).filter(Boolean);
+        item.notes = (Array.isArray(i.notes) ? i.notes : []).slice(0, 5).map(function (x) { return str(x, 300); }).filter(Boolean);
+      }
       if (Array.isArray(i.preview)) {
         item.preview = i.preview.slice(0, 20).map(function (sec) {
           return { name: str(sec && sec.name, 60), items: (Array.isArray(sec && sec.items) ? sec.items : []).slice(0, 80).map(function (x) { return str(x, 100); }) };
@@ -352,7 +384,7 @@
   /** What the tray's one button is: "finalise" | "finalising" | "save" | "blocked", with its label. */
   function trayButton(tray) {
     if (tray.can_save) return { kind: "save", label: "Save to site (" + tray.count + ")" };
-    if (tray.state === "finalising") return { kind: "finalising", label: "Building the list…" };
+    if (tray.state === "finalising") return { kind: "finalising", label: "Reviewing the list…" };
     if (tray.needs_list && !tray.list_current && !tray.items.some(function (i) { return i.error || i.clash; })) return { kind: "finalise", label: "Finalise list" };
     return { kind: "blocked", label: "Save to site (" + tray.count + ")" };
   }
@@ -476,6 +508,8 @@
         if (question) msg.question = question;
         var review = cleanReview(m.review, origin);
         if (review) msg.review = review;
+        var optional = cleanOptional(m.optional, origin);
+        if (optional) msg.optional = optional;
         var cards = cleanCards(m.cards, origin);
         if (cards.length) msg.cards = cards;
         var nav = cleanNav(m.nav, origin);
@@ -489,7 +523,7 @@
           };
         }
       }
-      if (msg.content || msg.cards || msg.question || msg.review || msg.images) out.push(msg);
+      if (msg.content || msg.cards || msg.question || msg.review || msg.optional || msg.images) out.push(msg);
     });
     return out;
   }
@@ -545,6 +579,8 @@
     cleanQuestion: cleanQuestion,
     cleanReview: cleanReview,
     reviewText: reviewText,
+    cleanOptional: cleanOptional,
+    optionalText: optionalText,
     cleanTray: cleanTray,
     cleanNumbers: cleanNumbers,
     cleanPhotos: cleanPhotos,
@@ -1079,6 +1115,75 @@
     return box;
   }
 
+  /**
+   * The optional items card: one row per item only garnishes and extras need (the recipes' photos, the name, its amount and recipes, a tick box),
+   * every row ticked (kept) to start; an unticked row is struck through. One Done, always enabled, sends every answer; the server stages them.
+   * It shares the drafts card's look and behaviour (.chat-review): it fades once answered, and the tray's Finalise list scrolls to it.
+   */
+  function optionalEl(card) {
+    var box = el("div", "chat-review chat-optional", { role: "group", "aria-label": "Optional items" });
+    var top = el("div", "chat-optional-top");
+    var title = el("span", "chat-review-title");
+    title.textContent = "Optional this week";
+    var lede = el("span", "chat-review-sub");
+    lede.textContent = "Only garnishes and extras. Everything else is on the list.";
+    top.appendChild(title);
+    top.appendChild(lede);
+    box.appendChild(top);
+    var answers = {};
+    card.items.forEach(function (it) {
+      if (it.answer === "drop") answers[it.item] = "drop";
+      var row = el("div", "chat-review-row chat-optional-row");
+      var photos = el("span", "chat-optional-photos", { "aria-hidden": "true" });
+      it.recipes.slice(0, 3).forEach(function (r) {
+        photos.appendChild(r.image ? el("img", "chat-optional-photo", { src: r.image, alt: "", loading: "lazy" }) : el("span", "chat-optional-photo"));
+      });
+      row.appendChild(photos);
+      var words = el("span", "chat-review-words chat-optional-words");
+      var name = el("span", "chat-review-title");
+      name.textContent = it.name;
+      var sub = el("span", "chat-review-sub");
+      sub.textContent = (it.quantity ? it.quantity + " · " : "") + "for " + it.recipes.map(function (r) { return r.title; }).join(", ");
+      words.appendChild(name);
+      words.appendChild(sub);
+      row.appendChild(words);
+      var tick = el("button", "chat-optional-tick", { type: "button", "aria-label": "Keep " + it.name });
+      var boxIcon = el("span", "chat-optional-box", { "aria-hidden": "true" });
+      boxIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      tick.appendChild(boxIcon);
+      function paint() {
+        var keep = answers[it.item] !== "drop";
+        tick.setAttribute("aria-pressed", keep ? "true" : "false");
+        row.classList.toggle("is-off", !keep);
+      }
+      tick.addEventListener("click", function () {
+        if (box.classList.contains("is-old")) return;
+        if (answers[it.item] === "drop") delete answers[it.item];
+        else answers[it.item] = "drop";
+        it.answer = answers[it.item] || ""; // kept on the message, so a redraw keeps the ticks
+        paint();
+      });
+      paint();
+      row.appendChild(tick);
+      box.appendChild(row);
+    });
+    var foot = el("div", "chat-review-foot");
+    var hint = el("p", "chat-review-hint");
+    hint.textContent = "Ticked items stay on the list.";
+    foot.appendChild(hint);
+    var done = el("button", "chat-chip is-done chat-review-done", { type: "button" });
+    done.textContent = "Done";
+    done.addEventListener("click", function () {
+      if (box.classList.contains("is-old")) return;
+      var all = {};
+      card.items.forEach(function (it) { all[it.item] = answers[it.item] === "drop" ? "drop" : "keep"; });
+      send(optionalText(card, all), { action: "review_optional", answers: all });
+    });
+    foot.appendChild(done);
+    box.appendChild(foot);
+    return box;
+  }
+
   /** The input invites a typed answer while a question is live. */
   function paintPlaceholder() {
     var live = log.querySelector(".chat-question:not(.is-old), .chat-review:not(.is-old)");
@@ -1252,6 +1357,7 @@
       if (mode === "editor" && chat.server && m.role === "assistant" && m.turn_id) log.appendChild(feedbackEl(m, !last));
       if (m.question && last) log.appendChild(questionEl(m.question));
       if (m.review && last && mode === "editor" && chat.server) log.appendChild(reviewEl(m.review));
+      if (m.optional && last && mode === "editor" && chat.server) log.appendChild(optionalEl(m.optional));
       if (m.replies && m.replies.length && last) log.appendChild(chipsEl(m.replies));
     });
     paintPhotoLine();
@@ -1426,7 +1532,7 @@
       autoFold = false; // the turn is over: the tray opens again (loadTray below redraws it)
       if (editorTurn) loadTray({ highlight: true });
       else if (trayData) renderTray();
-      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question || reply.review)) {
+      if (ok && (reply.content.trim() || (reply.cards && reply.cards.length) || reply.question || reply.review || reply.optional)) {
         chat.messages.push(reply);
         saveChat();
         if (reply.nav) {
@@ -1436,6 +1542,7 @@
         if (editorTurn && reply.turn_id) log.appendChild(feedbackEl(reply, false));
         if (reply.question) log.appendChild(questionEl(reply.question));
         else if (reply.review && editorTurn) log.appendChild(reviewEl(reply.review));
+        else if (reply.optional && editorTurn) log.appendChild(optionalEl(reply.optional));
         else if (reply.replies && reply.replies.length) log.appendChild(chipsEl(reply.replies));
         paintPlaceholder();
         watchPublishing();
@@ -1456,7 +1563,7 @@
           message: text,
           page: pageState(),
           action: action || undefined,
-          answers: action === "review_drafts" && opts.answers ? opts.answers : undefined,
+          answers: (action === "review_drafts" || action === "review_optional") && opts.answers ? opts.answers : undefined,
           image_paths: byPath ? photos.map(function (p) { return p.path; }) : undefined,
           images: photos.length && !byPath ? photos.map(function (p) { return p.data; }) : undefined,
         }
@@ -1541,6 +1648,7 @@
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
               else if (ev.name === "question") reply.question = cleanQuestion(ev.data) || reply.question;
               else if (ev.name === "review") reply.review = cleanReview(ev.data, origin) || reply.review;
+              else if (ev.name === "optional") reply.optional = cleanOptional(ev.data, origin) || reply.optional;
               else if (ev.name === "tray") { /* the tray is loaded once, when the turn ends (finish) */ }
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
@@ -2228,7 +2336,7 @@
     var kind = TRAY_KINDS[item.kind];
     var card = el("div", "tray-card" + (isNew ? " is-new" : "") + (item.error ? " has-error" : "") + (item.clash ? " has-clash" : ""), { role: "listitem", "data-id": item.id });
     var main = el("button", "tray-card-main", { type: "button" });
-    if (item.kind !== "switch" && item.kind !== "list" && item.kind !== "servings") main.appendChild(trayThumb(item));
+    if (["switch", "list", "servings", "catalogue"].indexOf(item.kind) === -1) main.appendChild(trayThumb(item));
     var cls = item.kind === "new" ? (item.draft ? "kicker-draft" : "") : item.kind === "next" ? (item.add ? "kicker-next" : "") : kind.cls;
     var k = el("p", "kicker" + (cls ? " " + cls : ""));
     k.textContent = item.kind === "next" && !item.add ? "Off next week" : kind.label;
@@ -2255,6 +2363,10 @@
       var e = el("p", "tray-problem");
       e.textContent = item.error;
       main.appendChild(e);
+    } else if (item.notes && item.notes.length) {
+      var sn0 = el("p", "tray-note");
+      sn0.textContent = item.notes[0];
+      main.appendChild(sn0);
     } else if (item.photo && item.photo.status === "failed") {
       var pf = el("p", "tray-problem");
       pf.textContent = "The photo didn't work: " + (item.photo.error || "try again");
@@ -2271,12 +2383,15 @@
       }
     });
     card.appendChild(main);
-    var drop = iconButton("tray-drop", "Drop from the tray: " + item.title, ICON.close);
-    drop.addEventListener("click", function () {
-      drop.disabled = true;
-      trayCall("DELETE", "/plan/items/" + item.id).then(function () { if (trayDetail === item.id) trayDetail = null; loadTray(); });
-    });
-    card.appendChild(drop);
+    // the list card follows next week (the server rebuilds it), so it has no ×: drop the recipes instead
+    if (item.kind !== "list") {
+      var drop = iconButton("tray-drop", "Drop from the tray: " + item.title, ICON.close);
+      drop.addEventListener("click", function () {
+        drop.disabled = true;
+        trayCall("DELETE", "/plan/items/" + item.id).then(function () { if (trayDetail === item.id) trayDetail = null; loadTray(); });
+      });
+      card.appendChild(drop);
+    }
     var acts = el("div", "tray-card-actions");
     if (item.photo) {
       var np = el("button", "text-button tray-link", { type: "button" });
@@ -2322,6 +2437,16 @@
         box.appendChild(n);
       }
     } else if (item.preview) {
+      if (item.edits && item.edits.length) {
+        var he = el("p", "tray-detail-notes");
+        he.textContent = "Changes: " + item.edits.join("; ") + ".";
+        box.appendChild(he);
+      }
+      (item.notes || []).forEach(function (x) {
+        var nn = el("p", "tray-note");
+        nn.textContent = x;
+        box.appendChild(nn);
+      });
       item.preview.forEach(function (sec) {
         var hh = el("h4", "tray-detail-h");
         hh.textContent = sec.name;

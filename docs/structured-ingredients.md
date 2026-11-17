@@ -2,8 +2,8 @@
 
 Status: **built on the server and the site** (phase 7 of `docs/chatbot-design.md`): all three rollout steps (catalogue, schema,
 renderer and migration; `buildShoppingList`, the rebuild on every tray change and Finalise as review; catalogue write-back
-from `remember: true` patches). The chat panel's side (the optional items card, the live List card, the button states) is in
-review before it is built; until then the server sends the `optional` event the panel doesn't draw yet. Each recipe's ingredients become structured
+from `remember: true` patches). The chat panel's side is built too: the optional items card (`optionalEl` in `templates/chat.js`, tick boxes, all ticked to start),
+the live List card (no ×, its patches and stale-patch notes) and "Reviewing the list…". Each recipe's ingredients become structured
 data in its frontmatter, the only place a recipe's ingredients live; the page's ingredient list, the servings
 selector, `scale_recipe`, the "Cook with Claude" prompt and the shopping list are all generated from it. The
 shopping list becomes a sum the server computes with an ingredient catalogue, and the model only reviews it.

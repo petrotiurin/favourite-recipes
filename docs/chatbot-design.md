@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (structured ingredients and the server-built shopping list, 7.4, `docs/structured-ingredients.md`) is built on the server; its panel UI (the optional items card, the live List card) is in review. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (structured ingredients and the server-built shopping list, 7.4, `docs/structured-ingredients.md`) is built. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 Proposed next: reading several recipe photos in parallel (about 6 per message when planning a week), in `docs/parallel-photo-reading.md`.
@@ -487,7 +487,7 @@ index: active filter and search text) and sends it with every message.
 
 ### 7.4 Structured ingredients and the server-built shopping list (built, phase 7)
 
-Built from **`docs/structured-ingredients.md`** (the optional items card's panel UI is in review). Finalise used to have the model write the whole list (match, scale,
+Built from **`docs/structured-ingredients.md`**. Finalise used to have the model write the whole list (match, scale,
 convert, add up and split every ingredient across the week's recipes), and on 16 Nov 2026 that ran out of tokens
 or time on both attempts. The proposal makes each recipe's ingredients structured data in its frontmatter (amount,
 unit from a fixed list, name, note, and the catalogue `item`), the only place they live: the page's ingredient

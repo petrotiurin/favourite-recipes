@@ -330,16 +330,29 @@ On the **At home** tab every row is a fill bar:
   tray already holds. The foot says "No thumb: kept for the coming week." next to a solid "Done", always enabled, which sends every thumb in
   one message. While it is open the input says "Or type an answer", the tray folds to its head line on a phone, and the tray's Finalise list
   button scrolls to the card instead of starting again. Once answered it fades to 40% like an old question; its recipe links still work.
+- **Optional items card** (`.chat-review.chat-optional`, editors, at the end of Finalise list): the drafts review card's look (`--surface`,
+  1px `--border`, 14px radius, rows divided by `--line`), headed "Optional this week" with a muted line "Only garnishes and extras. Everything
+  else is on the list." One row per item that only optional ingredients need: the photos of the recipes it is for (up to three 28px rounded
+  squares, overlapping), the item's name (semibold) over a muted line with its amount and the recipe titles ("5ml · for Satay Salmon"), and a
+  square **tick box** at 44px tap size: ticked = kept (filled `--accent-strong` with an `--on-accent` check), unticked = an `--icon-muted`
+  outline and the name struck through in muted ink. Every row starts ticked (or as an earlier answer left it). The foot says "Ticked items stay
+  on the list." next to a solid **Done**, always enabled, which sends every answer at once; the editor's message reads "Leaving off: sesame seeds
+  and chilli oil." (or "Keeping all the optional items."). It behaves like the drafts card: "Or type an answer" while open, the tray's Finalise
+  list scrolls to it, it fades to 40% once answered. Dropped items are simply off this week's list; kept ones show "optional" as their note on
+  the shopping page.
 - **Plan tray** (`.chat-tray`, editors only, between the log and the input): a hairline-topped strip. A small-caps head line "Tray · 8 changes ·
   until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
   week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button
-  (`.save-button` look): **Finalise list** while the tray changes next week or the servings and no current list exists, "Building the list…"
-  while the agent works, **Save to site (n)** when ready. On a phone the tray folds itself to its header line while a reply streams and when the reader scrolls up, and opens on a tap, a new card or the end of the turn. A fold the reader chose (a tap on the head) is theirs: it stays folded for the rest of the tab's visit (`sessionStorage`), across turns, sent messages and pages, until they tap it open; while it is, a change to the tray (a card added or dropped) shows as a small accent dot (`.tray-dot`) after "Tray · n changes" instead of opening it. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most 63% of the panel / 26rem: enough for a full row of cards, ~16rem, so no card is ever clipped by the button) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
+  (`.save-button` look): **Finalise list** while the tray changes next week and the list hasn't been reviewed (or a change brought a new flag or optional item),
+  "Reviewing the list…" while the model reviews it, **Save to site (n)** when ready. On a phone the tray folds itself to its header line while a reply streams and when the reader scrolls up, and opens on a tap, a new card or the end of the turn. A fold the reader chose (a tap on the head) is theirs: it stays folded for the rest of the tab's visit (`sessionStorage`), across turns, sent messages and pages, until they tap it open; while it is, a change to the tray (a card added or dropped) shows as a small accent dot (`.tray-dot`) after "Tray · n changes" instead of opening it. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most 63% of the panel / 26rem: enough for a full row of cards, ~16rem, so no card is ever clipped by the button) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
   when it closes or a message is sent. A card has the kind as a kicker (New in the draft purple, Next week teal, Switch accent, the rest muted),
   a serif title, a muted sub line, "Added by Name: reason", × to drop (a round button on the corner), and quiet text buttons: **Save now** (quick
   fixes only) and **New photo**. A newly added card gets the accent border on `--current-soft` for a few seconds and the row scrolls to it. A
   new recipe shows "Making the photo…" on its photo until ready; tapping it opens its staged ingredients and steps, tapping the list card
-  previews it by aisle. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
+  previews it by aisle. The **List card** is live: the server rebuilds it with every tray change ("52 items for 5 recipes", sub "Reviewed" or
+  "Changed since the review: Finalise list"); it has no ×, since it follows next week; its preview starts with the patches made at review
+  ("Changes: round lime up; …"), and a patch that no longer applies shows as a quiet italic `--text-muted` line (`.tray-note`) on the card.
+  A **Catalogue** card (muted kicker) holds ingredient catalogue changes from the review. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
   the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
   button that applies.
 - **Reading entries in the tray** (`.tray-reading`): photos being read anywhere in the household show above the cards as quiet italic `--text-muted`

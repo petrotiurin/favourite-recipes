@@ -310,7 +310,7 @@ const STATUS = {
   stage_remove_draft: "Adding that to the tray…",
   stage_set_week_recipes: "Adding that to next week in the tray…",
   stage_start_next_week: "Adding the switch to the tray…",
-  stage_update_shopping_list: "Building the shopping list…",
+  stage_shopping_list_edits: "Updating the shopping list…",
   stage_set_shopping_servings: "Adding that to the tray…",
   stage_stocktake: "Adding what's at home to the tray…",
   get_tray: "Reading next week's recipes…",
@@ -348,10 +348,6 @@ export function statusFor(name, { args, raw = "", titles } = {}) {
       return named ? `Promoting ${named} in the tray…` : STATUS.stage_promote_recipe;
     case "stage_remove_draft":
       return named ? `Adding the removal of ${named} to the tray…` : STATUS.stage_remove_draft;
-    case "stage_update_shopping_list": {
-      const items = (raw.match(/"recipes"\s*:/g) || []).length;
-      return items ? `Building the shopping list: ${items} item${items === 1 ? "" : "s"} so far…` : STATUS.stage_update_shopping_list;
-    }
     default:
       return STATUS[name] || "Working on it…";
   }

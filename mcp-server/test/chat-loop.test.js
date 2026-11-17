@@ -182,15 +182,14 @@ test("a stream always ends with content or an error event, never empty", async (
   }
 });
 
-test("status lines say what is happening: the recipe being read, being added, the list growing", async () => {
+test("status lines say what is happening: the recipe being read, being added, the list updated", async () => {
   const { statusFor } = await import("../lib/chat.js");
   const titles = new Map([["avocado-toast", "Avocado Toast"]]);
   assert.equal(statusFor("get_recipe", { args: { slug: "avocado-toast" }, titles }), "Reading Avocado Toast…");
   assert.equal(statusFor("get_recipe", { raw: '{"slug": "avocado-toast"', titles }), "Reading Avocado Toast…", "from half-streamed arguments");
   assert.equal(statusFor("stage_create_recipe", { raw: '{"title": "Lemon Garlic Pasta", "course": ["Din' }), "Adding Lemon Garlic Pasta to the tray…");
   assert.equal(statusFor("stage_create_recipe", { raw: '{"cou' }), "Adding the recipe to the tray…");
-  assert.equal(statusFor("stage_update_shopping_list", { raw: '{"sections":[{"name":"Produce","items":[{"name":"Onion","recipes":["a"]},{"name":"Lemon","recipes":["a","b"]},{"na' }), "Building the shopping list: 2 items so far…");
-  assert.equal(statusFor("stage_update_shopping_list", { raw: '{"sec' }), "Building the shopping list…");
+  assert.equal(statusFor("stage_shopping_list_edits", { raw: '{"edits":[{"round_up":"lime"}' }), "Updating the shopping list…");
   assert.equal(statusFor("no_such_tool"), "Working on it…");
   const slug = "avocado-toast";
   const evs = await turn([{ text: "", calls: [{ name: "get_recipe", arguments: { slug } }] }, { text: "Done.", calls: [REPLIES] }]);
