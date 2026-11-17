@@ -813,7 +813,7 @@ export async function finaliseState(caller) {
   if (!tray) return null;
   const { results } = await replay(tray.items, caller, await warmReads());
   const state = listState(tray.items, results);
-  return { ...state, problems: tray.items.filter((i) => i.error || i.clash).length };
+  return { ...state, items: tray.items, problems: tray.items.filter((i) => i.error || i.clash).length };
 }
 
 /**

@@ -7,6 +7,8 @@
 // this-week-only `drop` patches on the list card (lib/tray.js markReviewed), never catalogue changes.
 import { recipeSummaries } from "./recipes.js";
 import { cardFor } from "./chat-ui.js";
+import { slugify } from "./recipe-format.js";
+import { signedPhotoUrl } from "./tray-store.js";
 
 export const ANSWERS = ["keep", "drop"];
 export const MAX_OPTIONAL_ITEMS = 30;
@@ -16,10 +18,17 @@ export const MAX_OPTIONAL_ITEMS = 30;
  * is the built list's optional items (listState().built.optional, after earlier drops: those are off the list, so they come back unticked).
  * `edits` are the list card's patches: an item already dropped by an answer is shown unticked.
  */
-export async function optionalCard(optional, edits = [], dropped = []) {
+export async function optionalCard(optional, edits = [], dropped = [], trayItems = []) {
   const all = [...optional, ...dropped].slice(0, MAX_OPTIONAL_ITEMS);
   if (!all.length) return null;
   const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
+  // a recipe that is new in the tray isn't in the book yet: its title and its staged photo come from its tray card
+  const staged = new Map();
+  const wanted = new Set(all.flatMap((o) => o.recipes || []).filter((slug) => !book.has(slug)));
+  for (const i of trayItems.filter((x) => x.kind === "new" && wanted.has(slugify(x.op.title)))) {
+    const url = i.photo?.status === "ready" && i.photo.path ? await signedPhotoUrl(i.photo.path).catch(() => "") : "";
+    staged.set(slugify(i.op.title), { title: i.op.title, image: url || "" });
+  }
   const droppedIds = new Set(edits.filter((e) => e.drop).map((e) => e.drop));
   return {
     items: all.map((o) => ({
@@ -29,7 +38,8 @@ export async function optionalCard(optional, edits = [], dropped = []) {
       recipes: (o.recipes || []).map((slug) => {
         const r = book.get(slug);
         const card = r ? cardFor(r) : null;
-        return { slug, title: card?.title || r?.title || slug.replace(/-/g, " "), image: card?.image || "" };
+        const s = staged.get(slug);
+        return { slug, title: card?.title || r?.title || s?.title || slug.replace(/-/g, " "), image: card?.image || s?.image || "" };
       }),
       ...(droppedIds.has(o.item) ? { answer: "drop" } : {}),
     })),

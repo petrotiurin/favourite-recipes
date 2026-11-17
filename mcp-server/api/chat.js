@@ -726,7 +726,7 @@ export async function POST(request) {
         };
         const optionalStep = async (line) => {
           const st = await finaliseState(caller);
-          const card = st?.optionalOpen?.length ? await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional) : null;
+          const card = st?.optionalOpen?.length ? await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items) : null;
           if (card) {
             const text = [line, optionalLine(card.items.length)].filter(Boolean).join(" ");
             return { text, ui: { optional: card }, event: { type: "optional", ...card } };
