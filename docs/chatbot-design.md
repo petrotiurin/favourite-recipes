@@ -539,7 +539,9 @@ unit from a fixed list, name, note, and the catalogue `item`), the only place th
 list, the servings selector, `scale_recipe` and the shopping list are generated from it. An ingredient catalogue
 in the repo (`data/ingredients.json`) holds aisles, shopping units and conversions; `buildShoppingList` is a plain
 sum in today's `shopping-list.json` format. Finalise then stages the built list with no model call, and the model
-only reviews it with small patches (pack sizes, merges, notes, the user's asks).
+only reviews it with small patches (pack sizes, merges, notes, the user's asks). The tray rebuilds the list on
+every change, so it is never out of date; Finalise list becomes a short review (the promote question, the model's
+review when something is flagged, then one card asking which optional items to keep) before Save.
 
 ## 8. Safety, abuse and cost
 

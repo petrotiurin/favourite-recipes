@@ -4,8 +4,9 @@ Status: **proposed, not built** (phase 7 of `docs/chatbot-design.md`). Each reci
 data in its frontmatter, the only place a recipe's ingredients live; the page's ingredient list, the servings
 selector, `scale_recipe`, the "Cook with Claude" prompt and the shopping list are all generated from it. The
 shopping list becomes a sum the server computes with an ingredient catalogue, and the model only reviews it.
-Replaces step 2 of Finalise (`docs/chatbot-design.md` 7.1) and step 3 of `mcp-server/workflows/plan-recipes.md`,
-for both the chat and `/mcp`. The list format (`shopping-list.json`), `shopping.js`, the stocktake and the shop
+The tray keeps the list current on every change, so Finalise list becomes a short review (section 6). Replaces the
+list-building step of Finalise and the "out of date" rule (`docs/chatbot-design.md` 7.1) and step 3 of
+`mcp-server/workflows/plan-recipes.md`, for both the chat and `/mcp`. The list format (`shopping-list.json`), `shopping.js`, the stocktake and the shop
 workflows do not change.
 
 The goal is the simplest, least error-prone design for both the model and the server code: nothing parses free
@@ -46,9 +47,10 @@ to stop the two drifting apart. Storing the ingredients as data removes both the
         │ unknown item / no conversion → the model answers on that recipe's card     (the only source)
         ▼
  generated from it:  the page's ingredient list · servings selector · scale_recipe · Cook with Claude
-                     · duplicate check · buildShoppingList (sum over next week, at Finalise)
+                     · duplicate check · buildShoppingList (sum over next week)
                                                      │
- Finalise ──▶ list built and staged (no model) ──▶ model reviews: small patches (pack sizes, merges, notes)
+ every tray change ──▶ list rebuilt and staged (no model) ──▶ List card always current
+ Finalise list ──▶ promote question? ──▶ model review (patches) ──▶ optional items card ──▶ Save to site
 ```
 
 ## 1. Ingredients as data
@@ -169,7 +171,9 @@ A pure function in `lib/shopping-list.js`. For each next-week recipe and each in
 
 Then emit today's format: `name` and `section` from the catalogue, `quantity` as the total in the item's unit,
 `recipes` = the slugs that contributed, `amounts` = each one's share. Staples and amount-less ingredients go on
-without a quantity, merged per item. An item used only as `optional` gets the note "optional". The existing
+without a quantity, merged per item. **Optional ingredients are on the list by default**: an item that only
+optional ingredients need is marked optional (shown as "optional" on the row), and the user decides at the end of
+Finalise whether to keep it (section 6). The existing
 validation (no kitchen measures, shares adding up, every recipe covered) holds by construction and stays as a
 safety net. A recipe with no ingredients yet contributes nothing and is named in the review instead of failing
 the list (today it fails the "no item is for X" check).
@@ -274,22 +278,78 @@ The same shapes: the `catalogue` field on `create_recipe` / `update_recipe`, and
 in `batch_changes` (`{ action: "update_catalogue", changes: [...] }`) for review fixes, all through
 `applyCatalogueChange`. The `plan-recipes` workflow describes both.
 
-## 6. Finalise becomes "build, then review"
+## 6. The list in the tray, and Finalise list
 
-1. The promote question (`docs/chatbot-design.md` 7.1, step 1) is unchanged.
-2. The server runs `buildShoppingList` over what next week will be after Save, stages the list itself (no model
-   call), and the List card appears straight away.
-3. The model gets a short review turn: the staged list summarised (items, totals) plus what deserves a look:
-   fractional counts ("2.5 limes"), close names on different items ("cherry tomatoes" / "tomatoes"), very large
-   totals, recipes with no ingredients. It answers with **patches**, not a list:
+### The list is rebuilt on every tray change (S5)
+
+Building the list is free, so the tray never holds an out-of-date list. Every tray write that changes what next
+week will be after Save (a new recipe, adding to or taking off next week, the switch, an ingredient edit of a
+next-week recipe, a dropped item) rebuilds it with `buildShoppingList` inside the same tray write, under the tray's
+`version` check, so two people editing at once are handled as today. Then:
+
+- the **List card** appears as soon as the tray changes next week ("86 items for 5 recipes", tap to preview by
+  aisle) and updates with every change; it is never "out of date";
+- the stored **review patches** and **optional-item answers** (below) are re-applied by item id; one whose item is
+  gone is dropped and the card says so ("1 edit no longer applies: cherry tomatoes was removed");
+- **planned servings** can be staged at any time, against the current list: the special case for servings asked for
+  before the list exists (`servingsBeforeList` / `servingsFromRows` in `lib/tools.js`, and the follow-up `ask_user`
+  after Finalise) goes away;
+- **Save now** gets an exact rule: a quick fix is allowed when the rebuild shows it doesn't change the list
+  (`saveNowRule` in `lib/tray.js` today has to classify the item instead);
+- a staged **"At home" (stocktake) card** is checked against the rebuilt list (items by name), not against the list
+  as it was when the card was staged, so rebuilds don't make Save refuse it with a 409.
+
+The bot no longer says "tap Finalise list to build the shopping list" after every addition, and the tray's
+"Building the list…" state goes away.
+
+### Finalise list: review, then Save
+
+The tray button keeps its name, **Finalise list**: it now means finishing the list rather than building it. While
+collecting, the button is Finalise list; after the review it is **Save to site (n)**. Finalise list runs, in order:
+
+1. **The promote question** (`docs/chatbot-design.md` 7.1, step 1), only if next week already has recipes, followed by
+   the drafts review card. Unchanged.
+2. **The model's review** of the built list, only when the server flags something: fractional counts ("2.5 limes"),
+   close names on different items ("cherry tomatoes" / "tomatoes"), very large totals, recipes with no ingredients.
+   With nothing flagged there is no model call. The model answers with **patches**, not a list:
    `stage_shopping_list_edits({ edits: [{ round_up: "lime" }, { merge: ["tomatoes", "cherry-tomatoes"] },
    { note: { item: "chicken-thighs", text: "skinless" } }, { move: { item: "tahini", section: "Tins & jars" } }] })`,
-   applied and re-validated by the server. A few hundred tokens instead of ~5k per attempt; a bad patch is refused
-   on its own without losing the list.
-4. A patch that is generally true can be marked `remember: true` and becomes a catalogue change (section 5), so the
-   question isn't asked again next week.
+   applied and re-validated by the server. A few hundred tokens instead of ~5k per attempt; a bad patch is refused on
+   its own without losing the list. A patch that is generally true can be marked `remember: true` and becomes a
+   catalogue change (section 5). The tray shows "Reviewing the list…" while the model runs.
+3. **The optional items card (S6), at the end.** If the list has optional items, the server shows one card listing
+   them, each ticked (kept) by default; the user unticks what they don't want this week and taps **Done**. It works
+   like the drafts review card (`lib/draft-review.js`, `.chat-review` in `templates/chat.js`): shown by the server
+   with no model call, `POST /chat { action: "review_optional", answers: { item: "keep" | "drop" } }`, once only while
+   the card is the open question, any other value refused. The answers are stored as `drop` patches for this week
+   only (never catalogue changes) and stored as the editor's message in words ("Leaving off: sesame seeds, chilli
+   oil."). The model has a UI tool `review_optional` that shows the same card, and is told never to ask about optional
+   items one by one.
 
-The user's own asks still go through the model ("skip the fancy salt this week", "double the rice"), as patches.
+Then **Save to site**.
+
+**A change after the review usually keeps Save.** The list rebuilds and the patches and answers are re-applied.
+Finalise list comes back only if the change brings something the user hasn't seen: a new optional item, or a new
+item the server flags for review. Removing a recipe or editing an amount just updates the List card.
+
+The user's own asks still go through the model at any time ("skip the fancy salt this week", "double the rice"), as
+patches.
+
+### What changes in the UI
+
+- **The tray button:** Finalise list (collecting) → Save to site (n) (reviewed). No out-of-date state.
+- **The List card** is live while collecting, with a note when an edit no longer applies.
+- **A new optional items card**, in the style of the drafts review card: rows with a tick each, all ticked to start,
+  one Done. `design.md` gets an entry for it.
+- **Tray states:** "Building the list…" goes; "Reviewing the list…" shows only during a model review.
+
+The site and the shopping page don't change.
+
+### Over `/mcp`
+
+`update_shopping_list` with `build: true` builds the list in the batch. The `plan-recipes` workflow asks the
+optional-items question with `AskUserQuestion` (one multi-select question listing the optional items, all kept by
+default) before its one `batch_changes`, and passes the answers as `drop` edits.
 
 ## What stays the model's job, what moves to code
 
@@ -334,19 +394,27 @@ Recipes with no ingredients yet ("Ingredients not yet recorded") get `ingredient
 
 ## Code changes
 
+- **Chat panel:** `templates/chat.js` (the live List card, the optional items card, the tray button states).
 - **Site:** `build.js` (reads `ingredients`, checks `item` against the catalogue, renders the list),
   `templates/recipe.js` (renders lines and `data-qty` from the data, `recipePlainText`), `templates/quantities.js`
   (ingredient tagging removed), `templates/servings.js` (reads `data-qty` as now; ranges from the data).
 - **Server (`mcp-server/lib`):** `recipe-format.js` (the ingredient schema rules, the line renderer, `renderFrontmatter`
   for object lists), `recipes.js` (read/write `ingredients`, index names from the data), `tools.js` (ingredient schema,
   the `catalogue` field, `stage_shopping_list_edits`, `update_catalogue`), new `catalogue.js`, `shopping-list.js`
-  (`buildShoppingList`), `scaling.js` (scales `amount`), `tray.js` (card lines, Finalise builds the list),
+  (`buildShoppingList`), `scaling.js` (scales `amount`), `tray.js` (card lines, the list rebuilt on every tray write,
+patches and optional answers re-applied, the out-of-date hash removed, `saveNowRule` from the rebuild, the stocktake
+card checked against the rebuilt list), new `optional-review.js` (the optional items card, next to `draft-review.js`),
+`chat-prompt.js` and `tools.js` (`servingsBeforeList` / `servingsFromRows` removed, `review_optional`),
   `operations.js` (the new operations), the photo reader's output schema (`photo-reader-prompt.js`,
   `photo-reader.js`) to the new fields.
 - **Docs and workflows:** the `add-recipe` skill, `workflows/plan-recipes.md` (step 3 becomes "review the built
-  list"), the root `CLAUDE.md` (frontmatter schema, shopping list), `design.md` if the rendered line changes.
+  list", plus the optional-items question; the "In chat" section loses the Finalise build and the servings special
+  case), the root `CLAUDE.md` (frontmatter schema, shopping list, the chat's Finalise), `docs/chatbot-design.md` 7.1
+  (Finalise and the out-of-date rule), `design.md` (the optional items card, the live List card, and the rendered
+  ingredient line if it changes).
 - **Tests:** the line renderer (site and server agree), conversions, `buildShoppingList`, `applyCatalogueChange`,
-  the build's catalogue check.
+  the build's catalogue check, the tray rebuild (patches and answers re-applied, Finalise coming back only for new
+  optional or flagged items), the optional items card's route.
 
 ## Costs and risks
 
@@ -362,7 +430,8 @@ Recipes with no ingredients yet ("Ingredients not yet recorded") get `ingredient
 
 1. **Catalogue, schema, renderer and migration**, in one PR: the site renders from the data, the tools write it.
    The model still writes the shopping list for now.
-2. **`buildShoppingList` and Finalise "build, then review"**, with `stage_shopping_list_edits`.
+2. **`buildShoppingList`, the rebuild on every tray change, and Finalise list as review**: `stage_shopping_list_edits`
+   and the optional items card.
 3. **Catalogue write-back** from review patches (`remember: true`).
 
 Meanwhile, two small server changes unblock today's flow: drop `amounts` shares of 0 (and their slugs) instead of
@@ -377,6 +446,7 @@ rejecting, and convert tbsp/tsp quantities to ml instead of rejecting (`validate
   page's list is rendered from it.
 - **S4.** *Decided:* catalogue changes made while writing a recipe ride on that recipe's tray card; those from the
   Finalise review go on one Catalogue card (section 5).
-- **S5.** Since building the list is free, should the server rebuild the staged list on every tray change (keeping
-  review patches by item id) instead of marking it out of date and asking for Finalise again?
-- **S6.** Optional ingredients on the shopping list: listed with "optional" (proposed), or left off?
+- **S5.** *Decided:* the server rebuilds the staged list on every tray change, re-applying review patches and
+  optional-item answers by item; Finalise list comes back only for new optional or flagged items (section 6).
+- **S6.** *Decided:* optional ingredients go on the list by default; at the end of Finalise list one card asks which to
+  keep, all kept unless unticked (section 6). The button keeps the name Finalise list.
