@@ -9,7 +9,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { config } from "./config.js";
 import { ChangeSet, assertAllowedPath, branchSnapshot } from "./github.js";
-import { slugify, parseRecipe, renderIngredient, ingredientNamesFromSection } from "./recipe-format.js";
+import { slugify, parseRecipe, ingredientsOf } from "./recipe-format.js";
+import { ingredientText } from "./ingredient-line.js";
 import { listRecipes, isNextWeek, isDraft, recipeSummaries, removeDraft, UserError } from "./recipes.js";
 import { ShoppingListError } from "./shopping-list.js";
 import { runOperation } from "./operations.js";
@@ -482,9 +483,8 @@ export async function findClashes(items) {
 
 async function photoSubject(item) {
   if (item.kind === "new") return { title: item.op.title, ingredients: item.op.ingredients || [], slug: slugOf(item) };
-  const { data, sections } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
-  const names = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
-  return { title: item.op.title || data.title, ingredients: item.op.ingredients || names, slug: item.op.slug };
+  const { data } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
+  return { title: item.op.title || data.title, ingredients: item.op.ingredients || ingredientsOf(data), slug: item.op.slug };
 }
 
 /** Changes one item inside the tray (retrying on a version clash); does nothing if the item or the tray is gone. Returns the item. */
@@ -549,7 +549,7 @@ export function saveNowRule(item, inNext) {
 
 // --- what the panel and the model are told --------------------------------------------------------------------------------
 
-const lineOfIngredient = (i) => renderIngredient(i).replace(/^- /, "").replace(/\*\*/g, "");
+const lineOfIngredient = (i) => ingredientText(i);
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 
 /**

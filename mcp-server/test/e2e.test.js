@@ -16,7 +16,7 @@ process.env.EDITORS = "Owner@Example.com, partner@example.com";
 // --- fake GitHub: repo files live in a Map, commits update it -------------
 const ROOT = new URL("../../", import.meta.url);
 const files = new Map();
-for (const dir of ["recipes", "images/recipes"]) {
+for (const dir of ["recipes", "images/recipes", "data"]) {
   for (const f of readdirSync(new URL(dir + "/", ROOT))) files.set(`${dir}/${f}`, readFileSync(new URL(`${dir}/${f}`, ROOT)));
 }
 // Start from a repo where nothing is a draft or in a week, whatever the real recipes are marked as right now.
@@ -159,7 +159,7 @@ const base = {
   serves: 4,
   calories: 320,
   ingredients: [
-    { quantity: "200g", name: "red lentils", note: "rinsed" },
+    { amount: 200, unit: "g", name: "red lentils", note: "rinsed" },
     { name: "Salt", note: "to taste" },
   ],
   instructions: ["1. Simmer the **red lentils** for 20 minutes", "Season with **Salt**"],
@@ -168,7 +168,7 @@ const base = {
 test("schema rejects bad course and missing image", async () => {
   const r1 = await client.callTool({ name: "create_recipe", arguments: { ...base, course: ["Brunch"], image: { url: "https://img.example/dish.png" } } });
   assert.ok(r1.isError);
-  const r2 = await client.callTool({ name: "create_recipe", arguments: { ...base, image: {} } });
+  const r2 = await client.callTool({ name: "create_recipe", arguments: { ...base, catalogue: [{ add: { id: "red-lentils", name: "Red lentils", section: "Pantry", unit: "g" } }], image: {} } });
   assert.ok(r2.isError);
   assert.match(text(r2), /exactly one/);
 });
@@ -176,11 +176,16 @@ test("schema rejects bad course and missing image", async () => {
 test("rejects ingredients without quantity", async () => {
   const r = await client.callTool({ name: "create_recipe", arguments: { ...base, ingredients: [{ name: "lentils" }], image: { url: "https://img.example/dish.png" } } });
   assert.ok(r.isError);
-  assert.match(text(r), /needs a quantity/);
+  assert.match(text(r), /needs an amount/);
 });
 
 test("creates a recipe with image from URL in a single commit", async () => {
-  const r = await client.callTool({ name: "create_recipe", arguments: { ...base, image: { url: "https://img.example/dish.png" } } });
+  // red lentils aren't in the catalogue yet: without a catalogue change the recipe is refused, with one it adds them (docs/structured-ingredients.md 4, 5)
+  const refused = await client.callTool({ name: "create_recipe", arguments: { ...base, image: { url: "https://img.example/dish.png" } } });
+  assert.ok(refused.isError);
+  assert.match(text(refused), /no catalogue item for "red lentils"\..*add it to the catalogue/);
+  const catalogue = [{ add: { id: "red-lentils", name: "Red lentils", section: "Pantry", unit: "g" } }];
+  const r = await client.callTool({ name: "create_recipe", arguments: { ...base, catalogue, image: { url: "https://img.example/dish.png" } } });
   assert.ok(!r.isError, text(r));
   const md = files.get("recipes/test-lentil-soup.md").toString();
   assert.equal(md, `---
@@ -193,12 +198,10 @@ total_mins: 40
 serves: 4
 calories: 320
 draft: true
+ingredients:
+  - { amount: 200, unit: g, name: red lentils, note: rinsed, item: red-lentils }
+  - { name: Salt, note: to taste, item: salt }
 ---
-
-## Ingredients
-
-- 200g **red lentils**, rinsed
-- **Salt**, to taste
 
 ## Instructions
 
@@ -208,7 +211,8 @@ draft: true
   const meta = await sharp(files.get("images/recipes/test-lentil-soup.jpg")).metadata();
   assert.equal(meta.format, "jpeg");
   assert.equal(Math.max(meta.width, meta.height), 1600);
-  assert.deepEqual(commitLog.at(-1).paths.sort(), ["images/recipes/test-lentil-soup.jpg", "recipes/test-lentil-soup.md"]);
+  assert.deepEqual(commitLog.at(-1).paths.sort(), ["data/ingredients.json", "images/recipes/test-lentil-soup.jpg", "recipes/test-lentil-soup.md"], "the catalogue change lands in the same commit");
+  assert.match(text(r), /New in the catalogue: Red lentils · Pantry/);
 });
 
 test("promote_recipe turns a draft into a regular recipe and leaves its weeks alone", async () => {
@@ -258,7 +262,7 @@ test("weeks: set_week_recipes is one minimal commit, idempotent, works on drafts
   assert.ok(!r.isError, text(r));
   assert.equal(commitLog.length, commits + 1);
   assert.deepEqual(commitLog.at(-1).paths, ["recipes/steamed-rice.md"]);
-  assert.equal(files.get("recipes/steamed-rice.md").toString(), before.replace(/\n---\n/, "\ncurrent: true\n---\n"));
+  assert.equal(files.get("recipes/steamed-rice.md").toString(), before.replace(/\ningredients:\n/, "\ncurrent: true\ningredients:\n"));
 
   const again = await client.callTool({ name: "set_week_recipes", arguments: { week: "this", slugs: ["steamed-rice"], add: true } });
   assert.ok(!again.isError);
@@ -275,7 +279,7 @@ test("weeks: set_week_recipes is one minimal commit, idempotent, works on drafts
   const r2 = await client.callTool({ name: "create_recipe", arguments: { ...base, title: "Test Draft Salad", week: "next", image: { url: "https://img.example/dish.png" } } });
   assert.ok(!r2.isError, text(r2));
   assert.match(text(r2), /next week: refresh the shopping list/);
-  assert.match(files.get("recipes/test-draft-salad.md").toString(), /^next: true\ndraft: true\n---$/m);
+  assert.match(files.get("recipes/test-draft-salad.md").toString(), /^next: true\ndraft: true\ningredients:$/m);
   await client.callTool({ name: "set_week_recipes", arguments: { week: "next", slugs: ["steamed-rice"], add: true } });
 
   // Order: this week (drafts first), then next week, then the rest (alphabetical within each).
@@ -380,7 +384,7 @@ test("shopping list covers next week only, and stays as it is after the switch",
   assert.match(text(sw2), /left this week: steamed-rice/);
   assert.match(text(sw2), /drafts back in the book .*: test-draft-salad/);
   assert.deepEqual(await thisWeek(), ["harissa-tuna-pitta"]);
-  assert.match(files.get("recipes/test-draft-salad.md").toString(), /^draft: true\n---$/m);
+  assert.match(files.get("recipes/test-draft-salad.md").toString(), /^draft: true\ningredients:$/m);
   assert.ok(files.has("shopping-list.json"));
   await client.callTool({ name: "set_week_recipes", arguments: { week: "this", slugs: ["harissa-tuna-pitta"], add: false } });
 });
@@ -777,6 +781,6 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
 });
 
 test("no commit ever touches a path outside recipes/, images/recipes/ and shopping-list.json", () => {
-  for (const c of commitLog) for (const p of c.paths) assert.match(p, /^(recipes\/[a-z0-9-]+\.md|images\/recipes\/[a-z0-9-]+\.(jpg|webp)|shopping-list\.json)$/);
+  for (const c of commitLog) for (const p of c.paths) assert.match(p, /^(recipes\/[a-z0-9-]+\.md|images\/recipes\/[a-z0-9-]+\.(jpg|webp)|shopping-list\.json|data\/ingredients\.json)$/);
   assert.equal(files.get("build.js").toString(), "// build");
 });

@@ -68,8 +68,8 @@ export function chatGuide() {
  */
 export function recipeRules() {
   const text = WORKFLOWS["plan-recipes"].text;
-  const i = text.indexOf("**1. Every ingredient");
+  const i = text.indexOf("**1. Ingredients are fields");
   const j = text.indexOf("**Photos.**", i);
-  if (i === -1 || j === -1) throw new Error('plan-recipes.md has no recipe-writing rules ("**1. Every ingredient" … "**Photos.**")');
+  if (i === -1 || j === -1) throw new Error('plan-recipes.md has no recipe-writing rules ("**1. Ingredients are fields" … "**Photos.**")');
   return text.slice(i, j).trim();
 }

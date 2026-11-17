@@ -91,18 +91,19 @@ Skip to 2 if there are no new recipes.
 
 These are the mistakes that cost extra round-trips: a rejected recipe, or warnings to fix afterwards. Check every recipe against this list **before** the dry run. The recipes MCP server's instructions and tool schemas have the full rules; these are the ones that matter most.
 
-**1. Every ingredient has a `quantity`, or a `note` containing "to taste" or "to serve". Otherwise the whole recipe is rejected.**
-Sources often list seasoning, oil and garnish without amounts. Never leave both fields empty:
+**1. Ingredients are fields, not text: `{ amount, unit, name, note, optional }`. Every ingredient has an `amount`, or a `note` containing "to taste" or "to serve". Otherwise the whole recipe is rejected.**
+`amount` is a number (decimals: `0.5`, `0.75`, never "½") or a range `[2, 3]`. `unit` is one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, pinch, handful, juice, zest`, or none for a count ("4 salmon fillets"). **One measure per ingredient**, metric where the source gives it: "1 cup (200g) rice" is `{ amount: 200, unit: "g", name: "rice" }`; oz/lb are converted to g. "Juice of 1 lime" is `{ amount: 1, unit: "juice", name: "lime" }`. Garnishes and "if using" extras get `optional: true` (never "optional" in the note). The page renders the line, bolds the name and writes the fractions. Sources often list seasoning, oil and garnish without amounts. Never leave both `amount` and the note empty:
 
 | Source says | Bad (rejected) | Good |
 | --- | --- | --- |
-| "olive oil, for brushing" | `{ name: "olive oil", note: "for brushing" }` | `{ quantity: "1 tbsp", name: "olive oil", note: "for brushing" }` if you can estimate an amount, else `{ name: "olive oil", note: "for brushing, to taste" }` |
+| "olive oil, for brushing" | `{ name: "olive oil", note: "for brushing" }` | `{ amount: 1, unit: "tbsp", name: "olive oil", note: "for brushing" }` if you can estimate an amount, else `{ name: "olive oil", note: "for brushing, to taste" }` |
 | "salt and pepper" | `{ name: "salt and pepper" }` | `{ name: "salt", note: "to taste" }`, `{ name: "black pepper", note: "to taste" }` |
-| "chives, to garnish" | `{ name: "chives", note: "to garnish" }` | `{ quantity: "Small handful of", name: "chives", note: "chopped, to serve" }` or `{ name: "chives", note: "chopped, to serve" }` |
+| "chives, to garnish" | `{ name: "chives", note: "to garnish" }` | `{ amount: 1, unit: "handful", name: "chives", note: "chopped, to serve", optional: true }` or `{ name: "chives", note: "chopped, to serve", optional: true }` |
+| "2–3 tbsp curry paste" | `{ amount: "2-3 tbsp", … }` | `{ amount: [2, 3], unit: "tbsp", name: "curry paste" }` |
 
-"to garnish", "for brushing", "optional" and "as needed" do **not** count: the note must literally contain "to taste" or "to serve".
+"to garnish", "for brushing" and "as needed" do **not** count: the note must literally contain "to taste" or "to serve".
 
-**2. One ingredient per line.** Split combined lines ("olive oil, salt and pepper" → three ingredients). The `name` is plain text: no `**`, no quantity, no prep. Those go in `quantity` and `note`.
+**2. One ingredient per entry, each bought as a catalogue item.** Split combined lines ("olive oil, salt and pepper" → three ingredients). The `name` is plain text: no `**`, no amount, no prep (those go in `amount`, `unit` and `note`). The server fills each ingredient's `item` (what it's bought as, from the ingredient catalogue) from its name, and checks the amount converts to how it's bought. When it can't, the write comes back with a precise problem and the fix, e.g. *No catalogue item for "gochujang". Closest: curry-paste, miso.* or *capers has no conversion from tbsp*: answer it once, for that recipe, by setting `item` on the ingredient (an existing item) and/or adding a `catalogue` change to the same write (`catalogue: [{ add: { id: "gochujang", name: "Gochujang", section: "Tins & jars", unit: "g", per: { tbsp: 18 } } }]`, `{ alias: { item, name } }` or `{ set: { item, per: { tbsp: 10 } } }`). Sections are `Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen`; units g, ml, count or a named unit; `per` is how many of the shopping unit one recipe unit is (grams per tbsp, ml per can, limes per "juice of").
 
 **3. Bold every mention of an ingredient in every step, including later steps and passing references.** The server warns about any ingredient name that appears in a step without `**`. Don't write steps first and bold some of them afterwards: bold as you write.
 
@@ -125,7 +126,7 @@ Bold the ingredient noun only, not the dish ("the batter", "the salad", "the mea
 
 Fractions of a listed amount ("half the **sugar**", "the remaining **sugar**") are fine. So are times, temperatures, pan sizes and per-item sizes ("about 50g each").
 
-**5. Other format rules.** One action per step, no numbering (the server numbers them). Quantities are numerals ("2", "½", "150g"), never words ("two"). `serves` and `calories` (kcal per serving) are required: estimate them if the source doesn't give them.
+**5. Other format rules.** One action per step, no numbering (the server numbers them). A split goes in the ingredient's `note` ("1½ tbsp for the salmon, ½ for the pan"). `serves` and `calories` (kcal per serving) are required: estimate them if the source doesn't give them.
 
 **Photos.** Every recipe needs a hero photo, a real one or a generated one; never invent a placeholder. Don't ask the user for photos by default.
 - A recipe from a **link** with a photo of the dish: use it, `create_recipe`'s `image: { url }` (usually the page's `og:image`). A real photo always wins.

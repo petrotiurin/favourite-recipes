@@ -1,5 +1,5 @@
 const { layout } = require("./layout");
-const { markScalableQuantities } = require("./quantities");
+const { ingredientHtml, ingredientText, hasAmounts } = require("./ingredients");
 const { isThisWeek, isNextWeek } = require("./status");
 
 function escapeHtml(str) {
@@ -12,10 +12,14 @@ function escapeHtml(str) {
 
 const DEFAULT_SERVINGS = 4;
 
-// The recipe as plain text for the "Cook with Claude" prompt (templates/cook-claude.js):
-// the Markdown body without bold, links or heading marks, so it reads cleanly in a chat.
+const ingredientsOf = (recipe) => (Array.isArray(recipe.ingredients) ? recipe.ingredients : []);
+
+// The recipe as plain text for the "Cook with Claude" prompt (templates/cook-claude.js): the ingredient lines rendered
+// from the data, then the Markdown body without bold, links or heading marks, so it reads cleanly in a chat.
 function recipePlainText(recipe) {
   const facts = `Serves ${recipe.serves} · ${recipe.total_mins} min · ${recipe.calories} kcal per serving`;
+  const ingredients = ingredientsOf(recipe);
+  const list = `Ingredients\n\n${ingredients.length ? ingredients.map((i) => `- ${ingredientText(i)}`).join("\n") : "Not recorded yet."}`;
   const body = String(recipe.body || "")
     .replace(/\r\n/g, "\n")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -24,7 +28,7 @@ function recipePlainText(recipe) {
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return `${facts}\n\n${body}`;
+  return `${facts}\n\n${list}\n\n${body}`;
 }
 
 // Data for cook-claude.js, as JSON in a script element: "<" and friends escaped so no value can close it.
@@ -57,10 +61,10 @@ function renderRecipe(recipe, bodyHtml) {
     `<span><b>${recipe.calories}</b> kcal each</span>`,
   ].join("\n      ");
 
-  // `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list
-  // already gives amounts per number of people).
-  const { html: scaledBodyHtml, scalable } =
-    recipe.scalable === false ? { html: bodyHtml, scalable: false } : markScalableQuantities(bodyHtml);
+  // `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list already gives amounts per number of people).
+  // Otherwise every amount is a `.qty` the servings selector rescales, written straight from the data.
+  const ingredients = ingredientsOf(recipe);
+  const scalable = recipe.scalable !== false && hasAmounts(ingredients);
   // Hidden until servings.js runs, so the page reads normally with JS disabled.
   // servings.js opens the page at the pressed option: 4 servings, like the shopping page.
   const servingOptions = [...new Set([1, 2, 4, Number(recipe.serves)])].sort((a, b) => a - b);
@@ -75,23 +79,20 @@ function renderRecipe(recipe, bodyHtml) {
         </div>
       </div>`
     : "";
-  const body = scaledBodyHtml;
-  // Wrap the Ingredients section (up to the next h2) and what follows it, so wide
-  // screens can show them side by side: the ingredients as a sticky pane with its own
-  // scroll, the instructions in the page's scroll (see `.recipe-body` in style.css).
-  // Narrow screens stack them as before.
-  const ingStart = body.search(/<h2[^>]*>\s*Ingredients\b/i);
-  const ingLength = ingStart === -1 ? -1 : body.slice(ingStart + 1).search(/<h2[\s>]/i) + 1;
-  const bodyHtmlOut =
-    ingLength > 0
-      ? `${body.slice(0, ingStart)}<div class="recipe-body">
+  // The ingredients (rendered from the data) beside the rest of the body, so wide screens can show them side by side: the ingredients as
+  // a sticky pane with its own scroll, the instructions in the page's scroll (see `.recipe-body` in style.css). Narrow screens stack them.
+  const list = ingredients.length
+    ? `<ul>\n${ingredients.map((i) => `<li>${ingredientHtml(i, { scalable })}</li>`).join("\n")}\n</ul>`
+    : "<p>Ingredients not yet recorded.</p>";
+  const bodyHtmlOut = `<div class="recipe-body">
 <section class="recipe-ingredients">
-${body.slice(ingStart, ingStart + ingLength)}</section>
+<h2>Ingredients</h2>
+${list}
+</section>
 <div class="recipe-steps">
-${body.slice(ingStart + ingLength)}</div>
+${bodyHtml}</div>
 </div>
-`
-      : body;
+`;
 
   const content = `  <main>
     <a class="back-link" href="../index.html"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All recipes</a>

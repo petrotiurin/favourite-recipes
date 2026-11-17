@@ -7,7 +7,7 @@ description: Add a new recipe to the favourite-recipes static site — collects 
 
 > Handing over recipes to cook this week, or want a shopping list too? Use the `plan-recipes` skill instead (it works through the recipes MCP server and builds the shopping list). This skill is for editing the repo's files directly.
 
-This site is 100% static (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/`, save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
+This site is 100% static (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/` (with its ingredients as frontmatter data, adding any new ingredient to `data/ingredients.json`), save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
 
 ## 1. Collect the recipe
 
@@ -19,7 +19,7 @@ From whatever the user gives you (pasted text, a photo of a recipe card, a link,
 - **Total minutes** — a single number. If the source gives prep+cook separately, sum them.
 - **Serves** — a single number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
 - **Calories** — kcal per serving, a single whole number. Always required. Use the source's figure if it gives one (Emily English recipes usually state "xxx kcal per portion"); otherwise estimate from the ingredient quantities divided by `serves`, and tell the user it's an estimate.
-- **Ingredients** — a full list, each with a quantity
+- **Ingredients** — a full list, each with an amount
 - **Instructions** — numbered steps
 - **One hero image**
 
@@ -42,18 +42,21 @@ calories: <number>   # kcal per serving
 current: true        # optional: in this week (what's being cooked now); drafts too, nothing is in a week by default
 next: true           # optional: in next week (being planned; the shopping list is built from these)
 draft: true          # new recipes start as drafts; omit only if the user says it's already a tried-and-tested favourite
+ingredients:         # always last; one flow mapping per line, in the order they're used
+  - { amount: 200, unit: g, name: jasmine rice, item: jasmine-rice }
+  - { amount: 4, name: salmon fillets, note: about 140g each, item: salmon-fillet }
+  - { amount: [2, 3], unit: tbsp, name: red curry paste, item: curry-paste }
+  - { amount: 1, unit: juice, name: lime, item: lime }
+  - { name: salt, note: to taste, item: salt }
+  - { name: sesame seeds, note: to serve, optional: true, item: sesame-seeds }
 ---
 ```
 
-**Drafts.** Add new recipes as drafts (`draft: true`) by default — their recipe page says it's a draft until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes, its weeks included). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Being a draft says nothing about the week: only add `current: true` (this week) or `next: true` (next week) if the user says which week it's for. Key order in the frontmatter: `scalable`, `current`, `next`, `draft`.
+**Drafts.** Add new recipes as drafts (`draft: true`) by default — their recipe page says it's a draft until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes, its weeks included). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Being a draft says nothing about the week: only add `current: true` (this week) or `next: true` (next week) if the user says which week it's for. Key order in the frontmatter: `scalable`, `current`, `next`, `draft`, then `ingredients` last.
 
-Body:
+Body (the ingredient list is NOT in the body: the page renders it from the frontmatter):
 
 ```markdown
-## Ingredients
-
-- <quantity>, **<ingredient>**, <optional prep note>
-
 ## Instructions
 
 1. <One action per step, sentence case, with each ingredient mention **bolded**.>
@@ -61,11 +64,12 @@ Body:
 
 Rules that matter:
 
-- **Every ingredient line must state a quantity.** Never write a bare ingredient with no amount. If a recipe genuinely has no fixed amount for something, write the words `to taste` or `to serve` explicitly rather than omitting quantity language.
-- **Bold only the ingredient name itself, not the quantity.** e.g. `150g (⅔ cup) **Greek yogurt**`, or `2 **celery sticks**, finely diced`. The quantity/measurement stays outside the bold, and so do prep notes after the ingredient (diced, finely chopped, to taste, etc.). If a line has no quantity at all (e.g. `**Salt and pepper**, to taste`), the whole ingredient name is still bolded.
+- **Ingredients are data** (`docs/structured-ingredients.md`). Keys in this order, omitting absent ones: `amount`, `unit`, `name`, `note`, `optional`, `item`. Quote a string (double quotes) when YAML needs it (it contains `: `, `,`, `#`, brackets, or looks like a number). The page bolds the name, writes `200g`, `2 tbsp`, `2 cloves`, `¾ can`, `Juice of 1`, `Pinch of`, and the servings selector rescales every amount.
+  - `amount`: a number (decimals: `0.5`, `0.75`; thirds as `0.33` / `0.67`) or a range `[2, 3]`. Leave it out only for "to taste" / "to serve" items, and then the `note` must say so.
+  - `unit`: one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, pinch, handful, juice, zest`; none for a count. **One measure per ingredient**, metric where the source gives it ("1 cup (200g)" → `200`, `g`); convert oz/lb to g. A useful second measure can go in the note.
+  - `name`: what the recipe calls it, plain text. `note`: prep or buying detail ("finely diced", "about 140g each"); a split goes here ("1½ tbsp for the salmon, ½ for the pan"). `optional: true` for garnishes and "if using" (never "optional" in the note).
+  - `item`: the id in `data/ingredients.json` (the ingredient catalogue) it's bought as. Look it up by the entry's `name` / `aliases`. If there's none, add an entry (id kebab-case; `name` as on a shopping list; `section` one of `Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen`; `unit` `g`, `ml`, `count` or a named unit; `per` conversions from the recipe's units when there's no fixed rule, e.g. `{ "tbsp": 10 }` grams per tbsp; `staple: true` for salt, pepper, oil). Keep the file sorted by id. The build fails on an unknown `item` or unit.
 - **In the Instructions section, bold every mention of an ingredient** from the list above wherever it's referenced (e.g. "stir together the **oats**, **yogurt** and **honey**"). Only bold the ingredient noun itself, not surrounding words, and don't bold references to the dish being made (e.g. "the lamb burgers", "the batter").
-- **Write quantities as numerals** (`1`, `½`, `1¾`, `150g`, `2-3`), not words ("one", "two"), and fractions as `½` `¼` `¾` `⅓` `⅔` rather than `1/2`, so the recipe page's servings selector can rescale them. Every number in an ingredient line outside the bolded name is scaled, except percentages, numbers after an `x` (`2 x 150g` — the 150g is per item) and numbers inside a parenthetical containing `each`.
-- **If an ingredient is used in two places, put the split in the ingredient line** (`75 g **sugar**, split in half`, `1 tbsp **olive oil**, plus 2 tsp for the fish`) and let the instructions refer to the parts.
 - **Never repeat an amount in the Instructions.** The servings selector only rescales the ingredient list, so a number in the method is wrong as soon as someone cooks for a different number of people. Refer to the ingredient instead:
 
   | Instead of | Write |
@@ -79,9 +83,8 @@ Rules that matter:
 
   Fractions of a listed amount are fine ("half the **yogurt**", "a third of the dressing", "the rest"), because they scale with it. Times, temperatures, hob/oven settings, pan sizes and per-item sizes that don't depend on servings ("about 50 g per patty", "fry 2 slices at a time") stay as they are.
 - If the ingredient list genuinely can't be scaled (e.g. it already lists amounts per number of people), add `scalable: false` to the frontmatter to hide the servings selector.
-- Ingredients as a flat bulleted list (`-`), no sub-headings, in the order they're used.
 - Instructions as a numbered list (`1.`, `2.`, ...), one clear action per step, sentence case, no trailing period requirement but be consistent within the file.
-- Use `##` for `Ingredients` and `Instructions` — don't add other top-level sections unless the user explicitly wants e.g. a "Notes" section (also `##`, placed after Instructions).
+- Use `##` for `Instructions` — don't add other top-level sections unless the user explicitly wants e.g. a "Notes" section (also `##`, placed after Instructions).
 
 ## 3. Picture rules
 
@@ -98,7 +101,7 @@ After writing the `.md` file and saving the image:
 npm run build
 ```
 
-Confirm it completes without error, then open `dist/index.html` (or the new `dist/recipes/<slug>.html`) and check: the new tile appears with its image, time and calories, the ingredient bullets render with bold ingredient names (quantities not bolded), the instructions bold each ingredient mention, and the instructions are numbered correctly.
+Confirm it completes without error, then open `dist/index.html` (or the new `dist/recipes/<slug>.html`) and check: the new tile appears with its image, time and calories, the ingredient list renders from the frontmatter with bold names and the right amounts, the instructions bold each ingredient mention, and the instructions are numbered correctly.
 
 ## 5. Done
 

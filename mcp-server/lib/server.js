@@ -76,15 +76,15 @@ only the shopping list is converted. The server rejects kitchen measures and sum
 line against the recipes and make sure the sections cover the same recipes get_shopping_list lists.
 
 Rules the server enforces or expects:
-- Ingredients are structured: { quantity, name, note }. Give every ingredient a quantity ("150g (⅔ cup)", "2", "Juice of ½"),
-  or put "to taste"/"to serve" in the note. Names are plain text; the server bolds them. Keep them in the order they are used.
-- Quantities are rescaled on the site: each recipe page has a servings selector (1, 2, 4 and the recipe's own serves) that
-  multiplies every number in the ingredient list. So write amounts as numerals ("2", "½", "1¾", "150g", "2-3"), never words
-  ("one", "two"); ASCII fractions like "1/2" are converted to "½" for you. Numbers that must NOT scale: percentages ("0% fat"),
-  the per-item size after an "x" ("2 x 150g" scales the 2 only), and anything in a parenthetical containing "each"
-  ("(about 120g each)").
-- If an ingredient is used in two places, put the split in the ingredient line ("75g sugar, split in half",
-  "1 tbsp olive oil, plus 2 tsp for the fish"), and let the instructions refer to the parts.
+- Ingredients are data: { amount, unit, name, note, optional }. amount is a number (decimals, 0.75) or a range [min, max]; unit one of
+  g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, pinch, handful, juice, zest, or none for a count. One measure per
+  ingredient, metric where the source gives it ("1 cup (200g)" -> 200 g). No amount only with "to taste"/"to serve" in the note. Garnishes
+  get optional: true. Names are plain text; the site renders the line and its servings selector rescales every amount. Keep them in the
+  order they are used. The server fills each ingredient's item (the ingredient catalogue, data/ingredients.json) from its name and checks the
+  amount converts; when it can't, the error says what to fix: set item, or add a catalogue change to the same write
+  (catalogue: [{ add: { id, name, section, unit, per? } } | { alias: { item, name } } | { set: { item, per } }]).
+- If an ingredient is used in two places, put the split in its note ("split in half", "plus 2 tsp for the fish"),
+  and let the instructions refer to the parts.
 - Instructions: one action per array item, sentence case, no numbering (the server numbers them).
   Bold EVERY ingredient mention with **double asterisks**, ingredient noun only, e.g. "Stir the **oats** into the **yogurt**".
   Don't bold the dish itself ("the batter", "the burgers").

@@ -8,13 +8,12 @@ import {
   parseRecipe,
   serializeRecipe,
   setSection,
-  validateIngredient,
-  renderIngredient,
   renderInstructions,
   instructionWarnings,
   trailingText,
-  ingredientNamesFromSection,
+  ingredientsOf,
 } from "./recipe-format.js";
+import { loadCatalogue, writeCatalogue, checkIngredients, applyCatalogueChanges, CatalogueError } from "./catalogue.js";
 
 const recipePath = (slug) => `recipes/${slug}.md`;
 const imagePathFor = (slug, ext = "jpg") => `images/recipes/${slug}.${ext}`;
@@ -85,7 +84,7 @@ async function loadRecipeIndex() {
     files.map(async (f) => {
       const raw = (await cs.read(`recipes/${f}`)).toString("utf8");
       const { data, sections } = parseRecipe(raw);
-      const ingredients = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content).map((i) => i.name.trim());
+      const ingredients = ingredientsOf(data).map((i) => String(i.name).trim());
       return {
         data,
         markdown: raw,
@@ -100,6 +99,7 @@ async function loadRecipeIndex() {
         current: isThisWeek(data),
         next: isNextWeek(data),
         ingredients,
+        items: ingredientsOf(data),
         text: `${data.title}\n${sections.map((s) => s.content).join("\n")}`.toLowerCase(),
       };
     })
@@ -130,7 +130,7 @@ export async function searchRecipes({ text, include_ingredients = [], exclude_in
     (max_minutes === undefined || (r.total_mins !== undefined && r.total_mins <= max_minutes)) &&
     (draft === undefined || r.draft === draft) &&
     (week === undefined || (week === "this" ? r.current : week === "next" ? r.next : !r.current && !r.next));
-  return (await recipeIndex()).filter(matches).map(({ ingredients, text, image, data, markdown, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
+  return (await recipeIndex()).filter(matches).map(({ ingredients, items, text, image, data, markdown, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
 }
 
 // Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
@@ -139,11 +139,61 @@ export const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|
 /** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
 /** Every recipe's ingredient names with its list row, from the cached index (for matching against what's at home). */
 export async function recipeIngredients() {
-  return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n) => n.trim()) }));
+  return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n) => n.trim()), items: r.items }));
 }
 
 export async function recipeSummaries() {
-  return (await recipeIndex()).map(({ ingredients, text, data, markdown, ...row }) => row);
+  return (await recipeIndex()).map(({ ingredients, items, text, data, markdown, ...row }) => row);
+}
+
+/**
+ * Every recipe's structured ingredients: [{ slug, title, serves, next, current, draft, ingredients }]. Without a ChangeSet from the cached
+ * index; with one, fresh from the branch plus what the set has staged (what buildShoppingList and the catalogue checks work from).
+ */
+export async function bookIngredients(cs) {
+  if (!cs) return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.items }));
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
+  return Promise.all(
+    files.map(async (f) => {
+      const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
+      return { ...listRow(data), ingredients: ingredientsOf(data) };
+    })
+  );
+}
+
+/**
+ * Applies a write's catalogue changes (docs/structured-ingredients.md section 5) to the ChangeSet: checked against the book as it is in the set
+ * (minus `slug`, the recipe being written, whose ingredients are checked after), the file written, merged items re-pointed in the recipes that
+ * used them. Resolves { catalogue, lines }. Throws a UserError saying what to fix.
+ */
+export async function stageCatalogueChanges(changes, cs, { exceptSlug } = {}) {
+  const before = await loadCatalogue(cs);
+  if (!changes?.length) return { catalogue: before, lines: [] };
+  const book = (await bookIngredients(cs)).filter((r) => r.slug !== exceptSlug);
+  let out;
+  try {
+    out = applyCatalogueChanges(before, changes, book);
+  } catch (err) {
+    if (err instanceof CatalogueError) throw new UserError(`Catalogue change rejected: ${err.message}`);
+    throw err;
+  }
+  writeCatalogue(cs, out.catalogue);
+  for (const { from, into } of out.repoints) {
+    for (const r of book) {
+      if (!r.ingredients.some((i) => i.item === from)) continue;
+      const { data, sections } = parseRecipe((await cs.read(recipePath(r.slug))).toString("utf8"));
+      data.ingredients = ingredientsOf(data).map((i) => (i.item === from ? { ...i, item: into } : i));
+      cs.write(recipePath(r.slug), Buffer.from(serializeRecipe(data, sections)));
+    }
+  }
+  return { catalogue: out.catalogue, lines: out.lines };
+}
+
+/** Checks a recipe's ingredients against the catalogue and fills each `item` (section 4). Throws one UserError listing every problem. */
+function checkedIngredients(ingredients, catalogue) {
+  const { ingredients: out, errors } = checkIngredients(ingredients, catalogue);
+  if (errors.length) throw new UserError(`Recipe rejected:\n- ${errors.join("\n- ")}`);
+  return out;
 }
 
 /**
@@ -262,10 +312,7 @@ function validateCommon({ course, total_mins, serves, calories, ingredients, ins
   if (total_mins !== undefined && !(Number.isInteger(total_mins) && total_mins > 0)) errors.push("total_mins must be a positive whole number");
   if (serves !== undefined && !(Number.isInteger(serves) && serves > 0)) errors.push("serves must be a positive whole number");
   if (calories !== undefined && !(Number.isInteger(calories) && calories > 0)) errors.push("calories must be a positive whole number (kcal per serving)");
-  if (ingredients) {
-    if (!ingredients.length) errors.push("ingredients: at least one is required");
-    ingredients.forEach((ing, i) => errors.push(...validateIngredient(ing, i)));
-  }
+  if (ingredients && !ingredients.length) errors.push("ingredients: at least one is required");
   if (instructions) {
     if (!instructions.length) errors.push("instructions: at least one step is required");
     instructions.forEach((s, i) => {
@@ -292,6 +339,8 @@ export async function createRecipe(input, batch, caller) {
     throw new UserError(`A recipe with slug "${slug}" already exists. Use update_recipe to change it, or pick a different title.`);
   }
 
+  const { catalogue, lines: catalogueLines } = await stageCatalogueChanges(input.catalogue, cs, { exceptSlug: slug });
+  const ingredients = checkedIngredients(input.ingredients, catalogue);
   const imageBuffer = await resolveImageInput(input.image, slug, cs, { title, ingredients: input.ingredients });
   const data = {
     title,
@@ -305,11 +354,9 @@ export async function createRecipe(input, batch, caller) {
     ...(input.scalable === false ? { scalable: false } : {}),
     ...(input.draft !== false ? { draft: true } : {}), // new recipes start as drafts unless told otherwise
     ...(input.week ? { [WEEK_KEY[input.week]]: true } : {}),
+    ingredients,
   };
-  const sections = [
-    { heading: "Ingredients", content: input.ingredients.map(renderIngredient).join("\n") },
-    { heading: "Instructions", content: renderInstructions(input.instructions) },
-  ];
+  const sections = [{ heading: "Instructions", content: renderInstructions(input.instructions) }];
   if (input.notes?.trim()) sections.push({ heading: "Notes", content: input.notes.trim() });
 
   const markdown = serializeRecipe(data, sections);
@@ -318,7 +365,7 @@ export async function createRecipe(input, batch, caller) {
 
   const subject = `${data.draft ? "Add draft recipe" : "Add recipe"}: ${title}${input.week ? ` (${WEEK_NAME[input.week]})` : ""}`;
   const commit = batch ? null : await cs.commit(subject + via("Added"), caller);
-  return { slug, markdown, commit, subject, draft: !!data.draft, week: input.week || null, warnings: instructionWarnings(input.ingredients, input.instructions) };
+  return { slug, markdown, commit, subject, draft: !!data.draft, week: input.week || null, catalogueLines, warnings: instructionWarnings(ingredients, input.instructions) };
 }
 
 /** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. Its weeks are unchanged. */
@@ -470,15 +517,18 @@ export async function updateRecipe(input, batch, caller) {
     summary.push("scalable");
   }
 
+  const { catalogue, lines: catalogueLines } = await stageCatalogueChanges(input.catalogue, cs, { exceptSlug: slug });
+  if (input.catalogue?.length) summary.push("catalogue");
   if (input.ingredients !== undefined) {
-    setSection(sections, "Ingredients", input.ingredients.map(renderIngredient).join("\n"));
+    data.ingredients = checkedIngredients(input.ingredients, catalogue);
+    setSection(sections, "Ingredients", null); // a recipe from before structured ingredients
     summary.push("ingredients");
   }
   if (input.instructions !== undefined) {
     const existing = sections.find((s) => s.heading?.toLowerCase() === "instructions");
     const tail = existing ? trailingText(existing.content) : "";
     const content = renderInstructions(input.instructions) + (tail ? `\n\n${tail}` : "");
-    setSection(sections, "Instructions", content, { after: "Ingredients" });
+    setSection(sections, "Instructions", content);
     summary.push("instructions");
   }
   if (input.notes !== undefined) {
@@ -487,8 +537,7 @@ export async function updateRecipe(input, batch, caller) {
   }
 
   if (input.image !== undefined) {
-    const ingredients =
-      input.ingredients || ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
+    const ingredients = ingredientsOf(data);
     const imageBuffer = await resolveImageInput(input.image, slug, cs, { title: data.title, ingredients });
     const newPath = imagePathFor(slug);
     if (imageBuffer) changes.push({ path: newPath, content: imageBuffer });
@@ -502,16 +551,14 @@ export async function updateRecipe(input, batch, caller) {
 
   const markdown = serializeRecipe(data, sections);
   if (markdown !== before) changes.unshift({ path: recipePath(slug), content: Buffer.from(markdown) });
-  if (!changes.length) return { slug, markdown, commit: null, subject: null, warnings: ["No changes: the recipe already matches"] };
+  if (!changes.length && !catalogueLines.length) return { slug, markdown, commit: null, subject: null, warnings: ["No changes: the recipe already matches"] };
 
   for (const c of changes) (c.delete ? cs.remove(c.path) : cs.write(c.path, c.content));
   const subject = `Update recipe: ${data.title} (${summary.join(", ")})`;
   const commit = batch ? null : await cs.commit(subject + via("Updated"), caller);
 
-  const ingredientsForCheck =
-    input.ingredients || ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
-  const warnings = input.instructions ? instructionWarnings(ingredientsForCheck, input.instructions) : [];
-  return { slug, markdown, commit, subject, warnings };
+  const warnings = input.instructions ? instructionWarnings(ingredientsOf(data), input.instructions) : [];
+  return { slug, markdown, commit, subject, catalogueLines, warnings };
 }
 
 /**

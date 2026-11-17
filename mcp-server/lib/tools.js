@@ -9,7 +9,9 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
-import { scaleLine, ingredientLines } from "./scaling.js";
+import { UNITS, scaledMarkdown, ingredientMarkdown } from "./ingredient-line.js";
+import { SECTIONS, SHOP_UNITS } from "./catalogue.js";
+import { ingredientsOf } from "./recipe-format.js";
 import { recipesFromHome } from "./at-home.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
 import { stageOp, dropItem, resolveClash, loadTray, replay, needsList, trayNote, assertCanStage, warmReads } from "./tray.js";
@@ -49,14 +51,48 @@ import {
   MAX_SERVINGS,
 } from "./shopping-list.js";
 
+// A recipe's ingredients are data (docs/structured-ingredients.md section 1): the page, the servings selector and the shopping list are
+// generated from these fields. The server fills `item` from the name (the catalogue's names and aliases) and checks every amount converts.
 const ingredientSchema = z.object({
-  quantity: z
-    .string()
+  amount: z
+    .union([z.number().positive(), z.tuple([z.number().positive(), z.number().positive()])])
     .optional()
-    .describe('Amount including units, as numerals so the servings selector can rescale it, e.g. "150g (⅔ cup)", "2", "Juice of ½", "Small handful of". Omit only for "to taste"/"to serve" items.'),
-  name: z.string().min(1).describe('Ingredient name, plain text (no asterisks), e.g. "Greek yogurt". Bolded automatically.'),
-  note: z.string().optional().describe('Prep note after the name, e.g. "finely diced", "to taste", "(0% or full-fat)".'),
+    .describe('A number (decimals: 0.75, not ¾) or a range [min, max], e.g. 200, 0.5, [2, 3]. Omit only for "to taste" / "to serve" (say so in the note).'),
+  unit: z
+    .enum(UNITS)
+    .optional()
+    .describe('One measure per ingredient, metric where the source gives it ("1 cup (200g)" -> 200 g). None = a count ("4 salmon fillets"). juice / zest: "juice of 1 lime" -> amount 1, unit juice, name lime.'),
+  name: z.string().min(1).describe('What the recipe calls it, plain text (no asterisks), e.g. "jasmine rice". Bolded on the page.'),
+  note: z.string().optional().describe('Prep or buying detail after the name, e.g. "finely diced", "about 140g each", "to taste". A split goes here ("1½ tbsp for the salmon, ½ for the pan").'),
+  optional: z.literal(true).optional().describe("Garnishes and extras (\"to serve, optional\", \"if using\"). Shown as \", optional\"."),
+  item: z.string().optional().describe("The catalogue item it's bought as (e.g. \"spring-onion\"). Leave it out: the server fills it from the name. Set it when a problem asks you to."),
 });
+
+const catalogueChangeSchema = z
+  .object({
+    add: z
+      .object({
+        id: z.string().describe('kebab-case, e.g. "gochujang"'),
+        name: z.string().describe('The shopping-list name, e.g. "Gochujang", "Red onions"'),
+        section: z.enum(SECTIONS).optional().describe("The aisle"),
+        unit: z.enum(SHOP_UNITS).optional().describe("The unit it's bought in: g, ml, count, or a named unit (clove, can, …)"),
+        per: z.record(z.string(), z.number().positive()).optional().describe('Conversions from recipe units: shopping units per one recipe unit, e.g. { "tbsp": 18 } for a g item, { "can": 400 } for ml, { "juice": 1 } for a count'),
+        aliases: z.array(z.string()).optional().describe("Other names recipes use for it"),
+        staple: z.literal(true).optional().describe("Listed in Pantry without a quantity (salt, pepper, oil)"),
+        skip: z.literal(true).optional().describe("Never on the list (water, ice)"),
+      })
+      .optional(),
+    alias: z.object({ item: z.string(), name: z.string() }).optional().describe("Another name recipes use for an existing item"),
+    set: z
+      .object({ item: z.string(), name: z.string().optional(), section: z.enum(SECTIONS).optional(), unit: z.enum(SHOP_UNITS).optional(), per: z.record(z.string(), z.number().positive()).optional() })
+      .optional()
+      .describe("Change an existing item (per merges into its conversions). Affects every recipe using it."),
+  })
+  .describe("Exactly one of add / alias / set.");
+const catalogueSchema = z
+  .array(catalogueChangeSchema)
+  .optional()
+  .describe("Ingredient catalogue changes this recipe needs, only when a problem asks for one (an unknown ingredient, a missing conversion). Checked and saved with the recipe.");
 
 const imageSchema = z
   .object({
@@ -97,6 +133,7 @@ const createShape = {
   calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
   scalable: scalableSchema.optional(),
   ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
+  catalogue: catalogueSchema,
   instructions: instructionsSchema,
   notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
   image: imageSchema,
@@ -123,6 +160,7 @@ const updateShape = {
   calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
   scalable: scalableSchema.optional().describe("false hides the servings selector; true turns it back on."),
   ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
+  catalogue: catalogueSchema,
   instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
   notes: z.string().optional(),
   image: imageSchema.optional(),
@@ -227,8 +265,9 @@ function shoppingResult({ list, next, commit }) {
   ].join("\n");
 }
 
-function resultText(verb, { slug, markdown, commit, draft, week, warnings }) {
+function resultText(verb, { slug, markdown, commit, draft, week, warnings, catalogueLines }) {
   const lines = [];
+  if (catalogueLines?.length) lines.push(...catalogueLines, "");
   if (commit) {
     lines.push(`${verb} "${slug}" and committed to main: ${commit.url}`);
     lines.push(`It will be live in about a minute at ${pageUrl(slug)}`);
@@ -454,7 +493,7 @@ const STAGE_TOOLS = [
     name: "stage_create_recipe",
     title: "Stage a new recipe",
     description:
-      "Add a NEW recipe to the plan tray (not to the site: a person saves it). For a recipe read off the user's photos pass from_photo (its id from the site's note) and only the fields the user changed. Otherwise the same fields and rules as create_recipe (structured ingredients with quantities, bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
+      "Add a NEW recipe to the plan tray (not to the site: a person saves it). For a recipe read off the user's photos pass from_photo (its id from the site's note) and only the fields the user changed. Otherwise the same fields and rules as create_recipe (structured ingredients: amount, unit, name, note, optional; a catalogue change when a problem asks for one; bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
       "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
     inputSchema: stageCreateShape,
     access: "stage",
@@ -736,14 +775,14 @@ export const TOOLS = [
     access: "read",
     chatOnly: true, // the chat's helper; /mcp keeps its tools as they were
     handler: safe(async ({ slug, servings }) => {
-      const { data, markdown } = await getRecipe(slug);
+      const { data } = await getRecipe(slug);
       const base = Number(data.serves) || 1;
-      const lines = ingredientLines(markdown);
+      const ingredients = ingredientsOf(data);
       if (data.scalable === false) {
-        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...lines].join("\n"));
+        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...ingredients.map((i) => `- ${ingredientMarkdown(i)}`)].join("\n"));
       }
       const factor = servings / base;
-      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...lines.map((l) => scaleLine(l, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
+      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...ingredients.map((i) => `- ${scaledMarkdown(i, factor)}`), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
     }),
   },
   {

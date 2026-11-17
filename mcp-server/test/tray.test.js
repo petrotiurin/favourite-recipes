@@ -112,7 +112,7 @@ test("an editor stages a new recipe: it goes in the tray (not the repo), with a 
   assert.equal(card.title, "Test Pasta");
   assert.equal(card.added_by, "Owner");
   assert.equal(card.error, null);
-  assert.deepEqual(card.detail.ingredients.slice(0, 2), ["200g pasta", "2 garlic cloves"]);
+  assert.deepEqual(card.detail.ingredients.slice(0, 2), ["200g pasta", "2 cloves garlic"]);
   assert.equal(card.photo.status, "ready", "the background job finished");
   assert.equal(images.requests.length, 1, "generated, since no link was given");
   assert.equal(images.requests[0].auth, "Bearer or-image-test");
@@ -131,12 +131,12 @@ test("the dry run reports problems on the card at once, and re-staging the same 
   const slug = anySlug();
   const out = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
   assert.match(out.content[0].text, /PROBLEM on the card/);
-  assert.match(out.content[0].text, /quantity/);
+  assert.match(out.content[0].text, /needs an amount/);
   const t = await plan();
-  assert.match(t.items[0].error, /quantity/);
+  assert.match(t.items[0].error, /needs an amount/);
   assert.equal(t.can_save, false);
   assert.equal(slug.length > 0, true);
-  const again = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ quantity: "1 tsp", name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
+  const again = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ amount: 1, unit: "tsp", name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
   assert.doesNotMatch(again.content[0].text, /PROBLEM/);
   await background.backgroundIdle();
   const t2 = await plan();
@@ -335,7 +335,7 @@ test("Save now: a quick fix commits alone; new recipes and next-week changes can
   await say("it's 35 minutes", { page: pageOf(slug) });
   await say("add a new recipe: test pasta");
   const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
-  await tools.dispatch("stage_update_recipe", { slug: other, ingredients: [{ quantity: "1", name: "egg" }] }, ed, { chat: { emit() {} } });
+  await tools.dispatch("stage_update_recipe", { slug: other, ingredients: [{ amount: 1, name: "egg" }] }, ed, { chat: { emit() {} } });
   let t = await plan();
   const byKind = (kind, s) => t.items.find((i) => i.kind === kind && (!s || i.recipe?.url.includes(s)));
   const fix = byKind("edit", slug);
@@ -718,7 +718,7 @@ test("a recipe page's og:image (or JSON-LD Recipe image) is found and used; the 
   };
   try {
     const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
-    await tools.dispatch("stage_create_recipe", { title: "Linked Pasta", course: ["Dinner"], total_mins: 10, serves: 2, calories: 300, ingredients: [{ quantity: "100g", name: "pasta" }], instructions: ["Cook the **pasta**."], image_url: "https://r.example/pasta" }, ed, { chat: { emit() {} } });
+    await tools.dispatch("stage_create_recipe", { title: "Linked Pasta", course: ["Dinner"], total_mins: 10, serves: 2, calories: 300, ingredients: [{ amount: 100, unit: "g", name: "pasta" }], instructions: ["Cook the **pasta**."], image_url: "https://r.example/pasta" }, ed, { chat: { emit() {} } });
     await background.backgroundIdle();
     const t = await plan();
     assert.equal(t.items[0].photo.status, "ready");

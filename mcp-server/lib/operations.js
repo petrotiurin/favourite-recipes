@@ -11,6 +11,7 @@ import {
   UserError,
 } from "./recipes.js";
 import { updateShoppingList, setShoppingServings, updateStocktake } from "./shopping-list.js";
+import { stageCatalogueChanges } from "./recipes.js";
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
 export async function runOperation(op, cs, caller) {
@@ -20,11 +21,11 @@ export async function runOperation(op, cs, caller) {
     case "create_recipe": {
       const r = await createRecipe(args, cs, caller);
       const tags = [r.draft ? "draft" : null, r.week ? `${r.week} week` : null].filter(Boolean).join(", ");
-      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
+      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...(r.catalogueLines || []).map((l) => `  ${l}`), ...warn(r.warnings)] };
     }
     case "update_recipe": {
       const r = await updateRecipe(args, cs, caller);
-      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.subject ? warn(r.warnings) : [])] };
+      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.catalogueLines || []).map((l) => `  ${l}`), ...(r.subject ? warn(r.warnings) : [])] };
     }
     case "promote_recipe": {
       const r = await promoteRecipe(args.slug, cs, caller);
@@ -52,6 +53,11 @@ export async function runOperation(op, cs, caller) {
     case "set_shopping_servings": {
       const r = await setShoppingServings(args.servings, cs, caller);
       return { ...r, lines: [r.changed.length ? `Planned servings: ${r.changed.map(([slug, n]) => `${slug} x${n}`).join(", ")}` : "set_shopping_servings: already planned like that"] };
+    }
+    case "update_catalogue": {
+      // review fixes that are generally true (docs/structured-ingredients.md section 5): no recipe to ride on
+      const r = await stageCatalogueChanges(args.changes, cs);
+      return { ...r, catalogueChanged: true, lines: r.lines.length ? r.lines : ["update_catalogue: nothing to change"] };
     }
     case "update_stocktake": {
       // chat only (the tray's "At home" card); not a batch_changes operation

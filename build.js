@@ -20,6 +20,8 @@ const SHOPPING_SCRIPT_FILE = path.join(ROOT, "templates", "shopping.js");
 const AUTH_SCRIPT_FILE = path.join(ROOT, "templates", "auth.js");
 const CHAT_SCRIPT_FILE = path.join(ROOT, "templates", "chat.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
+const CATALOGUE_FILE = path.join(ROOT, "data", "ingredients.json");
+const { UNITS } = require("./templates/ingredients");
 // BUILD_OUT_DIR lets tests and one-off builds write somewhere else, so a running dev site in dist/ is left alone.
 const DIST_DIR = process.env.BUILD_OUT_DIR ? path.resolve(process.env.BUILD_OUT_DIR) : path.join(ROOT, "dist");
 
@@ -48,8 +50,37 @@ function loadRecipes() {
     if (!data.title || !data.slug || !data.image || !data.total_mins || !data.serves || !data.calories) {
       throw new Error(`Recipe ${file} is missing required frontmatter (title, slug, image, total_mins, serves, calories)`);
     }
-    return { ...data, body: content };
+    return { ...data, body: content, file };
   });
+}
+
+/**
+ * Every recipe's ingredients are data (docs/structured-ingredients.md): check each one has a known unit and points at an item in the ingredient
+ * catalogue (data/ingredients.json), so a recipe added by hand with a typo fails the build instead of making a wrong shopping list. The MCP
+ * server checks the rest (names, conversions) when it writes a recipe.
+ */
+function checkIngredients(recipes) {
+  const catalogue = fs.existsSync(CATALOGUE_FILE) ? JSON.parse(fs.readFileSync(CATALOGUE_FILE, "utf8")) : {};
+  const errors = [];
+  for (const r of recipes) {
+    if (r.ingredients === undefined) {
+      errors.push(`${r.file}: no \`ingredients\` in the frontmatter (use \`ingredients: []\` when they aren't recorded yet)`);
+      continue;
+    }
+    if (!Array.isArray(r.ingredients)) {
+      errors.push(`${r.file}: \`ingredients\` must be a list`);
+      continue;
+    }
+    if (/^##\s+Ingredients\b/im.test(r.body)) errors.push(`${r.file}: the ingredients live in the frontmatter now; remove the "## Ingredients" section`);
+    r.ingredients.forEach((ing, i) => {
+      const where = `${r.file}: ingredients[${i}]${ing && ing.name ? ` (${ing.name})` : ""}`;
+      if (!ing || typeof ing !== "object" || !String(ing.name || "").trim()) errors.push(`${where}: needs a name`);
+      else if (!ing.item) errors.push(`${where}: no \`item\` (the catalogue id it's bought as)`);
+      else if (!catalogue[ing.item]) errors.push(`${where}: item "${ing.item}" isn't in data/ingredients.json`);
+      if (ing && ing.unit !== undefined && !UNITS.includes(ing.unit)) errors.push(`${where}: unit "${ing.unit}" isn't one of ${UNITS.join(", ")}`);
+    });
+  }
+  if (errors.length) throw new Error(`Recipe ingredients don't check out:\n- ${errors.join("\n- ")}`);
 }
 
 /**
@@ -107,6 +138,7 @@ function build() {
 
   // This week first (drafts first), then the rest; alphabetical within each group.
   const recipes = loadRecipes().sort(byStatusThenTitle);
+  checkIngredients(recipes);
 
   fs.writeFileSync(path.join(DIST_DIR, "index.html"), renderIndex(recipes));
   const nextWeek = recipes.filter(isNextWeek).sort((a, b) => a.title.localeCompare(b.title));

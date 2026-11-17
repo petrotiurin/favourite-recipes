@@ -244,7 +244,7 @@ test("a photo sent with no text still works (and an empty message with no photo 
 });
 
 test("photo_from_attachment can't point at a photo that isn't in the chat, or at a path of the model's choosing", async () => {
-  const none = await tools.dispatch("stage_create_recipe", { title: "X Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ quantity: "1", name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 2 }, editor(), { chat: { emit() {}, photos: [{ n: 1, path: `${OWNER}/${OWNER}.jpg` }] } });
+  const none = await tools.dispatch("stage_create_recipe", { title: "X Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ amount: 1, name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 2 }, editor(), { chat: { emit() {}, photos: [{ n: 1, path: `${OWNER}/${OWNER}.jpg` }] } });
   assert.equal(none.isError, true);
   assert.match(none.content[0].text, /no photo-2 in this chat/);
   const shape = tools.toolDefinitions("editor").find((d) => d.function.name === "stage_create_recipe").function.parameters.properties;
@@ -308,7 +308,7 @@ test("photo_from_attachment is honoured only when the user's message asks for th
   console.warn = (...a) => warned.push(a.join(" "));
   let res;
   try {
-    res = await tools.dispatch("stage_create_recipe", { title: "Unasked Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ quantity: "1", name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 1 }, editor(), { chat: { emit() {}, conversationId: conversation_id, photos: [{ n: 1, path: supabase.tables.photo_reads[0].path }], userText: "add this recipe" } });
+    res = await tools.dispatch("stage_create_recipe", { title: "Unasked Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ amount: 1, name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 1 }, editor(), { chat: { emit() {}, conversationId: conversation_id, photos: [{ n: 1, path: supabase.tables.photo_reads[0].path }], userText: "add this recipe" } });
     await background.backgroundIdle();
   } finally {
     console.warn = warn;

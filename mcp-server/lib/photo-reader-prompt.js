@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { COURSES } from "./config.js";
 import { recipeRules } from "./workflows.js";
+import { UNITS } from "./ingredient-line.js";
 
 const JOB = `You read recipe screenshots and photos for a family recipe book. You report only what is visible in the image(s) and fill the JSON schema you are given. Nothing else: no chat, no advice, no extra keys.
 
@@ -18,7 +19,7 @@ What to report
 - dish_description: for a dish photo, or when a recipe screenshot shows the finished dish, one sentence on how it looks as served; else "".
 - unreadable: a short reason if the image can't be read (blurred, cropped, not a recipe); else "".
 
-Units: keep the source's amounts, but as numerals ("2", "½", "150g"), never words. Metric where the source gives a choice.`;
+Ingredients are fields, not text: amount (a number, decimals for fractions: ½ -> 0.5; null for "to taste" / "to serve"), amount_max (the top of a range "2-3 tbsp", else null), unit (one of ${UNITS.join(", ")}, or null for a count), name, note (prep or buying detail, "" if none), optional (true for garnishes and "if using"). One measure per ingredient: metric where the source gives a choice ("1 cup (200g)" -> 200, g).`;
 
 const SINGLE = "One photo follows. Read it.";
 const CONSECUTIVE = "The photos that follow are consecutive screenshots of ONE recipe, in order (a long page scrolled down). They may overlap: text that appears at the bottom of one and the top of the next is the same text, so don't repeat it. Read them together as one recipe.";
@@ -34,6 +35,7 @@ export const readerInstruction = (consecutive) => (consecutive ? CONSECUTIVE : S
 const str = { type: "string" };
 const strs = { type: "array", items: str };
 const intOrNull = { type: ["integer", "null"] };
+const numOrNull = { type: ["number", "null"] };
 export const READER_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -67,7 +69,12 @@ export const READER_SCHEMA = {
         calories_estimated: { type: "boolean" },
         ingredients: {
           type: "array",
-          items: { type: "object", additionalProperties: false, required: ["quantity", "name", "note"], properties: { quantity: str, name: str, note: str } },
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["amount", "amount_max", "unit", "name", "note", "optional"],
+            properties: { amount: numOrNull, amount_max: numOrNull, unit: { type: ["string", "null"], enum: [...UNITS, null] }, name: str, note: str, optional: { type: "boolean" } },
+          },
         },
         instructions: strs,
         notes: str,

@@ -507,7 +507,10 @@
   "dried-pasta": {
     "name": "Dried pasta",
     "section": "Pantry",
-    "unit": "g"
+    "unit": "g",
+    "aliases": [
+      "pasta"
+    ]
   },
   "dried-rosemary": {
     "name": "Dried rosemary",
@@ -1044,7 +1047,10 @@
   "parmesan": {
     "name": "Parmesan cheese",
     "section": "Dairy & eggs",
-    "unit": "g"
+    "unit": "g",
+    "aliases": [
+      "parmesan"
+    ]
   },
   "parsley": {
     "name": "Parsley",

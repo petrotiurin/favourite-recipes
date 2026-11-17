@@ -16,12 +16,19 @@ const REPO_ROOT = new URL("../../", import.meta.url);
  */
 export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean = false, root = REPO_ROOT } = {}) {
   const files = new Map();
-  for (const dir of ["recipes", "images/recipes"]) {
+  for (const dir of ["recipes", "images/recipes", "data"]) {
     const base = new URL(`${dir}/`, root);
     if (!existsSync(base)) continue;
     for (const f of readdirSync(base)) files.set(`${dir}/${f}`, readFileSync(new URL(f, base)));
   }
   for (const f of ["shopping-list.json", "build.js"]) if (existsSync(new URL(f, root))) files.set(f, readFileSync(new URL(f, root)));
+  // The fake photo reader (fakeRead below) makes a dish's main ingredient from its title's last word: give those words a catalogue item, so
+  // its recipes pass the write-time checks. Only in the fake repo.
+  if (files.has("data/ingredients.json")) {
+    const cat = JSON.parse(files.get("data/ingredients.json").toString());
+    cat["test-main"] = { name: "Test main ingredient", section: "Fresh produce", unit: "g", aliases: FAKE_MAINS.filter((w) => !Object.values(cat).some((e) => [e.name, ...(e.aliases || [])].some((n) => n.toLowerCase() === w))) };
+    files.set("data/ingredients.json", Buffer.from(JSON.stringify(cat, null, 2) + "\n"));
+  }
   if (clean) for (const [p, buf] of files) if (p.endsWith(".md")) files.set(p, Buffer.from(buf.toString().replace(/^(draft|current|next): true\n/gm, "")));
 
   const blobs = new Map();
@@ -118,12 +125,14 @@ const parseNoteDrafts = (note) => {
 };
 const callsOf = (m) => (m.tool_calls || []).map((c) => ({ name: c.function.name, args: (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })(), id: c.id }));
 
-/** Ingredient lines of a recipe's Markdown: [{ name, quantity }]. */
+/** A recipe's ingredients from its Markdown's frontmatter: [{ name, quantity }]. */
 const ingredientsOf = (markdown) => {
-  const section = String(markdown).split(/^## /m).find((x) => /^Ingredients/i.test(x)) || "";
-  return section.split("\n").filter((l) => l.startsWith("- ")).map((l) => {
-    const m = l.match(/^- (?:(.+?) )?\*\*(.+?)\*\*/);
-    return m ? { name: m[2], quantity: m[1] || "" } : null;
+  const front = String(markdown).split(/^---$/m)[1] || "";
+  return [...front.matchAll(/^  - \{ (.*) \}$/gm)].map((m) => {
+    const name = m[1].match(/\bname: ("[^"]*"|[^,]+)/)?.[1].replace(/^"|"$/g, "");
+    const amount = m[1].match(/\bamount: ([\d.]+)/)?.[1];
+    const unit = m[1].match(/\bunit: (\w+)/)?.[1];
+    return name ? { name, quantity: amount ? `${amount}${unit && /^(g|ml)$/.test(unit) ? unit : ""}` : "" } : null;
   }).filter(Boolean);
 };
 
@@ -218,8 +227,8 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
       try { recipe = JSON.parse(json); } catch { /* none */ }
       if (!recipe) return done("I couldn't read a recipe off that page. Could you paste it or send a screenshot?", "I'll paste it");
       const ingredients = (recipe.ingredients || []).map((line) => {
-        const m = line.match(/^([\d½¼¾./]+\s*(?:g|kg|ml|l|tbsp|tsp|cups?)?)\s+(.+)$/i);
-        return m ? { quantity: m[1].trim(), name: m[2].trim() } : { quantity: "1", name: line };
+        const m = line.match(/^(\d+(?:\.\d+)?)\s*(g|kg|ml|l|tbsp|tsp|cup)?\s+(.+)$/i);
+        return m ? { amount: Number(m[1]), ...(m[2] ? { unit: m[2].toLowerCase() } : {}), name: m[3].trim() } : { amount: 1, name: line };
       });
       return tray("stage_create_recipe", {
         title: recipe.name || "Linked Recipe", course: ["Dinner"], total_mins: recipe.total_mins || 30, serves: 4, calories: 400,
@@ -240,7 +249,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
       const title = titleCase(created[1].trim());
       return tray("stage_create_recipe", {
         title, course: ["Dinner"], tags: ["Quick"], total_mins: 20, serves: 2, calories: 450,
-        ingredients: [{ quantity: "200g", name: "pasta" }, { quantity: "2", name: "garlic cloves" }, { quantity: "2 tbsp", name: "olive oil" }, { name: "parmesan", note: "to serve" }],
+        ingredients: [{ amount: 200, unit: "g", name: "pasta" }, { amount: 2, unit: "clove", name: "garlic" }, { amount: 2, unit: "tbsp", name: "olive oil" }, { name: "parmesan", note: "to serve" }],
         instructions: ["Boil the **pasta** until al dente.", "Fry the **garlic cloves** in the **olive oil** for a minute.", "Toss the **pasta** in the pan and top with **parmesan**."],
         reason: "from this chat",
       }, `I'll put ${title} in the tray.`);
@@ -343,7 +352,7 @@ export function fakeRead(title, over = {}) {
     ingredient_names: [main, "onion", "olive oil"], step_ingredients: [main, "onion", "olive oil"], top_lines: [title], bottom_lines: [`Serve the ${title.toLowerCase()} hot.`],
     recipe: {
       title, course: ["Dinner"], tags: [], total_mins: 30, total_mins_estimated: false, serves: 4, serves_estimated: false, calories: 450, calories_estimated: true,
-      ingredients: [{ quantity: "400g", name: main, note: "" }, { quantity: "1", name: "onion", note: "chopped" }, { quantity: "1 tbsp", name: "olive oil", note: "" }],
+      ingredients: [{ amount: 400, amount_max: null, unit: "g", name: main, note: "", optional: false }, { amount: 1, amount_max: null, unit: null, name: "onion", note: "chopped", optional: false }, { amount: 1, amount_max: null, unit: "tbsp", name: "olive oil", note: "", optional: false }],
       instructions: [`Soften the **onion** in the **olive oil**.`, `Add the **${main}** and cook for 20 minutes.`, `Serve the ${title.toLowerCase()} hot.`],
       notes: "",
     },
@@ -352,6 +361,7 @@ export function fakeRead(title, over = {}) {
   const { recipe, ...rest } = over;
   return { ...read, ...rest, recipe: { ...read.recipe, ...(recipe || {}) } };
 }
+const FAKE_MAINS = ["aubergine", "aubergines", "bowl", "makhani", "orzo", "risotto", "soup", "tart", "dal", "chilli", "thai", "salmon", "dish", "recipe"];
 const DEV_READS = ["Miso Aubergine", "Lemon Chicken Orzo", "Dal Makhani", "Smoky Bean Chilli", "Prawn Pad Thai", "Mushroom Risotto", "Harissa Salmon", "Pea And Mint Soup"];
 
 /** The rounded average colour of a data-URL JPEG ("#c05030"), so tests can tell their solid-colour photos apart after the server re-encodes them. */
