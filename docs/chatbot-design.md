@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (the shopping list built by the server, 7.4) is proposed in `docs/shopping-list-builder.md`. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (structured ingredients and the server-built shopping list, 7.4) is proposed in `docs/structured-ingredients.md`. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 Proposed next: reading several recipe photos in parallel (about 6 per message when planning a week), in `docs/parallel-photo-reading.md`.
@@ -436,8 +436,8 @@ plain button with no model in it. So the list is built **before** Save becomes a
      (e.g. "next week's list from Sunday, with its at-home check") and waits for a yes.
   2. reads every recipe that will be in next week after Save, staged new ones included (reads inside
      a `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
-     *Proposed (7.4, `docs/shopping-list-builder.md`): the server builds and stages the list itself from
-     per-recipe `buy` data and an ingredient catalogue, and the model only reviews it with small patches.*
+     *Proposed (7.4, `docs/structured-ingredients.md`): the server builds and stages the list itself from
+     structured ingredients and an ingredient catalogue, and the model only reviews it with small patches.*
   The tray shows "Building the list…" meanwhile.
 - **Ready:** a **List** card ("86 items for 5 recipes", tap to preview by aisle) appears and the
   button becomes **Save to site (n)**.
@@ -530,15 +530,16 @@ index: active filter and search text) and sends it with every message.
   recipes show "Publishing…" and stay disabled until the page exists (the server can check with a
   HEAD request to the Pages URL; the client asks `/chat/status`, not the Pages URL directly).
 
-### 7.4 Shopping list built by the server (proposed, phase 7)
+### 7.4 Structured ingredients and the server-built shopping list (proposed, phase 7)
 
-Proposed in **`docs/shopping-list-builder.md`**. Finalise today has the model write the whole list (match, scale,
+Proposed in **`docs/structured-ingredients.md`**. Finalise today has the model write the whole list (match, scale,
 convert, add up and split every ingredient across the week's recipes), and on 16 Nov 2026 that ran out of tokens
-or time on both attempts. The proposal moves the arithmetic to code: an ingredient catalogue kept in the repo
-(`data/ingredients.json`), per-serving `buy` data stored on each recipe when it's written, and
-`buildShoppingList` as a plain sum in today's `shopping-list.json` format. Finalise then stages the built list
-with no model call, and the model only reviews it with small patches (pack sizes, merges, notes, the user's
-asks). The list format, the site and the stocktake don't change.
+or time on both attempts. The proposal makes each recipe's ingredients structured data in its frontmatter (amount,
+unit from a fixed list, name, note, and the catalogue `item`), the only place they live: the page's ingredient
+list, the servings selector, `scale_recipe` and the shopping list are generated from it. An ingredient catalogue
+in the repo (`data/ingredients.json`) holds aisles, shopping units and conversions; `buildShoppingList` is a plain
+sum in today's `shopping-list.json` format. Finalise then stages the built list with no model call, and the model
+only reviews it with small patches (pack sizes, merges, notes, the user's asks).
 
 ## 8. Safety, abuse and cost
 
@@ -743,7 +744,7 @@ Each phase ships and is useful on its own.
 | 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |
-| 7 | Shopping list by the server (proposed, 7.4, `docs/shopping-list-builder.md`) | Ingredient catalogue (`data/ingredients.json`), `buy` on recipes computed on write + backfill, `buildShoppingList`, Finalise = build then review patches, catalogue write-back | 4 |
+| 7 | Structured ingredients + server-built list (proposed, 7.4, `docs/structured-ingredients.md`) | Ingredients as frontmatter data + migration, ingredient catalogue (`data/ingredients.json`), `buildShoppingList`, Finalise = build then review patches, catalogue write-back | 4 |
 
 ## 13. Decisions and open questions
 
@@ -784,8 +785,8 @@ Open (Petro will settle these):
   short trial in phase 1/4: a handful of real questions and one full plan-recipes run, comparing
   tool-calling reliability and cost per chat.
 - **Q10.** Credit limits for the two keys (sets how tight the public rate limits need to be).
-- **Q20.** The server-built shopping list (7.4): go ahead with the rollout? Its own questions (S1–S4) are in
-  `docs/shopping-list-builder.md`.
+- **Q20.** Structured ingredients and the server-built shopping list (7.4): go ahead with the rollout? Its own questions (S1–S4) are in
+  `docs/structured-ingredients.md`.
 
 
 
