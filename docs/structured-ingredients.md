@@ -1,6 +1,9 @@
 # Structured ingredients and the server-built shopping list: design
 
-Status: **proposed, not built** (phase 7 of `docs/chatbot-design.md`). Each recipe's ingredients become structured
+Status: **built on the server and the site** (phase 7 of `docs/chatbot-design.md`): all three rollout steps (catalogue, schema,
+renderer and migration; `buildShoppingList`, the rebuild on every tray change and Finalise as review; catalogue write-back
+from `remember: true` patches). The chat panel's side (the optional items card, the live List card, the button states) is in
+review before it is built; until then the server sends the `optional` event the panel doesn't draw yet. Each recipe's ingredients become structured
 data in its frontmatter, the only place a recipe's ingredients live; the page's ingredient list, the servings
 selector, `scale_recipe`, the "Cook with Claude" prompt and the shopping list are all generated from it. The
 shopping list becomes a sum the server computes with an ingredient catalogue, and the model only reviews it.
@@ -440,7 +443,7 @@ rejecting, and convert tbsp/tsp quantities to ml instead of rejecting (`validate
 
 ## Open questions
 
-- **S1.** Go ahead with the rollout? (Q20 in `docs/chatbot-design.md`.)
+- **S1.** *Decided:* built.
 - **S2.** *Decided:* the catalogue lives in the repo (`data/ingredients.json`).
 - **S3.** *Decided:* a recipe's ingredients are structured data in its frontmatter, the only place they live; the
   page's list is rendered from it.

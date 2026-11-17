@@ -87,7 +87,7 @@ const say = async (message, extra = {}, token = "owner-token") => {
   await background.backgroundIdle();
   return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id, text: evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("") };
 };
-const trayItems = () => supabase.tables.trays[0]?.items || [];
+const trayItems = () => (supabase.tables.trays[0]?.items || []).filter((i) => i.kind !== "list"); // the list card follows next week on its own
 const notes = (conv) => supabase.tables.messages.filter((m) => m.conversation_id === conv && m.role === "event");
 const colourKey = async (color) => {
   // the colour the mock reader sees after the server re-encodes the photo

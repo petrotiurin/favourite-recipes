@@ -49,31 +49,22 @@ removed: a regular recipe can't be deleted through this server. remove_draft als
 the family keeps those, so tell the user it's still on next week's plan instead.
 
 Shopping list: the site has a separate shopping page for NEXT WEEK's recipes only (this week's food is already bought).
-You write it: whenever next week changes (get_shopping_list says "outdated"), read every next-week recipe (get_recipe), combine
-the ingredients into one deduplicated list (add up amounts of the same ingredient, e.g. 2 + 1 onions -> 3 onions; use the
-recipes' own units; keep different forms such as "garlic cloves" and "garlic powder" separate; skip "to taste" staples only if
-clearly pantry basics, else list them without a quantity), group it into shop-aisle sections, and call update_shopping_list.
-Tag every item with the slugs of the next-week recipes it is for (recipes: [...]); the page shows their photos on the row, and the
-server rejects a slug that isn't in next week or a next-week recipe with no items. The server links the recipes itself.
+The SERVER builds it: whenever next week changes (get_shopping_list says "outdated"), call update_shopping_list with build: true
+(in a batch, the last operation). It adds up next week's recipes from their structured ingredients and the ingredient catalogue:
+every amount converted to how the item is bought, scaled to 2 servings, totalled per item, each recipe's share recorded. Never
+combine a list yourself. Its result (a dry run of the batch shows it too) flags what needs judgement: a fraction of something bought
+whole at the planned servings, close names on different items, very large totals, a recipe with no ingredients, and lists the
+optional items (only garnishes and extras need them). Review those with edits on the same operation, by catalogue item id:
+round_up, merge [into, from], note { item, text }, move { item, section }, rename { item, name }, drop, scale { item, factor }.
+Ask the user once (one multi-select AskUserQuestion, all kept by default) which optional items to leave off, and drop those.
+Something generally true (two names for the same thing, a wrong aisle) can be fixed for every week with an update_catalogue operation.
 The page keeps showing the last list you saved until you save a new one: changing the weeks (start_next_week included) never
 alters or clears it, so after the switch it simply still shows the list that was built for what is now this week.
-Shopping list accuracy rules: build it ONLY from next week's recipes' own ingredient lists, read fresh with get_recipe (never from
-memory or the previous list). The list is always for 2 servings of EVERY recipe, whatever its own serves: scale each recipe's
-amounts by 2 / serves (serves 4 -> halve, serves 1 -> double, serves 2 -> as written).
-Items for several recipes also say how much of that 2-serving quantity each recipe needs (amounts: { slug: number }, in the item's
-unit, adding up to quantity), so the page can scale every recipe on its own.
 Planned servings: each recipe on the list is planned for a number of people (servings: { slug: n }, 1-${MAX_SERVINGS}). The shopping
 page opens on that plan, and the user can switch everything to 1/2/4 or change single recipes there. Pass servings to
 update_shopping_list when the user says how many a recipe is for ("the soup just for me", "the pie for two");
 recipes you don't name keep their previous plan, else ${DEFAULT_SERVINGS}. To change only the plan later, use set_shopping_servings:
 it keeps the list and the stocktake and needs no rebuild.
-Every ingredient of every next-week recipe must appear, and nothing else. Add up only the same ingredient in the same unit
-(2 + 1 onions -> 3); different forms stay separate (medium vs mild curry powder).
-The list is one homogenised list: no per-recipe notes (which recipe an item is for goes in recipes, never in note), and notes never contain amounts (only quantity rescales). Quantities are ONE
-number in ONE metric unit per line: convert tbsp/tsp/cups/oz to g or ml (1 tbsp = 15ml, 1 tsp = 5ml; use the ingredient's usual
-weight for dry things, e.g. 1 tbsp flour ~ 10g) and add everything up, so "100ml + 3 tbsp" becomes "145ml". Recipes keep their own units;
-only the shopping list is converted. The server rejects kitchen measures and sums. Before saving, re-add each
-line against the recipes and make sure the sections cover the same recipes get_shopping_list lists.
 
 Rules the server enforces or expects:
 - Ingredients are data: { amount, unit, name, note, optional }. amount is a number (decimals, 0.75) or a range [min, max]; unit one of

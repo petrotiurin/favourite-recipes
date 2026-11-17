@@ -780,6 +780,40 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
   assert.match(await shopping(), /Stocktake: none saved/);
 });
 
+test("batch_changes: the server builds next week's list (build: true), reports what to review and the optional items, and applies patches and catalogue changes in the same commit", async () => {
+  const list = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
+  const nextSlugs = list.filter((r) => r.next).map((r) => r.slug);
+  if (nextSlugs.length) await client.callTool({ name: "set_week_recipes", arguments: { week: "next", slugs: nextSlugs, add: false } });
+  const recipe = {
+    action: "create_recipe", title: "Batch Lime Noodles", course: ["Dinner"], total_mins: 20, serves: 8, calories: 400, week: "next",
+    ingredients: [{ amount: 200, unit: "g", name: "red lentils" }, { amount: 1, unit: "juice", name: "lime" }, { name: "sesame seeds", note: "to serve", optional: true }],
+    instructions: ["Cook the **red lentils**, squeeze over the **lime** and top with **sesame seeds**."], image: { url: "https://img.example/dish.png" },
+  };
+  const dry = await client.callTool({ name: "batch_changes", arguments: { operations: [recipe, { action: "update_shopping_list", build: true }], dry_run: true } });
+  assert.ok(!dry.isError, text(dry));
+  assert.match(text(dry), /\[fraction:lime\]/, "the dry run says what to review");
+  assert.match(text(dry), /Optional items .*Sesame seeds \(sesame-seeds\)/);
+  const commits = commitLog.length;
+  const ops = [
+    { action: "update_catalogue", changes: [{ set: { item: "red-lentils", section: "Tins & jars" } }] },
+    recipe,
+    { action: "update_shopping_list", build: true, edits: [{ round_up: "lime" }, { drop: "sesame-seeds" }] },
+  ];
+  const r = await client.callTool({ name: "batch_changes", arguments: { operations: ops } });
+  assert.ok(!r.isError, text(r));
+  assert.equal(commitLog.length, commits + 1, "one commit");
+  assert.ok(commitLog.at(-1).paths.includes("data/ingredients.json"));
+  const stored = JSON.parse(files.get("shopping-list.json").toString());
+  const all = stored.sections.flatMap((sec) => sec.items.map((i) => ({ ...i, section: sec.name })));
+  assert.deepEqual(stored.recipes, ["batch-lime-noodles"]);
+  assert.deepEqual(all.find((i) => i.name === "Red lentils"), { name: "Red lentils", quantity: "50g", recipes: ["batch-lime-noodles"], section: "Tins & jars" }, "200g for 8, at 2 servings, in the aisle the catalogue now says");
+  assert.ok(!all.some((i) => i.name === "Sesame seeds"), "dropped this week");
+  assert.equal(Number(all.find((i) => i.name === "Limes").quantity) * stored.servings["batch-lime-noodles"] / 2, 1);
+  // sections and build together are refused
+  const both = await client.callTool({ name: "update_shopping_list", arguments: { build: true, sections: [{ name: "X", items: [{ name: "Y", recipes: ["batch-lime-noodles"] }] }] } });
+  assert.ok(both.isError);
+});
+
 test("no commit ever touches a path outside recipes/, images/recipes/ and shopping-list.json", () => {
   for (const c of commitLog) for (const p of c.paths) assert.match(p, /^(recipes\/[a-z0-9-]+\.md|images\/recipes\/[a-z0-9-]+\.(jpg|webp)|shopping-list\.json|data\/ingredients\.json)$/);
   assert.equal(files.get("build.js").toString(), "// build");

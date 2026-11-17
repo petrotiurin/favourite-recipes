@@ -1,5 +1,6 @@
 import { ChangeSet, assertCanCommit } from "./github.js";
-import { listRecipes, isNextWeek } from "./recipes.js";
+import { listRecipes, isNextWeek, bookIngredients } from "./recipes.js";
+import { loadCatalogue, shopAmount, SECTIONS, CatalogueError } from "./catalogue.js";
 import { config, SHOPPING_LIST_PATH } from "./config.js";
 import { cached } from "./cache.js";
 import { createHash } from "node:crypto";
@@ -129,7 +130,8 @@ export function validateServings(servings, allowed, what) {
   if (errors.length) throw new ShoppingListError(`Servings rejected:\n- ${errors.join("\n- ")}`);
 }
 
-export function buildShoppingList(sections, slugs, now = new Date(), servings = resolveServings(slugs)) {
+/** The stored file from validated sections: dates it, records the recipes and the plan, tidies every item. */
+export function assembleShoppingList(sections, slugs, now = new Date(), servings = resolveServings(slugs)) {
   return {
     updated: now.toISOString().slice(0, 10),
     recipes: [...slugs].sort(),
@@ -383,7 +385,7 @@ export async function updateShoppingList(sections, batch, servings = {}, caller)
   validateServings(servings, slugs, "a next-week recipe");
   validateItemRecipes(sections, slugs);
   const previous = await readStoredList(cs);
-  const list = buildShoppingList(sections, slugs, new Date(), resolveServings(slugs, servings, previous?.servings));
+  const list = assembleShoppingList(sections, slugs, new Date(), resolveServings(slugs, servings, previous?.servings));
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
   const subject = `Update shopping list (${next.length} next-week recipe${next.length === 1 ? "" : "s"})`;
   const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
@@ -413,3 +415,233 @@ export async function setShoppingServings(servings, batch, caller) {
   const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
   return { list: updated, changed, commit, subject };
 }
+
+// --- the list as a sum (docs/structured-ingredients.md section 3) ------------------------------------------------------------------
+// Every next-week recipe's ingredients are data pointing at catalogue items, so the list is arithmetic: convert each amount to the item's
+// shopping unit, scale it to 2 servings, add it up per item, keeping each recipe's share. No model, deterministic, milliseconds. The model only
+// reviews the result, with small patches (applyListEdits), and the user decides about the optional items.
+
+const plural = { clove: "cloves", can: "cans", slice: "slices", bunch: "bunches", sprig: "sprigs", piece: "pieces" };
+const roundShare = (n, unit) => (unit === "g" || unit === "ml" ? (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) : Math.round(n * 1000) / 1000);
+const sumOf = (shares) => Object.values(shares).reduce((a, b) => a + b, 0);
+
+/**
+ * One row per catalogue item next week needs: { item, name, section, unit, shares: { slug: amount at 2 servings }, recipes, optional, notes }.
+ * `recipes`: [{ slug, serves, ingredients }]. Resolves { rows: Map, empty: [slugs with no ingredients], problems: [text] }. Pure.
+ */
+export function listRows(recipes, catalogue) {
+  const rows = new Map();
+  const empty = [];
+  const problems = [];
+  for (const r of [...recipes].sort((a, b) => a.slug.localeCompare(b.slug))) {
+    const ingredients = r.ingredients || [];
+    if (!ingredients.length) {
+      empty.push(r.slug);
+      continue;
+    }
+    const factor = BASE_SERVINGS / (Number(r.serves) || BASE_SERVINGS);
+    for (const ing of ingredients) {
+      const entry = catalogue[ing.item];
+      if (!entry) {
+        problems.push(`${r.slug}: ${ing.name} points at no catalogue item (${ing.item || "none"})`);
+        continue;
+      }
+      if (entry.skip) continue;
+      let row = rows.get(ing.item);
+      if (!row) {
+        row = { item: ing.item, name: entry.name, section: SECTIONS.includes(entry.section) ? entry.section : "Pantry", unit: entry.staple ? null : entry.unit, shares: {}, recipes: [], optional: true, notes: [] };
+        rows.set(ing.item, row);
+      }
+      if (!row.recipes.includes(r.slug)) row.recipes.push(r.slug);
+      row.optional = row.optional && ing.optional === true;
+      if (entry.staple) continue;
+      let amount;
+      try {
+        amount = shopAmount(ing, entry);
+      } catch (err) {
+        if (!(err instanceof CatalogueError)) throw err;
+        problems.push(`${r.slug}: ${err.message}`);
+        continue;
+      }
+      if (amount === null) continue; // "to taste" / "to serve": on the list, no quantity
+      row.shares[r.slug] = (row.shares[r.slug] || 0) + amount * factor;
+    }
+  }
+  return { rows, empty, problems };
+}
+
+/** What a patch is called in the review and on the card, in plain words. */
+export function editLabel(edit, rows) {
+  const name = (id) => rows?.get(id)?.name || id;
+  if (edit.drop) return `leave off ${name(edit.drop)}`;
+  if (edit.round_up) return `round ${name(edit.round_up)} up`;
+  if (edit.merge) return `${name(edit.merge[1])} merged into ${name(edit.merge[0])}`;
+  if (edit.note) return `${name(edit.note.item)}: "${edit.note.text}"`;
+  if (edit.move) return `${name(edit.move.item)} in ${edit.move.section}`;
+  if (edit.rename) return `${name(edit.rename.item)} renamed "${edit.rename.name}"`;
+  if (edit.scale) return `${name(edit.scale.item)} x${edit.scale.factor}`;
+  return "an edit";
+}
+
+/** Which item a patch is about (the key review patches are kept and replaced by). */
+export const editTarget = (edit) => edit.drop || edit.round_up || edit.merge?.[1] || edit.note?.item || edit.move?.item || edit.rename?.item || edit.scale?.item || null;
+const editKind = (edit) => ["drop", "round_up", "merge", "note", "move", "rename", "scale"].find((k) => edit[k] !== undefined);
+/** Two patches replace each other when they do the same kind of thing to the same item (a newer note replaces the older one). */
+export const sameEdit = (a, b) => editKind(a) === editKind(b) && editTarget(a) === editTarget(b);
+
+/**
+ * Applies review patches to the rows, in order. A patch whose item is gone (the recipe that needed it was removed) or that can't apply is
+ * returned in `stale` with why, and skipped. Resolves { rows, stale: [{ edit, why }] }. Pure (rows are copied).
+ */
+export function applyListEdits(rows, edits = [], plan = {}) {
+  const out = new Map([...rows].map(([id, r]) => [id, { ...r, shares: { ...r.shares }, recipes: [...r.recipes], notes: [...r.notes] }]));
+  const stale = [];
+  for (const edit of edits) {
+    const target = editTarget(edit);
+    const row = out.get(target);
+    if (!row) {
+      stale.push({ edit, why: `${editLabel(edit, rows)} no longer applies: ${target} isn't on the list any more` });
+      continue;
+    }
+    if (edit.drop) out.delete(target);
+    else if (edit.round_up) {
+      // whole at the planned servings (what the shopping page shows), the extra going to the recipe that needs most of it
+      const planned = plannedTotal(row, plan);
+      if (!Object.keys(row.shares).length || (row.unit !== "count" && !plural[row.unit])) stale.push({ edit, why: `${row.name} isn't counted, so it can't be rounded up` });
+      else {
+        const top = Object.entries(row.shares).sort((a, b) => b[1] - a[1])[0][0];
+        row.shares[top] += ((Math.ceil(planned - 1e-9) - planned) * BASE_SERVINGS) / servingsIn(plan, top);
+      }
+    } else if (edit.merge) {
+      const into = out.get(edit.merge[0]);
+      if (!into) stale.push({ edit, why: `${edit.merge[0]} isn't on the list` });
+      else if (into === row) stale.push({ edit, why: "merging an item with itself" });
+      else if (into.unit !== row.unit) stale.push({ edit, why: `${into.name} (${into.unit || "no amount"}) and ${row.name} (${row.unit || "no amount"}) aren't bought in the same unit` });
+      else {
+        for (const [slug, n] of Object.entries(row.shares)) into.shares[slug] = (into.shares[slug] || 0) + n;
+        into.recipes = [...new Set([...into.recipes, ...row.recipes])];
+        into.optional = into.optional && row.optional;
+        into.notes = [...new Set([...into.notes, ...row.notes])];
+        out.delete(target);
+      }
+    } else if (edit.note) row.notes = [String(edit.note.text).trim()].filter(Boolean);
+    else if (edit.move) {
+      if (!SECTIONS.includes(edit.move.section)) stale.push({ edit, why: `"${edit.move.section}" isn't one of the aisles (${SECTIONS.join(", ")})` });
+      else row.section = edit.move.section;
+    } else if (edit.rename) row.name = String(edit.rename.name).trim() || row.name;
+    else if (edit.scale) {
+      const f = Number(edit.scale.factor);
+      if (!(f > 0 && f <= 10)) stale.push({ edit, why: "scale factor must be between 0 and 10" });
+      else for (const slug of Object.keys(row.shares)) row.shares[slug] *= f;
+    }
+  }
+  return { rows: out, stale };
+}
+
+const servingsIn = (plan, slug) => plan?.[slug] ?? DEFAULT_SERVINGS;
+/** An item's total at the planned servings (each recipe's share scaled by its servings / 2), as the shopping page shows it. */
+const plannedTotal = (row, plan) => Object.entries(row.shares).reduce((n, [slug, a]) => n + (a * servingsIn(plan, slug)) / BASE_SERVINGS, 0);
+
+const words = (name) => String(name).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2).map((w) => w.replace(/(es|s)$/, ""));
+
+/** What the server asks the model to look at (section 6, step 2): [{ key, item, text }]. Keys are stable, so a reviewed flag stays reviewed. */
+export function reviewFlags(rows, empty = [], plan = {}) {
+  const flags = [];
+  const list = [...rows.values()];
+  for (const row of list) {
+    const total = sumOf(row.shares);
+    const planned = plannedTotal(row, plan);
+    if ((row.unit === "count" || plural[row.unit]) && planned > 0 && Math.abs(planned - Math.round(planned)) > 0.01) flags.push({ key: `fraction:${row.item}`, item: row.item, text: `${Math.round(planned * 100) / 100} ${row.name.toLowerCase()} at the planned servings is a fraction: round up (round_up) or leave it` });
+    if (((row.unit === "g" || row.unit === "ml") && total > 3000) || (row.unit === "count" && total > 30)) flags.push({ key: `large:${row.item}`, item: row.item, text: `${row.name}: ${Math.round(total)}${row.unit === "count" ? "" : row.unit} is a lot: check it` });
+  }
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const [a, b] = [list[i], list[j]];
+      const wa = words(a.name);
+      const wb = words(b.name);
+      if (!wa.length || !wb.length || a.unit !== b.unit) continue; // only what could be merged
+      if (wa.every((w) => wb.includes(w)) || wb.every((w) => wa.includes(w))) {
+        const pair = [a.item, b.item].sort();
+        flags.push({ key: `close:${pair.join("+")}`, item: pair[0], text: `"${a.name}" and "${b.name}" are close names on different items: merge them (merge) if they're the same thing` });
+      }
+    }
+  }
+  for (const slug of empty) flags.push({ key: `empty:${slug}`, item: null, text: `${slug} has no ingredients recorded, so nothing on the list is for it` });
+  return flags;
+}
+
+/** The rows as the stored list's sections (the format shopping.js reads): aisles in order, items by name, 2-serving quantities and shares. */
+export function rowsToSections(rows) {
+  const bySection = new Map(SECTIONS.map((s) => [s, []]));
+  for (const row of [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))) {
+    const shares = Object.fromEntries(Object.entries(row.shares).map(([slug, n]) => [slug, roundShare(n, row.unit)]).filter(([, n]) => n > 0));
+    const total = Math.round(sumOf(shares) * 100) / 100;
+    const quantity = total > 0 && row.unit ? (row.unit === "g" || row.unit === "ml" ? `${total}${row.unit}` : row.unit === "count" ? `${total}` : `${total} ${total > 1 ? plural[row.unit] || row.unit : row.unit}`) : "";
+    const note = [...row.notes, ...(row.optional ? ["optional"] : [])].join(", ");
+    const item = {
+      name: row.name,
+      ...(quantity ? { quantity } : {}),
+      ...(note ? { note } : {}),
+      recipes: [...row.recipes].sort(),
+      // every share when the item is for several recipes, even if only one of them measures it (the others: "to taste"), so the page scales each
+      ...(quantity && row.recipes.length > 1 ? { amounts: shares } : {}),
+    };
+    bySection.get(row.section)?.push(item);
+  }
+  return [...bySection].filter(([, items]) => items.length).map(([name, items]) => ({ name, items }));
+}
+
+/**
+ * The whole list for next week: `recipes` (next week's, with their ingredients), the catalogue, and review patches. Resolves { sections,
+ * rows (after the patches), optional: [{ item, name, quantity, recipes }] (items only optional ingredients need), flags, stale, empty, problems }.
+ */
+export function buildShoppingList(recipes, catalogue, edits = [], plan = {}) {
+  const { rows: raw, empty, problems } = listRows(recipes, catalogue);
+  const { rows, stale } = applyListEdits(raw, edits, plan);
+  const sections = rowsToSections(rows);
+  const quantityOf = new Map(sections.flatMap((s) => s.items).map((i) => [i.name, i.quantity]));
+  const optional = [...rows.values()].filter((r) => r.optional).map((r) => ({ item: r.item, name: r.name, quantity: quantityOf.get(r.name) || "", recipes: [...r.recipes].sort() }));
+  // optional items an answer left off: still asked about (unticked) if the card is shown again
+  const droppedOptional = [...raw.values()]
+    .filter((r) => r.optional && !rows.has(r.item) && edits.some((e) => e.drop === r.item))
+    .map((r) => ({ item: r.item, name: r.name, quantity: rowsToSections(new Map([[r.item, r]]))[0]?.items[0]?.quantity || "", recipes: [...r.recipes].sort() }));
+  return { sections, rows, optional, droppedOptional, flags: reviewFlags(rows, empty, plan), stale, empty, problems };
+}
+
+/**
+ * update_shopping_list with build: true: builds next week's list from the recipes in the ChangeSet (the batch's or tray's earlier changes
+ * included), applies the review patches, and stages (or commits) it. Resolves { list, next, built, commit, subject }.
+ */
+export async function buildAndSaveShoppingList({ edits = [] } = {}, batch, servings = {}, caller) {
+  assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.js
+  const cs = batch || new ChangeSet();
+  const book = await bookIngredients(cs);
+  const next = book.filter(isNextWeek);
+  if (!next.length) {
+    throw new ShoppingListError('Next week has no recipes, so there is nothing to shop for. Plan it first: create_recipe with week: "next", or set_week_recipes with week: "next". The page keeps showing the last list until then.');
+  }
+  const slugs = next.map((r) => r.slug);
+  validateServings(servings, slugs, "a next-week recipe");
+  const previous = await readStoredList(cs);
+  const plan = resolveServings(slugs, servings, previous?.servings);
+  const built = buildShoppingList(next, await loadCatalogue(cs), edits, plan);
+  if (built.problems.length) throw new ShoppingListError(`The list can't be built:\n- ${built.problems.join("\n- ")}\nFix those recipes' ingredients (update_recipe) first.`);
+  if (!built.sections.length) throw new ShoppingListError(`Next week's recipes (${slugs.join(", ")}) have no ingredients recorded, so there is nothing to shop for.`);
+  validateSections(built.sections); // a safety net: holds by construction
+  const list = assembleShoppingList(built.sections, slugs, new Date(), plan);
+  cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
+  const subject = `Update shopping list (${next.length} next-week recipe${next.length === 1 ? "" : "s"})`;
+  const commit = batch ? null : await cs.commit(`${subject}\n\nBuilt from the recipes via the recipes MCP server.`, caller);
+  return { list, next, built, commit, subject };
+}
+
+/** What the built list asks the agent to look at: the flags, the optional items, patches that no longer apply. */
+export function builtReport(built) {
+  if (!built) return [];
+  return [
+    ...(built.flags.length ? ["To review (patch with edits only if needed):", ...built.flags.map((f) => `- [${f.key}] ${f.text}`)] : ["Nothing flagged for review."]),
+    ...(built.optional.length ? [`Optional items (only garnishes and extras need them; ask the user which to keep, all kept by default, and drop the others with edits: [{ drop: id }]): ${built.optional.map((o) => `${o.name} (${o.item})`).join(", ")}`] : []),
+    ...(built.stale.length ? [`Patches that didn't apply: ${built.stale.map((x) => x.why).join("; ")}`] : []),
+  ];
+}
+

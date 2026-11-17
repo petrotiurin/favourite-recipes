@@ -260,10 +260,11 @@ export function messagesForPanel(rows) {
       if (ui.replies?.length) turn.replies = ui.replies;
       if (ui.question) turn.question = ui.question;
       if (ui.review) turn.review = ui.review;
+      if (ui.optional) turn.optional = ui.optional;
       if (row.feedback) turn.feedback = row.feedback;
     }
   }
-  return out.filter((m) => m.role === "user" || m.role === "event" || m.content || m.cards?.length || m.question || m.review);
+  return out.filter((m) => m.role === "user" || m.role === "event" || m.content || m.cards?.length || m.question || m.review || m.optional);
 }
 
 /**

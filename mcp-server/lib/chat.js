@@ -7,9 +7,10 @@ import { z } from "zod";
 import { config, COURSES } from "./config.js";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
-import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL, PROMPT_VERSION } from "./chat-prompt.js";
+import { optionalCard } from "./optional-review.js";
 import { thisWeeksDrafts, reviewCard } from "./draft-review.js";
-import { trayAction, trayView, loadTray } from "./tray.js";
+import { trayAction, trayView, loadTray, finaliseState } from "./tray.js";
 import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion } from "./chat-ui.js";
 
 export const MAX_TURNS = 20; // messages kept from the client's history
@@ -411,7 +412,7 @@ const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu
 export const photoPairingChip = (text) =>
   /\b(use|set|make|put|keep|take)\b[^]*\b(photo|picture|pic|image)s?\b/i.test(text) || /\b(photo|picture|pic|image)[-\s]?\d+\b[^]*\b(for|as|on)\b/i.test(text);
 
-const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user", "review_drafts"]);
+const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user", "review_drafts", "review_optional"]);
 
 const resultText = (result, max = MAX_TOOL_RESULT_CHARS) => {
   const text = (result?.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
@@ -431,7 +432,7 @@ export function offeredTools(role) {
   const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
   const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
   if (role !== "editor") return [...base, ...ui];
-  return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL];
+  return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
@@ -451,7 +452,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   const stagedLabels = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
   const emit = (event) => {
-    if (["cards", "question", "review", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
+    if (["cards", "question", "review", "optional", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
     if (event.type === "tray" && event.label && !stagedLabels.includes(event.label)) stagedLabels.push(event.label);
     rawEmit(event);
   };
@@ -701,6 +702,26 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         }
         content = JSON.stringify(card ? { shown: true, drafts: card.drafts.length, note: "End your turn now: the site stages the answers when the user taps Done, then you build the list." } : { shown: false, error: askedUser ? "One question per turn." : "This week has no drafts: nothing to ask about them." });
         span.end({ output: content });
+      } else if (call.name === "review_optional") {
+        // the optional items card, built from the tray's list (never from the model); Done is answered by the server (lib/optional-review.js)
+        let card = null;
+        if (caller.role === "editor" && offered.has("review_optional") && !askedUser) {
+          try {
+            const st = await finaliseState(caller);
+            if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional);
+          } catch (err) {
+            console.error("Building the optional items card failed:", err.message);
+          }
+        }
+        if (card) {
+          askedUser = true;
+          ui.optional = card;
+          delete ui.replies;
+          delete ui.question;
+          emit({ type: "optional", ...card });
+        }
+        content = JSON.stringify(card ? { shown: true, items: card.items.length, note: "End your turn now: the site stages the answers when the user taps Done." } : { shown: false, error: askedUser ? "One question per turn." : "The tray's list has no optional items." });
+        span.end({ output: content });
       } else if (call.name === "show_recipes") {
         const { cards, dropped } = buildCards(book, args?.slugs);
         if (cards.length) {
@@ -838,6 +859,7 @@ export function shownFor(ui) {
   if (ui.replies?.length) shown.replies = ui.replies.map((r) => (typeof r === "string" ? r : r.label));
   if (ui.question) shown.question = { text: ui.question.question, options: ui.question.options };
   if (ui.review) shown.review = ui.review.drafts.map((d) => d.slug);
+  if (ui.optional) shown.optional = ui.optional.items.map((i) => i.item);
   if (ui.nav) shown.navigation = ui.nav.label;
   return Object.keys(shown).length ? shown : undefined;
 }

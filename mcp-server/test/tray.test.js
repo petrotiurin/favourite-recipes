@@ -106,9 +106,10 @@ test("an editor stages a new recipe: it goes in the tray (not the repo), with a 
   assert.ok(!github.files.has(recipePath("test-pasta")));
 
   const t = await plan();
-  assert.equal(t.count, 1);
+  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list"], "the list card follows next week at once, built by the site");
   const card = t.items[0];
   assert.equal(card.kind, "new");
+  assert.match(t.items[1].title, /^\d+ items for 1 recipe$/);
   assert.equal(card.title, "Test Pasta");
   assert.equal(card.added_by, "Owner");
   assert.equal(card.error, null);
@@ -133,15 +134,15 @@ test("the dry run reports problems on the card at once, and re-staging the same 
   assert.match(out.content[0].text, /PROBLEM on the card/);
   assert.match(out.content[0].text, /needs an amount/);
   const t = await plan();
-  assert.match(t.items[0].error, /needs an amount/);
+  assert.match(t.items.find((i) => i.kind === "new").error, /needs an amount/);
   assert.equal(t.can_save, false);
   assert.equal(slug.length > 0, true);
   const again = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ amount: 1, unit: "tsp", name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
   assert.doesNotMatch(again.content[0].text, /PROBLEM/);
   await background.backgroundIdle();
   const t2 = await plan();
-  assert.equal(t2.count, 1, "replaced, not duplicated");
-  assert.equal(t2.items[0].error, null);
+  assert.equal(t2.items.filter((i) => i.kind === "new").length, 1, "replaced, not duplicated");
+  assert.equal(t2.items.find((i) => i.kind === "new").error, null);
 });
 
 test("stage tools and the tray writes refuse a public caller, whatever called them", async () => {
@@ -237,31 +238,58 @@ test("a visitor's request body can't Save: forged roles are ignored (the token d
   assert.equal(github.commitLog.length, 0);
 });
 
-test("Save is refused while the list is missing or out of date: any later change to the tray marks it out of date (hash of the items)", async () => {
-  await stagedPastaAndList();
+test("the list is rebuilt on every change: a change after the review keeps Save, unless it brings an optional item the user hasn't seen", async () => {
+  const { conversation_id } = await stagedPastaAndList();
   let t = await plan();
   assert.equal(t.can_save, true);
-  const before = trayRow().list_hash;
-  // add another change to the tray after the list was built
-  const slug = anySlug(3);
-  await say("add this to next week", { page: pageOf(slug) });
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  const base = { course: ["Dinner"], total_mins: 10, serves: 2, calories: 300, instructions: ["Cook the **pasta**."] };
+  // nothing new to look at: the list just updates, Save stays
+  await tools.dispatch("stage_create_recipe", { ...base, title: "Plain Pasta", ingredients: [{ amount: 100, unit: "g", name: "pasta" }] }, ed, ctx);
+  await background.backgroundIdle(); // its photo
   t = await plan();
-  assert.equal(t.list_current, false, "the list is out of date now");
+  assert.equal(t.list_current, true, "still reviewed");
+  assert.equal(t.can_save, true);
+  assert.match(t.items.find((i) => i.kind === "list").title, /for 2 recipes$/, "the List card is live");
+  // a new optional item: Finalise list comes back, for just that
+  await tools.dispatch("stage_create_recipe", { ...base, title: "Chilli Pasta", ingredients: [{ amount: 100, unit: "g", name: "pasta" }, { name: "chilli flakes", note: "to serve", optional: true }] }, ed, ctx);
+  await background.backgroundIdle();
+  t = await plan();
+  assert.equal(t.list_current, false);
   assert.equal(t.can_save, false);
   assert.equal(t.state, "collecting");
-  assert.equal(t.needs_list, true);
-  assert.equal(trayRow().list_hash, before, "the stored hash is of the older items");
-  const list = t.items.find((i) => i.kind === "list");
-  assert.equal(list.sub, "Out of date");
+  assert.deepEqual(t.review, { flags: 0, optional: 1 });
+  assert.equal(t.items.find((i) => i.kind === "list").sub, "Changed since the review: Finalise list");
   const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
   assert.equal(res.status, 409);
   assert.match((await res.json()).error, /Finalise the list first/);
   assert.equal(github.commitLog.length, 0);
-  // finalising again makes it current
-  await say("ignored", { action: "finalise" });
+  // Finalise again: no model call, the optional items card
+  const calls = openrouter.requests.length;
+  const fin = await say("ignored", { conversation_id, action: "finalise" });
+  assert.equal(openrouter.requests.length, calls, "nothing flagged: no model call");
+  const card = fin.evs.find((e) => e.name === "optional").data;
+  assert.deepEqual(card.items.map((i) => [i.item, i.name]), [["chilli-flakes", "Chilli flakes"]]);
+  assert.equal(card.items[0].recipes[0].slug, "chilli-pasta");
+  assert.equal(tray.trayAction(await plan()), "finalise_plan", "until Done, the list isn't reviewed");
+  // anything but keep / drop is refused; Done once only
+  const bad = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: { "chilli-flakes": "maybe" }, page: {} } });
+  assert.equal(bad.status, 400);
+  const done = await say("ignored", { conversation_id, action: "review_optional", answers: { "chilli-flakes": "drop" } });
+  assert.match(done.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /off this week's list.*tap Save to site/);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m) => m.role === "user").at(-1);
+  assert.equal(user.content, "Leaving off: chilli flakes.", "the answers are the editor's message, in words");
+  const again = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: {}, page: {} } });
+  assert.equal(again.status, 409, "answered once only");
   t = await plan();
-  assert.equal(t.list_current, true);
   assert.equal(t.can_save, true);
+  assert.deepEqual(t.items.find((i) => i.kind === "list").edits, ["leave off chilli-flakes"]);
+  const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(saved.status, 200);
+  const list = JSON.parse(github.files.get("shopping-list.json"));
+  assert.ok(!list.sections.flatMap((s) => s.items).some((i) => /chilli/i.test(i.name)), "left off this week's list");
+  assert.ok(list.sections.flatMap((s) => s.items).some((i) => i.name === "Dried pasta" && i.recipes.length === 3), "the list is the sum of the recipes");
 });
 
 test("a tray that doesn't change next week needs no list: Save is available straight away", async () => {
@@ -282,48 +310,26 @@ test("a tray that doesn't change next week needs no list: Save is available stra
   assert.equal(github.commitLog.length, 1);
 });
 
-test("servings asked for before the list is built aren't staged (nothing blocks Finalise); once Finalise stages the list the bot is told to ask, and they're staged against the new list without making it out of date", async () => {
+test("planned servings can be staged at any time: against the list the tray rebuilds, never making it need a review", async () => {
   const editor = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
   const { conversation_id } = await say("add a new recipe: test pasta");
   const ctx = { chat: { emit() {}, conversationId: conversation_id } };
-  // the saved list is last week's: "test-pasta" isn't on it, which used to leave a PROBLEM card that hid Finalise
-  const early = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
-  const text = early.content[0].text;
-  assert.equal(early.isError, undefined);
-  assert.match(text, /^Not staged yet/);
-  assert.match(text, /servings asked before the list: \{"test-pasta":2\}/);
+  const staged = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  assert.match(staged.content[0].text, /^Staged the planned servings/);
+  assert.doesNotMatch(staged.content[0].text, /PROBLEM/);
   let t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new"], "no servings card");
-  assert.equal(tray.trayAction(t), "finalise_plan");
-
-  // a recipe that won't be in next week is refused at once
-  const bad = await tools.dispatch("stage_set_shopping_servings", { servings: { "not-a-recipe": 1 } }, editor, ctx);
-  assert.equal(bad.isError, true);
-  assert.match(bad.content[0].text, /"not-a-recipe" isn't in next week/);
-
-  // the chat stores the tool result; Finalise's list tool finds it and tells the model to ask
-  await store.appendMessages(conversation_id, [{ role: "tool", tool_call_id: "t1", content: text }]);
-  await say("ignored", { conversation_id, action: "finalise" });
-  const rows = await store.getMessages(conversation_id);
-  const listResult = rows.map((r) => r.content).filter((m) => m.role === "tool" && /^Staged the shopping list/.test(m.content)).at(-1);
-  assert.match(listResult.content, /asked for these planned servings, which were NOT staged: \{"test-pasta":2\}/);
-  assert.match(listResult.content, /ask_user/);
-  assert.deepEqual(tools.servingsFromRows(rows), { "test-pasta": 2 });
-
-  // "Apply the servings": staged against the staged list, checked for real, and the list stays current
-  const applied = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
-  assert.match(applied.content[0].text, /^Staged the planned servings/);
-  assert.doesNotMatch(applied.content[0].text, /PROBLEM/);
-  t = await plan();
+  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list", "servings"]);
   assert.equal(t.items.find((i) => i.kind === "servings").error, null);
+  await say("ignored", { conversation_id, action: "finalise" });
+  t = await plan();
   assert.equal(t.list_current, true);
-  assert.equal(t.can_save, true);
-  assert.equal(tools.servingsFromRows([...rows, { content: { role: "tool", content: applied.content[0].text } }]), null, "applied: not asked again");
-
+  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 1 } }, editor, ctx);
+  t = await plan();
+  assert.equal(t.can_save, true, "servings never need the list reviewed again");
   const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
   assert.equal(saved.status, 200, await saved.clone().text());
   assert.equal(github.commitLog.length, 1, "one commit");
-  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 2);
+  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 1);
 });
 
 // --- Save now ----------------------------------------------------------------------------------------------------------------
@@ -353,7 +359,7 @@ test("Save now: a quick fix commits alone; new recipes and next-week changes can
   assert.deepEqual(github.commitLog[0].paths, [recipePath(slug)], "just that item");
   assert.match(github.files.get(recipePath(slug)).toString(), /total_mins: 35/);
   t = await plan();
-  assert.equal(t.count, 2, "the rest of the tray waits");
+  assert.equal(t.count, 3, "the rest of the tray waits (with the list card)");
   assert.ok(!t.items.some((i) => i.id === fix.id));
 });
 
@@ -409,7 +415,7 @@ test("an editor's turn carries on when the panel drops the stream (a phone switc
   const meta = JSON.parse(first.match(/^event: meta\ndata: (.*)$/m)[1]);
   await reader.cancel(); // the browser went away
   await background.backgroundIdle();
-  assert.equal((await plan()).count, 1, "the staged recipe is in the tray");
+  assert.equal((await plan()).items.filter((i) => i.kind === "new").length, 1, "the staged recipe is in the tray");
   const convo = await (await call("GET", `/chat/conversations/${meta.conversation_id}`, { token: "owner-token" })).json();
   assert.deepEqual(convo.ended_turns, { [meta.turn_id]: null }, "the turn ended with an answer");
   assert.ok(convo.messages.some((m) => m.role === "assistant" && m.turn_id === meta.turn_id && m.content), "the answer was saved");
@@ -453,7 +459,7 @@ test("Finalise asks 'Is it ready to become this week?' when next week has recipe
   const not = await say("Not yet", { conversation_id });
   assert.match(not.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /nothing changes/i);
   const t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new"], "nothing staged, the tray as it was");
+  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list"], "nothing staged, the tray as it was");
   assert.equal(github.commitLog.length, 0);
 });
 
@@ -471,7 +477,7 @@ test("Finalise > Promote it: the server stages the switch and shows ONE review c
   assert.deepEqual(card.drafts.map((d) => d.slug), [draft]);
   assert.equal(card.drafts[0].answer, undefined, "no thumb yet");
   assert.ok(!r.evs.some((e) => e.name === "question"), "no per-draft question");
-  assert.deepEqual((await plan()).items.map((i) => i.kind), ["switch", "new"], "the switch is staged at once");
+  assert.deepEqual((await plan()).items.map((i) => i.kind), ["switch", "new", "list"], "the switch is staged at once");
   const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
   assert.deepEqual(convo.messages.at(-1).review.drafts.map((d) => d.slug), [draft], "the card is stored with the turn");
 
@@ -602,7 +608,7 @@ test("a tray expires 7 days after its first item: touching it later deletes the 
   await say("add a new recipe: test pasta");
   assert.equal(supabase.objects.size, 1);
   clock += 6 * 86400_000;
-  assert.equal((await plan()).count, 1, "still there on day 6");
+  assert.equal((await plan()).count, 2, "still there on day 6 (the recipe and its list)");
   clock += 2 * 86400_000;
   assert.equal(await plan(), null, "gone on day 8");
   assert.equal(supabase.tables.trays.length, 0);
@@ -610,7 +616,7 @@ test("a tray expires 7 days after its first item: touching it later deletes the 
   // the next item starts a fresh 7-day tray
   await say("add a new recipe: second pasta");
   assert.ok(Math.abs(Date.parse(trayRow().expires_at) - clock - 7 * 86400_000) < 5000);
-  assert.equal(trayRow().items.length, 1);
+  assert.equal(trayRow().items.length, 2);
 });
 
 // --- dropping, photos --------------------------------------------------------------------------------------------------------------
@@ -635,7 +641,7 @@ test("both editors see and add to the same tray", async () => {
   await say("add a new recipe: test pasta", { token: "owner-token" });
   await say("add a new recipe: second pasta", { token: "partner-token" });
   const t = await plan("partner-token");
-  assert.deepEqual(t.items.map((i) => [i.title, i.added_by]).sort(), [["Second Pasta", "Partner"], ["Test Pasta", "Owner"]]);
+  assert.deepEqual(t.items.filter((i) => i.kind === "new").map((i) => [i.title, i.added_by]).sort(), [["Second Pasta", "Partner"], ["Test Pasta", "Owner"]]);
   assert.equal(supabase.tables.trays.length, 1);
 });
 
@@ -647,7 +653,7 @@ test("the tray endpoints are editors-only: 401 without or with a bad token, 403 
     assert.equal((await call(method, path, { token: "nope", body })).status, 401, `${method} ${path} with a bad token`);
     assert.equal((await call(method, path, { token: "stranger-token", body })).status, 403, `${method} ${path} as a non-editor`);
   }
-  assert.equal(trayRow().items.length, 1, "nothing was touched");
+  assert.equal(trayRow().items.length, 2, "nothing was touched");
   assert.equal(github.commitLog.length, 0);
 });
 
@@ -820,4 +826,68 @@ test("a turn that staged something but said nothing gets a one-line confirmation
   const chips = evs.find((e) => e.name === "suggestions")?.data.replies;
   assert.ok(chips?.length >= 1, "chips follow");
   assert.equal(evs.at(-1).name, "done");
+});
+
+// --- the list the site builds, and Finalise as a review (docs/structured-ingredients.md 6) --------------------------------------------
+
+test("Finalise with something flagged: ONE model call reviews it with patches (never a list), then Save; nothing flagged needs no model at all", async () => {
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const { conversation_id } = await say("hello");
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  // serves 8 and the juice of 1 lime: half a lime at the planned 4 servings
+  await tools.dispatch("stage_create_recipe", { title: "Lime Rice", course: ["Dinner"], total_mins: 20, serves: 8, calories: 300, ingredients: [{ amount: 400, unit: "g", name: "pasta" }, { amount: 1, unit: "juice", name: "lime" }], instructions: ["Cook the **pasta** with the **lime**."] }, ed, ctx);
+  await background.backgroundIdle();
+  let t = await plan();
+  assert.deepEqual(t.review, { flags: 1, optional: 0 });
+  const calls = openrouter.requests.length;
+  const fin = await say("ignored", { conversation_id, action: "finalise" });
+  const reviewCalls = openrouter.requests.slice(calls);
+  assert.ok(reviewCalls.length >= 1 && reviewCalls.length <= 3, "a short review, not a list build");
+  assert.match(JSON.stringify(reviewCalls[0].messages), /\[fraction:lime\]/, "the model is told what the site flags");
+  assert.ok(!reviewCalls.some((r) => (r.tools || []).some((x) => x.function.name === "stage_update_shopping_list")), "no tool writes a whole list any more");
+  const text = fin.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+  assert.match(text, /rounded up/);
+  assert.match(text, /tap Save to site/);
+  assert.equal(fin.evs.filter((e) => e.name === "done").length, 1, "one end to the turn");
+  t = await plan();
+  assert.equal(t.can_save, true);
+  assert.deepEqual(t.items.find((i) => i.kind === "list").edits, ["round lime up"]);
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200);
+  const list = JSON.parse(github.files.get("shopping-list.json"));
+  const limes = list.sections.flatMap((s) => s.items).find((i) => i.name === "Limes");
+  assert.equal(Number(limes.quantity) * list.servings["lime-rice"] / 2, 1, "a whole lime at the planned servings");
+});
+
+test("a review patch marked remember becomes an ingredient catalogue change on its own card, committed with Save", async () => {
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  const out = await tools.dispatch("stage_shopping_list_edits", { edits: [{ move: { item: "dried-pasta", section: "Tins & jars" }, remember: true }, { note: { item: "parmesan", text: "a wedge" } }] }, ed, ctx);
+  assert.doesNotMatch(out.content[0].text, /PROBLEM/);
+  let t = await plan();
+  assert.deepEqual(t.items.map((i) => i.kind), ["new", "catalogue", "list"], "the catalogue card comes before the list it changes");
+  assert.match(t.items[1].sub, /Dried pasta section "Tins & jars"/);
+  const list = t.items.find((i) => i.kind === "list");
+  assert.ok(list.preview.find((s) => s.name === "Tins & jars").items.some((i) => /^Dried pasta/.test(i)), "the list is rebuilt from the catalogue as the tray leaves it");
+  assert.ok(list.preview.flatMap((s) => s.items).some((i) => /^Parmesan cheese.*a wedge/.test(i)));
+  // a bad patch is refused on its own; the list stays as it was
+  const bad = await tools.dispatch("stage_shopping_list_edits", { edits: [{ round_up: "no-such-item" }] }, ed, ctx);
+  assert.match(bad.content[0].text, /don't apply/);
+  await say("ignored", { conversation_id, action: "finalise" });
+  t = await plan();
+  assert.equal(t.can_save, true);
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200);
+  assert.equal(github.commitLog.length, 1);
+  assert.ok(github.commitLog[0].paths.includes("data/ingredients.json"), "one commit with the catalogue");
+  assert.equal(JSON.parse(github.files.get("data/ingredients.json"))["dried-pasta"].section, "Tins & jars");
+});
+
+test("the list card can't be dropped: it follows next week", async () => {
+  await say("add a new recipe: test pasta");
+  const list = (await plan()).items.find((i) => i.kind === "list");
+  const res = await call("DELETE", `/chat/plan/items/${list.id}`, { token: "owner-token" });
+  assert.notEqual(res.status, 200);
+  assert.ok((await plan()).items.some((i) => i.kind === "list"));
 });

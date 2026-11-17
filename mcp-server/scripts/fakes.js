@@ -125,34 +125,6 @@ const parseNoteDrafts = (note) => {
 };
 const callsOf = (m) => (m.tool_calls || []).map((c) => ({ name: c.function.name, args: (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })(), id: c.id }));
 
-/** A recipe's ingredients from its Markdown's frontmatter: [{ name, quantity }]. */
-const ingredientsOf = (markdown) => {
-  const front = String(markdown).split(/^---$/m)[1] || "";
-  return [...front.matchAll(/^  - \{ (.*) \}$/gm)].map((m) => {
-    const name = m[1].match(/\bname: ("[^"]*"|[^,]+)/)?.[1].replace(/^"|"$/g, "");
-    const amount = m[1].match(/\bamount: ([\d.]+)/)?.[1];
-    const unit = m[1].match(/\bunit: (\w+)/)?.[1];
-    return name ? { name, quantity: amount ? `${amount}${unit && /^(g|ml)$/.test(unit) ? unit : ""}` : "" } : null;
-  }).filter(Boolean);
-};
-
-/** A shopping list from get_tray's answer: one line per ingredient, tagged with its recipes (a mock: not scaled, quantities only when plain). */
-function listFromTray(content) {
-  const json = String(content).split(/Recipes that will be in next week after Save \(\d+\):\n/)[1];
-  let recipes = [];
-  try { recipes = JSON.parse(json); } catch { /* none */ }
-  const byName = new Map();
-  for (const r of recipes) for (const i of ingredientsOf(r.markdown)) {
-    const key = i.name.toLowerCase();
-    const row = byName.get(key) || { name: i.name, quantity: i.quantity, recipes: [] };
-    if (row.recipes.length) row.quantity = "";
-    if (!row.recipes.includes(r.slug)) row.recipes.push(r.slug);
-    byName.set(key, row);
-  }
-  const items = [...byName.values()].map((r) => ({ name: r.name, ...(/^\d+(g|ml)?$/.test(r.quantity) ? { quantity: r.quantity } : {}), recipes: r.recipes }));
-  return { sections: [{ name: "Everything", items }] };
-}
-
 /** The editor's flows. Returns a scripted response, or null when the message is not one of them. */
 function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   const after = msgs.slice(lastUserIdx + 1);
@@ -299,17 +271,14 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     const noted = String(note || "").match(/Drafts with an answer already in the tray \(don't ask again\): (.*?)\. Drafts not yet answered/)?.[1] || "";
     const left = drafts.find((d) => !asked.some((q) => q.includes(`Did you like ${d.title}?`)) && !noted.includes(`(${d.slug},`));
     if (left) return ask(`Did you like ${left.title}?`, ["Liked", "Not for us", "Not tried yet"]);
-    if (!lastCall || lastCall.name !== "get_tray") return tray("get_tray", {}, "Now I'll read next week's recipes and build the list.");
-    return null;
+    return done("That's this week's drafts done. Tap Finalise list and the site checks next week's list.", { label: "Finalise list", action: "finalise_plan" });
   };
-  const buildStep = () => {
-    if (lastCall?.name === "get_tray") return tray("stage_update_shopping_list", listFromTray(lastResult.content), "");
-    if (lastCall?.name === "stage_update_shopping_list") return done("The shopping list is in the tray. Check it, then tap Save to site.", "Open the shopping page");
-    return null;
-  };
-  if (lastCall && ["get_tray", "stage_update_shopping_list"].includes(lastCall.name)) return buildStep();
-  // the drafts review card was answered: the site staged the answers and hands over for the list
-  if (/already staged the switch and the answers about this week's drafts/.test(String(note || "")) && !lastCall) return tray("get_tray", {}, "Now I'll read next week's recipes and build the list.");
+  // Finalise step (2): the site built the list and flags what to review. Round up the fractions, then one line.
+  if (/Finalise step \(2\): the site has built next week's shopping list/.test(String(note || ""))) {
+    const fractions = [...String(note).matchAll(/\[fraction:([a-z0-9-]+)\]/g)].map((m) => m[1]);
+    if (!lastCall && fractions.length) return tray("stage_shopping_list_edits", { edits: fractions.map((id) => ({ round_up: id })) }, "");
+    return scriptedStream({ ...opts, text: fractions.length ? `I rounded up ${fractions.length === 1 ? "one item" : `${fractions.length} items`} bought whole; the rest looks right.` : "The list looks right." });
+  }
   const answer = user;
   if (finaliseTap && !lastCall) {
     if (nextN > 0) {
@@ -317,14 +286,15 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
       // the recipes' cards first, then the question (both in one reply: the question ends the turn)
       return scriptedStream({ ...opts, text: "Next week already has recipes, so first: is it ready to become this week?", calls: [showRecipes(nextSlugs.slice(0, 6)), { name: "ask_user", arguments: { question: `Next week has ${nextN} recipe${nextN === 1 ? "" : "s"}. Is it ready to become this week?`, options: ["Promote it", "Not yet"] } }] });
     }
-    // next week is empty: no promote question and no draft questions, straight to building the list
-    return tray("get_tray", {}, "Next week is empty, so there's nothing to switch. I'll read the tray and build the list.");
+    // next week is empty: the site runs Finalise itself (no promote question); the model isn't asked
+    return done("Next week is empty, so there's nothing to switch.");
   }
   if (prevAsk && /ready to become this week/.test(prevAsk.question)) {
     if (answer === "not yet") return done("Okay: nothing changes, and next week and its list stay as they are. Say the word when you want to finalise.", { label: "Finalise list", action: "finalise_plan" });
     if (answer === "promote it") {
       if (!lastCall) return tray("stage_start_next_week", {}, "I'll stage the switch first.");
       if (lastCall.name === "stage_start_next_week" && drafts.length) return tray("review_drafts", {}, "How did this week's drafts go?");
+      if (lastCall.name === "stage_start_next_week") return done("The switch is in the tray.", { label: "Finalise list", action: "finalise_plan" });
       return nextStep();
     }
   }

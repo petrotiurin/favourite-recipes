@@ -6,7 +6,9 @@ import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/cha
 import { UserError } from "../lib/recipes.js";
 import { PROMPT_VERSION } from "../lib/chat-prompt.js";
 import { startTrace, setScore, deleteScore } from "../lib/langfuse.js";
-import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent, stageOp } from "../lib/tray.js";
+import { loadTray, trayView, trayAction, trayNote, dropItem, regeneratePhoto, startFinalise, settleFinalise, trayEvent, stageOp, finaliseState, markReviewed } from "../lib/tray.js";
+import { optionalCard, parseOptionalAnswers, optionalAnswersText, optionalOpen, optionalLine } from "../lib/optional-review.js";
+import { recipeSummaries } from "../lib/recipes.js";
 import { thisWeeksDrafts, reviewCard, parseAnswers, answersText, stageReview, reviewOpen, isPromoteIt } from "../lib/draft-review.js";
 import { chatEnabled, publicChatEnabled, DISABLED_BODY, SIGNIN_BODY } from "../lib/chat-switch.js";
 import { isNotYet, promoteQuestionOpen, NOT_YET_REPLY } from "../lib/shortcuts.js";
@@ -482,12 +484,31 @@ export async function POST(request) {
   let review = false; // Done on the drafts review card
   let reviewDrafts = [];
   let reviewAnswers = null;
+  let optionalReview = false; // Done on the optional items card
+  let optionalItems = [];
+  let optionalAnswers = null;
   let history = [];
   let rows = []; // the conversation's stored rows (an editor's)
   let imagePaths = []; // photos uploaded on pick (POST /chat/uploads), in picked order
   if (isEditor) {
     finalise = body?.action === "finalise";
     review = body?.action === "review_drafts";
+    optionalReview = body?.action === "review_optional";
+    if (optionalReview) {
+      if ((Array.isArray(body?.images) && body.images.length) || (Array.isArray(body?.image_paths) && body.image_paths.length)) return reply({ error: "Photos can't go with the answers." }, 400);
+      if (!isUuid(body?.conversation_id)) return reply({ error: "That question isn't in a chat." }, 400);
+      try {
+        const st = await finaliseState(caller);
+        optionalItems = st?.built ? [...st.built.optional, ...st.built.droppedOptional] : [];
+      } catch (err) {
+        console.error("Reading the optional items failed:", err.message);
+        return reply({ error: "The tray isn't available right now." }, 502);
+      }
+      if (!optionalItems.length) return reply({ error: "The list has no optional items any more." }, 409);
+      const parsed = parseOptionalAnswers(body?.answers, optionalItems);
+      if (parsed.error) return reply({ error: parsed.error }, 400);
+      optionalAnswers = parsed.answers;
+    }
     if (review) {
       if ((Array.isArray(body?.images) && body.images.length) || (Array.isArray(body?.image_paths) && body.image_paths.length)) return reply({ error: "Photos can't go with the drafts' answers." }, 400);
       if (!isUuid(body?.conversation_id)) return reply({ error: "That question isn't in a chat." }, 400);
@@ -502,14 +523,14 @@ export async function POST(request) {
       if (parsed.error) return reply({ error: parsed.error }, 400);
       reviewAnswers = parsed.answers;
     }
-    const hasImages = Array.isArray(body?.images) && body.images.length > 0 && !finalise && !review;
+    const hasImages = Array.isArray(body?.images) && body.images.length > 0 && !finalise && !review && !optionalReview;
     if (body?.images !== undefined && body?.images !== null && !Array.isArray(body.images)) return reply({ error: "Photos must be a list." }, 400);
     if (body?.image_paths !== undefined && body?.image_paths !== null && !(Array.isArray(body.image_paths) && body.image_paths.every(isUploadPath) && new Set(body.image_paths).size === body.image_paths.length)) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
     if (Array.isArray(body?.image_paths) && body.image_paths.length && finalise) return reply({ error: "Photos can't go with Finalise." }, 400);
     imagePaths = Array.isArray(body?.image_paths) ? body.image_paths : [];
     if ((Array.isArray(body?.images) ? body.images.length : 0) + imagePaths.length > MAX_IMAGES) return reply({ error: `At most ${MAX_IMAGES} photos per message.` }, 400);
     if (imagePaths.length && !isUuid(body?.conversation_id)) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
-    const text = finalise ? "Finalise list" : review ? answersText(reviewDrafts, reviewAnswers).slice(0, MAX_USER_CHARS) : typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
+    const text = finalise ? "Finalise list" : review ? answersText(reviewDrafts, reviewAnswers).slice(0, MAX_USER_CHARS) : optionalReview ? optionalAnswersText(optionalItems, optionalAnswers).slice(0, MAX_USER_CHARS) : typeof body?.message === "string" ? body.message.trim().slice(0, MAX_USER_CHARS) : "";
     if (!text && !hasImages && !imagePaths.length) return reply({ error: "Send a message to start the chat." }, 400);
     if (finalise) {
       try {
@@ -541,6 +562,7 @@ export async function POST(request) {
       // another turn of this chat is running (a follow-up, usually): say so before anything is counted; the panel sends again when it's done
       if (lockHeld(convo)) return reply({ busy: true, error: "I'm still working on the last answer. Your message goes as soon as I'm done." }, 409);
       if (review && !reviewOpen(rows)) return reply({ error: "Those drafts were already answered." }, 409);
+      if (optionalReview && !optionalOpen(rows)) return reply({ error: "Those items were already answered." }, 409);
     }
     // `messages` is built after the photos are checked and stored (below)
   } else {
@@ -562,7 +584,7 @@ export async function POST(request) {
     }
   }
 
-  const shortcutOk = isEditor && !finalise && !review && !images.length && !imagePaths.length && promoteQuestionOpen(history);
+  const shortcutOk = isEditor && !finalise && !review && !optionalReview && !images.length && !imagePaths.length && promoteQuestionOpen(history);
   const notYet = shortcutOk && isNotYet(storedUser.content);
   const promoteIt = shortcutOk && isPromoteIt(storedUser.content); // the switch and the drafts review card, no model call
   const turnId = newId();
@@ -599,6 +621,10 @@ export async function POST(request) {
         if (review && !reviewOpen(rows)) {
           await afterTurn(convo.id, lockToken, { origin: originOf(request) });
           return reply({ error: "Those drafts were already answered." }, 409);
+        }
+        if (optionalReview && !optionalOpen(rows)) {
+          await afterTurn(convo.id, lockToken, { origin: originOf(request) });
+          return reply({ error: "Those items were already answered." }, 409);
         }
       }
       if (finalise) await startFinalise(caller);
@@ -689,33 +715,59 @@ export async function POST(request) {
             console.error("Saving the answer failed:", err.message);
           }
         };
-        // After the drafts (answered on the card, or none to ask about): the shopping list is the one step that needs the model. With no list
-        // needed the server finishes the turn itself and offers Save.
-        const afterDrafts = async (line) => {
+        // Finalise list after the drafts (docs/structured-ingredients.md 6): the site has already built the list. The model reviews it only when
+        // the site flags something; then the optional items card (no model), then Save. Each step ends the turn if it needs an answer.
+        const saveOffer = async (line) => {
           const view = await trayView(await loadTray(), caller);
-          if (view?.needs_list && !view.list_current) {
-            listTurn = true;
-            await startFinalise(caller);
-            emit({ type: "text", delta: `${line}\n\n` });
-            const note = `${await trayNote(await loadTray(), caller)}\nThe site already staged the switch and the answers about this week's drafts, and told the user: "${line}" Don't repeat that, and don't ask about this week's drafts again: nothing is left to ask. Go straight to Finalise step (2): build the shopping list now.`;
-            const result = await runChat({ caller, messages, page, emit, trace, model, apiKey: config.chatEditorKey, origin: originOf(request), extraNote: note, userText: storedUser.content, conversation: { id: convo.id, title: convo.title || title } });
-            output = `${line}\n\n${result.reply}`;
-            shown = result.shown;
-            const produced = result.produced.map((m) => ({ ...m }));
-            const first = produced.findIndex((m) => m.role === "assistant");
+          const save = trayAction(view) === "apply_plan";
+          const text = [line, save ? (view.needs_list ? "The shopping list is ready: tap Save to site when you're ready." : "No shopping list is needed: tap Save to site when you're ready.") : view.blocked ? `${view.blocked}: see the tray.` : ""].filter(Boolean).join(" ");
+          const chips = save ? [{ label: "Save to site", action: "apply_plan" }] : [];
+          return { text, chips };
+        };
+        const optionalStep = async (line) => {
+          const st = await finaliseState(caller);
+          const card = st?.optionalOpen?.length ? await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional) : null;
+          if (card) {
+            const text = [line, optionalLine(card.items.length)].filter(Boolean).join(" ");
+            return { text, ui: { optional: card }, event: { type: "optional", ...card } };
+          }
+          if (st?.needs && !st.reviewed) await markReviewed(caller, {}); // nothing left to ask: the review is done
+          const offer = await saveOffer(line);
+          return { text: offer.text, ui: offer.chips.length ? { replies: offer.chips } : null, chips: offer.chips };
+        };
+        const finish = async (step, { prefix = "" } = {}) => {
+          emit({ type: "text", delta: `${prefix}${step.text}` });
+          if (step.event) emit(step.event);
+          if (step.chips?.length) emit({ type: "suggestions", replies: step.chips });
+          emit({ type: "done", suggestions: !!step.chips?.length });
+          output = `${output ? `${output}\n\n` : ""}${step.text}`;
+          if (step.ui?.optional) shown = { ...(shown || {}), optional: step.ui.optional.items.map((i) => i.item) };
+          await store([{ role: "assistant", content: step.text, ...(step.ui ? { ui: step.ui } : {}) }]);
+        };
+        const afterDrafts = async (line) => {
+          const st = await finaliseState(caller);
+          if (!st?.needs) return finish(await saveOffer(line));
+          if (st.error) return finish({ text: `${line ? `${line} ` : ""}The shopping list can't be built: ${st.error}` });
+          if (!st.flagsOpen.length) return finish(await optionalStep(line));
+          // the model reviews what the site flagged, with patches; its own chips and end are held back so the steps after it can follow
+          listTurn = true;
+          await startFinalise(caller);
+          if (line) emit({ type: "text", delta: `${line}\n\n` });
+          const flags = st.flagsOpen.map((f) => `- [${f.key}] ${f.text}`).join("\n");
+          const note = `${await trayNote(await loadTray(), caller)}\nFinalise step (2): the site has built next week's shopping list from the recipes (call get_tray to see it, with item ids). Review ONLY what the site flags:\n${flags}\nFix what needs it with ONE stage_shopping_list_edits call (patches by item id: round_up a fraction of something bought whole, merge two names that are the same thing, a note where it helps; leave what is fine), then say in one short line what you changed, or that it looks right. Don't recite the list, don't ask about optional items (the site asks about them next), don't offer Save or Finalise.`;
+          const held = (event) => (event.type === "done" || event.type === "suggestions" ? undefined : emit(event));
+          const result = await runChat({ caller, messages, page, emit: held, trace, model, apiKey: config.chatEditorKey, origin: originOf(request), extraNote: note, userText: storedUser.content, conversation: { id: convo.id, title: convo.title || title } });
+          await markReviewed(caller, { flags: st.flagsOpen.map((f) => f.key) });
+          output = line ? `${line}\n\n${result.reply}` : result.reply;
+          shown = result.shown;
+          const produced = result.produced.map((m) => ({ ...m, ...(m.ui ? { ui: { ...m.ui, replies: undefined } } : {}) }));
+          const first = produced.findIndex((m) => m.role === "assistant");
+          if (line) {
             if (first === -1) produced.unshift({ role: "assistant", content: line });
             else produced[first].content = produced[first].content ? `${line}\n\n${produced[first].content}` : line;
-            await store(produced);
-            return;
           }
-          const save = trayAction(view) === "apply_plan";
-          const text = save ? `${line} No shopping list is needed: tap Save to site when you're ready.` : line;
-          const chips = save ? [{ label: "Save to site", action: "apply_plan" }] : [];
-          emit({ type: "text", delta: text });
-          if (chips.length) emit({ type: "suggestions", replies: chips });
-          emit({ type: "done", suggestions: chips.length > 0 });
-          output = text;
-          await store([{ role: "assistant", content: text, ...(chips.length ? { ui: { replies: chips } } : {}) }]);
+          await store(produced);
+          await finish(await optionalStep(""), { prefix: result.reply ? "\n\n" : "" });
         };
         try {
           if (isEditor) {
@@ -740,6 +792,25 @@ export async function POST(request) {
             emit({ type: "done", suggestions: false });
             output = line;
             await appendMessages(convo.id, [{ role: "assistant", content: line }], { turnId, traceId: trace.traceId }).catch((err) => console.error("Saving the answer failed:", err.message));
+            return;
+          }
+          if (finalise) {
+            // the promote question only when next week on the site has recipes and the switch isn't staged yet (design 7.1 step 1); it needs the
+            // model (it shows next week's recipes). Otherwise Finalise goes straight to the review, run by the site.
+            const siteNext = (await recipeSummaries()).some((r) => r.next);
+            const switched = (await loadTray())?.items?.some((i) => i.kind === "switch");
+            if (!siteNext || switched) {
+              await afterDrafts("");
+              return;
+            }
+          }
+          if (optionalReview) {
+            // Done on the optional items card: the answers become this week's drops on the list card, no model call; then Save
+            emit({ type: "status", text: "Updating the list…" });
+            await markReviewed(caller, { optional: optionalAnswers });
+            emit({ type: "tray", added: [] });
+            const drops = Object.values(optionalAnswers).filter((a) => a === "drop").length;
+            await finish(await optionalStep(drops ? `Done: ${drops === 1 ? "that item is" : `those ${drops} items are`} off this week's list.` : "Done: everything stays on the list."));
             return;
           }
           if (promoteIt) {

@@ -71,7 +71,7 @@ const say = async (message, extra = {}) => {
   return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id };
 };
 const chatObjects = () => [...supabase.objects.keys()].filter((k) => k.startsWith("chat-uploads/"));
-const trayItems = () => supabase.tables.trays[0]?.items || [];
+const trayItems = () => (supabase.tables.trays[0]?.items || []).filter((i) => i.kind !== "list"); // the list card follows next week on its own
 
 // --- fetch_url: editors only ---------------------------------------------------------------------------------------------
 

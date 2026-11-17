@@ -10,7 +10,7 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
-import { updateShoppingList, setShoppingServings, updateStocktake } from "./shopping-list.js";
+import { updateShoppingList, buildAndSaveShoppingList, setShoppingServings, updateStocktake, builtReport } from "./shopping-list.js";
 import { stageCatalogueChanges } from "./recipes.js";
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
@@ -45,10 +45,12 @@ export async function runOperation(op, cs, caller) {
       return { ...r, lines: switchLines(r) };
     }
     case "update_shopping_list": {
-      const r = await updateShoppingList(args.sections, cs, args.servings, caller);
+      // build: true (docs/structured-ingredients.md 3): the server adds up next week's recipes; `sections` is the older, agent-written list
+      if (!args.build === !args.sections) throw new UserError("update_shopping_list: pass build: true (the server builds the list), or sections, not both");
+      const r = args.build ? await buildAndSaveShoppingList({ edits: args.edits }, cs, args.servings, caller) : await updateShoppingList(args.sections, cs, args.servings, caller);
       const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
       const plan = Object.entries(r.list.servings).map(([slug, n]) => `${slug} x${n}`).join(", ");
-      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`] };
+      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`, ...builtReport(r.built).map((l) => `  ${l}`)] };
     }
     case "set_shopping_servings": {
       const r = await setShoppingServings(args.servings, cs, caller);

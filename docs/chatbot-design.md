@@ -1,6 +1,6 @@
 # Recipe chat assistant: design
 
-Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (structured ingredients and the server-built shopping list, 7.4) is proposed in `docs/structured-ingredients.md`. Each phase at the end is meant to ship on its own.
+Status: **draft, iterating**. Phases 0 (groundwork), 1 (read-only anonymous chat: bubble, `/chat` streaming, rate limits, Langfuse, local dev harness), 2 (cards, navigation, chips), 3 (shared sign-in, editor role, per-user server-owned chats, feedback) 4 (editor writes through the household plan tray: stage tools, `ask_user`, photos on staging, Finalise, Save, Save now, clashes, expiry) 5 (photo attachments, `fetch_url`, photos from links or attachments, the plan-recipes guide in the editor prompt) and 6 (extras: 11.1 cooking help with `scale_recipe`, 11.3 `recipes_from_home`, 11.4 stocktake by chat with `stage_stocktake`, 11.6 week balance on the tray) are built. Voice input (11.7), the diff view (11.8) and revert last save (11.9) are left for later. Phase 7 (structured ingredients and the server-built shopping list, 7.4, `docs/structured-ingredients.md`) is built on the server; its panel UI (the optional items card, the live List card) is in review. Each phase at the end is meant to ship on its own.
 Decisions are marked **D1, D2…** with a recommendation; open questions are collected at the end.
 
 Proposed next: reading several recipe photos in parallel (about 6 per message when planning a week), in `docs/parallel-photo-reading.md`.
@@ -384,79 +384,34 @@ soon as it's staged, not at Save:
 
 #### Finalise, then Save (decided)
 
-The shopping list is written by the model (it combines and converts ingredients), while Save is a
-plain button with no model in it. So the list is built **before** Save becomes available:
+The shopping list is built by the server (phase 7, `docs/structured-ingredients.md` section 6), while Save is a plain
+button with no model in it. Finalise list is a short **review** of the built list before Save becomes available:
 
 ```
- collecting ──"Finalise list"──▶ finalising ──list staged──▶ ready ──"Save to site"──▶ saved
-     ▲                              (agent)                    │
-     └──────────── any change to the tray (add, drop, edit) ───┘   list marked out of date
+ collecting ──"Finalise list"──▶ (promote question?) ──▶ model review (only if flagged) ──▶ optional items card ──▶ ready ──"Save to site"──▶ saved
+     ▲                                                                                                        │
+     └──────────── a change that brings a new flag or a new optional item ────────────────────────────────────┘   (other changes keep Save)
 ```
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
-- **Finalising** lasts only as long as the Finalise turn: the turn settles it when it ends. Every model call
-  of a turn is cut short at `CHAT_TURN_DEADLINE_MS` (250s, under Vercel's 300s `maxDuration`), so a slow
-  list build ends with the "taking longer than expected" line instead of the function being killed
-  mid-stream (which the browser only reports as "network error"). A "finalising" flag older than
-  6 minutes (`FINALISE_STALE_MS`) counts as collecting again, so a turn that died anyway never leaves
-  the tray without its button.
-- **Finalise list** sends a fixed request to the agent, which first says what it's doing ("Next week
-  already has 4 recipes, so first: is it ready to become this week? Then I'll build the shopping
-  list"), then:
-  1. **asks whether next week is ready to be promoted**, if next week already has recipes on the
-     site (an earlier plan). The tray itself is built without asking: it just collects. The
-     question comes here, at Finalise, with that week's recipe cards:
-     *"Next week has 4 recipes. Is it ready to become this week?"*
-     - **Promote it** → answered by the server with no model call (`lib/draft-review.js`, next to the
-       *Not yet* shortcut): it stages `start_next_week` (first in Save order, so the tray's additions
-       land in the fresh next week) and shows the **drafts review card**: every draft of this week in
-       one card, each row with a thumbs up (liked → promoted) and a thumbs down (not for us →
-       removed; a draft also planned for next week is never removed), starting on any thumb already
-       in the tray. **No thumb means not decided: the draft is kept for the coming week** (the
-       switch's `carry_over`; one also in next week needs none). Then one **Done**, always enabled. (It used to be
-       one `ask_user` per draft, and every tap waited for a model call: 8 drafts meant 8 pauses.)
-       Done is `POST /chat { action: "review_drafts", answers: { slug: "liked" | "remove" } }`: only
-       while that card is the chat's open question (a second Done is a 409), any other value refused,
-       a draft left out is kept, slugs checked against the book. The server stores the answers as the editor's
-       message in words ("Liked: A. Not for us: B. Kept for the coming week: C."), stages them all in ONE tray write (`stageMany`
-       in `lib/tray.js`: the switch's carry-over, a promote per liked draft, a removal per draft not
-       for us; earlier answers for those drafts are replaced) and says what it staged. If a list is
-       needed it then hands the turn to the model for step 2 only (the tray shows "Building the
-       list…"); otherwise it offers Save. The model can show the same card with `review_drafts` if it
-       stages the switch itself, and is told never to ask about the drafts one by one. The list is
-       built for the tray's recipes only.
-     - **Not yet** → **nothing happens.** Finalise stops, nothing is staged, the tray stays as
-       it was, and next week and its shopping list are untouched. The bot says so and offers to
-       come back to it later.
-     If next week is empty there's nothing to promote and no question.
-
-     **Only on an explicit ask** does the agent add to an already-planned next week or overwrite its
-     shopping list ("add these to next week", "redo next week's list"). Neither is ever a default or
-     a side effect of another answer. Before staging an overwrite it says what will be replaced
-     (e.g. "next week's list from Sunday, with its at-home check") and waits for a yes.
-  2. reads every recipe that will be in next week after Save, staged new ones included (reads inside
-     a `ChangeSet` already see staged changes), and stages `update_shopping_list` (with servings).
-     *Proposed (7.4, `docs/structured-ingredients.md`): the server builds and stages the list itself from
-     structured ingredients and an ingredient catalogue, and the model only reviews it with small patches.*
-  The tray shows "Building the list…" meanwhile.
-- **Ready:** a **List** card ("86 items for 5 recipes", tap to preview by aisle) appears and the
-  button becomes **Save to site (n)**.
-- **Any later change** to the tray (adding, dropping or editing an item) marks the list out of
-  date: the List card says so, Save goes away and **Finalise list** comes back. The list stores a
-  hash of the tray items it was built from, so "out of date" is exact, not guessed. Planned servings
-  and what's at home don't count: they are applied on top of the list (always written for 2
-  servings), so changing them never needs it rebuilt.
-- **Servings asked for before the list exists** ("breakfasts for 2, the rest for 4") are not
-  staged: the saved list is the old week's, so there is nothing real to check them against. The
-  tool refuses a recipe that won't be in next week, and otherwise tells the model to say they'll be
-  applied after Finalise list (`servingsBeforeList` in `lib/tools.js`; no card, so nothing blocks
-  Finalise). When Finalise has staged the new list, the list tool's result names those servings
-  (found in the chat's stored tool results, `servingsFromRows`) and the bot asks with `ask_user`
-  whether to apply them; on yes it stages them against the staged list, checked like any change.
+- **The List card** appears as soon as the tray changes next week ("86 items for 5 recipes", tap to preview by aisle):
+  the server builds it (`buildShoppingList` in `lib/shopping-list.js`) inside every tray write and keeps it current; it
+  is never out of date. Review patches (`stage_shopping_list_edits`) and the optional-item answers are stored on the card
+  and re-applied by item id on every rebuild; one whose item is gone shows as a note ("1 edit no longer applies").
+- **Finalise list** runs: the promote question (below) only if next week on the site has recipes; then the model, ONLY if
+  the server flags something (a fraction of something bought whole at the planned servings, close names on items bought in
+  the same unit, a very large total, a recipe with no ingredients), with one `stage_shopping_list_edits` call; then the
+  **optional items card** (`lib/optional-review.js`, no model). With nothing flagged and nothing optional there is no model
+  call and Save is offered at once. "Reviewing the list…" (`finalising`) lasts only while the model runs.
+- **Ready:** the button becomes **Save to site (n)**. A later change keeps Save unless it brings a flag or an optional
+  item the user hasn't seen; then Finalise list comes back for just that.
+- **Planned servings** can be staged at any time (`stage_set_shopping_servings`): they apply on top of the list (always
+  written for 2 servings), so they never need a review. What's at home (the stocktake card) is checked against the
+  rebuilt list by item name.
 - **Asking to save in chat** ("ok save it") while collecting: the agent explains the shopping list
   has to be made first and offers chips *Finalise list* · *Not yet*. It never saves itself; Save
   stays a tap by a person (below).
-- **No list needed** when the tray doesn't change next week or the servings (e.g. only a typo fix
+- **No list needed** when the tray doesn't change next week (e.g. only a typo fix
   or promoting a draft): Save is available straight away, no Finalise step.
 
 #### Save
@@ -530,9 +485,9 @@ index: active filter and search text) and sends it with every message.
   recipes show "Publishing…" and stay disabled until the page exists (the server can check with a
   HEAD request to the Pages URL; the client asks `/chat/status`, not the Pages URL directly).
 
-### 7.4 Structured ingredients and the server-built shopping list (proposed, phase 7)
+### 7.4 Structured ingredients and the server-built shopping list (built, phase 7)
 
-Proposed in **`docs/structured-ingredients.md`**. Finalise today has the model write the whole list (match, scale,
+Built from **`docs/structured-ingredients.md`** (the optional items card's panel UI is in review). Finalise used to have the model write the whole list (match, scale,
 convert, add up and split every ingredient across the week's recipes), and on 16 Nov 2026 that ran out of tokens
 or time on both attempts. The proposal makes each recipe's ingredients structured data in its frontmatter (amount,
 unit from a fixed list, name, note, and the catalogue `item`), the only place they live: the page's ingredient
