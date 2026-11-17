@@ -272,6 +272,8 @@ test("the list is rebuilt on every change: a change after the review keeps Save,
   const card = fin.evs.find((e) => e.name === "optional").data;
   assert.deepEqual(card.items.map((i) => [i.item, i.name]), [["chilli-flakes", "Chilli flakes"]]);
   assert.equal(card.items[0].recipes[0].slug, "chilli-pasta");
+  assert.equal(card.items[0].recipes[0].title, "Chilli Pasta", "a recipe new in the tray: its title from its card, not its address");
+  assert.match(card.items[0].recipes[0].image, /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/tray-photos\/.+\/chilli-pasta\.jpg\?token=/, "and its staged photo");
   assert.equal(tray.trayAction(await plan()), "finalise_plan", "until Done, the list isn't reviewed");
   // anything but keep / drop is refused; Done once only
   const bad = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: { "chilli-flakes": "maybe" }, page: {} } });

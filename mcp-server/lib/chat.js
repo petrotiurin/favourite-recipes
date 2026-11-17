@@ -704,7 +704,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         if (caller.role === "editor" && offered.has("review_optional") && !askedUser) {
           try {
             const st = await finaliseState(caller);
-            if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional);
+            if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
           } catch (err) {
             console.error("Building the optional items card failed:", err.message);
           }

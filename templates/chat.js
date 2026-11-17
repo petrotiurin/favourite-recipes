@@ -258,7 +258,13 @@
    * The optional items card (docs/structured-ingredients.md 6): { items: [{ item, name, quantity, recipes: [{ slug, title, image }], answer }] },
    * or null. Built by the server from the tray's list; photos only on this site's origin, at most 30 rows. answer: "drop" | "" (ticked = kept).
    */
-  function cleanOptional(o, origin) {
+  function cleanOptional(o, origin, photoBase) {
+    // a recipe still in the tray has its staged photo: a Supabase signed URL, accepted only from that path (like the tray's cards)
+    var photo = function (u) {
+      if (typeof u !== "string" || !u) return "";
+      if (photoBase && u.indexOf(photoBase + "/storage/v1/object/sign/") === 0) return u;
+      return safeHref(u, origin) || "";
+    };
     if (!o || typeof o !== "object" || !Array.isArray(o.items)) return null;
     var items = [];
     o.items.forEach(function (i) {
@@ -267,7 +273,7 @@
       var recipes = [];
       (Array.isArray(i.recipes) ? i.recipes : []).forEach(function (r) {
         if (recipes.length >= 6 || !r || typeof r !== "object" || typeof r.slug !== "string" || !SLUG_RE.test(r.slug)) return;
-        recipes.push({ slug: r.slug, title: (typeof r.title === "string" && r.title.trim().slice(0, 120)) || r.slug.replace(/-/g, " "), image: (typeof r.image === "string" && r.image && safeHref(r.image, origin)) || "" });
+        recipes.push({ slug: r.slug, title: (typeof r.title === "string" && r.title.trim().slice(0, 120)) || r.slug.replace(/-/g, " "), image: photo(r.image) });
       });
       items.push({ item: i.item, name: i.name.trim().slice(0, 60), quantity: typeof i.quantity === "string" ? i.quantity.slice(0, 20) : "", recipes: recipes, answer: i.answer === "drop" ? "drop" : "" });
     });
@@ -508,7 +514,7 @@
         if (question) msg.question = question;
         var review = cleanReview(m.review, origin);
         if (review) msg.review = review;
-        var optional = cleanOptional(m.optional, origin);
+        var optional = cleanOptional(m.optional, origin, photoBase);
         if (optional) msg.optional = optional;
         var cards = cleanCards(m.cards, origin);
         if (cards.length) msg.cards = cards;
@@ -1136,7 +1142,11 @@
       var row = el("div", "chat-review-row chat-optional-row");
       var photos = el("span", "chat-optional-photos", { "aria-hidden": "true" });
       it.recipes.slice(0, 3).forEach(function (r) {
-        photos.appendChild(r.image ? el("img", "chat-optional-photo", { src: r.image, alt: "", loading: "lazy" }) : el("span", "chat-optional-photo"));
+        if (!r.image) return photos.appendChild(el("span", "chat-optional-photo"));
+        var img = el("img", "chat-optional-photo", { src: r.image, alt: "", loading: "lazy" });
+        // a staged photo's link expires after a while: an older card falls back to the plain square
+        img.addEventListener("error", function () { if (img.parentNode) img.parentNode.replaceChild(el("span", "chat-optional-photo"), img); });
+        photos.appendChild(img);
       });
       row.appendChild(photos);
       var words = el("span", "chat-review-words chat-optional-words");
@@ -1648,7 +1658,7 @@
               else if (ev.name === "suggestions") reply.replies = cleanReplyItems(ev.data.replies, origin);
               else if (ev.name === "question") reply.question = cleanQuestion(ev.data) || reply.question;
               else if (ev.name === "review") reply.review = cleanReview(ev.data, origin) || reply.review;
-              else if (ev.name === "optional") reply.optional = cleanOptional(ev.data, origin) || reply.optional;
+              else if (ev.name === "optional") reply.optional = cleanOptional(ev.data, origin, photoBase) || reply.optional;
               else if (ev.name === "tray") { /* the tray is loaded once, when the turn ends (finish) */ }
               else if (ev.name === "cards") {
                 var more = cleanCards(ev.data.cards, origin);
