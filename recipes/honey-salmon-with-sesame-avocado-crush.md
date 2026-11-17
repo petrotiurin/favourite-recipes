@@ -7,28 +7,27 @@ tags: [High Protein]
 total_mins: 15
 serves: 2
 calories: 670
+ingredients:
+  - { amount: 1, unit: tsp, name: black sesame seeds, item: sesame-seeds }
+  - { amount: 1, unit: tsp, name: white sesame seeds, item: sesame-seeds }
+  - { amount: 2, name: skinless salmon fillets, note: about 260g in total, item: salmon-fillet }
+  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 1, unit: tsp, name: runny honey, item: honey }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 2, name: spring onions, note: finely sliced, item: spring-onion }
+  - { amount: 1, unit: clove, name: garlic, note: "small, finely minced", item: garlic }
+  - { amount: 0.5, name: red chilli, note: finely diced, item: red-chilli }
+  - { amount: 1, unit: tsp, name: toasted sesame oil, item: sesame-oil }
+  - { amount: 1, name: avocado, note: "medium (about 150g flesh), lightly crushed", item: avocado }
+  - { amount: 1, unit: juice, name: lime, item: lime }
+  - { amount: 0.25, name: cucumber, note: deseeded and diced, item: cucumber }
+  - { amount: 250, unit: g, name: cooked rice, note: "1 pouch, brown or jasmine", item: cooked-rice }
+  - { name: Fresh coriander, note: to serve, item: coriander }
+  - { amount: 1, unit: pinch, name: sesame seeds, note: to serve, item: sesame-seeds }
+  - { name: Lime wedges, note: to serve, item: lime }
+  - { name: Nori sheets, note: to serve, optional: true, item: nori }
 ---
-
-## Ingredients
-
-- 1 tsp, **black sesame seeds**
-- 1 tsp, **white sesame seeds**
-- 2, **skinless salmon fillets** (about 260g/9½oz in total)
-- 1 tsp, **olive oil**
-- 1 tsp, **runny honey**
-- **Salt and black pepper**, to taste
-- 2, **spring onions**, finely sliced
-- 1, **garlic clove**, small, finely minced
-- ½, **red chilli**, finely diced
-- 1 tsp, **toasted sesame oil**
-- 1, **avocado**, medium (about 150g/5½oz flesh), lightly crushed
-- Juice of 1, **lime**
-- ¼, **cucumber**, deseeded and diced
-- 1 x 250g (9oz) pouch of, **cooked rice** (brown or jasmine)
-- **Fresh coriander**, to serve
-- Pinch of, **sesame seeds**, to serve
-- **Lime wedges**, to serve
-- **Nori sheets**, to serve, optional
 
 ## Instructions
 

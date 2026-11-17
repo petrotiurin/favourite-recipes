@@ -9,10 +9,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { config } from "./config.js";
 import { ChangeSet, assertAllowedPath, branchSnapshot } from "./github.js";
-import { slugify, parseRecipe, renderIngredient, ingredientNamesFromSection } from "./recipe-format.js";
+import { slugify, parseRecipe, ingredientsOf } from "./recipe-format.js";
+import { ingredientText } from "./ingredient-line.js";
 import { listRecipes, isNextWeek, isDraft, recipeSummaries, removeDraft, UserError } from "./recipes.js";
-import { ShoppingListError } from "./shopping-list.js";
+import { ShoppingListError, sameEdit, editLabel } from "./shopping-list.js";
 import { runOperation } from "./operations.js";
+import { upgradeItems, needsUpgrade } from "./tray-upgrade.js";
+import { loadCatalogue } from "./catalogue.js";
 import { readTray, createTray, patchTray, deleteTrayRow, removeTrayPhotos, removePhotos, uploadPhoto, signedPhotoUrl, TRAY_TTL_MS } from "./tray-store.js";
 import { makePhoto } from "./tray-photos.js";
 import { background } from "./background.js";
@@ -35,8 +38,8 @@ export function assertCanStage(caller) {
 // --- items -----------------------------------------------------------------------------------------------------------------
 
 /** The card kinds, in Save order (design Q16): switch, this week's drafts, new recipes, added to next week, edits, the list, servings. */
-const KIND_GROUP = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, list: 5, servings: 6, stocktake: 7 };
-const ACTION_KIND = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_shopping_list: "list", set_shopping_servings: "servings", update_stocktake: "stocktake" };
+const KIND_GROUP = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, catalogue: 4.5, list: 5, servings: 6, stocktake: 7 };
+const ACTION_KIND = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_catalogue: "catalogue", update_shopping_list: "list", set_shopping_servings: "servings", update_stocktake: "stocktake" };
 export const kindOf = (op) => ACTION_KIND[op?.action];
 
 const byCreated = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -44,15 +47,6 @@ const byCreated = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b
 export const saveOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(a, b));
 /** The order cards are shown in: the same groups, newest first within a group. */
 export const displayOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(b, a));
-
-/**
- * A fingerprint of what the shopping list was built from: every item except the list itself, by id and operation. Planned servings and
- * what's at home don't count: they are applied on top of the list (it is always written for 2 servings), so changing them never needs it rebuilt.
- */
-export function itemsHash(items) {
-  const parts = saveOrder(items).filter((i) => i.kind !== "list" && i.kind !== "stocktake" && i.kind !== "servings").map((i) => [i.id, i.op]);
-  return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 32);
-}
 
 export const nameFromEmail = (email) =>
   String(email || "").split("@")[0].split(/[._+-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || "Someone";
@@ -105,8 +99,10 @@ const tidyError = (err) => oneLine(String(err.message).replace(/^[^\n]*rejected:
 const photoPath = (slug) => `images/recipes/${slug}.jpg`;
 
 /** The operation to run for an item: a staged photo stands in as an already-uploaded image (its bytes are written to the set first). */
-export function applicableOp(item, cs, photoBytes) {
+export function applicableOp(item, cs, photoBytes, { listInTray = false } = {}) {
   const op = { ...item.op };
+  // With a list in the tray the stocktake is checked against the rebuilt list (items by name), not the one it was staged against.
+  if (item.kind === "stocktake" && listInTray) delete op.list_sig;
   if (item.photo && (item.kind === "new" || item.kind === "edit")) {
     const slug = slugOf(item);
     cs.write(photoPath(slug), photoBytes);
@@ -124,10 +120,11 @@ export async function replay(items, caller, { reads = new Map(), ref, photoBytes
   assertCanStage(caller);
   const cs = new ChangeSet({ reads, ref });
   const results = new Map();
+  const listInTray = items.some((i) => i.kind === "list");
   for (const item of saveOrder(items)) {
     const snapshot = cs.snapshot();
     try {
-      const op = applicableOp(item, cs, photoBytes(item));
+      const op = applicableOp(item, cs, photoBytes(item), { listInTray });
       const result = await runOperation(op, cs, caller);
       results.set(item.id, { ok: true, result, warnings: result.warnings || [] });
     } catch (err) {
@@ -141,8 +138,9 @@ export async function replay(items, caller, { reads = new Map(), ref, photoBytes
 }
 
 /**
- * Does Save need a shopping list built first (design 7.1 Finalise)? Yes when the tray changes next week's recipes or the servings and
- * next week won't be empty afterwards. A switch alone, a promotion, a typo fix or a new recipe kept out of next week need none.
+ * Does next week need its shopping list rebuilt (docs/structured-ingredients.md section 6, S5)? Yes when the tray changes next week's recipes
+ * and next week won't be empty afterwards. A switch alone, a promotion, a typo fix or a new recipe kept out of next week need none; planned
+ * servings and what's at home apply to whichever list there is.
  */
 export function needsList(items, nextSlugs) {
   if (!nextSlugs.length) return false;
@@ -150,22 +148,55 @@ export function needsList(items, nextSlugs) {
     (i) =>
       (i.kind === "new" && i.op.week === "next") ||
       i.kind === "next" ||
-      i.kind === "servings" ||
-      i.kind === "list" ||
-      (i.kind === "edit" && (i.op.ingredients !== undefined || i.op.serves !== undefined) && nextSlugs.includes(i.op.slug))
+      i.kind === "catalogue" ||
+      (i.kind === "edit" && (i.op.ingredients !== undefined || i.op.serves !== undefined || i.op.catalogue !== undefined) && nextSlugs.includes(i.op.slug))
   );
 }
 
-export const listCurrent = (tray, items) => {
+export const LIST_REASON = "built from next week's recipes";
+
+/** The list card follows next week: added (built by the server, no model) when the tray changes it, taken out when it no longer does. */
+export function withList(items, nextSlugs, caller) {
   const list = items.find((i) => i.kind === "list");
-  return !!list && !list.error && tray.list_hash === itemsHash(items);
-};
+  const needs = needsList(items, nextSlugs);
+  if (needs && !list) return [...items, makeItem({ action: "update_shopping_list", build: true, edits: [] }, { caller, reason: LIST_REASON, extra: { reviewed: null } })];
+  if (!needs && list) return items.filter((i) => i !== list);
+  return items;
+}
+
+/**
+ * Where the list stands (section 6): { needs, list, built, error, reviewed, flagsOpen, optionalOpen }. `results` come from replay. Reviewed
+ * means Finalise list has run since and nothing the user hasn't seen came in: no flag the model hasn't looked at, no optional item without an
+ * answer. A change that brings neither keeps Save.
+ */
+export function listState(items, results) {
+  const list = items.find((i) => i.kind === "list");
+  if (!list) return { needs: false, list: null, built: null, error: null, reviewed: true, flagsOpen: [], optionalOpen: [] };
+  const r = results?.get(list.id) || {};
+  const built = r.result?.built || null;
+  const rev = list.reviewed || null;
+  const flagsOpen = built ? built.flags.filter((f) => !rev?.flags?.includes(f.key)) : [];
+  const optionalOpen = built ? built.optional.filter((o) => !rev?.optional?.includes(o.item)) : [];
+  return { needs: true, list, built, error: r.error || null, reviewed: !!rev && !r.error && !flagsOpen.length && !optionalOpen.length, flagsOpen, optionalOpen };
+}
 
 // A Finalise turn sets "finalising" and settles it when it ends. One that never ended (its function was killed) must not leave the tray without
 // its button for good: past any turn's lifetime (Vercel's maxDuration is 300s) the flag no longer counts.
 export const FINALISE_STALE_MS = 6 * 60 * 1000;
-const finalising = (tray) => tray.status === "finalising" && !(Date.parse(tray.updated_at) <= clock.now() - FINALISE_STALE_MS);
-const statusFor = (tray, items, needs) => (needs && !listCurrent(tray, items) ? (finalising(tray) ? "finalising" : "collecting") : "ready");
+const finalising = (tray) => tray?.status === "finalising" && !(Date.parse(tray.updated_at) <= clock.now() - FINALISE_STALE_MS);
+const statusFor = (tray, state) => (state.reviewed ? "ready" : finalising(tray) ? "finalising" : "collecting");
+
+/**
+ * The tray's items after a change, checked: the list card added or taken out as next week needs, every item dry-run (problems on the cards).
+ * Resolves { items, results, nextSlugs, state }.
+ */
+export async function checkItems(items, caller, reads) {
+  let run = await replay(items, caller, reads);
+  const settled = withList(items, run.nextSlugs, caller);
+  if (settled !== items) run = await replay(settled, caller, reads);
+  const checked = settled.map((i) => ({ ...i, error: run.results.get(i.id)?.error || null }));
+  return { items: checked, results: run.results, nextSlugs: run.nextSlugs, cs: run.cs, state: listState(checked, run.results) };
+}
 
 // --- storage with retries --------------------------------------------------------------------------------------------------
 
@@ -177,7 +208,27 @@ export async function loadTray() {
     await purgeTray(row, "expired");
     return null;
   }
-  return row;
+  return upgradeTray(row);
+}
+
+/**
+ * A tray staged before structured ingredients is rewritten once, in place (lib/tray-upgrade.js): old list card -> the server-built one, old
+ * free-text quantities -> the new fields. Written back under the version check; if someone else wrote meanwhile, the next read upgrades it.
+ */
+async function upgradeTray(row) {
+  if (!needsUpgrade(row.items || [])) return row; // the usual case: nothing read, nothing written
+  let catalogue;
+  try {
+    catalogue = await loadCatalogue();
+  } catch (err) {
+    console.error("Upgrading the tray: reading the catalogue failed:", err.message);
+    return row;
+  }
+  const { items, changed } = upgradeItems(row.items || [], catalogue);
+  if (!changed) return row;
+  const saved = await patchTray(row.id, row.version, { items, list_hash: null, status: "collecting" }, null).catch((err) => (console.error("Saving the upgraded tray failed:", err.message), null));
+  trayEvent("tray-upgraded", { items: items.length });
+  return saved || { ...row, items, list_hash: null, status: "collecting" };
 }
 
 export async function purgeTray(row, why = "emptied") {
@@ -204,7 +255,7 @@ export async function mutate(caller, fn) {
       if (tray) await purgeTray(tray, "emptied");
       return { result: out.result, tray: null };
     }
-    const patch = { items: out.items, list_hash: out.listHash === undefined ? tray?.list_hash ?? null : out.listHash, status: out.status || "collecting" };
+    const patch = { items: out.items, list_hash: null, status: out.status || "collecting" };
     if (!tray) {
       const row = await createTray({ items: patch.items, listHash: patch.list_hash, status: patch.status, updatedBy: caller.userId });
       if (!row) continue;
@@ -298,9 +349,28 @@ function planChange(items, op, { caller, reason, base, photo }) {
       return { items: [...items, item], item, message: "Staged the switch: next week becomes this week" };
     }
     case "update_shopping_list": {
+      // the list is built by the server; what is staged here is review patches (a newer patch for the same item and kind replaces the older)
       const old = items.find((i) => i.kind === "list");
+      const edits = op.edits || [];
+      if (old) {
+        const kept = (old.op.edits || []).filter((e) => !edits.some((n) => sameEdit(e, n)));
+        const merged = { ...old, op: { ...old.op, edits: [...kept, ...edits] }, error: null };
+        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: edits.length ? `Staged ${edits.length} change${edits.length === 1 ? "" : "s"} to the shopping list` : "The shopping list is in the tray" };
+      }
+      const item = make({ action: "update_shopping_list", build: true, edits }, { reviewed: null });
+      return { items: [...items, item], item, message: "Staged the shopping list" };
+    }
+    case "update_catalogue": {
+      // one Catalogue card for review fixes that are generally true (remember: true); a newer change to the same item replaces the older
+      const old = items.find((i) => i.kind === "catalogue");
+      const key = (c) => JSON.stringify([Object.keys(c)[0], c.set?.item || c.merge?.from || c.alias?.name || c.add?.id]);
+      if (old) {
+        const kept = old.op.changes.filter((c) => !op.changes.some((n) => key(n) === key(c)));
+        const merged = { ...old, op: { ...old.op, changes: [...kept, ...op.changes] }, error: null };
+        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: "Added to the catalogue changes in the tray" };
+      }
       const item = make(op);
-      return { items: [...without(...(old ? [old] : [])), item], item, message: "Staged the shopping list" };
+      return { items: [...items, item], item, message: "Staged a catalogue change" };
     }
     case "update_stocktake": {
       // one "At home" card: later updates merge into it (the newest word on an item wins)
@@ -360,14 +430,10 @@ export async function stageOp(spec, caller, ctx = {}) {
     if (items.length >= MAX_ITEMS && !(op.action === "update_recipe" || op.action === "create_recipe")) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
     const planned = planChange(items, op, { caller, reason, base, photo: wantsPhoto });
     if (planned.items.length > MAX_ITEMS) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
-    const { results, nextSlugs } = await replay(planned.items, caller, reads);
-    const checked = planned.items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
-    const item = planned.item ? checked.find((i) => i.id === planned.item.id) : null;
-    const needs = needsList(checked, nextSlugs);
-    const listHash = item?.kind === "list" ? itemsHash(checked) : checked.some((i) => i.kind === "list") ? tray?.list_hash ?? null : null;
-    const next = { ...(tray || { status: "collecting" }), list_hash: listHash, items: checked };
-    outcome = { item, message: planned.message, warnings: item ? results.get(item.id)?.warnings || [] : [], needs };
-    return { items: checked, listHash, status: statusFor(next, checked, needs), result: null };
+    const { items: checked, results, state } = await checkItems(planned.items, caller, reads);
+    const item = planned.item ? checked.find((i) => i.id === planned.item.id) || null : null;
+    outcome = { item, message: planned.message, warnings: item ? results.get(item.id)?.warnings || [] : [], needs: state.needs, state };
+    return { items: checked, status: statusFor(tray, state), result: null };
   });
   if (outcome.item && wantsPhoto && tray) startPhotoJob(tray.id, outcome.item.id);
   trayEvent(`tray-staged`, { kind: outcome.item?.kind || kindOf(op), action: op.action, error: !!outcome.item?.error, trace: ctx.trace });
@@ -401,12 +467,9 @@ export async function stageMany(ops, caller, { clear, reason = "", trace } = {})
       outcome = { items: [], needs: false };
       return { items: [], result: null };
     }
-    const { results, nextSlugs } = await replay(items, caller, reads);
-    const checked = items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
-    const needs = needsList(checked, nextSlugs);
-    const listHash = checked.some((i) => i.kind === "list") ? tray?.list_hash ?? null : null;
-    outcome = { items: checked.filter((i) => ids.has(i.id)), needs };
-    return { items: checked, listHash, status: statusFor({ ...(tray || { status: "collecting" }), list_hash: listHash }, checked, needs), result: null };
+    const { items: checked, state } = await checkItems(items, caller, reads);
+    outcome = { items: checked.filter((i) => ids.has(i.id)), needs: state.needs, state };
+    return { items: checked, status: statusFor(tray, state), result: null };
   });
   trayEvent("tray-staged-many", { count: ops.length, kinds: outcome.items.map((i) => i.kind).join(","), error: outcome.items.some((i) => i.error), trace });
   return { ...outcome, tray };
@@ -420,13 +483,13 @@ export async function dropItem(id, caller, ctx = {}) {
   const { tray } = await mutate(caller, async (tray) => {
     dropped = tray?.items.find((i) => i.id === id) || null;
     if (!dropped) return { result: null };
+    if (dropped.kind === "list") throw new UserError("The shopping list follows next week: it's rebuilt from the recipes in the tray. Drop those instead, or ask to leave an item off.");
     const items = tray.items.filter((i) => i.id !== id);
     if (!items.length) return { items: [], result: null };
-    const { results, nextSlugs } = await replay(items, caller, reads);
-    const checked = items.map((i) => ({ ...i, error: results.get(i.id)?.error || null }));
-    const needs = needsList(checked, nextSlugs);
-    const listHash = checked.some((i) => i.kind === "list") ? tray.list_hash : null;
-    return { items: checked, listHash, status: statusFor({ ...tray, list_hash: listHash }, checked, needs), result: null };
+    const { items: checked, state } = await checkItems(items, caller, reads);
+    // only the list card left (nothing else changes next week any more): the tray is empty
+    if (!checked.length || checked.every((i) => i.kind === "list")) return { items: [], result: null };
+    return { items: checked, status: statusFor(tray, state), result: null };
   });
   if (dropped?.photo?.path) await removePhotos([dropped.photo.path]).catch((err) => console.error("Deleting a staged photo failed:", err.message));
   if (dropped) trayEvent("tray-dropped", { kind: dropped.kind, trace: ctx.trace });
@@ -446,7 +509,7 @@ export async function resolveClash(id, resolution, caller, ctx = {}) {
   const snap = item.base ? await repoSnapshot(item.base.slug) : null;
   await mutate(caller, async (tray) => {
     const items = (tray?.items || []).map((i) => (i.id === id ? { ...i, clash: null, base: snap ? { slug: item.base.slug, ...snap } : i.base } : i));
-    return { items, status: tray.status, listHash: tray.list_hash, result: null };
+    return { items, status: tray.status, result: null };
   });
   trayEvent("tray-clash-resolved", { resolution, trace: ctx.trace });
   return { item, message: "Kept yours: it will overwrite what changed on the site when you save" };
@@ -482,9 +545,8 @@ export async function findClashes(items) {
 
 async function photoSubject(item) {
   if (item.kind === "new") return { title: item.op.title, ingredients: item.op.ingredients || [], slug: slugOf(item) };
-  const { data, sections } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
-  const names = ingredientNamesFromSection(sections.find((s) => s.heading?.toLowerCase() === "ingredients")?.content);
-  return { title: item.op.title || data.title, ingredients: item.op.ingredients || names, slug: item.op.slug };
+  const { data } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
+  return { title: item.op.title || data.title, ingredients: item.op.ingredients || ingredientsOf(data), slug: item.op.slug };
 }
 
 /** Changes one item inside the tray (retrying on a version clash); does nothing if the item or the tray is gone. Returns the item. */
@@ -493,7 +555,7 @@ async function updateItem(trayId, itemId, change) {
     const tray = await readTray();
     const item = tray?.items.find((i) => i.id === itemId);
     if (!tray || tray.id !== trayId || !item) return null;
-    const row = await patchTray(tray.id, tray.version, { items: tray.items.map((i) => (i.id === itemId ? change(i) : i)), list_hash: tray.list_hash, status: tray.status });
+    const row = await patchTray(tray.id, tray.version, { items: tray.items.map((i) => (i.id === itemId ? change(i) : i)), list_hash: null, status: tray.status });
     if (row) return row.items.find((i) => i.id === itemId);
   }
   return null;
@@ -527,7 +589,7 @@ export async function regeneratePhoto(id, caller) {
     found = tray?.items.find((i) => i.id === id && i.photo) || null;
     if (!found) return { result: null };
     const items = tray.items.map((i) => (i.id === id ? { ...i, photo: { ...i.photo, status: "pending", error: null, started: clock.now() } } : i));
-    return { items, listHash: tray.list_hash, status: tray.status, result: null };
+    return { items, status: tray.status, result: null };
   });
   if (found) startPhotoJob(tray.id, id, { regenerate: true });
   return found;
@@ -549,7 +611,7 @@ export function saveNowRule(item, inNext) {
 
 // --- what the panel and the model are told --------------------------------------------------------------------------------
 
-const lineOfIngredient = (i) => renderIngredient(i).replace(/^- /, "").replace(/\*\*/g, "");
+const lineOfIngredient = (i) => ingredientText(i);
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 
 /**
@@ -572,10 +634,11 @@ export async function trayView(tray, caller) {
   if (!tray) return null;
   const items = tray.items || [];
   const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
-  const { results, nextSlugs, cs: afterSave } = await replay(items, caller, await warmReads());
+  const { results, cs: afterSave } = await replay(items, caller, await warmReads());
   const balance = weekBalance((await listRecipes(afterSave)).filter(isNextWeek));
-  const needs = needsList(items, nextSlugs);
-  const current = listCurrent(tray, items);
+  const list = listState(items, results);
+  const needs = list.needs;
+  const current = list.reviewed;
   const inNext = new Set([...(await listRecipes().then((rs) => rs.filter(isNextWeek).map((r) => r.slug)).catch(() => [])), ...items.filter((i) => i.kind === "next" && i.op.add).map((i) => slugOf(i))]);
   // "Save now" eligibility comes from the one full replay above (plus the quick-fix rule): no replay per item. Save re-checks the item on its own.
   const saveNow = new Map(items.map((item) => [item.id, !item.error && !item.clash && saveNowRule(item, inNext) && (!item.photo || item.photo.status === "ready") && !results.get(item.id)?.error]));
@@ -631,16 +694,26 @@ export async function trayView(tray, caller) {
         card.sub = `Changes ${Object.keys(item.op).filter((k) => EDIT_FIELDS.includes(k)).map((k) => ({ total_mins: "time", instructions: "steps", course: "course" })[k] || k.replace(/_/g, " ")).concat(item.photo ? ["photo"] : []).join(", ")}`;
         break;
       case "list": {
-        const sections = item.op.sections || [];
+        // live: rebuilt from next week as it will be after Save on every change (docs/structured-ingredients.md 6)
+        const stored = results.get(item.id)?.result?.list;
+        const sections = stored?.sections || [];
         const n = sections.reduce((t, s) => t + s.items.length, 0);
-        const recipes = new Set(sections.flatMap((s) => s.items.flatMap((i) => i.recipes || []))).size;
-        card.title = `${n} items for ${recipes} recipe${recipes === 1 ? "" : "s"}`;
-        card.sub = current ? "Ready" : "Out of date";
+        const recipes = stored?.recipes?.length || 0;
+        card.title = stored ? `${n} items for ${recipes} recipe${recipes === 1 ? "" : "s"}` : "Shopping list";
+        card.sub = current ? "Reviewed" : item.reviewed ? "Changed since the review: Finalise list" : "Built from next week; Finalise list to review it";
         card.current = current;
-        if (!current) card.error = null; // an out-of-date list "fails" only because the tray moved on: the card says so instead
-        card.preview = sections.map((s) => ({ name: s.name, items: s.items.map((i) => (i.quantity ? `${i.name} (${i.quantity})` : i.name)) }));
+        const edits = item.op.edits || [];
+        const stale = list.built?.stale || [];
+        card.edits = edits.filter((e) => !stale.some((x) => x.edit === e || JSON.stringify(x.edit) === JSON.stringify(e))).map((e) => editLabel(e));
+        card.notes = stale.length ? [`${stale.length} edit${stale.length === 1 ? "" : "s"} no longer appl${stale.length === 1 ? "ies" : "y"}: ${stale.map((x) => x.why.replace(/ no longer applies: .*$/, "")).join("; ")}`] : [];
+        card.preview = sections.map((s) => ({ name: s.name, items: s.items.map((i) => (i.quantity ? `${i.name} (${i.quantity})` : i.name) + (i.note ? `, ${i.note}` : "")) }));
+        card.optional = (list.built?.optional || []).length;
         break;
       }
+      case "catalogue":
+        card.title = "Ingredient catalogue";
+        card.sub = (results.get(item.id)?.result?.lines || item.op.changes.map((c) => Object.keys(c)[0])).join("; ");
+        break;
       case "stocktake": {
         const ups = item.op.items || [];
         card.title = `At home: ${ups.length} item${ups.length === 1 ? "" : "s"}`;
@@ -653,7 +726,7 @@ export async function trayView(tray, caller) {
         card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || afterSaveTitle(s)}: ${n}`).join(", ");
         break;
     }
-    if (recipe && item.kind !== "new" && item.kind !== "list" && item.kind !== "switch" && item.kind !== "servings" && item.kind !== "stocktake") {
+    if (recipe && !["new", "list", "switch", "servings", "stocktake", "catalogue"].includes(item.kind)) {
       card.recipe = { url: siteUrl(`recipes/${slug}.html`), image: typeof recipe.image === "string" && recipe.image.startsWith("/images/") ? new URL(`${config.siteUrl}${recipe.image}`).href : "" };
     }
     cards.push(card);
@@ -664,11 +737,12 @@ export async function trayView(tray, caller) {
   const ready = !needs || current;
   return {
     id: tray.id,
-    state: statusFor(tray, items, needs),
+    state: statusFor(tray, list),
     count: items.length,
     needs_list: needs,
     balance,
     list_current: current,
+    review: needs ? { flags: list.flagsOpen.length, optional: list.optionalOpen.length } : null,
     can_save: ready && !problems && !photosPending && !photosFailed && items.length > 0,
     blocked: problems ? "Some changes have a problem" : photosPending ? "Photos are still being made" : photosFailed ? "A photo failed: tap New photo" : "",
     expires_at: tray.expires_at,
@@ -716,19 +790,55 @@ export async function trayNote(tray, caller) {
   return lines.join("\n");
 }
 
-/** After a Finalise turn: if the list didn't get built the tray goes back to collecting. */
+/** After a Finalise turn: unless the list was reviewed, the tray goes back to collecting. */
 export async function settleFinalise(caller) {
   await mutate(caller, async (tray) => {
     if (!tray || tray.status !== "finalising") return { result: null };
-    const { nextSlugs } = await replay(tray.items, caller, await warmReads());
-    const needs = needsList(tray.items, nextSlugs);
-    return { items: tray.items, listHash: tray.list_hash, status: needs && !listCurrent(tray, tray.items) ? "collecting" : "ready", result: null };
+    const { results } = await replay(tray.items, caller, await warmReads());
+    return { items: tray.items, status: listState(tray.items, results).reviewed ? "ready" : "collecting", result: null };
   }).catch((err) => console.error("Settling the tray failed:", err.message));
 }
 
 export async function startFinalise(caller) {
-  const { tray } = await mutate(caller, async (tray) => (tray ? { items: tray.items, listHash: tray.list_hash, status: "finalising", result: null } : { result: null }));
+  const { tray } = await mutate(caller, async (tray) => (tray ? { items: tray.items, status: "finalising", result: null } : { result: null }));
   return tray;
+}
+
+/**
+ * Where Finalise list stands, for the server's own steps: { list, built, flagsOpen, optionalOpen, reviewed, problems } from a fresh dry run.
+ * null when there's no tray.
+ */
+export async function finaliseState(caller) {
+  const tray = await loadTray();
+  if (!tray) return null;
+  const { results } = await replay(tray.items, caller, await warmReads());
+  const state = listState(tray.items, results);
+  return { ...state, problems: tray.items.filter((i) => i.error || i.clash).length };
+}
+
+/**
+ * Records what Finalise list has gone through (section 6): `flags` (keys the model reviewed) and/or `optional` ({ item: "keep" | "drop" }, the
+ * card's answers: drops become this-week-only `drop` patches on the list, never catalogue changes). An answer stays with its item, so a rebuild
+ * re-applies it. Resolves the new listState.
+ */
+export async function markReviewed(caller, { flags = [], optional = {} } = {}) {
+  assertCanStage(caller);
+  const reads = await warmReads();
+  let out = null;
+  await mutate(caller, async (tray) => {
+    const list = tray?.items.find((i) => i.kind === "list");
+    if (!list) return { result: null };
+    const rev = list.reviewed || { flags: [], optional: [] };
+    const drops = Object.entries(optional).filter(([, a]) => a === "drop").map(([item]) => ({ drop: item }));
+    const keeps = new Set(Object.entries(optional).filter(([, a]) => a === "keep").map(([item]) => item));
+    const edits = [...(list.op.edits || []).filter((e) => !(e.drop && (keeps.has(e.drop) || drops.some((d) => d.drop === e.drop)))), ...drops];
+    const next = { ...list, op: { ...list.op, edits }, reviewed: { flags: [...new Set([...rev.flags, ...flags])], optional: [...new Set([...rev.optional, ...Object.keys(optional)])] } };
+    const items = tray.items.map((i) => (i === list ? next : i));
+    const { items: checked, state } = await checkItems(items, caller, reads);
+    out = state;
+    return { items: checked, status: statusFor(tray, state), result: null };
+  });
+  return out;
 }
 
 // --- Langfuse (design 8.1): tray events, never with emails or tokens ----------------------------------------------------------------

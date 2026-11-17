@@ -7,26 +7,24 @@ tags: [High Protein, Comfort Food]
 total_mins: 55
 serves: 4
 calories: 560
+ingredients:
+  - { amount: 300, unit: g, name: cooked chicken, note: shredded, item: cooked-chicken }
+  - { amount: 500, unit: ml, name: semi-skimmed milk, item: milk }
+  - { amount: 2, name: celery sticks, note: finely diced, item: celery }
+  - { amount: 120, unit: g, name: frozen peas, item: frozen-peas }
+  - { amount: 2, name: leeks, note: finely sliced, item: leek }
+  - { amount: 2, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 1, unit: tsp, name: Dijon mustard, item: dijon-mustard }
+  - { amount: 6, name: smoked pancetta rashers, note: diced, item: pancetta }
+  - { amount: 1, name: chicken stock cube, item: stock-cubes }
+  - { amount: 1, unit: tbsp, name: tarragon, note: "fresh, chopped", item: tarragon }
+  - { amount: 1, unit: tbsp, name: plain flour, note: "big, heaped", item: plain-flour }
+  - { amount: 250, unit: g, name: ready-rolled puff pastry, note: "approx., or enough to cover your dish", item: puff-pastry }
+  - { amount: 1, name: egg, note: "beaten, for brushing", item: eggs }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { name: greens, note: to serve, item: greens }
 ---
-
-## Ingredients
-
-- 300g **cooked chicken**, shredded
-- 500ml **semi-skimmed milk**
-- 2 sticks **celery**, finely diced
-- 120g **frozen peas**
-- 2 **leeks**, finely sliced
-- 2 cloves **garlic**, minced
-- 1 tsp **Dijon mustard**
-- 6 rashers **smoked pancetta**, diced
-- 1 **chicken stock cube**
-- 1 tbsp **tarragon**, fresh, chopped
-- 1 big heaped tbsp **plain flour**
-- Approx. 250g **ready-rolled puff pastry**, or enough to cover your dish
-- 1 **egg**, beaten, for brushing
-- **salt**, to taste
-- **black pepper**, to taste
-- **greens**, to serve
 
 ## Instructions
 

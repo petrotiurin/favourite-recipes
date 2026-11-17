@@ -7,33 +7,31 @@ tags: [High Protein]
 total_mins: 40
 serves: 2
 calories: 412
+ingredients:
+  - { amount: 2, name: chicken breasts, item: chicken-breast }
+  - { amount: 100, unit: g, name: panko breadcrumbs, note: or fresh breadcrumbs, item: panko }
+  - { amount: 0.5, unit: tsp, name: dried rosemary, item: dried-rosemary }
+  - { amount: 0.5, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: smoked paprika, note: heaped, item: smoked-paprika }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 1, name: egg, note: medium, item: eggs }
+  - { amount: 4, unit: tbsp, name: plain flour, item: plain-flour }
+  - { amount: 0.25, name: red cabbage, item: red-cabbage }
+  - { amount: 0.25, name: white cabbage, item: white-cabbage }
+  - { amount: 1, name: beetroot, note: "medium, raw, peeled", item: beetroot }
+  - { amount: 1, name: red apple, note: large, item: red-apple }
+  - { amount: 2, name: spring onions, note: "large, diced", item: spring-onion }
+  - { amount: 2, unit: tbsp, name: Greek yogurt, item: greek-yogurt }
+  - { amount: 2, unit: tsp, name: horseradish, note: "heaped, or to taste", item: horseradish }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 1, unit: tsp, name: Dijon mustard, item: dijon-mustard }
+  - { amount: 1, unit: tbsp, name: white wine vinegar, note: or apple cider vinegar, item: white-wine-vinegar }
+  - { amount: 1, unit: tbsp, name: nutritional yeast, optional: true, item: nutritional-yeast }
+  - { amount: 2, unit: tsp, name: vegetable oil, item: vegetable-oil }
+  - { amount: 60, unit: g, name: feta, note: "crumbled, to serve", item: feta }
+  - { name: parsley, note: to serve, item: parsley }
 ---
-
-## Ingredients
-
-- 2 **chicken breasts**
-- 100g **panko breadcrumbs**, or fresh breadcrumbs
-- ½ tsp **dried rosemary**
-- ½ tsp **garlic granules**
-- 1 heaped tsp **smoked paprika**
-- **salt**, to taste
-- **pepper**, to taste
-- 1 **egg**, medium
-- 4 tbsp **plain flour**
-- ¼ **red cabbage**
-- ¼ **white cabbage**
-- 1 **beetroot**, medium, raw, peeled
-- 1 **red apple**, large
-- 2 **spring onions**, large, diced
-- 2 tbsp **Greek yogurt**
-- 2 heaped tsp **horseradish**, or to taste
-- 1 tsp **honey**
-- 1 tsp **Dijon mustard**
-- 1 tbsp **white wine vinegar**, or apple cider vinegar
-- 1 tbsp **nutritional yeast**, optional
-- 2 tsp **vegetable oil**
-- 60g **feta**, crumbled, to serve
-- **parsley**, to serve
 
 ## Instructions
 

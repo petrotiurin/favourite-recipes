@@ -3100,6 +3100,102 @@ button.chat-attachment-state {
   opacity: 0.4;
 }
 
+/* The optional items card (Finalise list): the drafts card's look, a tick box per row; an unticked row is struck through. */
+.chat-optional-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.65rem 0.75rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.chat-optional-photos {
+  flex: none;
+  display: flex;
+}
+
+.chat-optional-photo {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-left: -0.5rem;
+  border: 2px solid var(--surface);
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--track);
+}
+
+.chat-optional-photo:first-child {
+  margin-left: 0;
+}
+
+.chat-optional-words {
+  flex: 1;
+}
+
+.chat-optional-words .chat-review-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-optional-row.is-off .chat-review-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--icon-muted);
+}
+
+.chat-optional-tick {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--icon-muted);
+  cursor: pointer;
+}
+
+.chat-optional-tick:hover:not(:disabled) {
+  background: var(--track);
+}
+
+.chat-optional-tick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.chat-optional-box {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1.8px solid currentColor;
+  border-radius: 6px;
+}
+
+.chat-optional-box svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  opacity: 0;
+}
+
+.chat-optional-tick[aria-pressed="true"] {
+  color: var(--accent-strong);
+}
+
+.chat-optional-tick[aria-pressed="true"] .chat-optional-box {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.chat-optional-tick[aria-pressed="true"] svg {
+  opacity: 1;
+  color: var(--on-accent);
+}
+
 .chat-card.is-publishing {
   opacity: 0.6;
   cursor: default;
@@ -3310,6 +3406,14 @@ button.chat-attachment-state {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* A quiet line on the List card: a patch that no longer applies (the recipe it was for left the tray) */
+.tray-note {
+  margin: 0.15rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .tray-drop {

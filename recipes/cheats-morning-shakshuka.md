@@ -8,19 +8,17 @@ serves: 1
 calories: 287
 current: true
 draft: true
+ingredients:
+  - { amount: 150, unit: g, name: pasta sauce, note: "good-quality, no additives", item: pasta-sauce }
+  - { amount: 1, unit: handful, name: spinach, item: spinach }
+  - { amount: 0.5, name: red or green pepper, note: deseeded and finely diced, item: red-pepper }
+  - { amount: 2, name: eggs, note: medium, item: eggs }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 15, unit: g, name: feta, note: "crumbled, to serve", item: feta }
+  - { amount: 1, unit: tbsp, name: parsley, note: "chopped, to serve", item: parsley }
+  - { amount: 1, unit: slice, name: toast or pitta, note: "warm, to serve", optional: true, item: bread }
 ---
-
-## Ingredients
-
-- 150g **pasta sauce**, good-quality, no additives
-- Handful of **spinach**
-- ½ **red or green pepper**, deseeded and finely diced
-- 2 **eggs**, medium
-- **salt**, to taste
-- **black pepper**, to taste
-- 15g **feta**, crumbled, to serve
-- 1 tbsp **parsley**, chopped, to serve
-- 1 slice **toast or pitta**, warm, optional, to serve
 
 ## Instructions
 

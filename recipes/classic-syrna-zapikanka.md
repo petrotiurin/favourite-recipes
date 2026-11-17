@@ -6,20 +6,20 @@ course: [Breakfast]
 total_mins: 70
 serves: 4
 calories: 305
+ingredients:
+  - { amount: 250, unit: g, name: cottage cheese, note: "tvorog, 5–9% fat", item: cottage-cheese }
+  - { amount: 2, name: eggs, note: separated, item: eggs }
+  - { amount: 50, unit: g, name: sour cream, note: 15–20% fat, item: sour-cream }
+  - { amount: 75, unit: g, name: sugar, note: split in half, item: sugar }
+  - { amount: 5, unit: g, name: vanilla sugar, note: about ½ sachet, item: vanilla-sugar }
+  - { amount: 30, unit: g, name: all-purpose flour, item: plain-flour }
+  - { amount: [25, 38], unit: g, name: raisins, item: raisins }
+  - { amount: 12, unit: g, name: butter, note: to grease the pan, item: butter }
+  - { amount: 0.25, unit: tsp, name: salt, item: salt }
+  - { amount: [0.5, 1], unit: tbsp, name: powdered sugar, note: to finish, optional: true, item: icing-sugar }
 ---
 
-## Ingredients (half batch)
-
-- 250 g **cottage cheese** (tvorog), 5–9% fat
-- 2 **eggs**, separated
-- 50 g **sour cream** (15–20% fat)
-- 75 g **sugar**, split in half
-- 5 g **vanilla sugar** (about ½ sachet)
-- 30 g **all-purpose flour**
-- 25–38 g **raisins**
-- 12 g **butter** (to grease the pan)
-- ¼ tsp **salt**
-- ½–1 tbsp **powdered sugar**, optional, to finish
+Quantities are for a half batch.
 
 ## Instructions
 

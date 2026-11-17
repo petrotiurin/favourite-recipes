@@ -8,6 +8,7 @@ const ALLOWED_PATHS = [
   /^recipes\/[a-z0-9]+(?:-[a-z0-9]+)*\.md$/,
   /^images\/recipes\/[a-z0-9]+(?:-[a-z0-9]+)*\.(?:jpg|jpeg|png|webp)$/,
   /^shopping-list\.json$/,
+  /^data\/ingredients\.json$/,
 ];
 
 export function isAllowedPath(path) {
@@ -16,7 +17,7 @@ export function isAllowedPath(path) {
 
 export function assertAllowedPath(path) {
   if (!isAllowedPath(path)) {
-    throw new Error(`Refusing to write "${path}": only recipes/<slug>.md, images/recipes/<slug>.<ext> and shopping-list.json may be changed`);
+    throw new Error(`Refusing to write "${path}": only recipes/<slug>.md, images/recipes/<slug>.<ext>, shopping-list.json and data/ingredients.json may be changed`);
   }
 }
 

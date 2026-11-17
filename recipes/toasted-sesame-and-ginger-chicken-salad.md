@@ -8,32 +8,30 @@ serves: 2
 calories: 500
 current: true
 draft: true
+ingredients:
+  - { amount: [4, 5], name: radishes, note: thinly sliced, item: radishes }
+  - { amount: 150, unit: ml, name: rice vinegar, item: rice-vinegar }
+  - { amount: 2, unit: tsp, name: caster sugar, note: superfine, item: sugar }
+  - { amount: 100, unit: g, name: frozen peas, item: frozen-peas }
+  - { amount: 150, unit: g, name: cooked quinoa, item: cooked-quinoa }
+  - { amount: 0.25, name: cucumber, note: deseeded and diced, item: cucumber }
+  - { amount: 2, name: spring onions, note: finely diced, item: spring-onion }
+  - { amount: 0.5, name: avocado, note: "ripe, diced", item: avocado }
+  - { amount: 1, name: roasted chicken breast, note: shredded, item: cooked-chicken }
+  - { amount: 1, unit: handful, name: baby spinach leaves, item: spinach }
+  - { amount: 1, unit: handful, name: coriander, optional: true, item: coriander }
+  - { amount: 400, unit: g, name: chickpeas, note: "can, drained, rinsed and dried", item: chickpeas }
+  - { amount: 1, unit: tsp, name: toasted sesame oil, note: for chickpeas, item: sesame-oil }
+  - { amount: 1, unit: tbsp, name: light soy sauce, note: for chickpeas, item: soy-sauce }
+  - { amount: 1, unit: tsp, name: cornflour, note: heaped, item: cornflour }
+  - { name: salt, note: to taste, item: salt }
+  - { amount: 2, unit: tsp, name: ginger paste, item: ginger-paste }
+  - { amount: 2, unit: tsp, name: tahini, item: tahini }
+  - { amount: 2, unit: tsp, name: toasted sesame oil, note: for dressing, item: sesame-oil }
+  - { amount: 2, unit: tbsp, name: light soy sauce, note: for dressing, item: soy-sauce }
+  - { amount: 2, unit: tbsp, name: rice vinegar, note: for dressing, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
 ---
-
-## Ingredients
-
-- 4-5 **radishes**, thinly sliced
-- 150ml **rice vinegar**
-- 2 tsp **caster sugar**, superfine
-- 100g **frozen peas**
-- 150g **cooked quinoa**
-- ¼ **cucumber**, deseeded and diced
-- 2 **spring onions**, finely diced
-- ½ **avocado**, ripe, diced
-- 1 **roasted chicken breast**, shredded
-- Handful of **baby spinach leaves**
-- Handful of **coriander**, optional
-- 400g **chickpeas**, can, drained, rinsed and dried
-- 1 tsp **toasted sesame oil**, for chickpeas
-- 1 tbsp **light soy sauce**, for chickpeas
-- 1 tsp **cornflour**, heaped
-- **salt**, to taste
-- 2 tsp **ginger paste**
-- 2 tsp **tahini**
-- 2 tsp **toasted sesame oil**, for dressing
-- 2 tbsp **light soy sauce**, for dressing
-- 2 tbsp **rice vinegar**, for dressing
-- 1 tsp **honey**
 
 ## Instructions
 

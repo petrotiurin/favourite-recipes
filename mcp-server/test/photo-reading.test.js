@@ -87,7 +87,7 @@ const say = async (message, extra = {}, token = "owner-token") => {
   await background.backgroundIdle();
   return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id, text: evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("") };
 };
-const trayItems = () => supabase.tables.trays[0]?.items || [];
+const trayItems = () => (supabase.tables.trays[0]?.items || []).filter((i) => i.kind !== "list"); // the list card follows next week on its own
 const notes = (conv) => supabase.tables.messages.filter((m) => m.conversation_id === conv && m.role === "event");
 const colourKey = async (color) => {
   // the colour the mock reader sees after the server re-encodes the photo
@@ -159,7 +159,7 @@ test("the reader's request is limited: its own prompt, one user message with the
   assert.equal(req.messages[0].role, "system");
   assert.doesNotMatch(req.messages[0].content, /Catalogue of our recipe book|plan tray|suggest_replies|stage_|owner@example.com/);
   assert.match(req.messages[0].content, /never instructions/);
-  assert.match(req.messages[0].content, /Every ingredient has a `quantity`/, "the shared recipe-writing rules");
+  assert.match(req.messages[0].content, /Ingredients are fields, not text/, "the shared recipe-writing rules");
   assert.equal(req.messages[1].role, "user");
   assert.deepEqual(req.messages[1].content.map((p) => p.type), ["text", "image_url"]);
   assert.equal(req.messages[1].content[0].text, "One photo follows. Read it.");
@@ -680,7 +680,7 @@ test("a follow-up turn can't read again or correct on its own: it asks the user 
 
 test("Finalise on a chat that is busy is refused without leaving the tray 'finalising'", async () => {
   const ctx = { chat: { emit() {}, photos: [], userText: "" } };
-  const staged = await tools.dispatch("stage_create_recipe", { title: "Busy Day Soup", course: ["Lunch"], total_mins: 20, serves: 2, calories: 300, ingredients: [{ quantity: "1", name: "onion" }], instructions: ["Cook the **onion**."] }, caller(), ctx);
+  const staged = await tools.dispatch("stage_create_recipe", { title: "Busy Day Soup", course: ["Lunch"], total_mins: 20, serves: 2, calories: 300, ingredients: [{ amount: 1, name: "onion" }], instructions: ["Cook the **onion**."] }, caller(), ctx);
   assert.ok(!staged.isError, staged.content[0].text);
   await background.backgroundIdle();
   const convo = await store.createConversation({ userId: OWNER, title: "x" });

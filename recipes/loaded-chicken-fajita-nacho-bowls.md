@@ -7,28 +7,26 @@ tags: [High Protein]
 total_mins: 20
 serves: 2
 calories: 654
+ingredients:
+  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 1, name: red pepper, note: "small, deseeded and sliced", item: red-pepper }
+  - { amount: 1, name: green pepper, note: "small, deseeded and sliced", item: green-pepper }
+  - { amount: 1, name: red onion, note: "small, sliced", item: red-onion }
+  - { amount: 100, unit: g, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
+  - { amount: 1, unit: tsp, name: fajita spice blend, item: fajita-spice }
+  - { amount: 1, unit: tbsp, name: tomato purée, note: "heaped, paste", item: tomato-puree }
+  - { amount: 200, unit: g, name: cooked chicken breast, note: shredded or sliced, item: cooked-chicken }
+  - { amount: 80, unit: g, name: black beans, note: drained and rinsed, item: black-beans }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 80, unit: g, name: tortilla chips, item: tortilla-chips }
+  - { amount: 60, unit: g, name: feta cheese, note: crumbled, item: feta }
+  - { amount: [1, 2], unit: tbsp, name: jalapeños, note: from a jar, optional: true, item: jalapenos }
+  - { amount: 100, unit: g, name: Greek yoghurt, note: 0% or full-fat, item: greek-yogurt }
+  - { amount: 0.5, name: avocado, note: "medium, diced", item: avocado }
+  - { name: coriander, note: "chopped, to serve", item: coriander }
+  - { name: lime wedges, note: to serve, item: lime }
 ---
-
-## Ingredients
-
-- 1 tsp **olive oil**
-- 1 small **red pepper**, deseeded and sliced
-- 1 small **green pepper**, deseeded and sliced
-- 1 small **red onion**, sliced
-- 100g (3½oz) **cherry tomatoes**, halved
-- 1 tsp **fajita spice blend**
-- 1 heaped tbsp **tomato purée**, paste
-- 200g (7oz) **cooked chicken breast**, shredded or sliced
-- 80g (2¾oz) **black beans**, drained and rinsed
-- **salt**, to taste
-- **black pepper**, to taste
-- 80g (2¾oz) **tortilla chips**
-- 60g (2¼oz) **feta cheese**, crumbled
-- 1–2 tbsp **jalapeños**, from a jar, optional
-- 100g (scant ½ cup) **Greek yoghurt**, 0% or full-fat
-- ½ medium **avocado**, diced
-- **coriander**, chopped, to serve
-- **lime wedges**, to serve
 
 ## Instructions
 

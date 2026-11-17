@@ -7,21 +7,19 @@ tags: [High Protein]
 total_mins: 11
 serves: 2
 calories: 257
+ingredients:
+  - { amount: 1, name: banana, note: medium, item: banana }
+  - { amount: 1, unit: tbsp, name: cottage cheese, note: "generous, heaped", item: cottage-cheese }
+  - { amount: 1, name: egg, note: medium, item: eggs }
+  - { amount: 0.5, unit: tsp, name: baking powder, item: baking-powder }
+  - { amount: 1, unit: pinch, name: salt, item: salt }
+  - { name: maple syrup, note: "or honey or sweetener, to taste", optional: true, item: maple-syrup }
+  - { amount: 2, unit: tbsp, name: plain flour, note: heaped, item: plain-flour }
+  - { amount: 20, unit: g, name: dark chocolate, note: "70% or higher, chopped", item: dark-chocolate }
+  - { name: Yogurt, note: to serve, item: natural-yogurt }
+  - { name: Nut butter, note: to serve, item: nut-butter }
+  - { name: Fresh berries, note: to serve, item: fresh-berries }
 ---
-
-## Ingredients
-
-- 1, **banana**, medium
-- 1 generous heaped tbsp, **cottage cheese**
-- 1, **egg**, medium
-- ½ tsp, **baking powder**
-- Pinch of, **salt**
-- **Maple syrup, honey or sweetener**, to taste, optional
-- 2 heaped tbsp, **plain flour**
-- 20g (¾oz), **dark chocolate** (70% or higher), chopped
-- **Yogurt**, to serve
-- **Nut butter**, to serve
-- **Fresh berries**, to serve
 
 ## Instructions
 

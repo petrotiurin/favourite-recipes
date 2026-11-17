@@ -7,20 +7,18 @@ tags: [High Protein]
 total_mins: 15
 serves: 1
 calories: 350
+ingredients:
+  - { amount: 2, name: free-range eggs, note: medium, item: eggs }
+  - { amount: 1, unit: tbsp, name: natural yogurt, note: heaped, item: natural-yogurt }
+  - { amount: 1, unit: tsp, name: American mustard, item: american-mustard }
+  - { amount: 1, name: spring onion, note: "scallion, finely sliced", item: spring-onion }
+  - { amount: 1, unit: tbsp, name: parsley, note: chopped, item: parsley }
+  - { amount: 1, name: tomato, note: deseeded and diced, item: tomato }
+  - { amount: 2, unit: slice, name: bread, note: of choice, item: bread }
+  - { amount: 1, unit: handful, name: baby spinach, note: "small, leaves", item: spinach }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 2 medium **free-range eggs**
-- 1 heaped tbsp **natural yogurt**
-- 1 tsp **American mustard**
-- 1 **spring onion**, scallion, finely sliced
-- 1 tbsp **parsley**, chopped
-- 1 **tomato**, deseeded and diced
-- 2 slices **bread**, of choice
-- Small handful of **baby spinach**, leaves
-- **salt**, to taste
-- **black pepper**, to taste
 
 ## Instructions
 

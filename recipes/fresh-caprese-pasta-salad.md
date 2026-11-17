@@ -6,22 +6,20 @@ course: [Lunch]
 total_mins: 20
 serves: 2
 calories: 487
+ingredients:
+  - { amount: 120, unit: g, name: wholewheat pasta, note: "dried, fusilli or penne", item: wholewheat-pasta }
+  - { amount: 250, unit: g, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
+  - { amount: 0.25, name: red onion, note: "small, thinly sliced", item: red-onion }
+  - { amount: 1, unit: tbsp, name: extra virgin olive oil, item: olive-oil }
+  - { amount: 2, unit: tsp, name: red wine vinegar, note: or balsamic for sweeter, item: red-wine-vinegar }
+  - { amount: 1, unit: tsp, name: Dijon mustard, item: dijon-mustard }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 125, unit: g, name: mozzarella, note: "1 ball, torn", item: mozzarella }
+  - { amount: 1, unit: handful, name: basil, note: "large, leaves, torn", item: basil }
+  - { amount: 30, unit: g, name: rocket, item: rocket }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 120g (4¼oz) **wholewheat pasta**, dried, fusilli or penne
-- 250g (9oz) **cherry tomatoes**, halved
-- ¼ **red onion**, small, thinly sliced
-- 1 tbsp **extra virgin olive oil**
-- 2 tsp **red wine vinegar**, or balsamic for sweeter
-- 1 tsp **Dijon mustard**
-- 1 tsp **honey**
-- 1 x 125g (4½oz) ball of **mozzarella**, torn
-- Large handful of **basil**, leaves, torn
-- 30g (1oz) **rocket**
-- **salt**, to taste
-- **black pepper**, to taste
 
 ## Instructions
 

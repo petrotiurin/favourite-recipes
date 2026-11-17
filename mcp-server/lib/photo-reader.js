@@ -2,6 +2,7 @@
 // call per photo (or per group of consecutive screenshots), with no tools, no conversation and nothing private in its prompt. Everything here
 // apart from readPhotos() is pure: normalising what the model returned, grouping neighbouring photos, turning a read into a create_recipe
 // operation and matching it against the tray and the book.
+import { UNITS } from "./ingredient-line.js";
 import { config, COURSES } from "./config.js";
 import { readerSystemPrompt, readerInstruction, READER_SCHEMA, PHOTO_READER_PROMPT_VERSION } from "./photo-reader-prompt.js";
 
@@ -140,13 +141,28 @@ const strList = (v, maxItems, maxLen) => (Array.isArray(v) ? v.filter((x) => typ
 const posInt = (v, max) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= max ? Math.round(Number(v)) : null);
 const bool = (v) => v === true;
 
+const posNum = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 100000 ? Math.round(v * 1000) / 1000 : null);
+/** One read ingredient in the recipe's own shape (docs/structured-ingredients.md section 1); the server fills `item` when it's staged. */
+function readIngredient(i) {
+  const amount = posNum(i.amount);
+  const max = posNum(i.amount_max);
+  const unit = UNITS.includes(i.unit) ? i.unit : undefined;
+  return {
+    ...(amount ? { amount: max && max > amount ? [amount, max] : amount } : {}),
+    ...(unit && amount ? { unit } : {}),
+    name: clean(i.name, 100).replace(/\*+/g, ""),
+    ...(clean(i.note, 120) ? { note: clean(i.note, 120) } : {}),
+    ...(i.optional === true ? { optional: true } : {}),
+  };
+}
+
 /** The reader's output reduced to the schema's shape with sane bounds, or null if it isn't an object at all. */
 export function normaliseRead(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const r = raw.recipe && typeof raw.recipe === "object" ? raw.recipe : {};
   const ingredients = (Array.isArray(r.ingredients) ? r.ingredients : [])
     .filter((i) => i && typeof i === "object")
-    .map((i) => ({ quantity: clean(i.quantity, 60), name: clean(i.name, 100).replace(/\*+/g, ""), note: clean(i.note, 120) }))
+    .map((i) => readIngredient(i))
     .filter((i) => i.name)
     .slice(0, 60);
   return {
@@ -288,7 +304,7 @@ export function fieldsFromRead(read) {
     total_mins: pick("total_mins", 30),
     serves: pick("serves", 2),
     calories: pick("calories", 500),
-    ingredients: (r.ingredients || []).map((i) => ({ ...(i.quantity ? { quantity: i.quantity } : {}), name: i.name, ...(i.note ? { note: i.note } : {}) })),
+    ingredients: (r.ingredients || []).map((i) => ({ ...i })),
     instructions: r.instructions || [],
     ...(r.notes ? { notes: r.notes } : {}),
   };

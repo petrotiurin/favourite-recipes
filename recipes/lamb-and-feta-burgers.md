@@ -6,44 +6,34 @@ course: [Dinner]
 total_mins: 45
 serves: 4
 calories: 685
+ingredients:
+  - { amount: 500, unit: g, name: skin-on potatoes, note: cut into wedges, item: potato }
+  - { amount: 0.5, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, unit: juice, name: lemon, note: plus the zest, item: lemon }
+  - { amount: 1, unit: tsp, name: dried rosemary, item: dried-rosemary }
+  - { amount: 1, unit: tbsp, name: olive oil, item: olive-oil }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 500, unit: g, name: minced (ground) lamb, note: lean, item: minced-lamb }
+  - { amount: 1, name: courgette (zucchini), note: "small, grated and excess water squeezed out", item: courgette }
+  - { amount: 80, unit: g, name: feta cheese, item: feta }
+  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: onion granules, item: onion-granules }
+  - { amount: 1, unit: zest, name: lemon, item: lemon }
+  - { amount: 1, unit: tsp, name: dried rosemary, item: dried-rosemary }
+  - { amount: 1, unit: tsp, name: salt, item: salt }
+  - { name: pepper, note: "a grind, to taste", item: black-pepper }
+  - { name: Olive oil, note: "for frying, to taste", item: olive-oil }
+  - { amount: 4, name: burger rolls, item: burger-rolls }
+  - { amount: 0.5, name: cucumber, note: pared into ribbons, item: cucumber }
+  - { amount: 0.5, unit: juice, name: lemon, note: plus the zest, item: lemon }
+  - { amount: 1, unit: tbsp, name: mint, note: chopped, item: mint }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 100, unit: g, name: Greek yogurt, note: "thick, 0% or full fat", item: greek-yogurt }
+  - { amount: 0.25, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, unit: tbsp, name: mint, note: chopped, item: mint }
 ---
-
-## Ingredients
-
-**For the Garlic Lemon Potato Wedges**
-
-- 500g (1lb 2oz) **skin-on potatoes**, cut into wedges
-- ½ tsp **garlic granules**
-- Zest and juice of 1 **lemon**
-- 1 tsp **dried rosemary**
-- 1 tbsp **olive oil**
-- **Salt and pepper**, to taste
-
-**For the Burgers**
-
-- 500g (1lb 2oz) lean **minced (ground) lamb**
-- 1 small **courgette (zucchini)**, grated and excess water squeezed out
-- 80g (2¾oz) **feta cheese**
-- 1 tsp **garlic granules**
-- 1 tsp **onion granules**
-- Zest of 1 **lemon**
-- 1 tsp **dried rosemary**
-- 1 tsp **salt** and a grind of **pepper**
-- **Olive oil**, for frying
-- 4 **burger rolls**
-
-**For the Cucumber Mint Slaw**
-
-- ½ **cucumber**, pared into ribbons
-- Zest and juice of ½ **lemon**
-- 1 tbsp **mint**, chopped
-- **Salt and pepper**, to taste
-
-**For the Garlic Yogurt**
-
-- 100g (scant ½ cup) thick **Greek yogurt** (0% or full fat)
-- ¼ tsp **garlic granules**
-- 1 tbsp **mint**, chopped
 
 ## Instructions
 

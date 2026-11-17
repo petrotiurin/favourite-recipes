@@ -7,23 +7,21 @@ tags: [High Protein]
 total_mins: 10
 serves: 1
 calories: 535
+ingredients:
+  - { amount: 60, unit: g, name: tuna, note: "canned in brine, drained and flaked", item: tuna }
+  - { amount: 1, name: spring onion, note: "scallion, chopped", item: spring-onion }
+  - { amount: 1, unit: tbsp, name: capers, note: chopped, item: capers }
+  - { amount: 1, unit: tbsp, name: natural yogurt, note: "heaped, thick", item: natural-yogurt }
+  - { amount: 1, unit: tsp, name: American mustard, item: american-mustard }
+  - { amount: 1, unit: tsp, name: white vinegar, item: white-vinegar }
+  - { amount: 2, unit: tsp, name: extra virgin olive oil, item: olive-oil }
+  - { amount: 1, unit: clove, name: garlic, note: finely chopped, item: garlic }
+  - { amount: 1, unit: handful, name: parsley, note: "small, leaves, finely chopped", item: parsley }
+  - { amount: 2, unit: slice, name: bread, note: of choice, item: bread }
+  - { amount: 40, unit: g, name: mature Cheddar cheese, note: grated, item: cheddar }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 60g (2¼oz) **tuna**, canned in brine, drained and flaked
-- 1 **spring onion**, scallion, chopped
-- 1 tbsp **capers**, chopped
-- 1 heaped tbsp **natural yogurt**, thick
-- 1 tsp **American mustard**
-- 1 tsp **white vinegar**
-- 2 tsp **extra virgin olive oil**
-- 1 **garlic clove**, finely chopped
-- Small handful of **parsley**, leaves, finely chopped
-- 2 slices of **bread**, of choice
-- 40g (1½oz) **mature Cheddar cheese**, grated
-- **salt**, to taste
-- **pepper**, to taste
 
 ## Instructions
 

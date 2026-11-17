@@ -8,24 +8,22 @@ total_mins: 45
 serves: 2
 calories: 350
 current: true
+ingredients:
+  - { amount: 2, name: salmon fillets, note: skinless, item: salmon-fillet }
+  - { amount: 1, unit: tbsp, name: peanut butter, note: "heaped, smooth, for the marinade", item: peanut-butter }
+  - { amount: 1, unit: tsp, name: ginger paste, note: for the marinade, item: ginger-paste }
+  - { amount: 0.25, unit: tsp, name: mild curry powder, note: for the marinade, item: curry-powder }
+  - { amount: 2, unit: tbsp, name: light soy sauce, note: for the marinade, item: soy-sauce }
+  - { amount: 1, unit: tbsp, name: rice vinegar, note: for the marinade, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: honey, note: for the marinade, item: honey }
+  - { amount: 1, name: cucumber, note: for the smacked cucumber salad, item: cucumber }
+  - { amount: 2, unit: tbsp, name: rice vinegar, note: for the salad, item: rice-vinegar }
+  - { amount: 1, unit: tbsp, name: light soy sauce, note: for the salad, item: soy-sauce }
+  - { amount: 0.25, unit: tsp, name: garlic granules, note: for the salad, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: caster sugar, note: "superfine, for the salad", item: sugar }
+  - { amount: 1, unit: tsp, name: crispy chilli oil, note: for the salad, item: chilli-oil }
+  - { amount: 1, unit: tsp, name: salt, note: for the salad, item: salt }
 ---
-
-## Ingredients
-
-- 2 **salmon fillets**, skinless
-- 1 heaped tbsp **peanut butter**, smooth, for the marinade
-- 1 tsp **ginger paste**, for the marinade
-- ¼ tsp **mild curry powder**, for the marinade
-- 2 tbsp **light soy sauce**, for the marinade
-- 1 tbsp **rice vinegar**, for the marinade
-- 1 tsp **honey**, for the marinade
-- 1 **cucumber**, for the smacked cucumber salad
-- 2 tbsp **rice vinegar**, for the salad
-- 1 tbsp **light soy sauce**, for the salad
-- ¼ tsp **garlic granules**, for the salad
-- 1 tsp **caster sugar** (superfine), for the salad
-- 1 tsp **crispy chilli oil**, for the salad
-- 1 tsp **salt**, for the salad
 
 ## Instructions
 

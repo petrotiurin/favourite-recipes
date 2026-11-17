@@ -7,33 +7,31 @@ tags: [High Protein]
 total_mins: 40
 serves: 2
 calories: 550
+ingredients:
+  - { amount: 100, unit: g, name: brown rice, item: brown-rice }
+  - { amount: 2, name: chicken breasts, note: "boneless, skinless", item: chicken-breast }
+  - { amount: 1, name: egg, note: "medium, free-range, beaten", item: eggs }
+  - { amount: 1, unit: tsp, name: ginger and garlic paste, note: for the coating, item: ginger-garlic-paste }
+  - { amount: 100, unit: g, name: panko breadcrumbs, item: panko }
+  - { amount: 4, unit: tbsp, name: cornflour, note: "heaped, cornstarch", item: cornflour }
+  - { name: neutral spray oil, note: "a spritz, to taste", item: spray-oil }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 0.5, name: cucumber, note: "thinly sliced, for the pickle", item: cucumber }
+  - { amount: 100, unit: ml, name: rice vinegar, note: for the pickle, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: toasted sesame oil, note: for the pickle, item: sesame-oil }
+  - { amount: 1, unit: tsp, name: caster sugar, note: "superfine, for the pickle", item: sugar }
+  - { amount: 2, unit: tsp, name: olive oil, note: for the sauce, item: olive-oil }
+  - { amount: 1, name: onion, note: finely chopped, item: onion }
+  - { amount: 2, unit: tsp, name: ginger and garlic paste, note: for the sauce, item: ginger-garlic-paste }
+  - { amount: 1, unit: tsp, name: medium curry powder, item: curry-powder }
+  - { amount: 0.5, unit: tsp, name: ground turmeric, item: turmeric }
+  - { amount: 0.5, unit: tsp, name: ground star anise, item: star-anise }
+  - { amount: 15, unit: g, name: plain flour, note: all-purpose, item: plain-flour }
+  - { amount: 275, unit: ml, name: chicken stock, note: "hot, made with 1 stock cube", item: chicken-stock }
+  - { amount: 1, unit: tbsp, name: tomato ketchup, item: ketchup }
+  - { amount: [1, 2], unit: tsp, name: soft light brown sugar, item: brown-sugar }
 ---
-
-## Ingredients
-
-- 100g (½ cup) **brown rice**
-- 2 **chicken breasts**, boneless, skinless
-- 1 **egg**, medium, free-range, beaten
-- 1 tsp **ginger and garlic paste**, for the coating
-- 100g (2 cups) **panko breadcrumbs**
-- 4 heaped tbsp **cornflour** (cornstarch)
-- Spritz of **neutral spray oil**
-- **salt**, to taste
-- **black pepper**, to taste
-- ½ **cucumber**, thinly sliced, for the pickle
-- 100ml (scant ½ cup) **rice vinegar**, for the pickle
-- 1 tsp **toasted sesame oil**, for the pickle
-- 1 tsp **caster sugar** (superfine), for the pickle
-- 2 tsp **olive oil**, for the sauce
-- 1 **onion**, finely chopped
-- 2 tsp **ginger and garlic paste**, for the sauce
-- 1 tsp **medium curry powder**
-- ½ tsp **ground turmeric**
-- ½ tsp **ground star anise**
-- 15g (1¾ tbsp) **plain flour** (all-purpose)
-- 275ml (scant 1¼ cups) **chicken stock**, hot, made with 1 stock cube
-- 1 tbsp **tomato ketchup**
-- 1–2 tsp **soft light brown sugar**
 
 ## Instructions
 

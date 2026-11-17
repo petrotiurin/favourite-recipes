@@ -6,18 +6,16 @@ course: [Breakfast]
 total_mins: 5
 serves: 4
 calories: 300
+ingredients:
+  - { amount: 160, unit: g, name: rolled oats, item: rolled-oats }
+  - { amount: 500, unit: g, name: plain or vanilla Greek yogurt, note: 0% or full-fat, item: greek-yogurt }
+  - { amount: 115, unit: ml, name: milk, note: of choice, item: milk }
+  - { amount: 2, unit: tsp, name: runny honey, item: honey }
+  - { amount: 1, unit: tbsp, name: chia seeds, item: chia-seeds }
+  - { amount: 1, unit: pinch, name: salt, item: salt }
+  - { amount: 30, unit: g, name: vanilla protein powder, optional: true, item: protein-powder }
+  - { amount: 150, unit: g, name: frozen raspberries, item: frozen-raspberries }
 ---
-
-## Ingredients
-
-- 160g (1¾ cups) **rolled oats**
-- 500g (2¼ cups) **plain or vanilla Greek yogurt** (0% or full-fat)
-- 115ml (½ cup) **milk** of choice
-- 2 tsp **runny honey**
-- 1 tbsp **chia seeds**
-- Pinch of **salt**
-- 30g (1oz) **vanilla protein powder** (optional)
-- 150g (5½oz) **frozen raspberries**
 
 ## Instructions
 

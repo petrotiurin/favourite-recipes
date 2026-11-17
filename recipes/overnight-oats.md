@@ -7,16 +7,14 @@ tags: [Low Fat]
 total_mins: 10
 serves: 1
 calories: 400
+ingredients:
+  - { amount: 0.5, unit: cup, name: rolled oats, item: rolled-oats }
+  - { amount: 1, unit: tbsp, name: chia seeds, note: 1 spoonful, item: chia-seeds }
+  - { name: Raisins, note: to taste, item: raisins }
+  - { amount: 0.5, unit: cup, name: milk, item: milk }
+  - { amount: 2, unit: tbsp, name: Greek yogurt, note: 2 spoons, optional: true, item: greek-yogurt }
+  - { name: maple syrup, note: "or honey, to taste", item: maple-syrup }
 ---
-
-## Ingredients
-
-- ½ cup **rolled oats**
-- 1 spoonful **chia seeds**
-- **Raisins**, to taste
-- ½ cup **milk**
-- 2 spoons **Greek yogurt** (optional)
-- **Maple syrup or honey**, to taste
 
 ## Instructions
 

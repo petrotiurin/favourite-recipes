@@ -54,23 +54,21 @@ const slugs = () => [...github.files.keys()].filter((p) => p.startsWith("recipes
 
 // --- 1. cooking help --------------------------------------------------------------------------------------------------------
 
-test("scaling uses the same numbers and rounding as the recipe page", () => {
+test("scaling rounds like the recipe page and scales the data's amounts", async () => {
   const require = createRequire(import.meta.url);
-  const { markQuantityText, markScalableQuantities } = require("../../templates/quantities.js");
-  const lines = ["- 150g **Greek yogurt**, diced", "- 2 x 150g **chicken breasts**", "- ½ **lemon** (0% or full-fat)", "- 1–2 tsp **paprika**", "- 3 **eggs (about 50g each)**", "- 2 **peppers (about 100g each)**, sliced", "- ¼ tsp **salt**", "- Juice of 2 **limes**", "- 100ml + 3 tbsp **milk**"];
-  for (const line of lines) {
-    const html = markScalableQuantities(`<h2>Ingredients</h2><ul><li>${line.slice(2).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</li></ul>`).html;
-    const site = [...html.matchAll(/data-qty="([^"]+)"/g)].map((m) => parseFloat(m[1]));
-    assert.deepEqual(scaling.scalableNumbers(line), site, line);
-  }
-  assert.equal(scaling.scaleLine("- 150g **Greek yogurt**, diced", 1.5), "- 225g **Greek yogurt**, diced");
-  assert.equal(scaling.scaleLine("- ½ **lemon**", 3), "- 1½ **lemon**");
-  assert.equal(scaling.scaleLine("- 2 x 150g **chicken**", 2), "- 4 x 150g **chicken**");
-  assert.equal(scaling.scaleLine("- 1 **onion**", 1), "- 1 **onion**");
+  const fs = require("node:fs");
+  // the page's format() and the server's formatQuantity agree
+  const src = fs.readFileSync(new URL("../../templates/servings.js", import.meta.url), "utf8");
+  const format = new Function(`${src.match(/var FRACTIONS = \[[\s\S]*?\];/)[0]}\n${src.match(/function format\(value\) \{[\s\S]*?\n  \}/)[0]}\nreturn format;`)();
+  for (const v of [0.1, 0.3, 0.5, 0.74, 1, 1.4, 2.66, 3.9, 9.99, 12.4, 37.5]) assert.equal(scaling.formatQuantity(v), format(v), String(v));
+  const { scaledMarkdown } = await import("../lib/ingredient-line.js");
+  assert.equal(scaledMarkdown({ amount: 150, unit: "g", name: "Greek yogurt", note: "diced" }, 1.5), "225g **Greek yogurt**, diced");
+  assert.equal(scaledMarkdown({ amount: 0.5, name: "lemon" }, 3), "1½ **lemon**");
+  assert.equal(scaledMarkdown({ amount: 1, unit: "clove", name: "garlic" }, 2), "2 cloves **garlic**");
+  assert.equal(scaledMarkdown({ amount: [1, 2], unit: "tsp", name: "paprika" }, 2), "2–4 tsp **paprika**");
+  assert.equal(scaledMarkdown({ amount: 1, name: "onion" }, 1), "1 **onion**");
   assert.equal(scaling.formatQuantity(0.1), "⅛");
   assert.equal(scaling.formatQuantity(12.4), "12");
-  assert.equal(scaling.formatQuantity(2.66), "2⅔");
-  void markQuantityText;
 });
 
 test("scale_recipe is a read tool for everyone, scales to N, and refuses to multiply a non-scalable list", async () => {

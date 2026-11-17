@@ -1,6 +1,9 @@
 # Structured ingredients and the server-built shopping list: design
 
-Status: **proposed, not built** (phase 7 of `docs/chatbot-design.md`). Each recipe's ingredients become structured
+Status: **built on the server and the site** (phase 7 of `docs/chatbot-design.md`): all three rollout steps (catalogue, schema,
+renderer and migration; `buildShoppingList`, the rebuild on every tray change and Finalise as review; catalogue write-back
+from `remember: true` patches). The chat panel's side is built too: the optional items card (`optionalEl` in `templates/chat.js`, tick boxes, all ticked to start),
+the live List card (no ×, its patches and stale-patch notes) and "Reviewing the list…". Each recipe's ingredients become structured
 data in its frontmatter, the only place a recipe's ingredients live; the page's ingredient list, the servings
 selector, `scale_recipe`, the "Cook with Claude" prompt and the shopping list are all generated from it. The
 shopping list becomes a sum the server computes with an ingredient catalogue, and the model only reviews it.
@@ -92,7 +95,7 @@ The fields:
 | `item` | yes (filled by the server) | The catalogue item it's bought as (section 2). |
 
 **Units** (one fixed list, shared by the schema and the renderer): `g`, `kg`, `ml`, `l`, `tsp`, `tbsp`, `cup`,
-`clove`, `can`, `slice`, `bunch`, `sprig`, `piece`, `pinch`, `handful`, `juice`, `zest`. Each has a fixed way to
+`clove`, `can`, `slice`, `bunch`, `sprig`, `piece`, `sheet`, `stick`, `head`, `pinch`, `handful`, `juice`, `zest`. Each has a fixed way to
 render: `200g`, `2 tbsp`, `1 clove` / `2 cloves`, `¾ can`, `Pinch of`, `Juice of 1`, `Zest of 1`. A unit
 not on the list is refused by the schema; adding one is a code change, on purpose.
 
@@ -440,7 +443,7 @@ rejecting, and convert tbsp/tsp quantities to ml instead of rejecting (`validate
 
 ## Open questions
 
-- **S1.** Go ahead with the rollout? (Q20 in `docs/chatbot-design.md`.)
+- **S1.** *Decided:* built.
 - **S2.** *Decided:* the catalogue lives in the repo (`data/ingredients.json`).
 - **S3.** *Decided:* a recipe's ingredients are structured data in its frontmatter, the only place they live; the
   page's list is rendered from it.

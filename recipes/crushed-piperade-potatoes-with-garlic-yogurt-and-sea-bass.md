@@ -7,27 +7,26 @@ tags: [High Protein]
 total_mins: 35
 serves: 2
 calories: 540
+ingredients:
+  - { amount: 1, unit: tbsp, name: olive oil, note: plus 2 tsp for the fish, item: olive-oil }
+  - { amount: 2, name: sea bass fillets, note: skin on, item: sea-bass }
+  - { name: salt, note: to taste, item: salt }
+  - { name: pepper, note: to taste, item: black-pepper }
+  - { name: lemon juice, note: "a squeeze, to serve", item: lemon }
+  - { amount: 400, unit: g, name: waxy baby potatoes, note: such as Jersey Royals (skin on), item: salad-potatoes }
+  - { amount: 1, name: red onion, note: "large, finely sliced", item: red-onion }
+  - { amount: 1, name: red (bell) pepper, note: "cored, deseeded and finely sliced", item: red-pepper }
+  - { amount: 1, name: yellow (bell) pepper, note: "cored, deseeded and finely sliced", item: yellow-pepper }
+  - { amount: 2, unit: clove, name: garlic, note: roughly chopped, item: garlic }
+  - { amount: 2, unit: tsp, name: sweet smoked paprika, note: heaped, item: smoked-paprika }
+  - { amount: 1, unit: tbsp, name: tomato purée (paste), item: tomato-puree }
+  - { amount: 3, name: vine-ripened tomatoes, note: roughly chopped, item: tomato }
+  - { amount: 12, name: Kalamata olives, note: "pitted, halved", item: kalamata-olives }
+  - { amount: 2, unit: tbsp, name: parsley, note: "finely chopped, plus extra to garnish", item: parsley }
+  - { amount: 100, unit: g, name: Greek yogurt, note: thick, item: greek-yogurt }
+  - { amount: 0.5, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 0.5, unit: zest, name: lemon, item: lemon }
 ---
-
-## Ingredients
-
-- 1 tbsp **olive oil**, plus 2 tsp for the fish
-- 2 **sea bass fillets** (skin on)
-- **Salt and pepper**, to taste
-- Squeeze of **lemon juice**, to serve
-- 400g (14oz) **waxy baby potatoes**, such as Jersey Royals (skin on)
-- 1 large **red onion**, finely sliced
-- 1 **red (bell) pepper**, cored, deseeded and finely sliced
-- 1 **yellow (bell) pepper**, cored, deseeded and finely sliced
-- 2 **garlic cloves**, roughly chopped
-- 2 heaped tsp **sweet smoked paprika**
-- 1 tbsp **tomato purée (paste)**
-- 3 **vine-ripened tomatoes**, roughly chopped
-- 12 pitted **Kalamata olives**, halved
-- 2 tbsp finely chopped **parsley**, plus extra to garnish
-- 100g (scant ½ cup) thick **Greek yogurt**
-- ½ **garlic clove**, minced
-- Zest of ½ **lemon**
 
 ## Instructions
 

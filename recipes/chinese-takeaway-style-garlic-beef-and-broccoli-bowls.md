@@ -7,23 +7,21 @@ tags: [High Protein]
 total_mins: 15
 serves: 2
 calories: 480
+ingredients:
+  - { amount: 2, unit: tbsp, name: light soy sauce, note: reduced-salt, item: soy-sauce }
+  - { amount: 1, unit: tbsp, name: oyster sauce, item: oyster-sauce }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 1, unit: tsp, name: sesame oil, item: sesame-oil }
+  - { amount: 1, unit: tsp, name: cornflour, note: cornstarch, item: cornflour }
+  - { amount: 3, unit: tbsp, name: water, item: water }
+  - { name: oil, note: "for cooking, to taste", item: vegetable-oil }
+  - { amount: 250, unit: g, name: lean beef steak, note: "rump or sirloin, thinly sliced", item: beef-steak }
+  - { amount: 200, unit: g, name: broccoli florets, item: broccoli }
+  - { amount: 2, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 2, name: spring onions, note: "scallions, sliced", item: spring-onion }
+  - { amount: 250, unit: g, name: cooked rice, note: "1 pouch, brown, jasmine or basmati", item: cooked-rice }
+  - { name: sesame seeds, note: to serve, optional: true, item: sesame-seeds }
 ---
-
-## Ingredients
-
-- 2 tbsp **light soy sauce**, reduced-salt
-- 1 tbsp **oyster sauce**
-- 1 tsp **honey**
-- 1 tsp **sesame oil**
-- 1 tsp **cornflour**, cornstarch
-- 3 tbsp **water**
-- **oil**, for cooking, to taste
-- 250g (9oz) **lean beef steak**, rump or sirloin, thinly sliced
-- 200g (7oz) **broccoli florets**
-- 2 **garlic cloves**, minced
-- 2 **spring onions**, scallions, sliced
-- 1 x 250g (9oz) pouch of **cooked rice**, brown, jasmine or basmati
-- **sesame seeds**, to serve (optional)
 
 ## Instructions
 

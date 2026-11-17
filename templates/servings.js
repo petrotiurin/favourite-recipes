@@ -4,6 +4,7 @@
   var base = parseFloat(picker.getAttribute("data-base"));
   var buttons = picker.querySelectorAll("button[data-serves]");
   var qtys = document.querySelectorAll(".qty");
+  var unitWords = document.querySelectorAll(".qty-unit");
   var servesChip = document.querySelector(".serves-chip");
   var bar = document.querySelector(".cook-bar");
   if (!base || !buttons.length || !qtys.length) return;
@@ -35,6 +36,13 @@
       el.textContent = factor === 1
         ? el.getAttribute("data-original")
         : format(parseFloat(el.getAttribute("data-qty")) * factor);
+    });
+    // "1 clove" -> "2 cloves": the unit word follows the (last) number before it in the same line.
+    unitWords.forEach(function (el) {
+      var line = el.parentNode;
+      var nums = line ? line.querySelectorAll(".qty") : [];
+      var last = nums.length ? parseFloat(nums[nums.length - 1].getAttribute("data-qty")) * factor : 1;
+      el.textContent = last > 1 ? el.getAttribute("data-many") : el.getAttribute("data-one");
     });
     buttons.forEach(function (btn) {
       btn.setAttribute("aria-pressed", String(parseFloat(btn.getAttribute("data-serves")) === serves));

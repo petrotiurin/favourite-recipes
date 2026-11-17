@@ -7,25 +7,25 @@ tags: [High Protein]
 total_mins: 20
 serves: 4
 calories: 520
+ingredients:
+  - { amount: 320, unit: g, name: grilled chicken breast, note: sliced or shredded, item: cooked-chicken }
+  - { amount: 8, unit: slice, name: Parma ham, item: parma-ham }
+  - { amount: 4, name: eggs, item: eggs }
+  - { amount: 4, unit: slice, name: sourdough, note: cut into cubes, item: sourdough }
+  - { amount: 4, name: little gem lettuce, note: roughly chopped, item: little-gem-lettuce }
+  - { amount: 4, unit: handful, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
+  - { amount: 2, name: avocado, item: avocado }
+  - { amount: 1, name: red onion, note: "small, very finely diced", item: red-onion }
+  - { amount: 8, unit: tbsp, name: full fat Greek yoghurt, item: greek-yogurt }
+  - { amount: 4, unit: tsp, name: American mustard, item: american-mustard }
+  - { amount: 4, unit: tsp, name: honey, item: honey }
+  - { amount: 2, unit: juice, name: lemon, item: lemon }
+  - { amount: 2, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { name: olive oil, note: "to taste, for the croutons", item: olive-oil }
+  - { name: salt, note: "to taste, for the croutons", item: salt }
+  - { name: pepper, note: "to taste, for the croutons", item: black-pepper }
+  - { name: chives, note: to serve, item: chives }
 ---
-
-## Ingredients
-
-- 320g **grilled chicken breast**, sliced or shredded
-- 8 slices **Parma ham**
-- 4 **eggs**
-- 4 slices **sourdough**, cut into cubes
-- 4 heads **little gem lettuce**, roughly chopped
-- 4 handfuls **cherry tomatoes**, halved
-- 2 **avocado**
-- 1 **red onion**, small, very finely diced
-- 8 tbsp **full fat Greek yoghurt**
-- 4 tsp **American mustard**
-- 4 tsp **honey**
-- 2 **lemon**, juiced
-- 2 tsp **garlic granules**
-- **olive oil, salt and pepper**, to taste, for the croutons
-- **chives**, to serve
 
 ## Instructions
 

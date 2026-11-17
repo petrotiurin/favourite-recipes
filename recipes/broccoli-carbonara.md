@@ -7,17 +7,16 @@ tags: [High Protein]
 total_mins: 20
 serves: 4
 calories: 566
+ingredients:
+  - { amount: 300, unit: g, name: dried pasta, note: spaghetti or short pasta, item: dried-pasta }
+  - { amount: 400, unit: g, name: broccoli florets, item: broccoli }
+  - { amount: 8, unit: slice, name: Parma ham, note: roughly torn, item: parma-ham }
+  - { amount: 2, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 4, name: large eggs, item: eggs }
+  - { amount: 100, unit: g, name: Parmesan cheese, note: "finely grated, plus extra to serve", item: parmesan }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 300g **dried pasta**, spaghetti or short pasta
-- 400g **broccoli florets**
-- 8 slices **Parma ham**, roughly torn
-- 2 cloves **garlic**, minced
-- 4 **large eggs**
-- 100g **Parmesan cheese**, finely grated, plus extra (optional) to serve
-- **salt and black pepper**, to taste
 
 ## Instructions
 

@@ -9,10 +9,12 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
-import { scaleLine, ingredientLines } from "./scaling.js";
+import { UNITS, scaledMarkdown, ingredientMarkdown } from "./ingredient-line.js";
+import { SECTIONS, SHOP_UNITS } from "./catalogue.js";
+import { ingredientsOf } from "./recipe-format.js";
 import { recipesFromHome } from "./at-home.js";
 import { runOperation, weekLines, switchLines } from "./operations.js";
-import { stageOp, dropItem, resolveClash, loadTray, replay, needsList, trayNote, assertCanStage, warmReads } from "./tray.js";
+import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads, finaliseState } from "./tray.js";
 import { getMessages } from "./chat-store.js";
 import { readsOf, enqueuePhotos, applyCorrections, readerConfigured } from "./photo-queue.js";
 import { parsePhotoId, photoLabel, fieldsFromRead, findDuplicate } from "./photo-reader.js";
@@ -40,8 +42,12 @@ import {
   mergeStocktake,
   applyStocktake,
   updateShoppingList,
+  buildAndSaveShoppingList,
+  buildShoppingList,
   setShoppingServings,
   shoppingPageUrl,
+  editLabel,
+  builtReport,
   stocktakeLines,
   servingsLines,
   ShoppingListError,
@@ -49,14 +55,48 @@ import {
   MAX_SERVINGS,
 } from "./shopping-list.js";
 
+// A recipe's ingredients are data (docs/structured-ingredients.md section 1): the page, the servings selector and the shopping list are
+// generated from these fields. The server fills `item` from the name (the catalogue's names and aliases) and checks every amount converts.
 const ingredientSchema = z.object({
-  quantity: z
-    .string()
+  amount: z
+    .union([z.number().positive(), z.tuple([z.number().positive(), z.number().positive()])])
     .optional()
-    .describe('Amount including units, as numerals so the servings selector can rescale it, e.g. "150g (⅔ cup)", "2", "Juice of ½", "Small handful of". Omit only for "to taste"/"to serve" items.'),
-  name: z.string().min(1).describe('Ingredient name, plain text (no asterisks), e.g. "Greek yogurt". Bolded automatically.'),
-  note: z.string().optional().describe('Prep note after the name, e.g. "finely diced", "to taste", "(0% or full-fat)".'),
+    .describe('A number (decimals: 0.75, not ¾) or a range [min, max], e.g. 200, 0.5, [2, 3]. Omit only for "to taste" / "to serve" (say so in the note).'),
+  unit: z
+    .enum(UNITS)
+    .optional()
+    .describe('One measure per ingredient, metric where the source gives it ("1 cup (200g)" -> 200 g). None = a count ("4 salmon fillets"). juice / zest: "juice of 1 lime" -> amount 1, unit juice, name lime.'),
+  name: z.string().min(1).describe('What the recipe calls it, plain text (no asterisks), e.g. "jasmine rice". Bolded on the page.'),
+  note: z.string().optional().describe('Prep or buying detail after the name, e.g. "finely diced", "about 140g each", "to taste". A split goes here ("1½ tbsp for the salmon, ½ for the pan").'),
+  optional: z.literal(true).optional().describe("Garnishes and extras (\"to serve, optional\", \"if using\"). Shown as \", optional\"."),
+  item: z.string().optional().describe("The catalogue item it's bought as (e.g. \"spring-onion\"). Leave it out: the server fills it from the name. Set it when a problem asks you to."),
 });
+
+const catalogueChangeSchema = z
+  .object({
+    add: z
+      .object({
+        id: z.string().describe('kebab-case, e.g. "gochujang"'),
+        name: z.string().describe('The shopping-list name, e.g. "Gochujang", "Red onions"'),
+        section: z.enum(SECTIONS).optional().describe("The aisle"),
+        unit: z.enum(SHOP_UNITS).optional().describe("The unit it's bought in: g, ml, count, or a named unit (clove, can, …)"),
+        per: z.record(z.string(), z.number().positive()).optional().describe('Conversions from recipe units: shopping units per one recipe unit, e.g. { "tbsp": 18 } for a g item, { "can": 400 } for ml, { "juice": 1 } for a count'),
+        aliases: z.array(z.string()).optional().describe("Other names recipes use for it"),
+        staple: z.literal(true).optional().describe("Listed in Pantry without a quantity (salt, pepper, oil)"),
+        skip: z.literal(true).optional().describe("Never on the list (water, ice)"),
+      })
+      .optional(),
+    alias: z.object({ item: z.string(), name: z.string() }).optional().describe("Another name recipes use for an existing item"),
+    set: z
+      .object({ item: z.string(), name: z.string().optional(), section: z.enum(SECTIONS).optional(), unit: z.enum(SHOP_UNITS).optional(), per: z.record(z.string(), z.number().positive()).optional() })
+      .optional()
+      .describe("Change an existing item (per merges into its conversions). Affects every recipe using it."),
+  })
+  .describe("Exactly one of add / alias / set.");
+const catalogueSchema = z
+  .array(catalogueChangeSchema)
+  .optional()
+  .describe("Ingredient catalogue changes this recipe needs, only when a problem asks for one (an unknown ingredient, a missing conversion). Checked and saved with the recipe.");
 
 const imageSchema = z
   .object({
@@ -97,6 +137,7 @@ const createShape = {
   calories: z.number().int().positive().describe("Calories (kcal) per serving. Use the source's figure, or estimate from the ingredients"),
   scalable: scalableSchema.optional(),
   ingredients: z.array(ingredientSchema).min(1).describe("In the order they're used"),
+  catalogue: catalogueSchema,
   instructions: instructionsSchema,
   notes: z.string().optional().describe("Optional free-text Markdown for a '## Notes' section (tips, nutrition, storage)."),
   image: imageSchema,
@@ -123,6 +164,7 @@ const updateShape = {
   calories: z.number().int().positive().optional().describe("Calories (kcal) per serving"),
   scalable: scalableSchema.optional().describe("false hides the servings selector; true turns it back on."),
   ingredients: z.array(ingredientSchema).min(1).optional().describe("Full replacement list, in the order used"),
+  catalogue: catalogueSchema,
   instructions: instructionsSchema.optional().describe("Full replacement list of steps. Bold every ingredient mention."),
   notes: z.string().optional(),
   image: imageSchema.optional(),
@@ -154,6 +196,21 @@ const sectionsSchema = z
   .min(1)
   .describe("The whole list, grouped into shop sections. Replaces whatever list is there.");
 
+const itemId = z.string().min(1).describe("A catalogue item id, as on the list (e.g. \"lime\")");
+const listEditSchema = z
+  .object({
+    round_up: itemId.optional(),
+    merge: z.tuple([itemId, itemId]).optional().describe("[into, from]: from's amounts are added to into"),
+    note: z.object({ item: itemId, text: z.string().min(1).max(80) }).optional(),
+    move: z.object({ item: itemId, section: z.enum(SECTIONS) }).optional(),
+    rename: z.object({ item: itemId, name: z.string().min(1).max(60) }).optional(),
+    drop: itemId.optional(),
+    scale: z.object({ item: itemId, factor: z.number().positive().max(10) }).optional(),
+    remember: z.boolean().optional().describe("merge / move / rename only: also change the ingredient catalogue, for every week"),
+  })
+  .refine((e) => ["round_up", "merge", "note", "move", "rename", "drop", "scale"].filter((k) => e[k] !== undefined).length === 1, "Each edit is exactly one of round_up, merge, note, move, rename, drop, scale")
+  .describe("One patch to the built list.");
+
 const servingsSchema = z
   .record(z.string(), z.number().int().min(1).max(MAX_SERVINGS))
   .describe(`How many people a recipe is planned for this week, by slug, e.g. { "spicy-tuna-loaded-sweet-potato": 1, "creamy-chicken-leek-and-pancetta-pie": 2 }. 1-${MAX_SERVINGS}. The shopping page opens on this plan.`);
@@ -170,8 +227,11 @@ const operationSchema = z.discriminatedUnion("action", [
     .object({ action: z.literal("start_next_week"), carry_over: z.array(z.string()).optional() })
     .describe("Same as the start_next_week tool. Put it after the promote_recipe / remove_draft operations for this week's drafts and before anything that plans the new next week."),
   z
-    .object({ action: z.literal("update_shopping_list"), sections: sectionsSchema, servings: servingsSchema.optional() })
-    .describe("Same as the update_shopping_list tool. Covers the recipes that are in next week after the operations before it."),
+    .object({ action: z.literal("update_shopping_list"), build: z.literal(true).optional(), edits: z.array(listEditSchema).optional(), sections: sectionsSchema.optional(), servings: servingsSchema.optional() })
+    .describe("Same as the update_shopping_list tool (build: true, or sections). Covers the recipes that are in next week after the operations before it."),
+  z
+    .object({ action: z.literal("update_catalogue"), changes: z.array(catalogueChangeSchema.or(z.object({ merge: z.object({ into: z.string(), from: z.string() }) }))).min(1) })
+    .describe("Ingredient catalogue changes with no recipe to ride on (review fixes that are generally true): add, alias, set, or merge { into, from } (recipes using from are re-pointed)."),
   z
     .object({ action: z.literal("set_shopping_servings"), servings: servingsSchema })
     .describe("Same as the set_shopping_servings tool."),
@@ -227,8 +287,9 @@ function shoppingResult({ list, next, commit }) {
   ].join("\n");
 }
 
-function resultText(verb, { slug, markdown, commit, draft, week, warnings }) {
+function resultText(verb, { slug, markdown, commit, draft, week, warnings, catalogueLines }) {
   const lines = [];
+  if (catalogueLines?.length) lines.push(...catalogueLines, "");
   if (commit) {
     lines.push(`${verb} "${slug}" and committed to main: ${commit.url}`);
     lines.push(`It will be live in about a minute at ${pageUrl(slug)}`);
@@ -289,49 +350,6 @@ export async function stagedLabel(item) {
   }
 }
 
-const SERVINGS_EARLY = "servings asked before the list:";
-
-/**
- * Planned servings asked for while the tray changes next week and has no list yet can't be checked against a real list (the saved one is
- * the old week's), so they aren't staged: the result tells the model to say they'll be applied after Finalise list, and carries them (after
- * SERVINGS_EARLY) so the list tool can ask about them once the list is built (servingsAskedEarlier). A recipe that won't be in next week is
- * refused at once. Resolves null when servings can be staged now.
- */
-async function servingsBeforeList(servings, caller) {
-  const tray = await loadTray();
-  const items = tray?.items || [];
-  if (!items.length || items.some((i) => i.kind === "list")) return null;
-  const { nextSlugs } = await replay(items, caller, await warmReads());
-  if (!needsList(items.filter((i) => i.kind !== "servings"), nextSlugs)) return null;
-  const missing = Object.keys(servings).filter((slug) => !nextSlugs.includes(slug));
-  if (missing.length) throw new UserError(`Not staged: ${missing.map((s) => `"${s}"`).join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} in next week after Save (${nextSlugs.join(", ") || "none"}). Use those slugs.`);
-  return ok(
-    `Not staged yet: the tray changes next week, so next week's shopping list hasn't been built, and servings are set on the list. ` +
-      `Tell the user you'll apply them once they tap Finalise list and the list is built (you'll ask them then); nothing to drop or redo. ` +
-      `Don't pass them to stage_update_shopping_list either. ${SERVINGS_EARLY} ${JSON.stringify(servings)}`
-  );
-}
-
-/** The servings this chat asked for before the list was built and hasn't applied since (null if none): the latest SERVINGS_EARLY result, cleared by a staged servings card or a Save. */
-export function servingsFromRows(rows) {
-  let asked = null;
-  for (const row of rows) {
-    const m = row.content || {};
-    const text = typeof m.content === "string" ? m.content : "";
-    if (m.role === "tool" && text.includes(SERVINGS_EARLY)) {
-      try {
-        asked = { ...(asked || {}), ...JSON.parse(text.slice(text.indexOf(SERVINGS_EARLY) + SERVINGS_EARLY.length).trim()) };
-      } catch {
-        /* not ours */
-      }
-    } else if (m.role === "tool" && /^(Staged the planned servings|Updated the staged servings)/.test(text)) asked = null;
-    else if (m.role === "assistant" && /^Saved /.test(text)) asked = null;
-  }
-  return asked;
-}
-
-const servingsAskedEarlier = async (conversationId) => servingsFromRows(await getMessages(conversationId));
-
 async function staged(spec, ctx, onStaged) {
   needChat(ctx);
   const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
@@ -343,7 +361,7 @@ async function staged(spec, ctx, onStaged) {
   if (out.error) lines.push(`PROBLEM on the card: ${out.error}`, "Stage it again with the problem fixed (the same title or slug replaces it), or drop it with drop_tray_item.");
   for (const w of out.warnings || []) lines.push(`warning: ${w}`);
   for (const note of spec.notes || []) lines.push(`note: ${note}`);
-  if (out.needs) lines.push("This tray changes next week or the servings, so a shopping list is needed before Save: it is built by Finalise list.");
+  if (out.needs) lines.push("This tray changes next week, so the site rebuilds next week's shopping list in the tray with every change (no work for you); Finalise list reviews it before Save.");
   return ok(lines.join("\n"));
 }
 
@@ -454,7 +472,7 @@ const STAGE_TOOLS = [
     name: "stage_create_recipe",
     title: "Stage a new recipe",
     description:
-      "Add a NEW recipe to the plan tray (not to the site: a person saves it). For a recipe read off the user's photos pass from_photo (its id from the site's note) and only the fields the user changed. Otherwise the same fields and rules as create_recipe (structured ingredients with quantities, bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
+      "Add a NEW recipe to the plan tray (not to the site: a person saves it). For a recipe read off the user's photos pass from_photo (its id from the site's note) and only the fields the user changed. Otherwise the same fields and rules as create_recipe (structured ingredients: amount, unit, name, note, optional; a catalogue change when a problem asks for one; bolded ingredient names in the steps, no amounts repeated in steps, drafts by default). " +
       "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
     inputSchema: stageCreateShape,
     access: "stage",
@@ -548,33 +566,39 @@ const STAGE_TOOLS = [
     handler: safe(async ({ carry_over, reason }, ctx) => staged({ op: { action: "start_next_week", ...(carry_over?.length ? { carry_over } : {}) }, reason }, ctx)),
   },
   {
-    name: "stage_update_shopping_list",
-    title: "Stage the shopping list",
-    description: "Stage the combined shopping list for ALL the recipes that will be in next week after Save (read them with get_tray). Same rules and fields as update_shopping_list. Stage it LAST: any later change to the tray marks it out of date. Staging it again replaces it.",
-    inputSchema: { sections: sectionsSchema, servings: servingsSchema.optional(), reason: reasonSchema },
+    name: "stage_shopping_list_edits",
+    title: "Change the staged shopping list",
+    description:
+      "The shopping list in the tray is built by the site from next week's recipes (every amount converted, scaled to 2 servings and added up), and rebuilt on every change: never write a list. " +
+      "Use this for the review at Finalise list (only what the site's note flags) and for the user's own asks (\"skip the fancy salt\", \"double the rice\"), as small patches on items by their catalogue id (the ids are in get_tray's list and the note): " +
+      "round_up (a counted item to a whole number at the planned servings), merge [into, from] (two items that are the same thing), note { item, text } (buying info, never amounts or recipes), move { item, section }, rename { item, name }, drop (leave it off this week), scale { item, factor }. " +
+      "remember: true on merge / move / rename when it's generally true (it becomes an ingredient catalogue change, for every week). A newer patch to the same item replaces the older one; a bad patch is refused on its own.",
+    inputSchema: { edits: z.array(listEditSchema).min(1).max(30), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ sections, servings, reason }, ctx) => {
-      const out = await staged({ op: { action: "update_shopping_list", sections, ...(servings ? { servings } : {}) }, reason }, ctx);
-      if (/PROBLEM on the card/.test(out.content[0].text) || !ctx.chat?.conversationId) return out;
-      const asked = await servingsAskedEarlier(ctx.chat.conversationId).catch((err) => (console.error("Looking for servings asked before the list failed:", err.message), null));
-      const left = asked && Object.entries(asked).filter(([slug, n]) => servings?.[slug] !== n);
-      if (!left?.length) return out;
-      const plan = Object.fromEntries(left);
-      return ok(`${out.content[0].text}\nBefore the list was built the user asked for these planned servings, which were NOT staged: ${JSON.stringify(plan)}. Now ask them with ask_user whether to apply them to this list (say which recipes and numbers), options "Apply the servings" and "Not now". On "Apply the servings", stage_set_shopping_servings with exactly these. Don't stage them before they answer.`);
+    handler: safe(async ({ edits, reason }, ctx) => {
+      needChat(ctx);
+      const tray = await loadTray();
+      if (!tray?.items?.some((i) => i.kind === "list")) throw new UserError("There's no shopping list in the tray: it appears once the tray changes next week. To change the list on the site, change next week's recipes.");
+      const remembered = edits.filter((e) => e.remember);
+      const changes = remembered.map((e) => (e.merge ? { merge: { into: e.merge[0], from: e.merge[1] } } : e.move ? { set: { item: e.move.item, section: e.move.section } } : e.rename ? { set: { item: e.rename.item, name: e.rename.name } } : null)).filter(Boolean);
+      const forList = edits.filter((e) => !(e.remember && (e.merge || e.move || e.rename))).map(({ remember, ...e }) => e);
+      const outs = [];
+      if (changes.length) outs.push(await staged({ op: { action: "update_catalogue", changes }, reason }, ctx));
+      if (forList.length) outs.push(await staged({ op: { action: "update_shopping_list", build: true, edits: forList }, reason }, ctx));
+      const after = await finaliseState(ctx.caller);
+      const stale = after?.built?.stale || [];
+      const lines = outs.map((o) => o.content[0].text);
+      if (stale.length) lines.push(`These patches don't apply (refused, the list is otherwise as before): ${stale.map((x) => x.why).join("; ")}`);
+      return ok(lines.join("\n"));
     }),
   },
   {
     name: "stage_set_shopping_servings",
     title: "Stage planned servings",
-    description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"): the list on the site, or the list staged in the tray once Finalise list has built it (changing servings then doesn't make it out of date). While the tray changes next week and has no list yet it is NOT staged: tell the user you'll apply them once Finalise list has built the list; the site asks them then. Staging again merges into the same card.",
+    description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"): the list in the tray when the tray changes next week, else the list on the site. Any time; it never needs the list rebuilt. Staging again merges into the same card.",
     inputSchema: { servings: servingsSchema, reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ servings, reason }, ctx) => {
-      needChat(ctx);
-      const early = await servingsBeforeList(servings, ctx.caller);
-      if (early) return early;
-      return staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx);
-    }),
+    handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
   },
   {
     name: "stage_stocktake",
@@ -629,18 +653,36 @@ const STAGE_TOOLS = [
     name: "get_tray",
     title: "Read the plan tray",
     description:
-      "Read the plan tray and the recipes that will be in next week AFTER Save (the tray's changes applied on top of the site, new recipes included), each as its full Markdown, plus the planned servings. " +
-      "Use it for the Finalise step that builds the shopping list. It reads only; it changes nothing.",
-    inputSchema: { include_recipes: z.boolean().optional().describe("Include each next-week recipe's Markdown (default true)") },
+      "Read the plan tray: its cards, the recipes that will be in next week AFTER Save, and the shopping list the site built for them (one line per item with its catalogue id, 2-serving amount and recipes), " +
+      "with what the site flags for review and the optional items. Use it for the Finalise review and when the user asks about the staged list. It reads only; it changes nothing.",
+    inputSchema: { include_recipes: z.boolean().optional().describe("Include each next-week recipe's ingredient lines (default false)") },
     access: "stage",
     handler: safe(async ({ include_recipes }, ctx) => {
       needChat(ctx);
       const tray = await loadTray();
       const note = await trayNote(tray, ctx.caller);
-      const { cs, nextSlugs } = await replay(tray?.items || [], ctx.caller, await warmReads());
-      const recipes = [];
-      if (include_recipes !== false) for (const slug of nextSlugs) recipes.push({ slug, ...(await (async () => { const { data, markdown } = await getRecipe(slug, cs); return { title: data.title, serves: data.serves, markdown }; })()) });
-      return ok([note, "", `Recipes that will be in next week after Save (${nextSlugs.length}):`, JSON.stringify(include_recipes === false ? nextSlugs : recipes, null, 2)].join("\n"));
+      const { cs, nextSlugs, results } = await replay(tray?.items || [], ctx.caller, await warmReads());
+      const lines = [note, "", `Recipes that will be in next week after Save (${nextSlugs.length}): ${nextSlugs.join(", ") || "none"}`];
+      if (include_recipes) {
+        for (const slug of nextSlugs) {
+          const { data } = await getRecipe(slug, cs);
+          lines.push(`- ${data.title} (${slug}, serves ${data.serves}): ${ingredientsOf(data).map((i) => ingredientMarkdown(i).replace(/\*\*/g, "")).join("; ") || "no ingredients recorded"}`);
+        }
+      }
+      const listItem = tray?.items?.find((i) => i.kind === "list");
+      const r = listItem && results.get(listItem.id);
+      if (r?.result?.built) {
+        const { built } = r.result;
+        lines.push("", "Shopping list built by the site (2-serving amounts; item id | name | quantity | note | recipes):");
+        for (const sec of r.result.list.sections) {
+          const byName = new Map([...built.rows.values()].map((row) => [row.name, row.item]));
+          for (const i of sec.items) lines.push(`${sec.name}: ${byName.get(i.name)} | ${i.name} | ${i.quantity || ""} | ${i.note || ""} | ${i.recipes.join(",")}`);
+        }
+        if ((listItem.op.edits || []).length) lines.push(`Patches already staged: ${listItem.op.edits.map((e) => editLabel(e, built.rows)).join("; ")}`);
+        lines.push(...builtReport(built));
+      } else if (r?.error) lines.push("", `The shopping list can't be built: ${r.error}`);
+      else lines.push("", "No shopping list in the tray (the tray doesn't change next week).");
+      return ok(lines.join("\n"));
     }),
   },
 ];
@@ -736,14 +778,14 @@ export const TOOLS = [
     access: "read",
     chatOnly: true, // the chat's helper; /mcp keeps its tools as they were
     handler: safe(async ({ slug, servings }) => {
-      const { data, markdown } = await getRecipe(slug);
+      const { data } = await getRecipe(slug);
       const base = Number(data.serves) || 1;
-      const lines = ingredientLines(markdown);
+      const ingredients = ingredientsOf(data);
       if (data.scalable === false) {
-        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...lines].join("\n"));
+        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...ingredients.map((i) => `- ${ingredientMarkdown(i)}`)].join("\n"));
       }
       const factor = servings / base;
-      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...lines.map((l) => scaleLine(l, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
+      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...ingredients.map((i) => `- ${scaledMarkdown(i, factor)}`), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
     }),
   },
   {
@@ -1058,13 +1100,22 @@ export const TOOLS = [
       "and links them on the page. Commits shopping-list.json to main. The page keeps showing the saved list until you call this again, " +
       "so call it after changing next week. Fails if next week has no recipes.",
     inputSchema: {
-      sections: sectionsSchema,
+      build: z.literal(true).optional().describe("Recommended: the server builds the list from next week's recipes and the ingredient catalogue (converted, scaled to 2 servings, added up, each recipe's share). Then only review it: pass edits for what needs judgement."),
+      edits: z.array(listEditSchema).optional().describe("With build: patches on the built list (round_up, merge, note, move, rename, drop, scale), by catalogue item id"),
+      sections: sectionsSchema.optional().describe("Only without build: a list you combined yourself (the old way)."),
       servings: servingsSchema
         .optional()
         .describe(`Planned servings for individual recipes, by slug. Recipes left out keep what the previous list planned, else ${DEFAULT_SERVINGS}.`),
     },
     access: "write",
-    handler: safe(async ({ sections, servings }, { caller }) => ok(shoppingResult(await updateShoppingList(sections, undefined, servings, caller)))),
+    handler: safe(async ({ build, edits, sections, servings }, { caller }) => {
+      if (!build === !sections) throw new UserError("Pass build: true (recommended: the server builds the list), or sections, not both.");
+      if (build) {
+        const r = await buildAndSaveShoppingList({ edits }, undefined, servings, caller);
+        return ok([shoppingResult(r), "", ...builtReport(r.built)].join("\n"));
+      }
+      return ok(shoppingResult(await updateShoppingList(sections, undefined, servings, caller)));
+    }),
   },
   {
     name: "set_shopping_servings",

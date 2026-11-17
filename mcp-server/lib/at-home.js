@@ -4,6 +4,7 @@
 import { getShoppingList } from "./shopping-list.js";
 import { recipeIngredients, STAPLES } from "./recipes.js";
 import { sameIngredient } from "./ingredient-match.js";
+import { loadCatalogue } from "./catalogue.js";
 
 export { sameIngredient };
 
@@ -22,10 +23,20 @@ export async function recipesFromHome({ limit = 8, maxMissing = 99 } = {}) {
   const home = atHomeNames(list);
   if (!home.length) return { stocktake: list?.stocktake || null, home, rows: [] };
   const rows = [];
+  const catalogue = await loadCatalogue().catch(() => ({}));
+  const homeNames = new Set(home.map((h) => h.trim().toLowerCase()));
   for (const r of await recipeIngredients()) {
-    const counted = [...new Set(r.ingredients.filter((n) => !STAPLES.test(n)).map((n) => n.toLowerCase()))];
+    // By catalogue item first (the list's names come from the catalogue), then by words. Staples and never-bought items don't count.
+    const byName = new Map();
+    for (const ing of r.items || []) {
+      const entry = catalogue[ing.item];
+      if (entry?.staple || entry?.skip || STAPLES.test(ing.name)) continue;
+      const key = String(ing.name).trim().toLowerCase();
+      if (!byName.has(key)) byName.set(key, entry?.name?.toLowerCase() || "");
+    }
+    const counted = [...byName.keys()];
     if (!counted.length) continue;
-    const missing = counted.filter((n) => !home.some((h) => sameIngredient(h, n)));
+    const missing = counted.filter((n) => !homeNames.has(byName.get(n)) && !home.some((h) => sameIngredient(h, n)));
     const have = counted.length - missing.length;
     if (!have || missing.length > maxMissing) continue;
     rows.push({ slug: r.slug, title: r.title, draft: r.draft, mins: r.total_mins, kcal: r.calories, have, total: counted.length, missing });

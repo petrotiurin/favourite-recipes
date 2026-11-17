@@ -6,16 +6,14 @@ course: [Breakfast]
 total_mins: 20
 serves: 2
 calories: 600
+ingredients:
+  - { name: Eggs, note: to taste, item: eggs }
+  - { name: Milk, note: to taste, item: milk }
+  - { name: Green pepper, note: to taste, item: green-pepper }
+  - { name: Bacon, note: to taste, item: bacon }
+  - { name: Cheese, note: to taste, item: cheese }
+  - { name: Tortillas, note: to taste, item: tortillas }
 ---
-
-## Ingredients
-
-- **Eggs**
-- **Milk**
-- **Green pepper**
-- **Bacon**
-- **Cheese**
-- **Tortillas**
 
 ## Instructions
 

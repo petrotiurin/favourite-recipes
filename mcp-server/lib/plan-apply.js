@@ -7,7 +7,7 @@ import { ChangeSet, assertCanCommit } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { listRecipes, isNextWeek, pageUrl, UserError } from "./recipes.js";
 import { runOperation } from "./operations.js";
-import { loadTray, mutate, replay, needsList, listCurrent, saveOrder, findClashes, saveNowRule, repoSnapshot, applicableOp, trayEvent, assertCanStage, purgeTray } from "./tray.js";
+import { loadTray, mutate, replay, listState, saveOrder, findClashes, saveNowRule, repoSnapshot, applicableOp, trayEvent, assertCanStage, purgeTray } from "./tray.js";
 import { downloadPhoto, removePhotos, patchTray } from "./tray-store.js";
 import { buildCards, loadBook } from "./chat-ui.js";
 
@@ -38,7 +38,7 @@ export async function applyPlan({ caller, itemId, trace }) {
 
   // 1. What may go: everything validates against the repo as it is now.
   const fresh = await replay(all, caller);
-  if (!one && needsList(all, fresh.nextSlugs) && !listCurrent(tray, all)) throw new PlanError("Finalise the list first: the tray changes next week, so the shopping list has to be built before saving.", 409);
+  if (!one && !listState(all, fresh.results).reviewed) throw new PlanError("Finalise the list first: the tray changes next week, so the shopping list needs its review before saving.", 409);
   const broken = picked.filter((i) => fresh.results.get(i.id)?.error);
   if (broken.length) {
     throw new PlanError(`${broken.length === 1 ? "A change has" : `${broken.length} changes have`} a problem, so nothing was saved: ${fresh.results.get(broken[0].id).error}`, 409, { problems: broken.map((i) => ({ id: i.id, error: fresh.results.get(i.id).error })) });
@@ -59,7 +59,7 @@ export async function applyPlan({ caller, itemId, trace }) {
   // 2. Clashes: something it was staged against changed on the site. Nothing is committed; the cards are flagged and the bot resolves them.
   const clashes = await findClashes(picked);
   if (clashes.size) {
-    await mutate(caller, async (t) => (t ? { items: t.items.map((i) => (clashes.has(i.id) ? { ...i, clash: clashes.get(i.id) } : i)), listHash: t.list_hash, status: t.status, result: null } : { result: null }));
+    await mutate(caller, async (t) => (t ? { items: t.items.map((i) => (clashes.has(i.id) ? { ...i, clash: clashes.get(i.id) } : i)), status: t.status, result: null } : { result: null }));
     trayEvent("tray-clash", { count: clashes.size, trace });
     throw new PlanError(`Nothing was saved: ${[...clashes.values()][0].reason}.`, 409, { clash: [...clashes].map(([id, c]) => ({ id, ...c })) });
   }
@@ -97,8 +97,9 @@ export async function applyPlan({ caller, itemId, trace }) {
       const snap = i.base ? await repoSnapshot(i.base.slug) : null;
       rebased.push(snap ? { ...i, base: { slug: i.base.slug, ...snap } } : i);
     }
-    const hasList = rebased.some((i) => i.kind === "list");
-    return { items: rebased, listHash: hasList && !picked.some((p) => p.kind === "list") ? t.list_hash : null, status: "collecting", result: null };
+    // only the list card left (a Save now while it waited): nothing else changes next week, so nothing is left to save
+    if (rebased.every((i) => i.kind === "list")) return { items: [], result: null };
+    return { items: rebased, status: "collecting", result: null };
   });
   await removePhotos(picked.map((i) => i.photo?.path)).catch((err) => console.error("Deleting staged photos failed:", err.message));
   if (!remaining.length) await loadTray().catch(() => {});

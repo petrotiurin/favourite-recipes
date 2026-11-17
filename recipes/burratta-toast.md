@@ -6,15 +6,13 @@ course: [Breakfast]
 total_mins: 15
 serves: 1
 calories: 450
+ingredients:
+  - { name: Eggs, note: to serve, optional: true, item: eggs }
+  - { name: Avocado, note: to serve, optional: true, item: avocado }
+  - { name: Burratta, note: to serve, item: burratta }
+  - { name: Prosciutto, note: to serve, item: parma-ham }
+  - { name: Balsamic vinegar, note: to serve, item: balsamic-vinegar }
 ---
-
-## Ingredients
-
-- **Eggs** (optional)
-- **Avocado** (optional)
-- **Burratta**
-- **Prosciutto**
-- **Balsamic vinegar**
 
 ## Instructions
 

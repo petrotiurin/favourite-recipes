@@ -17,26 +17,39 @@ export function slugify(title) {
 // Plain YAML scalar when safe, otherwise a JSON (= YAML double-quoted) string.
 function yamlScalar(value, { inFlow = false } = {}) {
   const s = String(value);
-  const unsafe = /^[\s\-?:,[\]{}#&*!|>'"%@`]|: | #|\s$/.test(s) || (inFlow && /[,[\]{}]/.test(s));
+  const unsafe =
+    /^[\s\-?:,[\]{}#&*!|>'"%@`]|: | #|:$|\s$/.test(s) || (inFlow && /[,[\]{}]/.test(s)) || /^(true|false|null|yes|no|on|off|~|[-+]?[\d.][\d.eE+-]*)$/i.test(s);
   return unsafe || s === "" ? JSON.stringify(s) : s;
 }
 
 function yamlFlowList(items) {
-  return `[${items.map((i) => yamlScalar(i, { inFlow: true })).join(", ")}]`;
+  return `[${items.map((i) => yamlFlowValue(i)).join(", ")}]`;
 }
 
-const KEY_ORDER = ["title", "slug", "image", "course", "tags", "total_mins", "serves", "calories", "scalable", "current", "next", "draft"];
+function yamlFlowValue(v) {
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return yamlFlowList(v);
+  return yamlScalar(v, { inFlow: true });
+}
+
+/** One flow mapping on one line: "{ amount: 200, unit: g, name: jasmine rice, item: jasmine-rice }". */
+const yamlFlowMap = (obj) => `{ ${Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}: ${yamlFlowValue(v)}`).join(", ")} }`;
+
+// `ingredients` goes last: it is the long one (docs/structured-ingredients.md section 1).
+const KEY_ORDER = ["title", "slug", "image", "course", "tags", "total_mins", "serves", "calories", "scalable", "current", "next", "draft", "ingredients"];
 
 export function renderFrontmatter(data) {
-  const keys = [...KEY_ORDER.filter((k) => k in data), ...Object.keys(data).filter((k) => !KEY_ORDER.includes(k))];
+  const keys = [...KEY_ORDER.filter((k) => k in data && k !== "ingredients"), ...Object.keys(data).filter((k) => !KEY_ORDER.includes(k)), ...("ingredients" in data ? ["ingredients"] : [])];
   const lines = [];
   for (const key of keys) {
     const value = data[key];
     if (value === undefined || value === null) continue;
     if (Array.isArray(value)) {
       if (key === "tags" && value.length === 0) continue; // omit the key entirely if no tags
-      lines.push(`${key}: ${yamlFlowList(value)}`);
-    } else if (typeof value === "number") {
+      if (value.some((v) => v && typeof v === "object" && !Array.isArray(v))) {
+        lines.push(`${key}:`, ...value.map((v) => `  - ${yamlFlowMap(v)}`));
+      } else lines.push(`${key}: ${yamlFlowList(value)}`);
+    } else if (typeof value === "number" || typeof value === "boolean") {
       lines.push(`${key}: ${value}`);
     } else {
       lines.push(`${key}: ${yamlScalar(value)}`);
@@ -45,45 +58,8 @@ export function renderFrontmatter(data) {
   return `---\n${lines.join("\n")}\n---\n`;
 }
 
-const TO_TASTE = /\bto (taste|serve)\b/i;
-
-export function validateIngredient(ing, i) {
-  const errors = [];
-  const where = `ingredients[${i}]`;
-  if (!ing.name.trim()) errors.push(`${where}: name is empty`);
-  if (/\*/.test(ing.name)) errors.push(`${where}: name must be plain text, the server adds the bold`);
-  if (/\*\*/.test(ing.quantity || "") || /\*\*/.test(ing.note || "")) {
-    errors.push(`${where}: quantity/note must not contain bold — only the ingredient name is bolded`);
-  }
-  if (!ing.quantity?.trim() && !TO_TASTE.test(ing.note || "")) {
-    errors.push(`${where} (${ing.name}): every ingredient needs a quantity, or a note saying "to taste" / "to serve"`);
-  }
-  return errors;
-}
-
-const FRACTIONS = { "1/4": "¼", "1/2": "½", "3/4": "¾", "1/3": "⅓", "2/3": "⅔", "1/8": "⅛" };
-
-/** "1 1/2 cups" -> "1½ cups", "2/3 cup" -> "⅔ cup": the site's servings selector only scales unicode fractions. */
-export function normalizeFractions(text) {
-  return text.replace(/(?<![\d/])(?:(\d+)\s+)?([1-3])\/([2-48])(?![\d/])/g, (m, whole, a, b) => {
-    const f = FRACTIONS[`${a}/${b}`];
-    return f ? `${whole || ""}${f}` : m;
-  });
-}
-
-export function renderIngredient({ quantity, name, note }) {
-  let line = "- ";
-  if (quantity?.trim()) line += `${normalizeFractions(quantity.trim())} `;
-  line += `**${name.trim()}**`;
-  const n = note?.trim();
-  if (n) {
-    // "(0% or full-fat)" sits right after the name; anything else is a ", prep note".
-    if (n.startsWith("(")) line += ` ${n}`;
-    else if (n.startsWith(",")) line += n;
-    else line += `, ${n}`;
-  }
-  return line;
-}
+/** A recipe's ingredients (frontmatter data), [] when it has none recorded. */
+export const ingredientsOf = (data) => (Array.isArray(data?.ingredients) ? data.ingredients : []);
 
 const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s+/;
 
@@ -133,11 +109,6 @@ export function instructionQuantityWarnings(instructions) {
     }
   });
   return warnings;
-}
-
-/** Ingredient names (the bolded parts) from an existing Ingredients section. */
-export function ingredientNamesFromSection(content) {
-  return [...(content || "").matchAll(/\*\*([^*]+)\*\*/g)].map((m) => ({ name: m[1] }));
 }
 
 export function renderInstructions(steps) {

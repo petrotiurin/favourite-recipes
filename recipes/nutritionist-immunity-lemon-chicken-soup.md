@@ -7,26 +7,24 @@ tags: [High Protein]
 total_mins: 25
 serves: 4
 calories: 323
+ingredients:
+  - { amount: 2, unit: tbsp, name: olive oil, note: for cooking and drizzling, item: olive-oil }
+  - { amount: 1, name: onion, note: "large, finely chopped", item: onion }
+  - { amount: 2, name: carrots, note: diced, item: carrot }
+  - { amount: 2, name: celery sticks, note: diced, item: celery }
+  - { amount: 2, unit: clove, name: garlic, note: "minced, or garlic paste", item: garlic }
+  - { amount: 1, unit: tsp, name: fresh root ginger, note: "grated, or ginger paste", item: ginger }
+  - { amount: 1, unit: sprig, name: rosemary, item: rosemary }
+  - { amount: 2, name: chicken stock cubes, item: stock-cubes }
+  - { amount: 2, unit: l, name: water, item: water }
+  - { amount: 2, name: egg noodle nests, note: "medium, about 100g in total, broken in half", item: egg-noodles }
+  - { amount: 2, unit: handful, name: kale, note: "large, shredded", item: kale }
+  - { amount: [320, 400], unit: g, name: cooked chicken breast, note: shredded, item: cooked-chicken }
+  - { amount: 2, name: egg yolks, item: eggs }
+  - { amount: 1, unit: juice, name: lemon, note: plus the zest, item: lemon }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 2 tbsp **olive oil**, for cooking and drizzling
-- 1 large **onion**, finely chopped
-- 2 **carrots**, diced
-- 2 **celery sticks**, diced
-- 2 **garlic cloves**, minced, or garlic paste
-- 1 tsp **fresh root ginger**, grated, or ginger paste
-- 1 **rosemary sprig**
-- 2 **chicken stock cubes**
-- 2 litres (3½ pints) **water**
-- 2 medium **egg noodle nests**, about 100g (3½oz) in total, broken in half
-- 2 large handfuls of **kale**, shredded
-- 320–400g (11¼–14oz) **cooked chicken breast**, shredded
-- 2 **egg yolks**
-- Zest and juice of 1 **lemon**
-- **salt**, to taste
-- **black pepper**, to taste
 
 ## Instructions
 

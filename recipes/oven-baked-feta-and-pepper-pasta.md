@@ -8,28 +8,26 @@ serves: 4
 calories: 450
 current: true
 draft: true
+ingredients:
+  - { amount: 150, unit: g, name: feta cheese, note: block, item: feta }
+  - { amount: 1, name: red pepper, note: "large, cored, deseeded and sliced", item: red-pepper }
+  - { amount: 1, name: yellow pepper, note: "large, cored, deseeded and sliced", item: yellow-pepper }
+  - { amount: 1, unit: tbsp, name: olive oil, item: olive-oil }
+  - { amount: 1, unit: tbsp, name: honey, item: honey }
+  - { amount: 1, unit: pinch, name: dried oregano, note: good, item: dried-oregano }
+  - { amount: 250, unit: g, name: dried pasta, note: of choice, item: dried-pasta }
+  - { amount: 0.5, name: red onion, note: finely diced, item: red-onion }
+  - { amount: 1, unit: handful, name: basil leaves, item: basil }
+  - { amount: 2, unit: tbsp, name: capers, item: capers }
+  - { amount: 1, unit: handful, name: green olives, note: "small cupped, pitted, halved", item: green-olives }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 1, unit: juice, name: lemon, note: "large,  for the dressing", item: lemon }
+  - { amount: 1, unit: tbsp, name: white wine vinegar, item: white-wine-vinegar }
+  - { amount: 1, unit: tsp, name: Dijon mustard, note: heaped, item: dijon-mustard }
+  - { amount: 1, unit: tsp, name: honey, note: "heaped, for the dressing", item: honey }
+  - { amount: 1, unit: tsp, name: garlic paste, item: garlic-paste }
 ---
-
-## Ingredients
-
-- 150g **feta cheese**, block
-- 1 **red pepper**, large, cored, deseeded and sliced
-- 1 **yellow pepper**, large, cored, deseeded and sliced
-- 1 tbsp **olive oil**
-- 1 tbsp **honey**
-- Good pinch of **dried oregano**
-- 250g **dried pasta**, of choice
-- ½ **red onion**, finely diced
-- Handful of **basil leaves**
-- 2 tbsp **capers**
-- Small cupped handful of **green olives**, pitted, halved
-- **salt**, to taste
-- **black pepper**, to taste
-- 1 **lemon**, large, juiced, for the dressing
-- 1 tbsp **white wine vinegar**
-- 1 tsp **Dijon mustard**, heaped
-- 1 tsp **honey**, heaped, for the dressing
-- 1 tsp **garlic paste**
 
 ## Instructions
 

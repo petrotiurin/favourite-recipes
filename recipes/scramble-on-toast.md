@@ -6,11 +6,8 @@ course: [Breakfast]
 total_mins: 10
 serves: 2
 calories: 330
+ingredients: []
 ---
-
-## Ingredients
-
-*Ingredients not yet recorded in the source — update this recipe with quantities via the `add-recipe` skill.*
 
 ## Instructions
 

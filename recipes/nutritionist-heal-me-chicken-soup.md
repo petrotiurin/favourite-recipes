@@ -7,29 +7,27 @@ tags: [High Protein]
 total_mins: 40
 serves: 4
 calories: 400
+ingredients:
+  - { amount: 1, unit: tbsp, name: olive oil, item: olive-oil }
+  - { amount: 1, name: onion, note: "large, finely chopped", item: onion }
+  - { amount: 2, name: carrots, note: diced, item: carrot }
+  - { amount: 200, unit: g, name: butternut squash, note: diced, item: butternut-squash }
+  - { amount: 2, name: celery sticks, note: diced, item: celery }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 1, unit: handful, name: chestnut mushrooms, note: sliced, item: chestnut-mushrooms }
+  - { amount: 1, unit: tsp, name: ginger paste, item: ginger-paste }
+  - { amount: 2, unit: clove, name: garlic, note: minced, item: garlic }
+  - { amount: 1, unit: sprig, name: rosemary, note: small, item: rosemary }
+  - { amount: 150, unit: g, name: brown rice, item: brown-rice }
+  - { amount: 2, name: chicken stock cubes, item: stock-cubes }
+  - { amount: 2.5, unit: l, name: water, note: boiling, item: water }
+  - { amount: [320, 400], unit: g, name: cooked chicken, note: "roasted, shredded", item: cooked-chicken }
+  - { amount: 1, name: lemon, note: zest and juice, item: lemon }
+  - { amount: 2, name: eggs, item: eggs }
+  - { amount: 1, unit: tbsp, name: dill, note: chopped, item: dill }
+  - { amount: 1, unit: tbsp, name: parsley, note: chopped, item: parsley }
 ---
-
-## Ingredients
-
-- 1 tbsp **olive oil**
-- 1 large **onion**, finely chopped
-- 2 **carrots**, diced
-- 200g **butternut squash**, diced
-- 2 sticks **celery**, diced
-- **salt**, to taste
-- **black pepper**, to taste
-- A handful of **chestnut mushrooms**, sliced
-- 1 tsp **ginger paste**
-- 2 cloves **garlic**, minced
-- 1 small sprig **rosemary**
-- 150g **brown rice**
-- 2 **chicken stock cubes**
-- 2.5L **water**, boiling
-- 320–400g **cooked chicken**, roasted, shredded
-- 1 **lemon**, zest and juice
-- 2 **eggs**
-- 1 tbsp **dill**, chopped
-- 1 tbsp **parsley**, chopped
 
 ## Instructions
 

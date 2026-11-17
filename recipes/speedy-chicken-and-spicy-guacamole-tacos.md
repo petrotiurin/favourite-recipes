@@ -6,24 +6,22 @@ course: [Lunch]
 total_mins: 15
 serves: 1
 calories: 450
+ingredients:
+  - { amount: 0.5, name: avocado, note: ripe, item: avocado }
+  - { amount: 1, unit: tsp, name: honey, item: honey }
+  - { amount: 1, name: spring onion, note: "scallion, diced, plus extra to serve", item: spring-onion }
+  - { amount: 3, name: jalapeños, note: "from a jar, diced", item: jalapenos }
+  - { amount: 1, unit: tsp, name: jalapeño brine, note: from the jar, item: jalapenos }
+  - { amount: 1, unit: tbsp, name: parsley, note: chopped, item: parsley }
+  - { amount: 3, name: corn tacos, item: corn-tacos }
+  - { amount: 80, unit: g, name: cooked chicken breast, note: shredded, item: cooked-chicken }
+  - { amount: 15, unit: g, name: feta, note: crumbled, item: feta }
+  - { name: salt, note: to taste, item: salt }
+  - { amount: 1, name: red onions, note: "sliced into strips, for the pickled onions", item: red-onion }
+  - { amount: 100, unit: ml, name: white wine vinegar, note: enough to submerge the onions, item: white-wine-vinegar }
+  - { amount: 1, unit: tbsp, name: caster sugar, note: superfine, item: sugar }
+  - { amount: 1, name: lime, note: "cut into wedges, to serve", optional: true, item: lime }
 ---
-
-## Ingredients
-
-- ½ **avocado**, ripe
-- 1 tsp **honey**
-- 1 **spring onion**, scallion, diced, plus extra to serve
-- 3 **jalapeños**, from a jar, diced
-- 1 tsp **jalapeño brine**, from the jar
-- 1 tbsp **parsley**, chopped
-- 3 **corn tacos**
-- 80g **cooked chicken breast**, shredded
-- 15g **feta**, crumbled
-- **salt**, to taste
-- 1 **red onions**, sliced into strips, for the pickled onions
-- 100ml **white wine vinegar**, enough to submerge the onions
-- 1 tbsp **caster sugar**, superfine
-- 1 **lime**, cut into wedges, to serve (optional)
 
 ## Instructions
 

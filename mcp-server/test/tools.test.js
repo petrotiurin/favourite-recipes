@@ -18,9 +18,9 @@ const AGENT = makeCaller({ role: "agent" });
 
 // --- fake GitHub: recipes/*.md in a Map; counts every call so "never reached" can be asserted ----------------
 const recipe = (fm, ingredients) =>
-  `---\n${Object.entries(fm).map(([k, v]) => `${k}: ${Array.isArray(v) ? `[${v.join(", ")}]` : v}`).join("\n")}\n---\n\n## Ingredients\n\n${ingredients
-    .map((i) => `- 1 **${i}**`)
-    .join("\n")}\n\n## Instructions\n\n1. Cook the **${ingredients[0]}** until golden.\n`;
+  `---\n${Object.entries(fm).map(([k, v]) => `${k}: ${Array.isArray(v) ? `[${v.join(", ")}]` : v}`).join("\n")}\ningredients:\n${ingredients
+    .map((i) => `  - { amount: 1, name: ${i}, item: ${i.toLowerCase().replace(/ /g, "-")} }`)
+    .join("\n")}\n---\n\n## Instructions\n\n1. Cook the **${ingredients[0]}** until golden.\n`;
 
 const FILES = {
   "recipes/lemon-chicken.md": recipe({ title: "Lemon Chicken", slug: "lemon-chicken", image: "/images/recipes/lemon-chicken.jpg", course: ["Dinner"], tags: ["High Protein"], total_mins: 35, serves: 4, calories: 280, current: true }, ["chicken breasts", "lemon", "olive oil", "salt"]),

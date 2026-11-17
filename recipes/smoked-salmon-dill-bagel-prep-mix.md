@@ -6,20 +6,19 @@ course: [Lunch]
 total_mins: 10
 serves: 4
 calories: 120
+ingredients:
+  - { amount: 150, unit: g, name: Greek yogurt, note: strained (0% or full-fat), item: greek-yogurt }
+  - { amount: 100, unit: g, name: cream cheese, note: light, item: cream-cheese }
+  - { amount: 100, unit: g, name: hot smoked salmon, note: flaked, item: hot-smoked-salmon }
+  - { amount: 0.5, name: green (bell) pepper, note: deseeded and finely diced, item: green-pepper }
+  - { amount: 1, unit: zest, name: lemon, item: lemon }
+  - { amount: 0.25, name: red onion, note: "small, finely diced", item: red-onion }
+  - { amount: 1, unit: handful, name: spinach, note: "large, finely chopped", item: spinach }
+  - { amount: 1, unit: handful, name: dill, note: "small, fresh, finely chopped", item: dill }
+  - { amount: 1, unit: tsp, name: sesame seeds, note: toasted, item: sesame-seeds }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
 ---
-
-## Ingredients
-
-- 150g (¾ cup) **Greek yogurt**, strained (0% or full-fat)
-- 100g (scant ½ cup) **cream cheese**, light
-- 100g (3½oz) **hot smoked salmon**, flaked
-- ½ **green (bell) pepper**, deseeded and finely diced
-- Zest of 1 **lemon**
-- ¼ small **red onion**, finely diced
-- Large handful of **spinach**, finely chopped
-- Small handful of fresh **dill**, finely chopped
-- 1 tsp **sesame seeds**, toasted
-- **Salt and black pepper**, to taste
 
 ## Instructions
 

@@ -7,19 +7,17 @@ tags: [High Protein, High Fibre]
 total_mins: 80
 serves: 2
 calories: 340
+ingredients:
+  - { amount: 4, unit: tbsp, name: chia seeds, item: chia-seeds }
+  - { amount: 150, unit: g, name: cottage cheese, item: cottage-cheese }
+  - { amount: 100, unit: g, name: Greek yoghurt, note: 0%, item: greek-yogurt }
+  - { amount: 150, unit: ml, name: semi-skimmed milk, note: plus a splash to loosen, item: milk }
+  - { name: maple syrup, note: "or honey or sweetener, to taste", item: maple-syrup }
+  - { amount: 300, unit: g, name: strawberries, note: hulled and halved, item: strawberries }
+  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
+  - { amount: 1, unit: tsp, name: balsamic vinegar, item: balsamic-vinegar }
+  - { name: pecans, note: "roasted, chopped, to serve", optional: true, item: pecans }
 ---
-
-## Ingredients
-
-- 4 tbsp **chia seeds**
-- 150g **cottage cheese**
-- 100g **Greek yoghurt**, 0%
-- 150ml **semi-skimmed milk**, plus a splash to loosen
-- **maple syrup**, or honey or sweetener, to taste
-- 300g **strawberries**, hulled and halved
-- 1 tsp **olive oil**
-- 1 tsp **balsamic vinegar**
-- **pecans**, roasted, chopped, optional, to serve
 
 ## Instructions
 

@@ -203,7 +203,7 @@ test("the tray from the server is reduced to plain values: photos only from Supa
   assert.equal(chat.trayLine(t, false), "Tray · 2 changes · until Fri");
   assert.equal(chat.trayButton(t).kind, "save");
   assert.deepEqual(chat.trayButton({ ...t, can_save: false, list_current: false, items: t.items }), { kind: "finalise", label: "Finalise list" });
-  assert.equal(chat.trayButton({ ...t, can_save: false, state: "finalising" }).label, "Building the list…");
+  assert.equal(chat.trayButton({ ...t, can_save: false, state: "finalising" }).label, "Reviewing the list…");
   assert.equal(chat.trayButton({ ...t, can_save: false, list_current: false, items: [{ error: "x" }] }).kind, "blocked");
   assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 20 * 3600_000).toISOString() }, Date.now()).startsWith("The tray expires"), true);
   assert.equal(chat.trayExpiryNotice({ expires_at: new Date(Date.now() + 3 * 86400_000).toISOString() }, Date.now()), "");
@@ -265,4 +265,40 @@ test("the drafts review card: rows from the server, on our origin only, thumbs o
   assert.equal(chat.cleanReview(null, ORIGIN), null);
   assert.equal(chat.reviewText(review, { "pea-soup": "remove" }), "Not for us: Pea Soup. Kept for the coming week: Rice, Stew.");
   assert.equal(chat.reviewText(review, { "pea-soup": "liked", rice: "liked", stew: "remove" }), "Liked: Pea Soup, Rice. Not for us: Stew.");
+});
+
+test("the optional items card: rows from the server, photos on our origin only, only a drop is an answer; Done's words match the server's", async () => {
+  const card = chat.cleanOptional(
+    {
+      items: [
+        { item: "sesame-seeds", name: " Sesame seeds ", quantity: "", recipes: [{ slug: "satay-salmon", title: "Satay Salmon", image: "https://site.test/favourite-recipes/images/recipes/satay-salmon.jpg" }, { slug: "Bad", title: "x" }] },
+        { item: "Bad Id", name: "x", recipes: [] },
+        { item: "chilli-oil", name: "Chilli oil", quantity: "5ml", recipes: [{ slug: "air-fried-salmon", title: "Air-Fried Salmon", image: "https://evil.test/x.jpg" }], answer: "drop" },
+        { item: "coriander", name: "Coriander", answer: "keep", recipes: [] },
+      ],
+    },
+    ORIGIN
+  );
+  assert.deepEqual(card.items.map((i) => i.item), ["sesame-seeds", "chilli-oil", "coriander"]);
+  const [sesame, oil, coriander] = card.items;
+  assert.equal(sesame.name, "Sesame seeds");
+  assert.deepEqual(sesame.recipes.map((r) => r.slug), ["satay-salmon"]);
+  assert.match(sesame.recipes[0].image, /^https:\/\/site\.test\//);
+  assert.equal(oil.recipes[0].image, "", "a photo off our origin is dropped");
+  assert.equal(oil.answer, "drop");
+  assert.equal(coriander.answer, "", "ticked (kept) unless dropped");
+  assert.equal(chat.cleanOptional({ items: [] }, ORIGIN), null);
+  const { optionalAnswersText } = await import("../lib/optional-review.js");
+  for (const answers of [{}, { "chilli-oil": "drop" }, { "chilli-oil": "drop", "sesame-seeds": "drop", coriander: "keep" }]) {
+    assert.equal(chat.optionalText(card, answers), optionalAnswersText(card.items, answers), JSON.stringify(answers));
+  }
+  assert.equal(chat.optionalText(card, { "chilli-oil": "drop", "sesame-seeds": "drop" }), "Leaving off: sesame seeds and chilli oil.");
+});
+
+test("the tray's List card has no drop button and shows its patches; the button says Reviewing while the model reviews", () => {
+  const t = chat.cleanTray({ items: [{ id: "abcd1234", kind: "list", title: "52 items for 5 recipes", sub: "Reviewed", edits: ["round lime up"], notes: ["1 edit no longer applies"], preview: [{ name: "Fresh produce", items: ["Limes (3)"] }] }], state: "finalising", needs_list: true }, ORIGIN, "https://sb.test");
+  assert.deepEqual(t.items[0].edits, ["round lime up"]);
+  assert.deepEqual(t.items[0].notes, ["1 edit no longer applies"]);
+  assert.equal(chat.trayButton(t).label, "Reviewing the list…");
+  assert.ok(chat.cleanTray({ items: [{ id: "abcd1235", kind: "catalogue", title: "Ingredient catalogue" }] }, ORIGIN, "").items.length, "the Catalogue card is a known kind");
 });

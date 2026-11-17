@@ -8,23 +8,21 @@ serves: 1
 calories: 494
 current: true
 draft: true
+ingredients:
+  - { amount: 80, unit: g, name: white cabbage, note: thinly sliced or chopped, item: white-cabbage }
+  - { amount: 1, unit: handful, name: spinach, note: "small, about 20g", item: spinach }
+  - { amount: 80, unit: g, name: cooked chicken breast, note: shredded, item: cooked-chicken }
+  - { amount: 2, unit: slice, name: wholemeal bread, note: about 70g, item: bread }
+  - { name: salt, note: to taste, item: salt }
+  - { name: black pepper, note: to taste, item: black-pepper }
+  - { amount: 0.25, name: avocado, note: "medium, about 50g", item: avocado }
+  - { amount: 2, unit: tbsp, name: Greek yogurt, note: "heaped, 0% fat", item: greek-yogurt }
+  - { amount: 1, unit: tsp, name: Dijon mustard, note: or wholegrain, item: dijon-mustard }
+  - { amount: 1, unit: tsp, name: runny honey, item: honey }
+  - { amount: 0.25, unit: tsp, name: garlic granules, item: garlic-granules }
+  - { amount: 1, name: spring onion, note: chopped, item: spring-onion }
+  - { amount: 1, unit: handful, name: basil leaves, note: "small, chopped", item: basil }
 ---
-
-## Ingredients
-
-- 80g **white cabbage**, thinly sliced or chopped
-- Small handful of **spinach**, about 20g
-- 80g **cooked chicken breast**, shredded
-- 2 slices **wholemeal bread**, about 70g
-- **salt**, to taste
-- **black pepper**, to taste
-- ¼ **avocado**, medium, about 50g
-- 2 tbsp **Greek yogurt**, heaped, 0% fat
-- 1 tsp **Dijon mustard**, or wholegrain
-- 1 tsp **runny honey**
-- ¼ tsp **garlic granules**
-- 1 **spring onion**, chopped
-- Small handful of **basil leaves**, chopped
 
 ## Instructions
 

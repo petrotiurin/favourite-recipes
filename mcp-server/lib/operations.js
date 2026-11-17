@@ -10,7 +10,8 @@ import {
   pageUrl,
   UserError,
 } from "./recipes.js";
-import { updateShoppingList, setShoppingServings, updateStocktake } from "./shopping-list.js";
+import { updateShoppingList, buildAndSaveShoppingList, setShoppingServings, updateStocktake, builtReport } from "./shopping-list.js";
+import { stageCatalogueChanges } from "./recipes.js";
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
 export async function runOperation(op, cs, caller) {
@@ -20,11 +21,11 @@ export async function runOperation(op, cs, caller) {
     case "create_recipe": {
       const r = await createRecipe(args, cs, caller);
       const tags = [r.draft ? "draft" : null, r.week ? `${r.week} week` : null].filter(Boolean).join(", ");
-      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...warn(r.warnings)] };
+      return { ...r, nextChanged: r.week === "next", lines: [`Created "${r.slug}"${tags ? ` (${tags})` : ""}: ${pageUrl(r.slug)}`, ...(r.catalogueLines || []).map((l) => `  ${l}`), ...warn(r.warnings)] };
     }
     case "update_recipe": {
       const r = await updateRecipe(args, cs, caller);
-      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.subject ? warn(r.warnings) : [])] };
+      return { ...r, lines: [r.subject ? `${r.subject}: ${pageUrl(r.slug)}` : `"${r.slug}": no changes, it already matches`, ...(r.catalogueLines || []).map((l) => `  ${l}`), ...(r.subject ? warn(r.warnings) : [])] };
     }
     case "promote_recipe": {
       const r = await promoteRecipe(args.slug, cs, caller);
@@ -44,14 +45,21 @@ export async function runOperation(op, cs, caller) {
       return { ...r, lines: switchLines(r) };
     }
     case "update_shopping_list": {
-      const r = await updateShoppingList(args.sections, cs, args.servings, caller);
+      // build: true (docs/structured-ingredients.md 3): the server adds up next week's recipes; `sections` is the older, agent-written list
+      if (!args.build === !args.sections) throw new UserError("update_shopping_list: pass build: true (the server builds the list), or sections, not both");
+      const r = args.build ? await buildAndSaveShoppingList({ edits: args.edits }, cs, args.servings, caller) : await updateShoppingList(args.sections, cs, args.servings, caller);
       const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
       const plan = Object.entries(r.list.servings).map(([slug, n]) => `${slug} x${n}`).join(", ");
-      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`] };
+      return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`, ...builtReport(r.built).map((l) => `  ${l}`)] };
     }
     case "set_shopping_servings": {
       const r = await setShoppingServings(args.servings, cs, caller);
       return { ...r, lines: [r.changed.length ? `Planned servings: ${r.changed.map(([slug, n]) => `${slug} x${n}`).join(", ")}` : "set_shopping_servings: already planned like that"] };
+    }
+    case "update_catalogue": {
+      // review fixes that are generally true (docs/structured-ingredients.md section 5): no recipe to ride on
+      const r = await stageCatalogueChanges(args.changes, cs);
+      return { ...r, catalogueChanged: true, lines: r.lines.length ? r.lines : ["update_catalogue: nothing to change"] };
     }
     case "update_stocktake": {
       // chat only (the tray's "At home" card); not a batch_changes operation
