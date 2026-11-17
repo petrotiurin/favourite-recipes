@@ -75,7 +75,7 @@ One entry per thing we buy, keyed by a stable id:
   committed in the same commit as the recipe that needed a new entry (one deploy), and the server reads it
   through the cached recipe index. It is not copied to `dist/`. Supabase stays for chat state.
 - Only the MCP server writes it, through the same validation path as recipes (a new entry is staged with
-  the recipe that introduced it and shows on that recipe's tray card).
+  the recipe that introduced it and shows on that recipe's tray card; section 5).
 - Other users of ingredient matching get it for free: `sameIngredient` (`lib/ingredient-match.js`, used by
   `recipes_from_home` and the stocktake by chat) can match by catalogue id first and fall back to words.
   The shop workflows' product preferences could live on the same entries later.
@@ -111,7 +111,7 @@ buy_checked: 7c41e2                   # hash of the Ingredients section buy was 
   milk', 'a few sprigs of thyme'"*. The model answers with a small mapping for that recipe (a new tool
   argument, e.g. `buy_hints: [{ line: "¾ can coconut milk", item: "coconut-milk", amount: 300 }]`, keyed by
   the line's text since that is what the model sees) and, for a
-  new item, a proposed catalogue entry. In chat this happens on the recipe's card while the tray collects, so
+  new item, a proposed catalogue entry (section 5). In chat this happens on the recipe's card while the tray collects, so
   Finalise starts with every recipe resolved.
 - A recipe with no ingredients yet (e.g. "Ingredients not yet recorded") gets `buy: []` and a note; it
   doesn't block the list (today it fails the "no item is for X" check).
@@ -144,10 +144,84 @@ safety net. It needs no model and runs in milliseconds, so it also works over `/
    { note: { item: "chicken-thighs", text: "skinless" } }, { move: { item: "tahini", section: "Tins & jars" } }] })`,
    applied and re-validated by the server. A few hundred tokens instead of ~5k per attempt; a bad patch is
    refused on its own without losing the list.
-4. A patch that is generally true (an alias: "scallion" is "spring onion"; a section move) can be offered as a
-   catalogue change, staged on the same tray, so the question isn't asked again next week.
+4. A patch that is generally true (an alias: "scallion" is "spring onion"; a section move) can be marked
+   `remember: true` and becomes a catalogue change on the tray (section 5), so the question isn't asked again
+   next week.
 
 The user's own asks still go through the model ("skip the fancy salt this week", "double the rice"), as patches.
+
+## 5. How the catalogue is updated
+
+The model never edits `data/ingredients.json` itself. It suggests catalogue changes as part of the work it is
+already doing, and the server checks and stages them like any other change.
+
+### When
+
+**1. While writing a recipe (most changes).** An unresolved line's `buy_hints` answer (section 2) can point at
+an existing item, add the line's wording as an alias, or create a new item:
+
+```json
+buy_hints: [
+  { "line": "¾ can coconut milk", "item": "coconut-milk", "amount": 300 },
+  { "line": "2 tbsp baby capers", "alias_of": "capers" },
+  { "line": "1 tbsp gochujang", "new_item": { "id": "gochujang", "name": "Gochujang",
+      "section": "Tins & jars", "unit": "g", "per_tbsp": 18 } }
+]
+```
+
+The catalogue change is part of the recipe's own operation: it shows on that recipe's tray card ("New in the
+catalogue: Gochujang · Tins & jars") and lands in the same commit (S4).
+
+**2. At Finalise review.** A review patch (section 4) changes only this week's list by default. With
+`remember: true` the model marks it as generally true, and it becomes a catalogue change too:
+
+| Review patch | Catalogue change |
+| --- | --- |
+| `merge: ["scallion", "spring-onion"]` | `scallion`'s wording becomes an alias of `spring-onion` |
+| `move: { item, section }` | the item's `section` |
+| `round_up: "lemon"` with a pack size | a pack size on the item |
+
+These have no recipe to ride on, so they go on one **Catalogue** card in the tray. The staged list is rebuilt
+from the catalogue as the tray's replay leaves it (`lib/tray.js` `replay`), so the list and the catalogue never
+disagree.
+
+### What the model may change
+
+- **Additions go through freely:** new items, new aliases, new conversions. They only affect lines that weren't
+  resolved before.
+- **Edits to an existing item** (its section, name or a conversion rate) are allowed. The server works out which
+  recipes they affect and says so on the card ("changes the amount for 4 recipes"); Save recomputes those
+  recipes' `buy` in the same commit.
+- **Not by the model:**
+  - changing an item's `unit`, since every `buy` amount for that item would have to be converted: that's a script;
+  - deleting an item, since one in use would break recipes: unused items are cleaned up by a script.
+
+### How the server checks it
+
+One function, `applyCatalogueChange(catalogue, change)` in a new `lib/catalogue.js`, used everywhere: `/mcp`
+`batch_changes`, the tray dry run and Save. It refuses:
+
+- an id that already exists (for `new_item`), or one that isn't kebab-case;
+- an alias that already belongs to another item (the refusal names that item, so the model picks one);
+- a section that isn't one of the list's fixed aisles;
+- a unit that isn't g, ml, count or a named count;
+- a conversion that is zero, negative or far outside a sane range (e.g. 1 tbsp = 500 g).
+
+Like every write it is for editors and agents only, checked by `dispatch()` and by the commit path
+(`assertCanCommit`); public callers never see it.
+
+### At Save
+
+Save checks the catalogue changes again against the catalogue on `main` (fresh, not the snapshot). If another
+save meanwhile added the same item or alias, that is a **clash**, resolved through the bot like recipe clashes
+(`docs/chatbot-design.md` 7.1); usually the answer is "use the existing item", which re-points this recipe's
+`buy` at it.
+
+### Over `/mcp`
+
+The same shapes: `buy_hints` on `create_recipe` / `update_recipe`, and an `update_catalogue` operation in
+`batch_changes` (`{ action: "update_catalogue", changes: [...] }`) for review fixes, all going through
+`applyCatalogueChange`. The `plan-recipes` workflow describes both.
 
 ## What stays the model's job, what moves to code
 
@@ -189,4 +263,5 @@ of rejecting, and convert tbsp/tsp quantities to ml instead of rejecting (`valid
 - **S1.** Go ahead with the rollout? (Q20 in `docs/chatbot-design.md`.)
 - **S2.** The catalogue in the repo (proposed) or in Supabase.
 - **S3.** `buy` in the recipe frontmatter (proposed) or a sidecar file.
-- **S4.** Whether catalogue changes the model proposes get their own tray card or ride on the recipe's.
+- **S4.** *Decided:* catalogue changes made while writing a recipe ride on that recipe's tray card; those from the
+  Finalise review go on one Catalogue card (section 5).
