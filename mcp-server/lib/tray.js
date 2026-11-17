@@ -14,8 +14,6 @@ import { ingredientText } from "./ingredient-line.js";
 import { listRecipes, isNextWeek, isDraft, recipeSummaries, removeDraft, UserError } from "./recipes.js";
 import { ShoppingListError, sameEdit, editLabel } from "./shopping-list.js";
 import { runOperation } from "./operations.js";
-import { upgradeItems, needsUpgrade } from "./tray-upgrade.js";
-import { loadCatalogue } from "./catalogue.js";
 import { readTray, createTray, patchTray, deleteTrayRow, removeTrayPhotos, removePhotos, uploadPhoto, signedPhotoUrl, TRAY_TTL_MS } from "./tray-store.js";
 import { makePhoto } from "./tray-photos.js";
 import { background } from "./background.js";
@@ -208,27 +206,7 @@ export async function loadTray() {
     await purgeTray(row, "expired");
     return null;
   }
-  return upgradeTray(row);
-}
-
-/**
- * A tray staged before structured ingredients is rewritten once, in place (lib/tray-upgrade.js): old list card -> the server-built one, old
- * free-text quantities -> the new fields. Written back under the version check; if someone else wrote meanwhile, the next read upgrades it.
- */
-async function upgradeTray(row) {
-  if (!needsUpgrade(row.items || [])) return row; // the usual case: nothing read, nothing written
-  let catalogue;
-  try {
-    catalogue = await loadCatalogue();
-  } catch (err) {
-    console.error("Upgrading the tray: reading the catalogue failed:", err.message);
-    return row;
-  }
-  const { items, changed } = upgradeItems(row.items || [], catalogue);
-  if (!changed) return row;
-  const saved = await patchTray(row.id, row.version, { items, list_hash: null, status: "collecting" }, null).catch((err) => (console.error("Saving the upgraded tray failed:", err.message), null));
-  trayEvent("tray-upgraded", { items: items.length });
-  return saved || { ...row, items, list_hash: null, status: "collecting" };
+  return row;
 }
 
 export async function purgeTray(row, why = "emptied") {
