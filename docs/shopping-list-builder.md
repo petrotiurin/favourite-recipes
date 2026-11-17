@@ -88,18 +88,29 @@ resolves each line against the catalogue and stores the result in the frontmatte
 
 ```yaml
 buy:
-  - { item: capers, amount: 5, line: 3f9a }       # "1 tbsp capers", serves 2 → 10 g / 2
-  - { item: lemon, amount: 0.5, line: 81c2 }      # "juice of 1 lemon", serves 2
-  - { item: salt, line: 0d7e }                    # "salt, to taste": no amount
+  - { item: capers, amount: 5 }       # "1 tbsp capers", serves 2 → 10 g / 2
+  - { item: lemon, amount: 0.5 }      # "juice of 1 lemon", serves 2
+  - { item: salt }                    # "salt, to taste": no amount
+  - {}                                # "water, to loosen": nothing to buy
+buy_checked: 7c41e2                   # hash of the Ingredients section buy was computed from
 ```
 
-- `amount` is in the item's shopping unit; `line` is a short hash of the ingredient line it came from, so
-  an edit of the line is detected and that entry recomputed. The block is **server-owned**: never written by
-  hand or by the model directly, recomputed on every write that touches ingredients.
+- **One entry per ingredient line, in the same order**, so an entry needs no key: entry *n* is line *n*.
+  A line with nothing to buy gets an empty entry, so the positions stay aligned.
+- `amount` is in the item's shopping unit. The block is **server-owned**: never written by hand or by the
+  model directly.
+- **Recomputed from scratch on every write** that touches ingredients. The server has the old version of the
+  file at that point, so an answer the model gave earlier for a line (below) is kept when that line's text is
+  unchanged: the match happens at write time and nothing about it is stored in the recipe.
+- **Stale data is caught with one hash per recipe.** `buy_checked` is a short hash of the Ingredients section
+  the block was computed from. A recipe edited outside the server (by hand, or locally with the `add-recipe`
+  skill) no longer matches its hash, and `buildShoppingList` re-resolves that recipe instead of trusting its
+  `buy`; the build can warn about it too.
 - **Lines the server can't resolve** (unknown phrasing, an item not in the catalogue) are reported in the
   write's result the way problems are today (`PROBLEM on the card`): *"say what to buy for: '¾ can coconut
   milk', 'a few sprigs of thyme'"*. The model answers with a small mapping for that recipe (a new tool
-  argument, e.g. `buy_hints: [{ line: "¾ can coconut milk", item: "coconut-milk", amount: 300 }]`) and, for a
+  argument, e.g. `buy_hints: [{ line: "¾ can coconut milk", item: "coconut-milk", amount: 300 }]`, keyed by
+  the line's text since that is what the model sees) and, for a
   new item, a proposed catalogue entry. In chat this happens on the recipe's card while the tray collects, so
   Finalise starts with every recipe resolved.
 - A recipe with no ingredients yet (e.g. "Ingredients not yet recorded") gets `buy: []` and a note; it
@@ -156,8 +167,9 @@ The user's own asks still go through the model ("skip the fancy salt this week",
 - **Catalogue upkeep:** a few entries a week, proposed by the model, reviewed on the tray card / in the commit.
 - **Conversions are approximate** (1 tbsp flour ≈ 10 g), the same guesses the model makes today, written down
   once and correctable in one place.
-- **Two representations of a recipe's ingredients** (the Markdown line and `buy`): kept honest by the line
-  hashes and by recomputing on every write; a build check can warn when a `buy` entry's line hash matches no line.
+- **Two representations of a recipe's ingredients** (the Markdown lines and `buy`): kept honest by
+  recomputing on every write, by the entry count matching the line count, and by the one `buy_checked` hash,
+  which catches an edit made outside the server.
 - **Migration:** the backfill PR; until a recipe has `buy`, Finalise falls back to today's model-written list for
   the whole week (no mixed lists).
 
