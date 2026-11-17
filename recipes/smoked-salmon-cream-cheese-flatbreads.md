@@ -6,6 +6,7 @@ course: [Breakfast]
 total_mins: 25
 serves: 2
 calories: 415
+next: true
 ingredients:
   - { amount: 120, unit: g, name: flour, note: "plain (all-purpose), plus extra for dusting", item: plain-flour }
   - { amount: 120, unit: g, name: Greek yogurt, note: 0% or full fat, item: greek-yogurt }

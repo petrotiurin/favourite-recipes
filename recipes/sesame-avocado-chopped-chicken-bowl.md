@@ -7,6 +7,7 @@ tags: [High Protein]
 total_mins: 6
 serves: 1
 calories: 391
+next: true
 ingredients:
   - { amount: 0.25, name: cucumber, note: "large, thinly sliced", item: cucumber }
   - { amount: 1, name: spring onion, note: "large, scallion, thinly sliced", item: spring-onion }

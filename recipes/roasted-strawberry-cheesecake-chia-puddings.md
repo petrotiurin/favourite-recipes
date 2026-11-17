@@ -7,6 +7,7 @@ tags: [High Protein, High Fibre]
 total_mins: 80
 serves: 2
 calories: 340
+next: true
 ingredients:
   - { amount: 4, unit: tbsp, name: chia seeds, item: chia-seeds }
   - { amount: 150, unit: g, name: cottage cheese, item: cottage-cheese }

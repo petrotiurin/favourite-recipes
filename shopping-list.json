@@ -1,213 +1,274 @@
 {
-  "updated": "2026-11-08",
+  "updated": "2026-11-17",
   "recipes": [
-    "cba-sandwich-chicken-basil-avocado",
-    "cheats-morning-shakshuka",
-    "meatball-and-ricotta-al-forno",
-    "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-    "oven-baked-feta-and-pepper-pasta",
-    "satay-salmon-with-smacked-cucumber-salad",
-    "skin-glow-omega-bowl",
-    "tiramisu-french-toast",
-    "toasted-sesame-and-ginger-chicken-salad"
+    "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+    "avocado-toast",
+    "crispy-baked-cod-katsu-curry",
+    "fish-pie-en-croute",
+    "healthy-christmas-spice-granola",
+    "hot-honey-sticky-fig-cottage-cheese-toasts",
+    "maple-chicken-breakfast-sausage-muffins",
+    "my-ultimate-christmas-salad",
+    "roasted-strawberry-cheesecake-chia-puddings",
+    "sesame-avocado-chopped-chicken-bowl",
+    "smoked-salmon-cream-cheese-flatbreads",
+    "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad",
+    "super-greens-broccoli-and-smoked-cheddar-soup"
   ],
   "servings": {
-    "cba-sandwich-chicken-basil-avocado": 4,
-    "cheats-morning-shakshuka": 4,
-    "meatball-and-ricotta-al-forno": 4,
-    "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 4,
-    "oven-baked-feta-and-pepper-pasta": 4,
-    "satay-salmon-with-smacked-cucumber-salad": 4,
-    "skin-glow-omega-bowl": 4,
-    "tiramisu-french-toast": 4,
-    "toasted-sesame-and-ginger-chicken-salad": 4
+    "50g-protein-toasties-the-bct-brie-cranberry-turkey": 4,
+    "avocado-toast": 4,
+    "crispy-baked-cod-katsu-curry": 4,
+    "fish-pie-en-croute": 4,
+    "healthy-christmas-spice-granola": 4,
+    "hot-honey-sticky-fig-cottage-cheese-toasts": 4,
+    "maple-chicken-breakfast-sausage-muffins": 4,
+    "my-ultimate-christmas-salad": 4,
+    "roasted-strawberry-cheesecake-chia-puddings": 4,
+    "sesame-avocado-chopped-chicken-bowl": 4,
+    "smoked-salmon-cream-cheese-flatbreads": 4,
+    "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 4,
+    "super-greens-broccoli-and-smoked-cheddar-soup": 4
   },
   "sections": [
     {
       "name": "Fresh produce",
       "items": [
         {
-          "name": "White cabbage",
-          "quantity": "160g",
+          "name": "Avocados",
+          "quantity": "1.5",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado"
-          ],
-          "have": true
-        },
-        {
-          "name": "Spinach",
-          "quantity": "100g",
-          "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "cheats-morning-shakshuka",
-            "skin-glow-omega-bowl",
-            "toasted-sesame-and-ginger-chicken-salad"
+            "sesame-avocado-chopped-chicken-bowl",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
           ],
           "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 40,
-            "cheats-morning-shakshuka": 30,
-            "skin-glow-omega-bowl": 10,
-            "toasted-sesame-and-ginger-chicken-salad": 20
+            "sesame-avocado-chopped-chicken-bowl": 1,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 0.5
           }
         },
         {
-          "name": "Red peppers",
-          "quantity": "3",
+          "name": "Basil",
+          "quantity": "1 bunch",
           "recipes": [
-            "cheats-morning-shakshuka",
-            "meatball-and-ricotta-al-forno",
-            "oven-baked-feta-and-pepper-pasta",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ],
-          "amounts": {
-            "cheats-morning-shakshuka": 1,
-            "meatball-and-ricotta-al-forno": 1,
-            "oven-baked-feta-and-pepper-pasta": 0.5,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 0.5
-          }
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
         },
         {
-          "name": "Yellow peppers",
+          "name": "Broccoli",
+          "quantity": "200g",
+          "recipes": [
+            "super-greens-broccoli-and-smoked-cheddar-soup"
+          ]
+        },
+        {
+          "name": "Brussels sprouts",
+          "quantity": "133g",
+          "recipes": [
+            "my-ultimate-christmas-salad"
+          ]
+        },
+        {
+          "name": "Carrots",
           "quantity": "2",
           "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "oven-baked-feta-and-pepper-pasta"
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Celery (sticks)",
+          "quantity": "2.5",
+          "recipes": [
+            "fish-pie-en-croute",
+            "super-greens-broccoli-and-smoked-cheddar-soup"
           ],
           "amounts": {
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 1,
-            "oven-baked-feta-and-pepper-pasta": 1
+            "fish-pie-en-croute": 1,
+            "super-greens-broccoli-and-smoked-cheddar-soup": 1.5
           }
         },
         {
-          "name": "Avocados",
+          "name": "Cherry tomatoes",
+          "quantity": "160g",
+          "recipes": [
+            "sesame-avocado-chopped-chicken-bowl"
+          ]
+        },
+        {
+          "name": "Coriander",
+          "quantity": "1 bunch",
+          "recipes": [
+            "sesame-avocado-chopped-chicken-bowl"
+          ]
+        },
+        {
+          "name": "Cucumbers",
+          "quantity": "1.5",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "sesame-avocado-chopped-chicken-bowl",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ],
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 0.5,
+            "sesame-avocado-chopped-chicken-bowl": 0.5,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 0.5
+          }
+        },
+        {
+          "name": "Dill",
+          "note": "optional",
+          "recipes": [
+            "smoked-salmon-cream-cheese-flatbreads"
+          ]
+        },
+        {
+          "name": "Figs",
+          "quantity": "2",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
+        },
+        {
+          "name": "Garlic",
+          "quantity": "3.5 cloves",
+          "recipes": [
+            "fish-pie-en-croute",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ],
+          "amounts": {
+            "fish-pie-en-croute": 2,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 1.5
+          }
+        },
+        {
+          "name": "Granny Smith apples",
+          "quantity": "0.5",
+          "recipes": [
+            "my-ultimate-christmas-salad"
+          ]
+        },
+        {
+          "name": "Leeks",
+          "quantity": "2.5",
+          "recipes": [
+            "fish-pie-en-croute",
+            "super-greens-broccoli-and-smoked-cheddar-soup"
+          ],
+          "amounts": {
+            "fish-pie-en-croute": 1,
+            "super-greens-broccoli-and-smoked-cheddar-soup": 1.5
+          }
+        },
+        {
+          "name": "Lemons",
           "quantity": "1",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "toasted-sesame-and-ginger-chicken-salad"
+            "fish-pie-en-croute",
+            "my-ultimate-christmas-salad",
+            "smoked-salmon-cream-cheese-flatbreads",
+            "super-greens-broccoli-and-smoked-cheddar-soup"
           ],
           "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 0.5,
-            "toasted-sesame-and-ginger-chicken-salad": 0.5
+            "fish-pie-en-croute": 0.83,
+            "my-ultimate-christmas-salad": 0.17,
+            "smoked-salmon-cream-cheese-flatbreads": null,
+            "super-greens-broccoli-and-smoked-cheddar-soup": null
           }
         },
         {
-          "name": "Spring onions",
-          "quantity": "6",
+          "name": "Limes",
+          "quantity": "1",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "skin-glow-omega-bowl",
-            "toasted-sesame-and-ginger-chicken-salad"
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Onions",
+          "quantity": "1.5",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
           ],
           "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 2,
-            "skin-glow-omega-bowl": 2,
-            "toasted-sesame-and-ginger-chicken-salad": 2
+            "crispy-baked-cod-katsu-curry": 1,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 0.5
           }
         },
         {
-          "name": "Basil leaves",
-          "quantity": "50g",
+          "name": "Oranges",
+          "quantity": "2",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "meatball-and-ricotta-al-forno",
-            "oven-baked-feta-and-pepper-pasta",
-            "skin-glow-omega-bowl"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 10,
-            "meatball-and-ricotta-al-forno": 20,
-            "oven-baked-feta-and-pepper-pasta": 10,
-            "skin-glow-omega-bowl": 10
-          }
+            "healthy-christmas-spice-granola"
+          ]
         },
         {
           "name": "Parsley",
-          "quantity": "30g",
+          "quantity": "0.5 bunch",
           "recipes": [
-            "cheats-morning-shakshuka",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ],
-          "amounts": {
-            "cheats-morning-shakshuka": 10,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 20
-          }
-        },
-        {
-          "name": "Courgette",
-          "quantity": "1",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
+            "fish-pie-en-croute"
           ]
         },
         {
           "name": "Red onions",
-          "quantity": "2",
+          "quantity": "0.5",
           "recipes": [
-            "meatball-and-ricotta-al-forno",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "oven-baked-feta-and-pepper-pasta"
+            "my-ultimate-christmas-salad",
+            "smoked-salmon-cream-cheese-flatbreads"
           ],
           "amounts": {
-            "meatball-and-ricotta-al-forno": 1,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 0.5,
-            "oven-baked-feta-and-pepper-pasta": 0.5
+            "my-ultimate-christmas-salad": 0.17,
+            "smoked-salmon-cream-cheese-flatbreads": 0.33
           }
         },
         {
-          "name": "Garlic cloves",
-          "quantity": "3",
+          "name": "Shallots",
+          "quantity": "1",
           "recipes": [
-            "meatball-and-ricotta-al-forno",
-            "skin-glow-omega-bowl"
-          ],
-          "amounts": {
-            "meatball-and-ricotta-al-forno": 1,
-            "skin-glow-omega-bowl": 2
-          },
-          "have": true
-        },
-        {
-          "name": "Lemons",
-          "quantity": "3",
-          "recipes": [
-            "meatball-and-ricotta-al-forno",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "oven-baked-feta-and-pepper-pasta",
-            "skin-glow-omega-bowl"
-          ],
-          "amounts": {
-            "meatball-and-ricotta-al-forno": 1,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 1,
-            "oven-baked-feta-and-pepper-pasta": 0.5,
-            "skin-glow-omega-bowl": 0.5
-          }
-        },
-        {
-          "name": "Cucumbers",
-          "quantity": "2",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad",
-            "skin-glow-omega-bowl",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "satay-salmon-with-smacked-cucumber-salad": 1,
-            "skin-glow-omega-bowl": 0.5,
-            "toasted-sesame-and-ginger-chicken-salad": 0.5
-          }
-        },
-        {
-          "name": "Radishes",
-          "quantity": "5",
-          "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
+            "fish-pie-en-croute"
           ]
         },
         {
-          "name": "Salad potatoes",
-          "quantity": "350g",
+          "name": "Spinach",
+          "quantity": "187g",
           "recipes": [
-            "skin-glow-omega-bowl"
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "sesame-avocado-chopped-chicken-bowl",
+            "super-greens-broccoli-and-smoked-cheddar-soup"
+          ],
+          "amounts": {
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey": 40,
+            "sesame-avocado-chopped-chicken-bowl": 80,
+            "super-greens-broccoli-and-smoked-cheddar-soup": 67
+          }
+        },
+        {
+          "name": "Spring onions",
+          "quantity": "5.5",
+          "recipes": [
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "crispy-baked-cod-katsu-curry",
+            "sesame-avocado-chopped-chicken-bowl",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ],
+          "amounts": {
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey": 2,
+            "crispy-baked-cod-katsu-curry": 1,
+            "sesame-avocado-chopped-chicken-bowl": 2,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 0.5
+          }
+        },
+        {
+          "name": "Strawberries",
+          "quantity": "300g",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
+        },
+        {
+          "name": "Tomatoes",
+          "quantity": "1",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
           ]
         }
       ]
@@ -216,44 +277,64 @@
       "name": "Meat & fish",
       "items": [
         {
-          "name": "Cooked chicken breast",
-          "quantity": "360g",
+          "name": "Chicken breasts",
+          "quantity": "4",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "toasted-sesame-and-ginger-chicken-salad"
+            "sesame-avocado-chopped-chicken-bowl",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
           ],
           "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 160,
-            "toasted-sesame-and-ginger-chicken-salad": 200
-          },
-          "have": true
+            "sesame-avocado-chopped-chicken-bowl": 1.66,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 2.34
+          }
         },
         {
-          "name": "Minced beef (5% fat)",
-          "quantity": "250g",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ]
-        },
-        {
-          "name": "Sea bass fillets",
+          "name": "Cod fillets",
           "quantity": "2",
           "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
+            "crispy-baked-cod-katsu-curry"
           ]
         },
         {
-          "name": "Salmon fillets (skinless)",
-          "quantity": "2",
+          "name": "Cooked chicken",
+          "quantity": "200g",
           "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad"
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey"
           ]
         },
         {
-          "name": "Smoked mackerel fillets",
-          "quantity": "140g",
+          "name": "Fish pie mix",
+          "quantity": "300g",
           "recipes": [
-            "skin-glow-omega-bowl"
+            "fish-pie-en-croute"
+          ]
+        },
+        {
+          "name": "Minced chicken",
+          "quantity": "160g",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Parma ham",
+          "quantity": "4 slices",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
+        },
+        {
+          "name": "Smoked pancetta rashers",
+          "quantity": "2.5",
+          "recipes": [
+            "my-ultimate-christmas-salad"
+          ]
+        },
+        {
+          "name": "Smoked salmon",
+          "quantity": "100g",
+          "recipes": [
+            "smoked-salmon-cream-cheese-flatbreads"
           ]
         }
       ]
@@ -262,78 +343,106 @@
       "name": "Dairy & eggs",
       "items": [
         {
-          "name": "Eggs",
-          "quantity": "7",
+          "name": "Blue cheese",
+          "quantity": "27g",
           "recipes": [
-            "cheats-morning-shakshuka",
-            "meatball-and-ricotta-al-forno",
-            "tiramisu-french-toast"
-          ],
-          "amounts": {
-            "cheats-morning-shakshuka": 4,
-            "meatball-and-ricotta-al-forno": 1,
-            "tiramisu-french-toast": 2
-          },
-          "have": 5
-        },
-        {
-          "name": "Feta cheese",
-          "quantity": "145g",
-          "recipes": [
-            "cheats-morning-shakshuka",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "amounts": {
-            "cheats-morning-shakshuka": 30,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 40,
-            "oven-baked-feta-and-pepper-pasta": 75
-          }
-        },
-        {
-          "name": "Greek yogurt (0%)",
-          "quantity": "310g",
-          "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "tiramisu-french-toast"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 60,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 200,
-            "tiramisu-french-toast": 50
-          }
-        },
-        {
-          "name": "Ricotta cheese",
-          "quantity": "55ml",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
+            "my-ultimate-christmas-salad"
           ]
         },
         {
-          "name": "Parmesan cheese",
-          "quantity": "25g",
+          "name": "Brie",
+          "quantity": "100g",
           "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ],
-          "have": true
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey"
+          ]
         },
         {
-          "name": "Thick natural yogurt",
-          "quantity": "30ml",
+          "name": "Cottage cheese",
+          "quantity": "540g",
           "recipes": [
-            "skin-glow-omega-bowl"
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "hot-honey-sticky-fig-cottage-cheese-toasts",
+            "maple-chicken-breakfast-sausage-muffins",
+            "roasted-strawberry-cheesecake-chia-puddings"
           ],
-          "have": true
+          "amounts": {
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey": 60,
+            "hot-honey-sticky-fig-cottage-cheese-toasts": 300,
+            "maple-chicken-breakfast-sausage-muffins": 30,
+            "roasted-strawberry-cheesecake-chia-puddings": 150
+          }
         },
         {
-          "name": "Semi-skimmed milk",
-          "quantity": "120ml",
+          "name": "Cream cheese",
+          "quantity": "45g",
           "recipes": [
-            "tiramisu-french-toast"
+            "fish-pie-en-croute",
+            "smoked-salmon-cream-cheese-flatbreads"
           ],
-          "have": true
+          "amounts": {
+            "fish-pie-en-croute": 15,
+            "smoked-salmon-cream-cheese-flatbreads": 30
+          }
+        },
+        {
+          "name": "Eggs",
+          "quantity": "4",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "fish-pie-en-croute",
+            "healthy-christmas-spice-granola"
+          ],
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 1,
+            "fish-pie-en-croute": 1,
+            "healthy-christmas-spice-granola": 2
+          }
+        },
+        {
+          "name": "Feta cheese",
+          "quantity": "100g",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
+        },
+        {
+          "name": "Greek yogurt",
+          "quantity": "328g",
+          "recipes": [
+            "my-ultimate-christmas-salad",
+            "roasted-strawberry-cheesecake-chia-puddings",
+            "sesame-avocado-chopped-chicken-bowl",
+            "smoked-salmon-cream-cheese-flatbreads",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ],
+          "amounts": {
+            "my-ultimate-christmas-salad": 20,
+            "roasted-strawberry-cheesecake-chia-puddings": 100,
+            "sesame-avocado-chopped-chicken-bowl": 30,
+            "smoked-salmon-cream-cheese-flatbreads": 120,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 58
+          }
+        },
+        {
+          "name": "Milk",
+          "quantity": "150ml",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
+        },
+        {
+          "name": "Red Leicester",
+          "quantity": "40g",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Smoked cheddar",
+          "quantity": "53g",
+          "recipes": [
+            "super-greens-broccoli-and-smoked-cheddar-soup"
+          ]
         }
       ]
     },
@@ -341,87 +450,97 @@
       "name": "Bakery",
       "items": [
         {
-          "name": "Wholemeal bread",
-          "quantity": "300g",
+          "name": "Bread",
+          "quantity": "4 slices",
           "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "tiramisu-french-toast"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 140,
-            "tiramisu-french-toast": 160
-          },
-          "have": true
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey"
+          ]
+        },
+        {
+          "name": "English muffins",
+          "quantity": "2",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Fresh wholemeal breadcrumbs",
+          "quantity": "4g",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Ready-rolled puff pastry",
+          "quantity": "320g",
+          "recipes": [
+            "fish-pie-en-croute"
+          ]
+        },
+        {
+          "name": "Sourdough",
+          "quantity": "2 slices",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
         }
       ]
     },
     {
-      "name": "Tins, jars & frozen",
+      "name": "Tins & jars",
       "items": [
         {
-          "name": "Pasta sauce",
-          "quantity": "300g",
+          "name": "Capers",
+          "quantity": "10g",
           "recipes": [
-            "cheats-morning-shakshuka"
-          ]
-        },
-        {
-          "name": "Dried apricots",
-          "quantity": "30g",
-          "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ]
-        },
-        {
-          "name": "Cooked brown rice",
-          "quantity": "250g",
-          "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ],
-          "have": true
-        },
-        {
-          "name": "Dried pasta",
-          "quantity": "125g",
-          "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "have": true
-        },
-        {
-          "name": "Butter beans",
-          "quantity": "200g",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ]
-        },
-        {
-          "name": "Passata",
-          "quantity": "250g",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
+            "smoked-salmon-cream-cheese-flatbreads"
           ]
         },
         {
           "name": "Chickpeas",
-          "quantity": "400g",
+          "quantity": "200g",
           "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
           ]
         },
         {
-          "name": "Frozen peas",
-          "quantity": "100g",
+          "name": "Cranberry sauce",
+          "quantity": "12g",
           "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "have": true
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey"
+          ]
         },
         {
-          "name": "Cooked quinoa",
-          "quantity": "150g",
+          "name": "Ginger paste",
+          "quantity": "10g",
           "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
+            "crispy-baked-cod-katsu-curry",
+            "sesame-avocado-chopped-chicken-bowl"
+          ],
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 5,
+            "sesame-avocado-chopped-chicken-bowl": 5
+          }
+        },
+        {
+          "name": "Jalapeños",
+          "quantity": "7.5g",
+          "recipes": [
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ]
+        },
+        {
+          "name": "Sweetcorn",
+          "quantity": "100g",
+          "recipes": [
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ]
+        },
+        {
+          "name": "Tomato purée",
+          "quantity": "16g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
           ]
         }
       ]
@@ -430,298 +549,333 @@
       "name": "Pantry",
       "items": [
         {
-          "name": "Olive oil",
-          "quantity": "25ml",
-          "recipes": [
-            "meatball-and-ricotta-al-forno",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "amounts": {
-            "meatball-and-ricotta-al-forno": 10,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 10,
-            "oven-baked-feta-and-pepper-pasta": 5
-          },
-          "have": true
-        },
-        {
-          "name": "Honey",
-          "quantity": "40ml",
-          "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "oven-baked-feta-and-pepper-pasta",
-            "satay-salmon-with-smacked-cucumber-salad",
-            "tiramisu-french-toast",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 4,
-            "oven-baked-feta-and-pepper-pasta": 10,
-            "satay-salmon-with-smacked-cucumber-salad": 5,
-            "tiramisu-french-toast": 10,
-            "toasted-sesame-and-ginger-chicken-salad": 11
-          },
-          "have": true
-        },
-        {
-          "name": "Dijon mustard",
-          "quantity": "15ml",
-          "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 10,
-            "oven-baked-feta-and-pepper-pasta": 5
-          },
-          "have": true
-        },
-        {
-          "name": "Garlic granules",
-          "quantity": "6g",
-          "recipes": [
-            "cba-sandwich-chicken-basil-avocado",
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "satay-salmon-with-smacked-cucumber-salad"
-          ],
-          "amounts": {
-            "cba-sandwich-chicken-basil-avocado": 1,
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 2,
-            "satay-salmon-with-smacked-cucumber-salad": 3
-          },
-          "have": true
-        },
-        {
-          "name": "Middle Eastern spice blend",
-          "quantity": "15ml",
-          "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass"
-          ],
-          "have": true
-        },
-        {
-          "name": "White wine vinegar",
-          "quantity": "8ml",
-          "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "have": true
-        },
-        {
-          "name": "Caster sugar",
-          "quantity": "12g",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "satay-salmon-with-smacked-cucumber-salad": 2,
-            "toasted-sesame-and-ginger-chicken-salad": 10
-          },
-          "have": true
-        },
-        {
-          "name": "Crispy chilli oil",
-          "quantity": "5ml",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Salt",
-          "quantity": "6g",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Instant coffee granules",
-          "quantity": "4g",
-          "recipes": [
-            "tiramisu-french-toast"
-          ],
-          "have": true
-        },
-        {
-          "name": "Vanilla extract",
-          "quantity": "5ml",
-          "recipes": [
-            "tiramisu-french-toast"
-          ],
-          "have": true
-        },
-        {
-          "name": "Cocoa powder",
+          "name": "Baking powder",
           "quantity": "2g",
           "recipes": [
-            "tiramisu-french-toast"
-          ],
-          "have": true
-        },
-        {
-          "name": "Rice vinegar",
-          "quantity": "225ml",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "satay-salmon-with-smacked-cucumber-salad": 25,
-            "toasted-sesame-and-ginger-chicken-salad": 200
-          },
-          "have": 150
-        },
-        {
-          "name": "Light soy sauce",
-          "quantity": "90ml",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "satay-salmon-with-smacked-cucumber-salad": 50,
-            "toasted-sesame-and-ginger-chicken-salad": 40
-          },
-          "have": 50
-        },
-        {
-          "name": "Ginger paste",
-          "quantity": "15ml",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "satay-salmon-with-smacked-cucumber-salad": 5,
-            "toasted-sesame-and-ginger-chicken-salad": 10
-          },
-          "have": true
-        },
-        {
-          "name": "Mild curry powder",
-          "quantity": "1g",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Peanut butter",
-          "quantity": "15ml",
-          "recipes": [
-            "satay-salmon-with-smacked-cucumber-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Tahini",
-          "quantity": "25ml",
-          "recipes": [
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass",
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "amounts": {
-            "middle-eastern-style-apricot-and-pepper-rice-with-crispy-sea-bass": 10,
-            "toasted-sesame-and-ginger-chicken-salad": 15
-          },
-          "have": true
-        },
-        {
-          "name": "Toasted sesame oil",
-          "quantity": "15ml",
-          "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Cornflour",
-          "quantity": "3g",
-          "recipes": [
-            "toasted-sesame-and-ginger-chicken-salad"
-          ],
-          "have": true
-        },
-        {
-          "name": "Sun-dried tomato paste",
-          "quantity": "8ml",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ]
-        },
-        {
-          "name": "Tomato purée",
-          "quantity": "8ml",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ],
-          "have": true
-        },
-        {
-          "name": "Smoked paprika",
-          "quantity": "1g",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ],
-          "have": true
-        },
-        {
-          "name": "Chicken stock cube",
-          "quantity": "1",
-          "recipes": [
-            "meatball-and-ricotta-al-forno"
+            "smoked-salmon-cream-cheese-flatbreads"
           ]
         },
         {
           "name": "Balsamic vinegar",
-          "quantity": "15ml",
+          "quantity": "5ml",
           "recipes": [
-            "meatball-and-ricotta-al-forno"
-          ],
-          "have": true
-        },
-        {
-          "name": "Dried oregano",
-          "quantity": "1g",
-          "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "have": true
-        },
-        {
-          "name": "Capers",
-          "quantity": "15ml",
-          "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
-          ],
-          "have": true
-        },
-        {
-          "name": "Green olives",
-          "quantity": "30g",
-          "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
+            "roasted-strawberry-cheesecake-chia-puddings"
           ]
         },
         {
-          "name": "Garlic paste",
-          "quantity": "3g",
+          "name": "Black pepper",
           "recipes": [
-            "oven-baked-feta-and-pepper-pasta"
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "crispy-baked-cod-katsu-curry",
+            "fish-pie-en-croute",
+            "hot-honey-sticky-fig-cottage-cheese-toasts",
+            "maple-chicken-breakfast-sausage-muffins",
+            "my-ultimate-christmas-salad"
+          ]
+        },
+        {
+          "name": "Cajun seasoning",
+          "quantity": "4g",
+          "recipes": [
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ]
+        },
+        {
+          "name": "Chia seeds",
+          "quantity": "48g",
+          "recipes": [
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
+        },
+        {
+          "name": "Chicken stock",
+          "quantity": "800ml",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "super-greens-broccoli-and-smoked-cheddar-soup"
           ],
-          "have": true
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 400,
+            "super-greens-broccoli-and-smoked-cheddar-soup": 400
+          }
+        },
+        {
+          "name": "Chicken stock cubes",
+          "quantity": "1",
+          "recipes": [
+            "fish-pie-en-croute"
+          ]
+        },
+        {
+          "name": "Chilli flakes",
+          "quantity": "0.6g",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts"
+          ]
+        },
+        {
+          "name": "Chinese five spice",
+          "quantity": "2g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Cooked rice (pouches)",
+          "quantity": "250g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Curry powder",
+          "quantity": "2g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Dried cranberries",
+          "quantity": "100g",
+          "recipes": [
+            "healthy-christmas-spice-granola"
+          ]
+        },
+        {
+          "name": "Dried sage",
+          "quantity": "0.5g",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Garlic granules",
+          "quantity": "5g",
+          "recipes": [
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "maple-chicken-breakfast-sausage-muffins",
+            "my-ultimate-christmas-salad"
+          ],
+          "amounts": {
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey": 3,
+            "maple-chicken-breakfast-sausage-muffins": 1.5,
+            "my-ultimate-christmas-salad": 0.5
+          }
+        },
+        {
+          "name": "Ground allspice",
+          "quantity": "2g",
+          "recipes": [
+            "healthy-christmas-spice-granola"
+          ]
+        },
+        {
+          "name": "Ground ginger",
+          "quantity": "2g",
+          "recipes": [
+            "healthy-christmas-spice-granola"
+          ]
+        },
+        {
+          "name": "Ground turmeric",
+          "quantity": "1.5g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Honey",
+          "quantity": "161g",
+          "recipes": [
+            "healthy-christmas-spice-granola",
+            "hot-honey-sticky-fig-cottage-cheese-toasts",
+            "my-ultimate-christmas-salad",
+            "sesame-avocado-chopped-chicken-bowl",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ],
+          "amounts": {
+            "healthy-christmas-spice-granola": 126,
+            "hot-honey-sticky-fig-cottage-cheese-toasts": 14,
+            "my-ultimate-christmas-salad": 7,
+            "sesame-avocado-chopped-chicken-bowl": 14,
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": null
+          }
+        },
+        {
+          "name": "Jumbo oats",
+          "quantity": "250g",
+          "recipes": [
+            "healthy-christmas-spice-granola"
+          ]
+        },
+        {
+          "name": "Maple syrup",
+          "quantity": "7.5ml",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ],
+          "amounts": {
+            "maple-chicken-breakfast-sausage-muffins": 7.5,
+            "roasted-strawberry-cheesecake-chia-puddings": null
+          }
+        },
+        {
+          "name": "Medjool dates",
+          "quantity": "2",
+          "recipes": [
+            "my-ultimate-christmas-salad"
+          ]
         },
         {
           "name": "Mild mustard",
-          "quantity": "5ml",
+          "quantity": "15ml",
           "recipes": [
-            "skin-glow-omega-bowl"
+            "fish-pie-en-croute",
+            "my-ultimate-christmas-salad"
+          ],
+          "amounts": {
+            "fish-pie-en-croute": 10,
+            "my-ultimate-christmas-salad": 5
+          }
+        },
+        {
+          "name": "Olive oil",
+          "recipes": [
+            "hot-honey-sticky-fig-cottage-cheese-toasts",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ]
+        },
+        {
+          "name": "Onion granules",
+          "quantity": "1.5g",
+          "recipes": [
+            "maple-chicken-breakfast-sausage-muffins"
+          ]
+        },
+        {
+          "name": "Panko breadcrumbs",
+          "quantity": "100g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Pecans",
+          "quantity": "150g",
+          "recipes": [
+            "healthy-christmas-spice-granola",
+            "roasted-strawberry-cheesecake-chia-puddings"
+          ],
+          "amounts": {
+            "healthy-christmas-spice-granola": 150,
+            "roasted-strawberry-cheesecake-chia-puddings": null
+          }
+        },
+        {
+          "name": "Plain flour",
+          "quantity": "152g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "fish-pie-en-croute",
+            "smoked-salmon-cream-cheese-flatbreads"
+          ],
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 24,
+            "fish-pie-en-croute": 8,
+            "smoked-salmon-cream-cheese-flatbreads": 120
+          }
+        },
+        {
+          "name": "Salt",
+          "recipes": [
+            "50g-protein-toasties-the-bct-brie-cranberry-turkey",
+            "crispy-baked-cod-katsu-curry",
+            "fish-pie-en-croute",
+            "healthy-christmas-spice-granola",
+            "hot-honey-sticky-fig-cottage-cheese-toasts",
+            "maple-chicken-breakfast-sausage-muffins",
+            "my-ultimate-christmas-salad",
+            "smoked-salmon-cream-cheese-flatbreads",
+            "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
+          ]
+        },
+        {
+          "name": "Sesame oil",
+          "quantity": "10ml",
+          "recipes": [
+            "sesame-avocado-chopped-chicken-bowl"
+          ]
+        },
+        {
+          "name": "Sesame seeds",
+          "quantity": "9g",
+          "recipes": [
+            "smoked-salmon-cream-cheese-flatbreads"
+          ]
+        },
+        {
+          "name": "Soft light brown sugar",
+          "quantity": "8g",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Soy sauce",
+          "quantity": "25ml",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry",
+            "sesame-avocado-chopped-chicken-bowl"
+          ],
+          "amounts": {
+            "crispy-baked-cod-katsu-curry": 5,
+            "sesame-avocado-chopped-chicken-bowl": 20
+          }
+        },
+        {
+          "name": "Sriracha",
+          "quantity": "20ml",
+          "recipes": [
+            "sesame-avocado-chopped-chicken-bowl"
+          ]
+        },
+        {
+          "name": "Tahini",
+          "quantity": "90g",
+          "recipes": [
+            "healthy-christmas-spice-granola"
+          ]
+        },
+        {
+          "name": "Tomato ketchup",
+          "quantity": "15ml",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Vegetable oil",
+          "recipes": [
+            "crispy-baked-cod-katsu-curry"
+          ]
+        },
+        {
+          "name": "Walnuts",
+          "quantity": "20g",
+          "recipes": [
+            "my-ultimate-christmas-salad"
+          ]
+        },
+        {
+          "name": "White wine",
+          "quantity": "75ml",
+          "note": "optional",
+          "recipes": [
+            "fish-pie-en-croute"
           ]
         }
       ]
     }
-  ],
-  "stocktake": "2026-11-08T21:33:02.828Z"
+  ]
 }

@@ -7,6 +7,7 @@ tags: [Low Carb]
 total_mins: 5
 serves: 2
 calories: 280
+next: true
 ingredients: []
 ---
 
