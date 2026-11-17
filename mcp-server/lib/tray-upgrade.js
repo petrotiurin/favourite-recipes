@@ -17,10 +17,11 @@ const UNIT_WORDS = {
   g: "g", gram: "g", grams: "g", kg: "kg", ml: "ml", l: "l", litre: "l", litres: "l", tsp: "tsp", teaspoon: "tsp", teaspoons: "tsp",
   tbsp: "tbsp", tablespoon: "tbsp", tablespoons: "tbsp", cup: "cup", cups: "cup", clove: "clove", cloves: "clove", can: "can", cans: "can",
   tin: "can", tins: "can", slice: "slice", slices: "slice", bunch: "bunch", bunches: "bunch", sprig: "sprig", sprigs: "sprig", piece: "piece",
-  pieces: "piece", pinch: "pinch", pinches: "pinch", handful: "handful", handfuls: "handful",
+  pieces: "piece", sheet: "sheet", sheets: "sheet", stick: "stick", sticks: "stick", head: "head", heads: "head", pinch: "pinch", pinches: "pinch", handful: "handful", handfuls: "handful",
 };
 const MODIFIERS = /^(heaped|generous|large|small|medium|good|thick|big|scant|level|rounded)\b\s*/i;
 const TO_TASTE = /\bto (taste|serve)\b/i;
+const SIZES = /^(small|medium|large|big)\b/i;
 
 function number(s) {
   s = String(s).trim();
@@ -80,6 +81,14 @@ export function upgradeIngredient(old) {
   }
   if (amount === null && q) note = joinNote(q, note); // words with no number ("a few") stay as the source said them
   else if (q) mods.unshift(q);
+  // a size goes in front of the name when nothing else counts it: "1 large leek", not "1 leek, large" (the catalogue ignores it when matching)
+  let named = name;
+  if (amount !== null && !unit) {
+    const sizes = mods.filter((w) => SIZES.test(w));
+    if (sizes.length && !SIZES.test(name)) named = `${sizes.join(" ")} ${name}`;
+    for (const w of sizes) mods.splice(mods.indexOf(w), 1);
+  }
+  out.name = named;
   if (amount !== null) out.amount = amount;
   if (amount !== null && unit && UNITS.includes(unit)) out.unit = unit;
   if (/\boptional\b/i.test(note)) {

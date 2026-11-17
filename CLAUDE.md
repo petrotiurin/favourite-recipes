@@ -200,7 +200,7 @@ ingredients:                       # required, always last: the only place a rec
 ```
 
 **Ingredients are data** (`docs/structured-ingredients.md`): `amount` (a number or a range `[min, max]`; none only for "to taste" / "to serve"
-in the `note`), `unit` (one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, pinch, handful, juice, zest`; none = a count),
+in the `note`), `unit` (one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, sheet, stick, head, pinch, handful, juice, zest`; none = a count),
 `name`, `note`, `optional`, and `item`: the id of what it's bought as in the **ingredient catalogue**, `data/ingredients.json` (shopping-list name,
 aisle, shopping unit, conversions `per`, `aliases`, `staple` / `skip`). The page's ingredient list, the servings selector (`data-qty` written by
 `templates/ingredients.js`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.

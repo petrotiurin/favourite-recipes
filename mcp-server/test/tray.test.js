@@ -903,6 +903,10 @@ test("a tray staged before structured ingredients is upgraded once when read: ol
   assert.deepEqual(upgradeIngredient({ quantity: "1 slice (approx 50g)", name: "sourdough" }), { name: "sourdough", amount: 1, unit: "slice", note: "approx 50g" });
   assert.deepEqual(upgradeIngredient({ quantity: "75ml", name: "white wine", note: "optional, to taste" }), { name: "white wine", amount: 75, unit: "ml", optional: true, note: "to taste" });
   assert.deepEqual(upgradeIngredient({ name: "salt" }), { name: "salt", note: "to taste" });
+  assert.deepEqual(upgradeIngredient({ quantity: "1 large", name: "leek", note: "finely sliced" }), { name: "large leek", amount: 1, note: "finely sliced" }, "a size goes in front of the name");
+  assert.deepEqual(upgradeIngredient({ quantity: "1 sheet", name: "puff pastry" }), { name: "puff pastry", amount: 1, unit: "sheet" });
+  assert.deepEqual(upgradeIngredient({ quantity: "1 stick", name: "celery" }), { name: "celery", amount: 1, unit: "stick" });
+  assert.deepEqual(upgradeIngredient({ quantity: "1 large head", name: "broccoli" }), { name: "broccoli", amount: 1, unit: "head", note: "large" });
 
   const old = (id, kind, op) => ({ id, kind, op, added_by: { email: null, name: "Owner" }, reason: "", created_at: new Date(clock).toISOString(), error: null, photo: null, base: null, clash: null });
   const items = [

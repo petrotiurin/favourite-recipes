@@ -68,7 +68,7 @@ it keeps the list and the stocktake and needs no rebuild.
 
 Rules the server enforces or expects:
 - Ingredients are data: { amount, unit, name, note, optional }. amount is a number (decimals, 0.75) or a range [min, max]; unit one of
-  g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, pinch, handful, juice, zest, or none for a count. One measure per
+  g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, sheet, stick, head, pinch, handful, juice, zest, or none for a count. One measure per
   ingredient, metric where the source gives it ("1 cup (200g)" -> 200 g). No amount only with "to taste"/"to serve" in the note. Garnishes
   get optional: true. Names are plain text; the site renders the line and its servings selector rescales every amount. Keep them in the
   order they are used. The server fills each ingredient's item (the ingredient catalogue, data/ingredients.json) from its name and checks the

@@ -77,13 +77,19 @@ export function nameIndex(catalogue) {
   return { exact, loose };
 }
 
-/** The item a recipe's ingredient name resolves to, or null. */
+// Words that say how big or ripe one is, not what it is: "large leek" is bought as leeks.
+const SIZE_WORDS = /^(?:(?:small|medium|large|big|extra[- ]large|ripe|fresh)\s+)+/;
+
+/** The item a recipe's ingredient name resolves to, or null. A name with a size word in front ("large leek") falls back to the name without it. */
 export function resolveItem(name, catalogue, index = nameIndex(catalogue)) {
+  const look = (n) => {
+    if (index.exact.has(n)) return index.exact.get(n);
+    for (const f of forms(n)) if (index.exact.has(f)) return index.exact.get(f);
+    for (const f of forms(n)) if (index.loose.has(f)) return index.loose.get(f);
+    return null;
+  };
   const n = norm(name);
-  if (index.exact.has(n)) return index.exact.get(n);
-  for (const f of forms(n)) if (index.exact.has(f)) return index.exact.get(f);
-  for (const f of forms(n)) if (index.loose.has(f)) return index.loose.get(f);
-  return null;
+  return look(n) ?? (SIZE_WORDS.test(n) ? look(n.replace(SIZE_WORDS, "")) : null);
 }
 
 /** Up to `n` ids whose names share words with `name`, best first (for "Closest: …" in a problem). */

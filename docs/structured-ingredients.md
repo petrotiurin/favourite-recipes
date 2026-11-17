@@ -95,7 +95,7 @@ The fields:
 | `item` | yes (filled by the server) | The catalogue item it's bought as (section 2). |
 
 **Units** (one fixed list, shared by the schema and the renderer): `g`, `kg`, `ml`, `l`, `tsp`, `tbsp`, `cup`,
-`clove`, `can`, `slice`, `bunch`, `sprig`, `piece`, `pinch`, `handful`, `juice`, `zest`. Each has a fixed way to
+`clove`, `can`, `slice`, `bunch`, `sprig`, `piece`, `sheet`, `stick`, `head`, `pinch`, `handful`, `juice`, `zest`. Each has a fixed way to
 render: `200g`, `2 tbsp`, `1 clove` / `2 cloves`, `¾ can`, `Pinch of`, `Juice of 1`, `Zest of 1`. A unit
 not on the list is refused by the schema; adding one is a code change, on purpose.
 

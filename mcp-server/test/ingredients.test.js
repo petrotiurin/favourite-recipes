@@ -43,6 +43,9 @@ test("lines render the fixed way per unit", () => {
   assert.equal(md({ amount: 1, unit: "pinch", name: "salt" }), "Pinch of **salt**");
   assert.equal(md({ amount: 2, unit: "handful", name: "spinach" }), "2 handfuls of **spinach**");
   assert.equal(md({ amount: 0.33, unit: "cup", name: "oats" }), "⅓ cup **oats**");
+  assert.equal(md({ amount: 1, unit: "sheet", name: "puff pastry" }), "1 sheet **puff pastry**");
+  assert.equal(md({ amount: 2, unit: "stick", name: "celery" }), "2 sticks **celery**");
+  assert.equal(md({ amount: 1, unit: "head", name: "broccoli" }), "1 head **broccoli**");
   assert.equal(md({ amount: 37.5, unit: "g", name: "sugar" }), "37.5g **sugar**");
   assert.equal(md({ name: "sesame seeds", note: "to serve", optional: true }), "**sesame seeds**, to serve, optional");
   assert.equal(md({ amount: 500, unit: "g", name: "Greek yogurt", note: "(0% or full-fat)" }), "500g **Greek yogurt** (0% or full-fat)");
@@ -78,6 +81,8 @@ test("the write-time checks: schema, the item filled from the name, conversions,
   // a given item is kept, so the model can say exactly which one
   assert.equal(checkIngredients([{ amount: 1, name: "something else", item: "lime" }], cat).ingredients[0].item, "lime");
   assert.equal(resolveItem("Limes", cat), "lime");
+  assert.equal(resolveItem("large ripe lime", cat), "lime", "size words in front don't change what it is");
+  assert.equal(resolveItem("small", cat), null);
   assert.equal(resolveItem("lime", cat), "lime");
 });
 

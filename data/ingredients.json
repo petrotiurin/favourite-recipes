@@ -164,7 +164,8 @@
     "section": "Fresh produce",
     "unit": "g",
     "per": {
-      "count": 300
+      "count": 300,
+      "head": 300
     },
     "aliases": [
       "broccoli florets"
@@ -258,6 +259,9 @@
     "name": "Celery (sticks)",
     "section": "Fresh produce",
     "unit": "count",
+    "per": {
+      "stick": 1
+    },
     "aliases": [
       "celery sticks",
       "celery"
@@ -1350,7 +1354,8 @@
     "section": "Bakery",
     "unit": "g",
     "per": {
-      "count": 320
+      "count": 320,
+      "sheet": 320
     },
     "aliases": [
       "puff pastry"

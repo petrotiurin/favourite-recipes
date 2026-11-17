@@ -6,11 +6,11 @@ import { formatQuantity } from "./scaling.js";
 //
 // One ingredient: { amount?: number | [min, max], unit?: one of UNITS, name, note?, optional?: true, item }.
 
-export const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "clove", "can", "slice", "bunch", "sprig", "piece", "pinch", "handful", "juice", "zest"];
+export const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "clove", "can", "slice", "bunch", "sprig", "piece", "sheet", "stick", "head", "pinch", "handful", "juice", "zest"];
 // Written right after the number: "200g", "1.5l".
 const METRIC = new Set(["g", "kg", "ml", "l"]);
 // "1 clove" / "2 cloves". tsp and tbsp stay as they are.
-const PLURAL = { cup: "cups", clove: "cloves", can: "cans", slice: "slices", bunch: "bunches", sprig: "sprigs", piece: "pieces", pinch: "pinches", handful: "handfuls" };
+const PLURAL = { cup: "cups", clove: "cloves", can: "cans", slice: "slices", bunch: "bunches", sprig: "sprigs", piece: "pieces", sheet: "sheets", stick: "sticks", head: "heads", pinch: "pinches", handful: "handfuls" };
 // Read as "Pinch of", "Handful of" for one, "2 pinches of" for more.
 const OF_UNITS = new Set(["pinch", "handful"]);
 // "Juice of 1", "Zest of ½".
