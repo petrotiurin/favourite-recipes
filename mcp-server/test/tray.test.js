@@ -891,3 +891,34 @@ test("the list card can't be dropped: it follows next week", async () => {
   assert.notEqual(res.status, 200);
   assert.ok((await plan()).items.some((i) => i.kind === "list"));
 });
+
+test("a tray staged before structured ingredients is upgraded once when read: old quantities become fields, the old list card the server-built one", async () => {
+  const { upgradeIngredient } = await import("../lib/tray-upgrade.js");
+  assert.deepEqual(upgradeIngredient({ quantity: "450g", name: "chicken breasts", note: "cut into strips" }), { name: "chicken breasts", amount: 450, unit: "g", note: "cut into strips" });
+  assert.deepEqual(upgradeIngredient({ quantity: "2 heaped tbsp", name: "cottage cheese" }), { name: "cottage cheese", amount: 2, unit: "tbsp", note: "heaped" });
+  assert.deepEqual(upgradeIngredient({ quantity: "3-4 tbsp", name: "Greek yoghurt", note: "thick" }), { name: "Greek yoghurt", amount: [3, 4], unit: "tbsp", note: "thick" });
+  assert.deepEqual(upgradeIngredient({ quantity: "Zest of 2", name: "oranges" }), { name: "oranges", amount: 2, unit: "zest" });
+  assert.deepEqual(upgradeIngredient({ quantity: "A handful of", name: "spinach", note: "to serve" }), { name: "spinach", amount: 1, unit: "handful", note: "to serve" });
+  assert.deepEqual(upgradeIngredient({ quantity: "1", name: "ground ginger", note: "tsp" }), { name: "ground ginger", amount: 1, unit: "tsp" });
+  assert.deepEqual(upgradeIngredient({ quantity: "1 slice (approx 50g)", name: "sourdough" }), { name: "sourdough", amount: 1, unit: "slice", note: "approx 50g" });
+  assert.deepEqual(upgradeIngredient({ quantity: "75ml", name: "white wine", note: "optional, to taste" }), { name: "white wine", amount: 75, unit: "ml", optional: true, note: "to taste" });
+  assert.deepEqual(upgradeIngredient({ name: "salt" }), { name: "salt", note: "to taste" });
+
+  const old = (id, kind, op) => ({ id, kind, op, added_by: { email: null, name: "Owner" }, reason: "", created_at: new Date(clock).toISOString(), error: null, photo: null, base: null, clash: null });
+  const items = [
+    old("a1b2c3d4", "new", { action: "create_recipe", title: "Old Pasta", course: ["Dinner"], tags: [], total_mins: 20, serves: 2, calories: 400, week: "next", instructions: ["Cook the **pasta**."],
+      ingredients: [{ quantity: "200g", name: "pasta" }, { quantity: "2", name: "garlic" }, { quantity: "1", name: "salt", note: "to taste" }, { quantity: "1 tbsp", name: "olive oil" }] }),
+    old("e5f6a7b8", "list", { action: "update_shopping_list", sections: [{ name: "Pantry", items: [{ name: "Pasta", quantity: "1 tbsp", recipes: ["old-pasta"] }] }] }),
+  ];
+  items[0].photo = { status: "ready", path: "t/old-pasta.jpg" };
+  supabase.tables.trays.push({ id: "00000000-0000-4000-8000-0000000000f1", status: "collecting", items, list_hash: "x", version: 3, created_at: new Date(clock).toISOString(), expires_at: new Date(clock + 86400_000).toISOString(), updated_at: new Date(clock).toISOString(), updated_by: OWNER });
+  const t = await plan();
+  assert.deepEqual(t.items.map((i) => [i.kind, i.error]), [["new", null], ["list", null]], "no problems after the upgrade");
+  assert.match(t.items[1].title, /items for 1 recipe/);
+  const row = trayRow();
+  assert.equal(row.version, 4, "written back once");
+  assert.deepEqual(row.items[0].op.ingredients, [{ name: "pasta", amount: 200, unit: "g" }, { name: "garlic", amount: 2 }, { name: "salt", note: "to taste" }, { name: "olive oil", amount: 1, unit: "tbsp" }], "'1 salt, to taste' loses the number it didn't mean");
+  assert.deepEqual(row.items[1].op, { action: "update_shopping_list", build: true, edits: [] });
+  await plan();
+  assert.equal(trayRow().version, 4, "a second read changes nothing");
+});

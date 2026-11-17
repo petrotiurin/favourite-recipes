@@ -90,7 +90,9 @@ only when the server flags something (`reviewFlags`), answering with ONE `stage_
 re-applied by item id; `remember: true` on a merge / move / rename stages an `update_catalogue` change on one Catalogue card); then the
 **optional items card** (`lib/optional-review.js`, `POST /chat { action: "review_optional", answers: { item: "keep" | "drop" } }`, once only,
 no model call; the model's UI tool `review_optional` shows it again; drops are this week's patches only); then Save. A later change keeps Save
-unless it brings a new flag or optional item. Planned servings can be staged at any time.' The panel draws it in `templates/chat.js` (`optionalEl`, `.chat-optional` in `design.md`). **Save is `POST /chat/plan/apply`, never a model tool**: fresh token + `EDITORS`, re-validation, clash detection, ONE commit
+unless it brings a new flag or optional item. Planned servings can be staged at any time.' The panel draws it in `templates/chat.js` (`optionalEl`, `.chat-optional` in `design.md`). A tray staged before phase 7 is upgraded once when read (`lib/tray-upgrade.js`, called from `loadTray`, only
+when it holds old cards): free-text ingredient quantities become the structured fields, and the old model-written list card becomes the
+server-built one. **Save is `POST /chat/plan/apply`, never a model tool**: fresh token + `EDITORS`, re-validation, clash detection, ONE commit
 (`lib/plan-apply.js`) with the photos, then the tray is emptied and a summary is posted into the chat (new recipes "Publishing…" until
 `GET /chat/status` sees their page). "Save now" (`{ item_id }`) is for quick fixes only (`saveNowRule`). Other routes: `GET /chat/plan`,
 `DELETE /chat/plan/items/:id`, `POST /chat/plan/items/:id/photo`. Migrations: `20261108000000_trays.sql`, `20261108000100_tray_photos_bucket.sql`.
