@@ -74,8 +74,10 @@ Rules the server enforces or expects:
   order they are used. The server fills each ingredient's item (the ingredient catalogue, data/ingredients.json) from its name and checks the
   amount converts; when it can't, the error says what to fix: set item, or add a catalogue change to the same write
   (catalogue: [{ add: { id, name, section, unit, per? } } | { alias: { item, name } } | { set: { item, per } }]).
-- If an ingredient is used in two places, put the split in its note ("split in half", "plus 2 tsp for the fish"),
-  and let the instructions refer to the parts.
+- A recipe made of parts (a sauce, a pickle, a marinade) gives each line a section ("Curry sauce"): the page heads each part. Lines of
+  one section sit together; lines without a section go first; a one-part recipe has none. An ingredient used in two parts is two lines,
+  one per section. Without sections, an ingredient used in two places puts the split in its note ("split in half", "plus 2 tsp for the
+  fish"), and the instructions refer to the parts.
 - Instructions: one action per array item, sentence case, no numbering (the server numbers them).
   Bold EVERY ingredient mention with **double asterisks**, ingredient noun only, e.g. "Stir the **oats** into the **yogurt**".
   Don't bold the dish itself ("the batter", "the burgers").

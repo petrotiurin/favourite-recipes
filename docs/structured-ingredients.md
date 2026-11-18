@@ -92,7 +92,14 @@ The fields:
 | `unit` | no | One of a fixed list (below). None means a count ("4 salmon fillets"). |
 | `note` | no | Prep or buying detail after the name ("finely diced", "about 140g each", "to taste"). |
 | `optional` | no | `true` for garnishes and extras; rendered ", optional". |
+| `section` | no | The part of the dish it is for ("Curry sauce", "Pickle"), a short plain name. The page shows a small heading over each section's lines. |
 | `item` | yes (filled by the server) | The catalogue item it's bought as (section 2). |
+
+**Sections.** A recipe made of parts gives its lines a `section`. The list stays flat and in order: a section's lines sit together,
+lines without a section come first (under no heading), and a section is never split (the build and the server refuse it, `sectionErrors`).
+An ingredient used in two parts is two lines, one per section; the shopping list adds them up by `item` like any other two lines, so
+sections change nothing in the list, the stocktake or the servings selector. Grouping is `ingredientGroups` in both line renderers.
+The tray changes a section the way it changes anything else in the list: the staged edit replaces the whole `ingredients`.
 
 **Units** (one fixed list, shared by the schema and the renderer): `g`, `kg`, `ml`, `l`, `tsp`, `tbsp`, `cup`,
 `clove`, `can`, `slice`, `bunch`, `sprig`, `piece`, `sheet`, `stick`, `head`, `pinch`, `handful`, `juice`, `zest`. Each has a fixed way to

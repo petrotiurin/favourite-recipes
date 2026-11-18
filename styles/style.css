@@ -650,6 +650,24 @@ main:has(.tile-grid.is-searching) .week-label {
   font-weight: 600;
 }
 
+/* A section of the ingredients ("Sauce", "Pickle"): a small-caps label in muted ink (the accent is the steps'),
+   ruled off underneath like the rows. The first one sits right under "Ingredients". */
+.recipe-ingredients .ingredient-section {
+  margin: 1.4rem 0 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.recipe-ingredients h2 + .ingredient-section {
+  margin-top: 0.4rem;
+}
+
 /* Instructions: each step headed "Step n" in small caps */
 .recipe-steps ol {
   list-style: none;
@@ -3480,6 +3498,12 @@ button.chat-attachment-state {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.tray-detail-section {
+  margin: 0.35rem 0 0.1rem;
+  font-weight: 600;
+  font-size: 0.85rem;
 }
 
 .tray-detail ul,

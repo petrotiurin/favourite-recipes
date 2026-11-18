@@ -4,7 +4,7 @@
 import { config } from "./config.js";
 import { cached } from "./cache.js";
 import { ChangeSet } from "./github.js";
-import { UNITS } from "./ingredient-line.js";
+import { UNITS, sectionErrors } from "./ingredient-line.js";
 
 export const CATALOGUE_PATH = "data/ingredients.json";
 /** The shopping list's fixed aisles, in the order the list shows them. */
@@ -182,6 +182,7 @@ export function tidyIngredient(ing) {
   out.name = String(ing.name).trim();
   if (String(ing.note || "").trim()) out.note = String(ing.note).trim();
   if (ing.optional === true) out.optional = true;
+  if (String(ing.section || "").trim()) out.section = String(ing.section).trim();
   if (ing.item) out.item = ing.item;
   return out;
 }
@@ -219,6 +220,7 @@ export function checkIngredients(ingredients, catalogue) {
       return x;
     }
   });
+  errors.push(...sectionErrors(out));
   return { ingredients: out, errors };
 }
 

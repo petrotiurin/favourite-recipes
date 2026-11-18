@@ -8,29 +8,29 @@ total_mins: 40
 serves: 2
 calories: 550
 ingredients:
-  - { amount: 100, unit: g, name: brown rice, item: brown-rice }
-  - { amount: 2, name: chicken breasts, note: "boneless, skinless", item: chicken-breast }
-  - { amount: 1, name: egg, note: "medium, free-range, beaten", item: eggs }
-  - { amount: 1, unit: tsp, name: ginger and garlic paste, note: for the coating, item: ginger-garlic-paste }
-  - { amount: 100, unit: g, name: panko breadcrumbs, item: panko }
-  - { amount: 4, unit: tbsp, name: cornflour, note: "heaped, cornstarch", item: cornflour }
-  - { name: neutral spray oil, note: "a spritz, to taste", item: spray-oil }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 0.5, name: cucumber, note: "thinly sliced, for the pickle", item: cucumber }
-  - { amount: 100, unit: ml, name: rice vinegar, note: for the pickle, item: rice-vinegar }
-  - { amount: 1, unit: tsp, name: toasted sesame oil, note: for the pickle, item: sesame-oil }
-  - { amount: 1, unit: tsp, name: caster sugar, note: "superfine, for the pickle", item: sugar }
-  - { amount: 2, unit: tsp, name: olive oil, note: for the sauce, item: olive-oil }
-  - { amount: 1, name: onion, note: finely chopped, item: onion }
-  - { amount: 2, unit: tsp, name: ginger and garlic paste, note: for the sauce, item: ginger-garlic-paste }
-  - { amount: 1, unit: tsp, name: medium curry powder, item: curry-powder }
-  - { amount: 0.5, unit: tsp, name: ground turmeric, item: turmeric }
-  - { amount: 0.5, unit: tsp, name: ground star anise, item: star-anise }
-  - { amount: 15, unit: g, name: plain flour, note: all-purpose, item: plain-flour }
-  - { amount: 275, unit: ml, name: chicken stock, note: "hot, made with 1 stock cube", item: chicken-stock }
-  - { amount: 1, unit: tbsp, name: tomato ketchup, item: ketchup }
-  - { amount: [1, 2], unit: tsp, name: soft light brown sugar, item: brown-sugar }
+  - { amount: 100, unit: g, name: brown rice, section: Chicken and rice, item: brown-rice }
+  - { amount: 2, name: chicken breasts, note: "boneless, skinless", section: Chicken and rice, item: chicken-breast }
+  - { amount: 1, name: egg, note: "medium, free-range, beaten", section: Chicken and rice, item: eggs }
+  - { amount: 1, unit: tsp, name: ginger and garlic paste, section: Chicken and rice, item: ginger-garlic-paste }
+  - { amount: 100, unit: g, name: panko breadcrumbs, section: Chicken and rice, item: panko }
+  - { amount: 4, unit: tbsp, name: cornflour, note: "heaped, cornstarch", section: Chicken and rice, item: cornflour }
+  - { name: neutral spray oil, note: "a spritz, to taste", section: Chicken and rice, item: spray-oil }
+  - { name: salt, note: to taste, section: Chicken and rice, item: salt }
+  - { name: black pepper, note: to taste, section: Chicken and rice, item: black-pepper }
+  - { amount: 0.5, name: cucumber, note: thinly sliced, section: Pickle, item: cucumber }
+  - { amount: 100, unit: ml, name: rice vinegar, section: Pickle, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: toasted sesame oil, section: Pickle, item: sesame-oil }
+  - { amount: 1, unit: tsp, name: caster sugar, note: superfine, section: Pickle, item: sugar }
+  - { amount: 2, unit: tsp, name: olive oil, section: Curry sauce, item: olive-oil }
+  - { amount: 1, name: onion, note: finely chopped, section: Curry sauce, item: onion }
+  - { amount: 2, unit: tsp, name: ginger and garlic paste, section: Curry sauce, item: ginger-garlic-paste }
+  - { amount: 1, unit: tsp, name: medium curry powder, section: Curry sauce, item: curry-powder }
+  - { amount: 0.5, unit: tsp, name: ground turmeric, section: Curry sauce, item: turmeric }
+  - { amount: 0.5, unit: tsp, name: ground star anise, section: Curry sauce, item: star-anise }
+  - { amount: 15, unit: g, name: plain flour, note: all-purpose, section: Curry sauce, item: plain-flour }
+  - { amount: 275, unit: ml, name: chicken stock, note: "hot, made with 1 stock cube", section: Curry sauce, item: chicken-stock }
+  - { amount: 1, unit: tbsp, name: tomato ketchup, section: Curry sauce, item: ketchup }
+  - { amount: [1, 2], unit: tsp, name: soft light brown sugar, section: Curry sauce, item: brown-sugar }
 ---
 
 ## Instructions

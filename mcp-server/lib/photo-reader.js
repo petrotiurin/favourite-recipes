@@ -153,6 +153,7 @@ function readIngredient(i) {
     name: clean(i.name, 100).replace(/\*+/g, ""),
     ...(clean(i.note, 120) ? { note: clean(i.note, 120) } : {}),
     ...(i.optional === true ? { optional: true } : {}),
+    ...(clean(i.section, 40) ? { section: clean(i.section, 40).replace(/\*+/g, "") } : {}),
   };
 }
 

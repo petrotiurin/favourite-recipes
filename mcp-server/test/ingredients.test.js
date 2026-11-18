@@ -137,3 +137,30 @@ test("the site build refuses a recipe whose ingredient points at no catalogue it
   writeFileSync(join(dir, "recipes/rice.md"), `---\n${fm}\ningredients: []\n---\n\n## Ingredients\n\n- 200g **rice**\n\n## Instructions\n\n1. Cook the **rice**.\n`);
   assert.throws(build, /remove the "## Ingredients" section/);
 });
+
+test("sections: grouped in order on both renderers, kept by the write-time checks, refused when split up", () => {
+  const list = [
+    { amount: 2, name: "chicken breasts" },
+    { amount: 1, unit: "tbsp", name: "soy sauce", section: "Marinade" },
+    { amount: 2, unit: "tbsp", name: "soy sauce", section: "Sauce" },
+    { amount: 1, unit: "tsp", name: "honey", section: "Sauce" },
+  ];
+  const groups = server.ingredientGroups(list);
+  assert.deepEqual(groups.map((g) => [g.section, g.items.length]), [[null, 1], ["Marinade", 1], ["Sauce", 2]]);
+  assert.deepEqual(site.ingredientGroups(list), groups);
+  assert.deepEqual(server.sectionErrors(list), []);
+  // every line of the book agrees too
+  for (const r of book) assert.deepEqual(site.sectionErrors(r.ingredients), server.sectionErrors(r.ingredients), r.slug);
+
+  const split = [{ name: "a", section: "Sauce" }, { name: "b", section: "Pickle" }, { name: "c", section: "Sauce" }];
+  assert.match(server.sectionErrors(split).join(), /"Sauce" lines must sit together/);
+  assert.deepEqual(site.sectionErrors(split), server.sectionErrors(split));
+  assert.match(server.sectionErrors([{ name: "a", section: "Sauce" }, { name: "b" }]).join(), /lines without a section go first/);
+  assert.match(server.sectionErrors([{ name: "a", section: "  " }]).join(), /short name/);
+
+  const { ingredients, errors } = checkIngredients(list, catalogue);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(ingredients.map((i) => i.section), [undefined, "Marinade", "Sauce", "Sauce"]);
+  assert.deepEqual(Object.keys(ingredients[1]), ["amount", "unit", "name", "section", "item"]);
+  assert.match(checkIngredients(split.map((i) => ({ ...i, name: "salt", note: "to taste" })), catalogue).errors.join(), /must sit together/);
+});

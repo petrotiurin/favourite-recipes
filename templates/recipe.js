@@ -1,5 +1,5 @@
 const { layout } = require("./layout");
-const { ingredientHtml, ingredientText, hasAmounts } = require("./ingredients");
+const { ingredientHtml, ingredientText, hasAmounts, ingredientGroups } = require("./ingredients");
 const { isThisWeek, isNextWeek } = require("./status");
 
 function escapeHtml(str) {
@@ -19,7 +19,10 @@ const ingredientsOf = (recipe) => (Array.isArray(recipe.ingredients) ? recipe.in
 function recipePlainText(recipe) {
   const facts = `Serves ${recipe.serves} · ${recipe.total_mins} min · ${recipe.calories} kcal per serving`;
   const ingredients = ingredientsOf(recipe);
-  const list = `Ingredients\n\n${ingredients.length ? ingredients.map((i) => `- ${ingredientText(i)}`).join("\n") : "Not recorded yet."}`;
+  const lines = ingredientGroups(ingredients)
+    .map((g) => `${g.section ? `${g.section}:\n` : ""}${g.items.map((i) => `- ${ingredientText(i)}`).join("\n")}`)
+    .join("\n\n");
+  const list = `Ingredients\n\n${ingredients.length ? lines : "Not recorded yet."}`;
   const body = String(recipe.body || "")
     .replace(/\r\n/g, "\n")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -81,8 +84,12 @@ function renderRecipe(recipe, bodyHtml) {
     : "";
   // The ingredients (rendered from the data) beside the rest of the body, so wide screens can show them side by side: the ingredients as
   // a sticky pane with its own scroll, the instructions in the page's scroll (see `.recipe-body` in style.css). Narrow screens stack them.
+  // A list in sections (`section` on its lines, e.g. "Sauce") gets a small heading above each section's lines; lines with no section come first.
+  const ul = (items) => `<ul>\n${items.map((i) => `<li>${ingredientHtml(i, { scalable })}</li>`).join("\n")}\n</ul>`;
   const list = ingredients.length
-    ? `<ul>\n${ingredients.map((i) => `<li>${ingredientHtml(i, { scalable })}</li>`).join("\n")}\n</ul>`
+    ? ingredientGroups(ingredients)
+        .map((g) => (g.section ? `<h3 class="ingredient-section">${escapeHtml(g.section)}</h3>\n${ul(g.items)}` : ul(g.items)))
+        .join("\n")
     : "<p>Ingredients not yet recorded.</p>";
   const bodyHtmlOut = `<div class="recipe-body">
 <section class="recipe-ingredients">

@@ -340,6 +340,7 @@
       if (i.detail && typeof i.detail === "object") {
         item.detail = {
           ingredients: (Array.isArray(i.detail.ingredients) ? i.detail.ingredients : []).slice(0, 60).map(function (x) { return str(x, 160); }),
+          sections: (Array.isArray(i.detail.sections) ? i.detail.sections : []).slice(0, 60).map(function (x) { return x ? str(x, 40) : null; }),
           steps: (Array.isArray(i.detail.steps) ? i.detail.steps : []).slice(0, 60).map(function (x) { return str(x, 400); }),
           notes: str(i.detail.notes, 800),
         };
@@ -2429,18 +2430,38 @@
     h.textContent = item.title;
     box.appendChild(h);
     if (item.detail) {
-      var hi = el("h4", "tray-detail-h");
-      hi.textContent = "Ingredients";
-      var ul = el("ul");
-      item.detail.ingredients.forEach(function (x) { var li = el("li"); inlineToDom(doc, parseInline(x), origin, li); ul.appendChild(li); });
-      var hs = el("h4", "tray-detail-h");
-      hs.textContent = "Instructions";
-      var ol = el("ol");
-      item.detail.steps.forEach(function (x) { var li = el("li"); inlineToDom(doc, parseInline(x), origin, li); ol.appendChild(li); }); // **bold** ingredient names
-      box.appendChild(hi);
-      box.appendChild(ul);
-      box.appendChild(hs);
-      box.appendChild(ol);
+      if (item.detail.ingredients.length) {
+        var hi = el("h4", "tray-detail-h");
+        hi.textContent = "Ingredients";
+        box.appendChild(hi);
+        // a list in sections ("Sauce") gets a small heading over each section's lines, as on the recipe page
+        var ul = null;
+        var current;
+        item.detail.ingredients.forEach(function (x, n) {
+          var sec = item.detail.sections[n] || null;
+          if (!ul || sec !== current) {
+            if (sec) {
+              var hsec = el("p", "tray-detail-section");
+              hsec.textContent = sec;
+              box.appendChild(hsec);
+            }
+            ul = el("ul");
+            box.appendChild(ul);
+            current = sec;
+          }
+          var li = el("li");
+          inlineToDom(doc, parseInline(x), origin, li);
+          ul.appendChild(li);
+        });
+      }
+      if (item.detail.steps.length) {
+        var hs = el("h4", "tray-detail-h");
+        hs.textContent = "Instructions";
+        var ol = el("ol");
+        item.detail.steps.forEach(function (x) { var li = el("li"); inlineToDom(doc, parseInline(x), origin, li); ol.appendChild(li); }); // **bold** ingredient names
+        box.appendChild(hs);
+        box.appendChild(ol);
+      }
       if (item.detail.notes) {
         var n = el("p", "tray-detail-notes");
         n.textContent = item.detail.notes;

@@ -21,7 +21,7 @@ const AUTH_SCRIPT_FILE = path.join(ROOT, "templates", "auth.js");
 const CHAT_SCRIPT_FILE = path.join(ROOT, "templates", "chat.js");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
 const CATALOGUE_FILE = path.join(ROOT, "data", "ingredients.json");
-const { UNITS } = require("./templates/ingredients");
+const { UNITS, sectionErrors } = require("./templates/ingredients");
 // BUILD_OUT_DIR lets tests and one-off builds write somewhere else, so a running dev site in dist/ is left alone.
 const DIST_DIR = process.env.BUILD_OUT_DIR ? path.resolve(process.env.BUILD_OUT_DIR) : path.join(ROOT, "dist");
 
@@ -79,6 +79,7 @@ function checkIngredients(recipes) {
       else if (!catalogue[ing.item]) errors.push(`${where}: item "${ing.item}" isn't in data/ingredients.json`);
       if (ing && ing.unit !== undefined && !UNITS.includes(ing.unit)) errors.push(`${where}: unit "${ing.unit}" isn't one of ${UNITS.join(", ")}`);
     });
+    for (const e of sectionErrors(r.ingredients)) errors.push(`${r.file}: ${e}`);
   }
   if (errors.length) throw new Error(`Recipe ingredients don't check out:\n- ${errors.join("\n- ")}`);
 }
