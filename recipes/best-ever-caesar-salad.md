@@ -8,22 +8,22 @@ total_mins: 20
 serves: 2
 calories: 400
 ingredients:
-  - { amount: 1, unit: slice, name: sourdough, note: "thick, about 80g", item: sourdough }
-  - { amount: 2, unit: tsp, name: extra virgin olive oil, item: olive-oil }
-  - { amount: 1, unit: sprig, name: thyme, note: leaves stripped, item: thyme }
-  - { amount: 0.5, unit: tsp, name: garlic granules, note: for the croutons, item: garlic-granules }
-  - { amount: 3, unit: slice, name: Parma ham, item: parma-ham }
-  - { amount: 1, name: romaine lettuce, note: sliced, item: romaine-lettuce }
-  - { amount: 1, unit: handful, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
-  - { amount: 160, unit: g, name: cooked chicken breast, note: sliced, item: cooked-chicken }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 4, name: anchovies, note: in oil, item: anchovies }
-  - { amount: 2, unit: tbsp, name: thick kefir, note: or strained natural yogurt, item: kefir }
-  - { amount: 1, unit: juice, name: lemon, item: lemon }
-  - { amount: 15, unit: g, name: Parmesan cheese, note: "grated, plus extra to serve", item: parmesan }
-  - { amount: [2, 3], unit: tsp, name: Worcestershire sauce, note: to taste, item: worcestershire }
-  - { amount: 0.25, unit: tsp, name: garlic granules, note: for the dressing, item: garlic-granules }
+  - { amount: 1, unit: slice, name: sourdough, note: "thick, about 80g", section: Croutons, item: sourdough }
+  - { amount: 2, unit: tsp, name: extra virgin olive oil, section: Croutons, item: olive-oil }
+  - { amount: 1, unit: sprig, name: thyme, note: leaves stripped, section: Croutons, item: thyme }
+  - { amount: 0.5, unit: tsp, name: garlic granules, section: Croutons, item: garlic-granules }
+  - { name: salt, note: to taste, section: Croutons, item: salt }
+  - { amount: 3, unit: slice, name: Parma ham, section: Salad, item: parma-ham }
+  - { amount: 1, name: romaine lettuce, note: sliced, section: Salad, item: romaine-lettuce }
+  - { amount: 1, unit: handful, name: cherry tomatoes, note: halved, section: Salad, item: cherry-tomatoes }
+  - { amount: 160, unit: g, name: cooked chicken breast, note: sliced, section: Salad, item: cooked-chicken }
+  - { amount: 4, name: anchovies, note: in oil, section: Dressing, item: anchovies }
+  - { amount: 2, unit: tbsp, name: thick kefir, note: or strained natural yogurt, section: Dressing, item: kefir }
+  - { amount: 1, unit: juice, name: lemon, section: Dressing, item: lemon }
+  - { amount: 15, unit: g, name: Parmesan cheese, note: "grated, plus extra to serve", section: Dressing, item: parmesan }
+  - { amount: [2, 3], unit: tsp, name: Worcestershire sauce, note: to taste, section: Dressing, item: worcestershire }
+  - { amount: 0.25, unit: tsp, name: garlic granules, section: Dressing, item: garlic-granules }
+  - { name: black pepper, note: to taste, section: Dressing, item: black-pepper }
 ---
 
 ## Instructions

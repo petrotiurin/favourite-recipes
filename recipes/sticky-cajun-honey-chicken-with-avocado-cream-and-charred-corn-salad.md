@@ -10,23 +10,23 @@ calories: 450
 next: true
 draft: true
 ingredients:
-  - { amount: 450, unit: g, name: chicken breast fillets or chicken breasts, note: cut into strips, item: chicken-breast }
-  - { amount: 1, unit: tbsp, name: Greek yogurt, item: greek-yogurt }
-  - { amount: 1, unit: tbsp, name: spice blend, item: cajun-seasoning }
-  - { amount: 2, name: garlic cloves, item: garlic }
-  - { name: honey, note: to taste, item: honey }
-  - { name: avocado cream, note: to taste, item: avocado-cream }
-  - { amount: 1, name: medium ripe avocado, note: to taste, item: avocado }
-  - { amount: 100, unit: g, name: Greek yogurt, item: greek-yogurt }
-  - { amount: 1, unit: tbsp, name: pickled jalapeños, item: jalapenos }
-  - { amount: 2, unit: tbsp, name: brine, item: brine }
-  - { amount: 1, name: spring onion, item: spring-onion }
-  - { amount: 1, name: small garlic clove, item: garlic }
-  - { name: salt, note: to taste, item: salt }
-  - { amount: 200, unit: g, name: frozen sweetcorn, note: from corn cob, item: sweetcorn }
-  - { amount: 1, name: cucumber, item: cucumber }
-  - { amount: 1, name: small onion, item: onion }
-  - { amount: 1, name: tin chickpeas, note: drained and rinsed, item: chickpeas }
+  - { amount: 450, unit: g, name: chicken breast fillets or chicken breasts, note: cut into strips, section: Chicken, item: chicken-breast }
+  - { amount: 1, unit: tbsp, name: Greek yogurt, section: Chicken, item: greek-yogurt }
+  - { amount: 1, unit: tbsp, name: spice blend, section: Chicken, item: cajun-seasoning }
+  - { amount: 2, name: garlic cloves, section: Chicken, item: garlic }
+  - { name: honey, note: to taste, section: Chicken, item: honey }
+  - { name: avocado cream, note: to taste, section: Avocado cream, item: avocado-cream }
+  - { amount: 1, name: medium ripe avocado, note: to taste, section: Avocado cream, item: avocado }
+  - { amount: 100, unit: g, name: Greek yogurt, section: Avocado cream, item: greek-yogurt }
+  - { amount: 1, unit: tbsp, name: pickled jalapeños, section: Avocado cream, item: jalapenos }
+  - { amount: 2, unit: tbsp, name: brine, section: Avocado cream, item: brine }
+  - { amount: 1, name: spring onion, section: Avocado cream, item: spring-onion }
+  - { amount: 1, name: small garlic clove, section: Avocado cream, item: garlic }
+  - { name: salt, note: to taste, section: Avocado cream, item: salt }
+  - { amount: 200, unit: g, name: frozen sweetcorn, note: from corn cob, section: Charred corn salad, item: sweetcorn }
+  - { amount: 1, name: cucumber, section: Charred corn salad, item: cucumber }
+  - { amount: 1, name: small onion, section: Charred corn salad, item: onion }
+  - { amount: 1, name: tin chickpeas, note: drained and rinsed, section: Charred corn salad, item: chickpeas }
 ---
 
 ## Instructions

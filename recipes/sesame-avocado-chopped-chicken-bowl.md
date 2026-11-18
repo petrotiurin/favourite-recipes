@@ -9,19 +9,19 @@ serves: 1
 calories: 391
 next: true
 ingredients:
-  - { amount: 0.25, name: cucumber, note: "large, thinly sliced", item: cucumber }
-  - { amount: 1, name: spring onion, note: "large, scallion, thinly sliced", item: spring-onion }
-  - { amount: 1, unit: handful, name: cherry tomatoes, note: "about 80g, halved", item: cherry-tomatoes }
-  - { amount: 0.5, name: avocado, note: "medium, about 60g, diced", item: avocado }
-  - { amount: 2, unit: handful, name: spinach, note: "large, roughly chopped", item: spinach }
-  - { amount: 1, unit: handful, name: coriander, note: "small, cilantro, roughly chopped", item: coriander }
-  - { amount: 100, unit: g, name: chicken breast, note: "cooked, shredded", item: chicken-breast }
-  - { amount: 1, unit: tbsp, name: Greek yogurt, note: "heaped, 0% or full-fat, for the dressing", item: greek-yogurt }
-  - { amount: 1, unit: tsp, name: sesame oil, note: for the dressing, item: sesame-oil }
-  - { amount: 2, unit: tsp, name: sriracha, note: for the dressing, item: sriracha }
-  - { amount: 2, unit: tsp, name: light soy sauce, note: for the dressing, item: soy-sauce }
-  - { amount: 1, unit: tsp, name: honey, note: "runny, for the dressing", item: honey }
-  - { amount: 0.5, unit: tsp, name: ginger paste, note: for the dressing, item: ginger-paste }
+  - { amount: 0.25, name: cucumber, note: "large, thinly sliced", section: Bowl, item: cucumber }
+  - { amount: 1, name: spring onion, note: "large, scallion, thinly sliced", section: Bowl, item: spring-onion }
+  - { amount: 1, unit: handful, name: cherry tomatoes, note: "about 80g, halved", section: Bowl, item: cherry-tomatoes }
+  - { amount: 0.5, name: avocado, note: "medium, about 60g, diced", section: Bowl, item: avocado }
+  - { amount: 2, unit: handful, name: spinach, note: "large, roughly chopped", section: Bowl, item: spinach }
+  - { amount: 1, unit: handful, name: coriander, note: "small, cilantro, roughly chopped", section: Bowl, item: coriander }
+  - { amount: 100, unit: g, name: chicken breast, note: "cooked, shredded", section: Bowl, item: chicken-breast }
+  - { amount: 1, unit: tbsp, name: Greek yogurt, note: "heaped, 0% or full-fat", section: Dressing, item: greek-yogurt }
+  - { amount: 1, unit: tsp, name: sesame oil, section: Dressing, item: sesame-oil }
+  - { amount: 2, unit: tsp, name: sriracha, section: Dressing, item: sriracha }
+  - { amount: 2, unit: tsp, name: light soy sauce, section: Dressing, item: soy-sauce }
+  - { amount: 1, unit: tsp, name: honey, note: runny, section: Dressing, item: honey }
+  - { amount: 0.5, unit: tsp, name: ginger paste, section: Dressing, item: ginger-paste }
 ---
 
 ## Instructions

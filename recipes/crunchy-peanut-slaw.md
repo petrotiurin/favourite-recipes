@@ -8,20 +8,20 @@ total_mins: 20
 serves: 4
 calories: 250
 ingredients:
-  - { amount: 0.25, name: red cabbage, item: red-cabbage }
-  - { amount: 50, unit: g, name: cooked quinoa or rice, item: cooked-quinoa }
-  - { amount: 2, unit: handful, name: sugar snap peas, note: "cupped, sliced diagonally", item: sugar-snap-peas }
-  - { amount: 3, name: spring onions, note: "scallions, finely sliced", item: spring-onion }
-  - { amount: 1, unit: handful, name: mint leaves, note: large, item: mint }
-  - { amount: 1, name: red pepper, note: "bell, cored, deseeded and diced", item: red-pepper }
-  - { amount: 1, unit: handful, name: roasted peanuts, note: "small, roughly chopped", item: peanuts }
-  - { amount: 2, unit: tbsp, name: smooth peanut butter, note: for the satay dressing, item: peanut-butter }
-  - { amount: 2, unit: tbsp, name: light soy sauce, note: for the satay dressing, item: soy-sauce }
-  - { amount: 2, unit: juice, name: limes, note: for the satay dressing, item: lime }
-  - { amount: 2, unit: tsp, name: ginger paste, note: for the satay dressing, item: ginger-paste }
-  - { amount: 2, unit: tsp, name: garlic paste, note: for the satay dressing, item: garlic-paste }
-  - { amount: 2, unit: tsp, name: honey, note: for the satay dressing, item: honey }
-  - { amount: 1, unit: pinch, name: salt, note: "for the satay dressing, plus extra to taste", item: salt }
+  - { amount: 0.25, name: red cabbage, section: Slaw, item: red-cabbage }
+  - { amount: 50, unit: g, name: cooked quinoa or rice, section: Slaw, item: cooked-quinoa }
+  - { amount: 2, unit: handful, name: sugar snap peas, note: "cupped, sliced diagonally", section: Slaw, item: sugar-snap-peas }
+  - { amount: 3, name: spring onions, note: "scallions, finely sliced", section: Slaw, item: spring-onion }
+  - { amount: 1, unit: handful, name: mint leaves, note: large, section: Slaw, item: mint }
+  - { amount: 1, name: red pepper, note: "bell, cored, deseeded and diced", section: Slaw, item: red-pepper }
+  - { amount: 1, unit: handful, name: roasted peanuts, note: "small, roughly chopped", section: Slaw, item: peanuts }
+  - { amount: 2, unit: tbsp, name: smooth peanut butter, section: Satay dressing, item: peanut-butter }
+  - { amount: 2, unit: tbsp, name: light soy sauce, section: Satay dressing, item: soy-sauce }
+  - { amount: 2, unit: juice, name: limes, section: Satay dressing, item: lime }
+  - { amount: 2, unit: tsp, name: ginger paste, section: Satay dressing, item: ginger-paste }
+  - { amount: 2, unit: tsp, name: garlic paste, section: Satay dressing, item: garlic-paste }
+  - { amount: 2, unit: tsp, name: honey, section: Satay dressing, item: honey }
+  - { amount: 1, unit: pinch, name: salt, note: plus extra to taste, section: Satay dressing, item: salt }
 ---
 
 ## Instructions

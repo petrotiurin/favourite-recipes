@@ -8,24 +8,25 @@ total_mins: 30
 serves: 4
 calories: 620
 ingredients:
-  - { amount: 200, unit: g, name: jasmine rice, item: jasmine-rice }
-  - { amount: 4, name: salmon fillets, note: about 140g each, item: salmon-fillet }
-  - { amount: 2, unit: tbsp, name: olive oil, note: "split: 1½ tbsp for the salmon + ½ tbsp for the pan", item: olive-oil }
-  - { amount: 1, unit: tsp, name: garlic powder, item: garlic-granules }
-  - { amount: 1, unit: tsp, name: paprika, item: paprika }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 2, unit: bunch, name: bok choy, note: ends trimmed, item: bok-choy }
-  - { amount: 1, unit: tbsp, name: fresh ginger, note: minced, item: ginger }
-  - { amount: 1, unit: clove, name: garlic, note: minced, item: garlic }
-  - { amount: [2, 3], unit: tbsp, name: red or green curry paste, item: curry-paste }
-  - { amount: 0.75, unit: can, name: coconut milk, item: coconut-milk }
-  - { amount: 0.5, unit: cup, name: chicken bone broth, item: chicken-bone-broth }
-  - { amount: 1, unit: tbsp, name: honey, item: honey }
-  - { amount: 1, unit: tbsp, name: soy sauce, item: soy-sauce }
-  - { name: sesame seeds, note: to serve, optional: true, item: sesame-seeds }
-  - { name: scallion, note: "sliced, to serve", optional: true, item: spring-onion }
-  - { name: chili oil, note: to serve, optional: true, item: chilli-oil }
+  - { amount: 200, unit: g, name: jasmine rice, section: Salmon and rice, item: jasmine-rice }
+  - { amount: 4, name: salmon fillets, note: about 140g each, section: Salmon and rice, item: salmon-fillet }
+  - { amount: 1.5, unit: tbsp, name: olive oil, section: Salmon and rice, item: olive-oil }
+  - { amount: 1, unit: tsp, name: garlic powder, section: Salmon and rice, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: paprika, section: Salmon and rice, item: paprika }
+  - { name: salt, note: to taste, section: Salmon and rice, item: salt }
+  - { name: black pepper, note: to taste, section: Salmon and rice, item: black-pepper }
+  - { amount: 0.5, unit: tbsp, name: olive oil, section: Bok choy and curry broth, item: olive-oil }
+  - { amount: 2, unit: bunch, name: bok choy, note: ends trimmed, section: Bok choy and curry broth, item: bok-choy }
+  - { amount: 1, unit: tbsp, name: fresh ginger, note: minced, section: Bok choy and curry broth, item: ginger }
+  - { amount: 1, unit: clove, name: garlic, note: minced, section: Bok choy and curry broth, item: garlic }
+  - { amount: [2, 3], unit: tbsp, name: red or green curry paste, section: Bok choy and curry broth, item: curry-paste }
+  - { amount: 0.75, unit: can, name: coconut milk, section: Bok choy and curry broth, item: coconut-milk }
+  - { amount: 0.5, unit: cup, name: chicken bone broth, section: Bok choy and curry broth, item: chicken-bone-broth }
+  - { amount: 1, unit: tbsp, name: honey, section: Bok choy and curry broth, item: honey }
+  - { amount: 1, unit: tbsp, name: soy sauce, section: Bok choy and curry broth, item: soy-sauce }
+  - { name: sesame seeds, note: to serve, optional: true, section: To serve, item: sesame-seeds }
+  - { name: scallion, note: "sliced, to serve", optional: true, section: To serve, item: spring-onion }
+  - { name: chili oil, note: to serve, optional: true, section: To serve, item: chilli-oil }
 ---
 
 ## Instructions
