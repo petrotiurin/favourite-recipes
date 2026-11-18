@@ -10,18 +10,18 @@ calories: 390
 next: true
 draft: true
 ingredients:
-  - { amount: 4, name: English muffins, item: english-muffins }
-  - { amount: 320, unit: g, name: chicken mince, item: minced-chicken }
-  - { amount: 1, unit: tbsp, name: maple syrup, item: maple-syrup }
-  - { amount: 1, unit: tsp, name: dried sage, item: dried-sage }
-  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
-  - { amount: 1, unit: tsp, name: onion granules, item: onion-granules }
-  - { amount: 1, unit: tbsp, name: breadcrumbs, note: heaped, item: breadcrumbs }
-  - { amount: 4, unit: slice, name: Red Leicester, note: "or any cheese you like, to serve", item: red-leicester }
-  - { amount: 4, unit: tbsp, name: cottage cheese, item: cottage-cheese }
-  - { amount: 2, name: tomatoes, note: "medium, sliced", item: tomato }
-  - { name: salt, note: "a good pinch, to taste", item: salt }
-  - { name: pepper, note: "a good pinch, to taste", item: black-pepper }
+  - { amount: 320, unit: g, name: chicken mince, section: Sausage patties, item: minced-chicken }
+  - { amount: 1, unit: tbsp, name: maple syrup, section: Sausage patties, item: maple-syrup }
+  - { amount: 1, unit: tsp, name: dried sage, section: Sausage patties, item: dried-sage }
+  - { amount: 1, unit: tsp, name: garlic granules, section: Sausage patties, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: onion granules, section: Sausage patties, item: onion-granules }
+  - { amount: 1, unit: tbsp, name: breadcrumbs, note: heaped, section: Sausage patties, item: breadcrumbs }
+  - { name: salt, note: "a good pinch, to taste", section: Sausage patties, item: salt }
+  - { name: pepper, note: "a good pinch, to taste", section: Sausage patties, item: black-pepper }
+  - { amount: 4, name: English muffins, section: To assemble, item: english-muffins }
+  - { amount: 4, unit: tbsp, name: cottage cheese, section: To assemble, item: cottage-cheese }
+  - { amount: 2, name: tomatoes, note: "medium, sliced", section: To assemble, item: tomato }
+  - { amount: 4, unit: slice, name: Red Leicester, note: "or any cheese you like, to serve", section: To assemble, item: red-leicester }
 ---
 
 ## Instructions

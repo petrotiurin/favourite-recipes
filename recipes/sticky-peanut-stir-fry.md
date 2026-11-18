@@ -7,22 +7,25 @@ total_mins: 20
 serves: 2
 calories: 500
 ingredients:
-  - { amount: 100, unit: g, name: brown rice, item: brown-rice }
-  - { amount: 2, unit: tsp, name: neutral oil, note: "split: 1 tsp + 1 tsp", item: vegetable-oil }
-  - { amount: 300, unit: g, name: firm tofu, note: "pressed and cut into cubes (or use chicken, raw peeled prawns or raw beef)", item: firm-tofu }
-  - { amount: 3, unit: tbsp, name: light soy sauce, note: "split: 1 tbsp for the tofu + 2 tbsp for the sauce", item: soy-sauce }
-  - { amount: 3, name: spring onions, note: "sliced into chunks, plus extra thin slices to serve", item: spring-onion }
-  - { amount: 0.5, name: red chilli, note: deseeded and finely diced, item: red-chilli }
-  - { amount: 2, unit: clove, name: garlic, note: "minced, split: 1 for the stir-fry + 1 for the sauce", item: garlic }
-  - { amount: 1, name: carrot, note: cut into matchsticks, item: carrot }
-  - { amount: 1, name: red pepper, note: "cored, deseeded and cut into thin strips", item: red-pepper }
-  - { amount: 150, unit: g, name: Tenderstem broccoli, note: each stem cut into 3, item: tenderstem-broccoli }
-  - { amount: 2, unit: tbsp, name: roasted salted peanuts, item: peanuts }
-  - { name: salt, note: to taste, item: salt }
-  - { amount: 1, unit: tbsp, name: peanut butter, item: peanut-butter }
-  - { amount: 1, unit: tsp, name: rice vinegar, item: rice-vinegar }
-  - { amount: 0.5, unit: juice, name: lime, note: plus the zest, item: lime }
-  - { amount: 1, unit: tsp, name: honey, note: heaped, item: honey }
+  - { amount: 1, unit: tsp, name: neutral oil, section: Tofu, item: vegetable-oil }
+  - { amount: 300, unit: g, name: firm tofu, note: "pressed and cut into cubes (or use chicken, raw peeled prawns or raw beef)", section: Tofu, item: firm-tofu }
+  - { amount: 1, unit: tbsp, name: light soy sauce, section: Tofu, item: soy-sauce }
+  - { amount: 1, unit: tsp, name: neutral oil, section: Stir-fry, item: vegetable-oil }
+  - { amount: 3, name: spring onions, note: "sliced into chunks, plus extra thin slices to serve", section: Stir-fry, item: spring-onion }
+  - { amount: 0.5, name: red chilli, note: deseeded and finely diced, section: Stir-fry, item: red-chilli }
+  - { amount: 1, unit: clove, name: garlic, note: minced, section: Stir-fry, item: garlic }
+  - { amount: 1, name: carrot, note: cut into matchsticks, section: Stir-fry, item: carrot }
+  - { amount: 1, name: red pepper, note: "cored, deseeded and cut into thin strips", section: Stir-fry, item: red-pepper }
+  - { amount: 150, unit: g, name: Tenderstem broccoli, note: each stem cut into 3, section: Stir-fry, item: tenderstem-broccoli }
+  - { amount: 2, unit: tbsp, name: roasted salted peanuts, section: Stir-fry, item: peanuts }
+  - { name: salt, note: to taste, section: Stir-fry, item: salt }
+  - { amount: 1, unit: tbsp, name: peanut butter, section: Sauce, item: peanut-butter }
+  - { amount: 2, unit: tbsp, name: light soy sauce, section: Sauce, item: soy-sauce }
+  - { amount: 1, unit: tsp, name: rice vinegar, section: Sauce, item: rice-vinegar }
+  - { amount: 0.5, unit: juice, name: lime, note: plus the zest, section: Sauce, item: lime }
+  - { amount: 1, unit: clove, name: garlic, note: minced, section: Sauce, item: garlic }
+  - { amount: 1, unit: tsp, name: honey, note: heaped, section: Sauce, item: honey }
+  - { amount: 100, unit: g, name: brown rice, section: To serve, item: brown-rice }
 ---
 
 ## Instructions

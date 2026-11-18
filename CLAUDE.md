@@ -194,12 +194,14 @@ ingredients:                       # required, always last: the only place a rec
   - { amount: 200, unit: g, name: jasmine rice, item: jasmine-rice }
   - { amount: [2, 3], unit: tbsp, name: red curry paste, item: curry-paste }
   - { name: sesame seeds, note: to serve, optional: true, item: sesame-seeds }
+  - { amount: 2, unit: tbsp, name: soy sauce, section: Sauce, item: soy-sauce }
 ---
 ```
 
 **Ingredients are data** (`docs/structured-ingredients.md`): `amount` (a number or a range `[min, max]`; none only for "to taste" / "to serve"
 in the `note`), `unit` (one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, sheet, stick, head, pinch, handful, juice, zest`; none = a count),
-`name`, `note`, `optional`, and `item`: the id of what it's bought as in the **ingredient catalogue**, `data/ingredients.json` (shopping-list name,
+`name`, `note`, `optional`, `section` (the part of the dish, e.g. "Sauce": a small heading on the page over that part's lines; a section's lines sit
+together, lines without one first; the shopping list ignores it), and `item`: the id of what it's bought as in the **ingredient catalogue**, `data/ingredients.json` (shopping-list name,
 aisle, shopping unit, conversions `per`, `aliases`, `staple` / `skip`). The page's ingredient list, the servings selector (`data-qty` written by
 `templates/ingredients.js`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.
 The line renderer exists twice, `templates/ingredients.js` and `mcp-server/lib/ingredient-line.js`: keep them in step (`test/ingredients.test.js`

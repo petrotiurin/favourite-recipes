@@ -7,20 +7,20 @@ total_mins: 15
 serves: 1
 calories: 450
 ingredients:
-  - { amount: 0.5, name: avocado, note: ripe, item: avocado }
-  - { amount: 1, unit: tsp, name: honey, item: honey }
-  - { amount: 1, name: spring onion, note: "scallion, diced, plus extra to serve", item: spring-onion }
-  - { amount: 3, name: jalapeños, note: "from a jar, diced", item: jalapenos }
-  - { amount: 1, unit: tsp, name: jalapeño brine, note: from the jar, item: jalapenos }
-  - { amount: 1, unit: tbsp, name: parsley, note: chopped, item: parsley }
-  - { amount: 3, name: corn tacos, item: corn-tacos }
-  - { amount: 80, unit: g, name: cooked chicken breast, note: shredded, item: cooked-chicken }
-  - { amount: 15, unit: g, name: feta, note: crumbled, item: feta }
-  - { name: salt, note: to taste, item: salt }
-  - { amount: 1, name: red onions, note: "sliced into strips, for the pickled onions", item: red-onion }
-  - { amount: 100, unit: ml, name: white wine vinegar, note: enough to submerge the onions, item: white-wine-vinegar }
-  - { amount: 1, unit: tbsp, name: caster sugar, note: superfine, item: sugar }
-  - { amount: 1, name: lime, note: "cut into wedges, to serve", optional: true, item: lime }
+  - { amount: 1, name: red onions, note: sliced into strips, section: Pickled onions, item: red-onion }
+  - { amount: 100, unit: ml, name: white wine vinegar, note: enough to submerge the onions, section: Pickled onions, item: white-wine-vinegar }
+  - { amount: 1, unit: tbsp, name: caster sugar, note: superfine, section: Pickled onions, item: sugar }
+  - { amount: 0.5, name: avocado, note: ripe, section: Spicy guacamole, item: avocado }
+  - { amount: 1, unit: tsp, name: honey, section: Spicy guacamole, item: honey }
+  - { amount: 1, name: spring onion, note: "scallion, diced, plus extra to serve", section: Spicy guacamole, item: spring-onion }
+  - { amount: 3, name: jalapeños, note: "from a jar, diced", section: Spicy guacamole, item: jalapenos }
+  - { amount: 1, unit: tsp, name: jalapeño brine, note: from the jar, section: Spicy guacamole, item: jalapenos }
+  - { amount: 1, unit: tbsp, name: parsley, note: chopped, section: Spicy guacamole, item: parsley }
+  - { name: salt, note: to taste, section: Spicy guacamole, item: salt }
+  - { amount: 3, name: corn tacos, section: Tacos, item: corn-tacos }
+  - { amount: 80, unit: g, name: cooked chicken breast, note: shredded, section: Tacos, item: cooked-chicken }
+  - { amount: 15, unit: g, name: feta, note: crumbled, section: Tacos, item: feta }
+  - { amount: 1, name: lime, note: "cut into wedges, to serve", optional: true, section: Tacos, item: lime }
 ---
 
 ## Instructions

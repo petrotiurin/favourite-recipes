@@ -4,7 +4,7 @@ import { formatQuantity } from "./scaling.js";
 // templates). KEEP THE TWO IN STEP; test/ingredients.test.js checks that both render the same lines. The server adds scaling (scale_recipe)
 // at the end, with the recipe page's rounding (formatQuantity in lib/scaling.js, kept in step with templates/servings.js).
 //
-// One ingredient: { amount?: number | [min, max], unit?: one of UNITS, name, note?, optional?: true, item }.
+// One ingredient: { amount?: number | [min, max], unit?: one of UNITS, name, note?, optional?: true, section?, item }.
 
 export const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "clove", "can", "slice", "bunch", "sprig", "piece", "sheet", "stick", "head", "pinch", "handful", "juice", "zest"];
 // Written right after the number: "200g", "1.5l".
@@ -97,6 +97,42 @@ export function ingredientHtml(ing, { scalable = true } = {}) {
     name: (n) => `<strong>${escapeHtml(n)}</strong>`,
     text: (t) => escapeHtml(t),
   });
+}
+
+/**
+ * The list in its sections (`section` on each line, docs/structured-ingredients.md 1): [{ section, items }] in order. Lines without a section
+ * come first under no heading; each section's lines sit together (sectionErrors refuses a list where they don't).
+ */
+export function ingredientGroups(ingredients) {
+  const groups = [];
+  for (const ing of ingredients || []) {
+    const section = String(ing.section || "").trim() || null;
+    const last = groups[groups.length - 1];
+    if (last && last.section === section) last.items.push(ing);
+    else groups.push({ section, items: [ing] });
+  }
+  return groups;
+}
+
+/** Problems with a list's sections: a name that is blank or too long, lines without a section after a section, a section split in two. */
+export function sectionErrors(ingredients) {
+  const errors = [];
+  const seen = new Set();
+  let prev;
+  (ingredients || []).forEach((ing, i) => {
+    if (!ing || typeof ing !== "object" || ing.section === undefined) {
+      if (prev) errors.push(`ingredients[${i}]${ing?.name ? ` (${ing.name})` : ""}: lines without a section go first, before "${prev}"; give it a section or move it up`);
+      return;
+    }
+    const where = `ingredients[${i}]${ing.name ? ` (${ing.name})` : ""}`;
+    const name = typeof ing.section === "string" ? ing.section.trim() : "";
+    if (!name) return void errors.push(`${where}: section is a short name ("Sauce") or left out`);
+    if (name.length > 40 || /[*\n]/.test(name)) errors.push(`${where}: section "${name}" must be a short plain name ("Sauce", "For the dressing")`);
+    if (name !== prev && seen.has(name.toLowerCase())) errors.push(`${where}: the "${name}" lines must sit together; move it next to the others`);
+    seen.add(name.toLowerCase());
+    prev = name;
+  });
+  return errors;
 }
 
 /** Does the list have any amount the servings selector could rescale? */

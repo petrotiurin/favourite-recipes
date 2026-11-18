@@ -7,17 +7,20 @@ total_mins: 15
 serves: 2
 calories: 450
 ingredients:
-  - { amount: 0.5, name: avocado, note: ripe, item: avocado }
-  - { amount: 3, unit: tbsp, name: parsley, note: "finely chopped, split: 2 tbsp for the avocado + 1 tbsp for the topping, if using", item: parsley }
-  - { amount: 1, unit: juice, name: lemon, item: lemon }
-  - { amount: 2, name: spring onions, note: "scallions, finely chopped", item: spring-onion }
-  - { amount: 5, unit: tsp, name: honey, note: "split: 4 tsp for the honey-chilli mix + 1 tsp for the topping, if using", item: honey }
-  - { amount: 3, unit: tsp, name: dried chilli flakes, note: "split: 2 tsp for the honey-chilli mix + 1 tsp for the topping, if using", item: chilli-flakes }
-  - { amount: 2, name: eggs, note: "medium, free-range, at room temperature", item: eggs }
-  - { amount: 100, unit: g, name: halloumi, note: sliced about 1cm thick, item: halloumi }
-  - { amount: 2, unit: slice, name: sourdough, note: or bread of choice, item: sourdough }
-  - { name: salt, note: to taste, item: salt }
-  - { name: pepper, note: to taste, item: black-pepper }
+  - { amount: 0.5, name: avocado, note: ripe, section: Avocado, item: avocado }
+  - { amount: 2, unit: tbsp, name: parsley, note: finely chopped, section: Avocado, item: parsley }
+  - { amount: 1, unit: juice, name: lemon, section: Avocado, item: lemon }
+  - { amount: 2, name: spring onions, note: "scallions, finely chopped", section: Avocado, item: spring-onion }
+  - { name: salt, note: to taste, section: Avocado, item: salt }
+  - { name: pepper, note: to taste, section: Avocado, item: black-pepper }
+  - { amount: 4, unit: tsp, name: honey, section: Hot honey halloumi, item: honey }
+  - { amount: 2, unit: tsp, name: dried chilli flakes, section: Hot honey halloumi, item: chilli-flakes }
+  - { amount: 100, unit: g, name: halloumi, note: sliced about 1cm thick, section: Hot honey halloumi, item: halloumi }
+  - { amount: 2, name: eggs, note: "medium, free-range, at room temperature", section: Eggs and toast, item: eggs }
+  - { amount: 2, unit: slice, name: sourdough, note: or bread of choice, section: Eggs and toast, item: sourdough }
+  - { amount: 1, unit: tbsp, name: parsley, note: finely chopped, optional: true, section: Topping, item: parsley }
+  - { amount: 1, unit: tsp, name: dried chilli flakes, optional: true, section: Topping, item: chilli-flakes }
+  - { amount: 1, unit: tsp, name: honey, optional: true, section: Topping, item: honey }
 ---
 
 ## Instructions

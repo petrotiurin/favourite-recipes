@@ -72,8 +72,8 @@ export const READER_SCHEMA = {
           items: {
             type: "object",
             additionalProperties: false,
-            required: ["amount", "amount_max", "unit", "name", "note", "optional"],
-            properties: { amount: numOrNull, amount_max: numOrNull, unit: { type: ["string", "null"], enum: [...UNITS, null] }, name: str, note: str, optional: { type: "boolean" } },
+            required: ["amount", "amount_max", "unit", "name", "note", "optional", "section"],
+            properties: { amount: numOrNull, amount_max: numOrNull, unit: { type: ["string", "null"], enum: [...UNITS, null] }, name: str, note: str, optional: { type: "boolean" }, section: str },
           },
         },
         instructions: strs,

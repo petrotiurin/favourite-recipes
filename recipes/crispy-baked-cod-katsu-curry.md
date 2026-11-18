@@ -9,29 +9,29 @@ calories: 560
 next: true
 draft: true
 ingredients:
-  - { amount: 250, unit: g, name: cooked weight brown rice, note: to serve, item: cooked-rice }
-  - { amount: 2, name: skinless cod fillets, note: "120–140g each, patted very dry", item: cod-fillets }
-  - { amount: 1, name: medium egg, note: beaten, item: eggs }
-  - { amount: 2, unit: tbsp, name: flour, note: "heaped, for coating", item: plain-flour }
-  - { amount: 100, unit: g, name: panko breadcrumbs, note: to coat, item: panko }
-  - { amount: 1, name: large onion, note: finely sliced, item: onion }
-  - { amount: 2, name: medium carrots, note: sliced, item: carrot }
-  - { amount: 1, unit: tsp, name: ginger paste, note: "heaped, to taste", item: ginger-paste }
-  - { amount: 1, unit: tsp, name: medium curry powder, note: to taste, item: curry-powder }
-  - { amount: 0.5, unit: tsp, name: ground turmeric, note: to taste, item: turmeric }
-  - { amount: 1, unit: tsp, name: Chinese 5 spice, note: to taste, item: chinese-five-spice }
-  - { amount: 1, unit: tbsp, name: plain flour, note: "heaped, for the sauce", item: plain-flour }
-  - { amount: 1, unit: tbsp, name: tomato purée, note: to taste, item: tomato-puree }
-  - { amount: 400, unit: ml, name: hot stock, note: made with a chicken stock cube, item: chicken-stock }
-  - { amount: 1, unit: tbsp, name: tomato ketchup, note: to taste, item: ketchup }
-  - { amount: [1, 2], unit: tsp, name: soft light brown sugar, note: to taste, item: brown-sugar }
-  - { amount: 0.5, name: cucumber, note: "thinly sliced, to serve", item: cucumber }
-  - { amount: 1, name: lime, note: "juice and zest, to taste", item: lime }
-  - { amount: 1, name: spring onion, note: "finely diced, to serve", item: spring-onion }
-  - { name: oil, note: "for frying, to taste", item: vegetable-oil }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 1, unit: tsp, name: soy sauce, note: to taste, item: soy-sauce }
+  - { amount: 2, name: skinless cod fillets, note: "120–140g each, patted very dry", section: Crispy cod, item: cod-fillets }
+  - { amount: 1, name: medium egg, note: beaten, section: Crispy cod, item: eggs }
+  - { amount: 2, unit: tbsp, name: flour, note: "heaped, for coating", section: Crispy cod, item: plain-flour }
+  - { amount: 100, unit: g, name: panko breadcrumbs, note: to coat, section: Crispy cod, item: panko }
+  - { name: salt, note: to taste, section: Crispy cod, item: salt }
+  - { name: black pepper, note: to taste, section: Crispy cod, item: black-pepper }
+  - { name: oil, note: "for frying, to taste", section: Curry sauce, item: vegetable-oil }
+  - { amount: 1, name: large onion, note: finely sliced, section: Curry sauce, item: onion }
+  - { amount: 2, name: medium carrots, note: sliced, section: Curry sauce, item: carrot }
+  - { amount: 1, unit: tsp, name: ginger paste, note: "heaped, to taste", section: Curry sauce, item: ginger-paste }
+  - { amount: 1, unit: tsp, name: medium curry powder, note: to taste, section: Curry sauce, item: curry-powder }
+  - { amount: 0.5, unit: tsp, name: ground turmeric, note: to taste, section: Curry sauce, item: turmeric }
+  - { amount: 1, unit: tsp, name: Chinese 5 spice, note: to taste, section: Curry sauce, item: chinese-five-spice }
+  - { amount: 1, unit: tbsp, name: plain flour, note: heaped, section: Curry sauce, item: plain-flour }
+  - { amount: 1, unit: tbsp, name: tomato purée, note: to taste, section: Curry sauce, item: tomato-puree }
+  - { amount: 400, unit: ml, name: hot stock, note: made with a chicken stock cube, section: Curry sauce, item: chicken-stock }
+  - { amount: 1, unit: tbsp, name: tomato ketchup, note: to taste, section: Curry sauce, item: ketchup }
+  - { amount: [1, 2], unit: tsp, name: soft light brown sugar, note: to taste, section: Curry sauce, item: brown-sugar }
+  - { amount: 1, unit: tsp, name: soy sauce, note: to taste, section: Curry sauce, item: soy-sauce }
+  - { amount: 0.5, name: cucumber, note: "thinly sliced, to serve", section: Cucumber salad, item: cucumber }
+  - { amount: 1, name: lime, note: "juice and zest, to taste", section: Cucumber salad, item: lime }
+  - { amount: 1, name: spring onion, note: "finely diced, to serve", section: Cucumber salad, item: spring-onion }
+  - { amount: 250, unit: g, name: cooked weight brown rice, note: to serve, section: To serve, item: cooked-rice }
 ---
 
 ## Instructions

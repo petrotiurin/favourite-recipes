@@ -9,20 +9,20 @@ serves: 2
 calories: 350
 current: true
 ingredients:
-  - { amount: 2, name: salmon fillets, note: skinless, item: salmon-fillet }
-  - { amount: 1, unit: tbsp, name: peanut butter, note: "heaped, smooth, for the marinade", item: peanut-butter }
-  - { amount: 1, unit: tsp, name: ginger paste, note: for the marinade, item: ginger-paste }
-  - { amount: 0.25, unit: tsp, name: mild curry powder, note: for the marinade, item: curry-powder }
-  - { amount: 2, unit: tbsp, name: light soy sauce, note: for the marinade, item: soy-sauce }
-  - { amount: 1, unit: tbsp, name: rice vinegar, note: for the marinade, item: rice-vinegar }
-  - { amount: 1, unit: tsp, name: honey, note: for the marinade, item: honey }
-  - { amount: 1, name: cucumber, note: for the smacked cucumber salad, item: cucumber }
-  - { amount: 2, unit: tbsp, name: rice vinegar, note: for the salad, item: rice-vinegar }
-  - { amount: 1, unit: tbsp, name: light soy sauce, note: for the salad, item: soy-sauce }
-  - { amount: 0.25, unit: tsp, name: garlic granules, note: for the salad, item: garlic-granules }
-  - { amount: 1, unit: tsp, name: caster sugar, note: "superfine, for the salad", item: sugar }
-  - { amount: 1, unit: tsp, name: crispy chilli oil, note: for the salad, item: chilli-oil }
-  - { amount: 1, unit: tsp, name: salt, note: for the salad, item: salt }
+  - { amount: 2, name: salmon fillets, note: skinless, section: Satay salmon, item: salmon-fillet }
+  - { amount: 1, unit: tbsp, name: peanut butter, note: "heaped, smooth", section: Satay salmon, item: peanut-butter }
+  - { amount: 1, unit: tsp, name: ginger paste, section: Satay salmon, item: ginger-paste }
+  - { amount: 0.25, unit: tsp, name: mild curry powder, section: Satay salmon, item: curry-powder }
+  - { amount: 2, unit: tbsp, name: light soy sauce, section: Satay salmon, item: soy-sauce }
+  - { amount: 1, unit: tbsp, name: rice vinegar, section: Satay salmon, item: rice-vinegar }
+  - { amount: 1, unit: tsp, name: honey, section: Satay salmon, item: honey }
+  - { amount: 1, name: cucumber, section: Smacked cucumber salad, item: cucumber }
+  - { amount: 2, unit: tbsp, name: rice vinegar, section: Smacked cucumber salad, item: rice-vinegar }
+  - { amount: 1, unit: tbsp, name: light soy sauce, section: Smacked cucumber salad, item: soy-sauce }
+  - { amount: 0.25, unit: tsp, name: garlic granules, section: Smacked cucumber salad, item: garlic-granules }
+  - { amount: 1, unit: tsp, name: caster sugar, note: superfine, section: Smacked cucumber salad, item: sugar }
+  - { amount: 1, unit: tsp, name: crispy chilli oil, section: Smacked cucumber salad, item: chilli-oil }
+  - { amount: 1, unit: tsp, name: salt, section: Smacked cucumber salad, item: salt }
 ---
 
 ## Instructions

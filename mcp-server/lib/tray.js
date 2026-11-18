@@ -590,6 +590,13 @@ export function saveNowRule(item, inNext) {
 // --- what the panel and the model are told --------------------------------------------------------------------------------
 
 const lineOfIngredient = (i) => ingredientText(i);
+// A recipe card's detail: its ingredient lines with each line's section (null for none: the panel heads each section), steps, notes.
+const recipeDetail = (op) => ({
+  ingredients: (op.ingredients || []).map(lineOfIngredient),
+  sections: (op.ingredients || []).map((i) => String(i.section || "").trim() || null),
+  steps: op.instructions || [],
+  notes: op.notes || "",
+});
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 
 /**
@@ -652,7 +659,7 @@ export async function trayView(tray, caller) {
         card.sub = [item.op.draft === false ? "Regular recipe" : "Draft", item.op.week === "next" ? "next week" : "", `${item.op.total_mins} min`, `${item.op.calories} kcal`].filter(Boolean).join(" · ");
         card.draft = item.op.draft !== false;
         card.next = item.op.week === "next";
-        card.detail = { ingredients: item.op.ingredients.map(lineOfIngredient), steps: item.op.instructions, notes: item.op.notes || "" };
+        card.detail = recipeDetail(item.op);
         break;
       case "promote":
         card.title = recipe?.title || slug;
@@ -670,6 +677,8 @@ export async function trayView(tray, caller) {
       case "edit":
         card.title = recipe?.title || item.op.title || slug;
         card.sub = `Changes ${Object.keys(item.op).filter((k) => EDIT_FIELDS.includes(k)).map((k) => ({ total_mins: "time", instructions: "steps", course: "course" })[k] || k.replace(/_/g, " ")).concat(item.photo ? ["photo"] : []).join(", ")}`;
+        // an edit of the ingredients or steps opens to the new list, in its sections
+        if (item.op.ingredients || item.op.instructions) card.detail = recipeDetail(item.op);
         break;
       case "list": {
         // live: rebuilt from next week as it will be after Save on every change (docs/structured-ingredients.md 6)

@@ -8,27 +8,27 @@ total_mins: 25
 serves: 2
 calories: 410
 ingredients:
-  - { amount: 2, name: "boneless, skinless chicken breasts", note: about 120g each, item: chicken-breast }
-  - { amount: 2, unit: tbsp, name: pomegranate seeds, item: pomegranate-seeds }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 1, unit: tbsp, name: mango chutney, item: mango-chutney }
-  - { amount: 1, unit: tbsp, name: thick Greek yogurt, note: "heaped, 0% or full-fat", item: greek-yogurt }
-  - { amount: 0.5, unit: juice, name: lemon, item: lemon }
-  - { amount: 1, unit: clove, name: garlic, note: minced (or ½ tsp garlic granules), item: garlic }
-  - { amount: 1, unit: tsp, name: mild curry powder, item: curry-powder }
-  - { amount: 150, unit: g, name: thick Greek yogurt, note: "0% or full-fat, for the raita", item: greek-yogurt }
-  - { amount: 0.25, name: cucumber, note: deseeded and diced, item: cucumber }
-  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
-  - { amount: 0.5, unit: juice, name: lemon, note: for the raita, item: lemon }
-  - { amount: 1, unit: tbsp, name: mint leaves, note: chopped, item: mint }
-  - { amount: 300, unit: g, name: potatoes, note: cut into small dice (skins on), item: potato }
-  - { amount: 1, unit: tsp, name: olive oil, item: olive-oil }
-  - { amount: 0.5, name: red onion, note: finely sliced, item: red-onion }
-  - { amount: 1, name: red bell pepper, note: deseeded and diced, item: red-pepper }
-  - { amount: 1, unit: tsp, name: mild curry powder, note: for the hash, item: curry-powder }
-  - { amount: 0.5, unit: tsp, name: ground turmeric, item: turmeric }
-  - { amount: 1, unit: handful, name: coriander, note: "chopped, plus extra to serve", item: coriander }
+  - { amount: 2, name: "boneless, skinless chicken breasts", note: about 120g each, section: Chicken, item: chicken-breast }
+  - { name: salt, note: to taste, section: Chicken, item: salt }
+  - { name: black pepper, note: to taste, section: Chicken, item: black-pepper }
+  - { amount: 1, unit: tbsp, name: mango chutney, section: Chicken, item: mango-chutney }
+  - { amount: 1, unit: tbsp, name: thick Greek yogurt, note: "heaped, 0% or full-fat", section: Chicken, item: greek-yogurt }
+  - { amount: 0.5, unit: juice, name: lemon, section: Chicken, item: lemon }
+  - { amount: 1, unit: clove, name: garlic, note: minced (or ½ tsp garlic granules), section: Chicken, item: garlic }
+  - { amount: 1, unit: tsp, name: mild curry powder, section: Chicken, item: curry-powder }
+  - { amount: 150, unit: g, name: thick Greek yogurt, note: 0% or full-fat, section: Raita, item: greek-yogurt }
+  - { amount: 0.25, name: cucumber, note: deseeded and diced, section: Raita, item: cucumber }
+  - { amount: 1, unit: tsp, name: garlic granules, section: Raita, item: garlic-granules }
+  - { amount: 0.5, unit: juice, name: lemon, section: Raita, item: lemon }
+  - { amount: 1, unit: tbsp, name: mint leaves, note: chopped, section: Raita, item: mint }
+  - { amount: 300, unit: g, name: potatoes, note: cut into small dice (skins on), section: Bombay potato hash, item: potato }
+  - { amount: 1, unit: tsp, name: olive oil, section: Bombay potato hash, item: olive-oil }
+  - { amount: 0.5, name: red onion, note: finely sliced, section: Bombay potato hash, item: red-onion }
+  - { amount: 1, name: red bell pepper, note: deseeded and diced, section: Bombay potato hash, item: red-pepper }
+  - { amount: 1, unit: tsp, name: mild curry powder, section: Bombay potato hash, item: curry-powder }
+  - { amount: 0.5, unit: tsp, name: ground turmeric, section: Bombay potato hash, item: turmeric }
+  - { amount: 1, unit: handful, name: coriander, note: "chopped, plus extra to serve", section: Bombay potato hash, item: coriander }
+  - { amount: 2, unit: tbsp, name: pomegranate seeds, section: To serve, item: pomegranate-seeds }
 ---
 
 ## Instructions

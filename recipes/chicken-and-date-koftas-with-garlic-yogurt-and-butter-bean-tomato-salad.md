@@ -8,23 +8,23 @@ total_mins: 22
 serves: 4
 calories: 464
 ingredients:
-  - { amount: 6, name: Medjool dates, note: pitted, item: medjool-dates }
-  - { amount: 1, name: red onion, note: "small, roughly chopped", item: red-onion }
-  - { amount: 1, unit: tsp, name: garlic granules, item: garlic-granules }
-  - { amount: 1, unit: handful, name: parsley, note: small, item: parsley }
-  - { amount: 1, unit: handful, name: coriander (cilantro), note: small, item: coriander }
-  - { amount: 500, unit: g, name: minced (ground) chicken, note: 5% fat, item: minced-chicken }
-  - { amount: 1.5, unit: tbsp, name: Middle Eastern or Moroccan spice blend, note: e.g. ras el hanout or baharat, item: middle-eastern-spice }
-  - { name: olive oil, note: "for brushing, to taste", item: olive-oil }
-  - { name: salt, note: to taste, item: salt }
-  - { name: black pepper, note: to taste, item: black-pepper }
-  - { amount: 200, unit: g, name: Greek yogurt, note: "0% or full-fat, for the garlic yogurt", item: greek-yogurt }
-  - { amount: 0.5, unit: tsp, name: garlic granules, note: for the garlic yogurt, item: garlic-granules }
-  - { amount: 400, unit: g, name: butter beans, note: "can, drained and rinsed", item: butter-beans }
-  - { amount: 200, unit: g, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
-  - { amount: 1, unit: tbsp, name: olive oil, note: for the salad, item: olive-oil }
-  - { amount: 0.5, unit: juice, name: lemon, note: plus wedges to serve, item: lemon }
-  - { amount: 1, unit: handful, name: parsley, note: "small, for the salad", item: parsley }
+  - { amount: 6, name: Medjool dates, note: pitted, section: Koftas, item: medjool-dates }
+  - { amount: 1, name: red onion, note: "small, roughly chopped", section: Koftas, item: red-onion }
+  - { amount: 1, unit: tsp, name: garlic granules, section: Koftas, item: garlic-granules }
+  - { amount: 1, unit: handful, name: parsley, note: small, section: Koftas, item: parsley }
+  - { amount: 1, unit: handful, name: coriander (cilantro), note: small, section: Koftas, item: coriander }
+  - { amount: 500, unit: g, name: minced (ground) chicken, note: 5% fat, section: Koftas, item: minced-chicken }
+  - { amount: 1.5, unit: tbsp, name: Middle Eastern or Moroccan spice blend, note: e.g. ras el hanout or baharat, section: Koftas, item: middle-eastern-spice }
+  - { name: olive oil, note: "for brushing, to taste", section: Koftas, item: olive-oil }
+  - { name: salt, note: to taste, section: Koftas, item: salt }
+  - { name: black pepper, note: to taste, section: Koftas, item: black-pepper }
+  - { amount: 200, unit: g, name: Greek yogurt, note: 0% or full-fat, section: Garlic yogurt, item: greek-yogurt }
+  - { amount: 0.5, unit: tsp, name: garlic granules, section: Garlic yogurt, item: garlic-granules }
+  - { amount: 400, unit: g, name: butter beans, note: "can, drained and rinsed", section: Butter bean tomato salad, item: butter-beans }
+  - { amount: 200, unit: g, name: cherry tomatoes, note: halved, section: Butter bean tomato salad, item: cherry-tomatoes }
+  - { amount: 1, unit: tbsp, name: olive oil, section: Butter bean tomato salad, item: olive-oil }
+  - { amount: 0.5, unit: juice, name: lemon, note: plus wedges to serve, section: Butter bean tomato salad, item: lemon }
+  - { amount: 1, unit: handful, name: parsley, note: small, section: Butter bean tomato salad, item: parsley }
 ---
 
 ## Instructions

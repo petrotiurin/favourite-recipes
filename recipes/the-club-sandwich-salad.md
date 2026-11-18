@@ -8,23 +8,24 @@ total_mins: 20
 serves: 4
 calories: 520
 ingredients:
-  - { amount: 320, unit: g, name: grilled chicken breast, note: sliced or shredded, item: cooked-chicken }
-  - { amount: 8, unit: slice, name: Parma ham, item: parma-ham }
-  - { amount: 4, name: eggs, item: eggs }
-  - { amount: 4, unit: slice, name: sourdough, note: cut into cubes, item: sourdough }
-  - { amount: 4, name: little gem lettuce, note: roughly chopped, item: little-gem-lettuce }
-  - { amount: 4, unit: handful, name: cherry tomatoes, note: halved, item: cherry-tomatoes }
-  - { amount: 2, name: avocado, item: avocado }
-  - { amount: 1, name: red onion, note: "small, very finely diced", item: red-onion }
-  - { amount: 8, unit: tbsp, name: full fat Greek yoghurt, item: greek-yogurt }
-  - { amount: 4, unit: tsp, name: American mustard, item: american-mustard }
-  - { amount: 4, unit: tsp, name: honey, item: honey }
-  - { amount: 2, unit: juice, name: lemon, item: lemon }
-  - { amount: 2, unit: tsp, name: garlic granules, item: garlic-granules }
-  - { name: olive oil, note: "to taste, for the croutons", item: olive-oil }
-  - { name: salt, note: "to taste, for the croutons", item: salt }
-  - { name: pepper, note: "to taste, for the croutons", item: black-pepper }
-  - { name: chives, note: to serve, item: chives }
+  - { amount: 320, unit: g, name: grilled chicken breast, note: sliced or shredded, section: Salad, item: cooked-chicken }
+  - { amount: 8, unit: slice, name: Parma ham, section: Salad, item: parma-ham }
+  - { amount: 4, name: eggs, section: Salad, item: eggs }
+  - { amount: 4, name: little gem lettuce, note: roughly chopped, section: Salad, item: little-gem-lettuce }
+  - { amount: 4, unit: handful, name: cherry tomatoes, note: halved, section: Salad, item: cherry-tomatoes }
+  - { amount: 2, name: avocado, section: Salad, item: avocado }
+  - { amount: 1, name: red onion, note: "small, very finely diced", section: Salad, item: red-onion }
+  - { name: chives, note: to serve, section: Salad, item: chives }
+  - { amount: 4, unit: slice, name: sourdough, note: cut into cubes, section: Croutons, item: sourdough }
+  - { name: olive oil, note: to taste, section: Croutons, item: olive-oil }
+  - { name: salt, note: to taste, section: Croutons, item: salt }
+  - { name: pepper, note: to taste, section: Croutons, item: black-pepper }
+  - { amount: 0.5, unit: tsp, name: garlic granules, section: Croutons, item: garlic-granules }
+  - { amount: 8, unit: tbsp, name: full fat Greek yoghurt, section: Dressing, item: greek-yogurt }
+  - { amount: 4, unit: tsp, name: American mustard, section: Dressing, item: american-mustard }
+  - { amount: 4, unit: tsp, name: honey, section: Dressing, item: honey }
+  - { amount: 2, unit: juice, name: lemon, section: Dressing, item: lemon }
+  - { amount: 1.5, unit: tsp, name: garlic granules, section: Dressing, item: garlic-granules }
 ---
 
 ## Instructions

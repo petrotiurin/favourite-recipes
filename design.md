@@ -147,7 +147,10 @@ there. On a recipe without the servings control the prompt has Claude ask how ma
 On a phone the pills wrap under the servings, side by side, flush left. The bar is hidden until its scripts
 run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
 Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
-in an accent-ink kicker.
+in an accent-ink kicker. A recipe made of parts heads each part's ingredients with its section name
+(`.ingredient-section`: the same small caps as the step kicker but in `--text-muted`, so the accent stays
+the steps', with a solid `--border` rule under it). Lines with no section come first, under no heading. The
+tray's recipe card shows the same sections as a bold line over each part (`.tray-detail-section`).
 From 720px the ingredients and the instructions sit side by side, with no scroll snapping. The page
 scrolls normally and carries the instructions. The cook bar sticks to the top of the screen once it
 gets there (opaque, ruled off underneath), so the servings and "Keep screen on" are always one tap

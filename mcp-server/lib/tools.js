@@ -9,7 +9,7 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
-import { UNITS, scaledMarkdown, ingredientMarkdown } from "./ingredient-line.js";
+import { UNITS, scaledMarkdown, ingredientMarkdown, ingredientGroups } from "./ingredient-line.js";
 import { SECTIONS, SHOP_UNITS } from "./catalogue.js";
 import { ingredientsOf } from "./recipe-format.js";
 import { recipesFromHome } from "./at-home.js";
@@ -57,6 +57,9 @@ import {
 
 // A recipe's ingredients are data (docs/structured-ingredients.md section 1): the page, the servings selector and the shopping list are
 // generated from these fields. The server fills `item` from the name (the catalogue's names and aliases) and checks every amount converts.
+/** A recipe's ingredient lines as Markdown list rows, with a "Sauce:" line above each section's rows. */
+const grouped = (ingredients, line) => ingredientGroups(ingredients).flatMap((g) => [...(g.section ? [`${g.section}:`] : []), ...g.items.map((i) => `- ${line(i)}`)]);
+
 const ingredientSchema = z.object({
   amount: z
     .union([z.number().positive(), z.tuple([z.number().positive(), z.number().positive()])])
@@ -69,6 +72,11 @@ const ingredientSchema = z.object({
   name: z.string().min(1).describe('What the recipe calls it, plain text (no asterisks), e.g. "jasmine rice". Bolded on the page.'),
   note: z.string().optional().describe('Prep or buying detail after the name, e.g. "finely diced", "about 140g each", "to taste". A split goes here ("1½ tbsp for the salmon, ½ for the pan").'),
   optional: z.literal(true).optional().describe("Garnishes and extras (\"to serve, optional\", \"if using\"). Shown as \", optional\"."),
+  section: z
+    .string()
+    .max(40)
+    .optional()
+    .describe('Which part of the dish it is for, when the recipe has parts ("Curry sauce", "Pickle", "Marinade"). Shown as a small heading above its lines. Lines of one section sit together, lines without one go first; leave it out on every line when the recipe is one thing. One ingredient used in two parts is two lines, one per section (not a "split" note).'),
   item: z.string().optional().describe("The catalogue item it's bought as (e.g. \"spring-onion\"). Leave it out: the server fills it from the name. Set it when a problem asks you to."),
 });
 
@@ -782,10 +790,10 @@ export const TOOLS = [
       const base = Number(data.serves) || 1;
       const ingredients = ingredientsOf(data);
       if (data.scalable === false) {
-        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...ingredients.map((i) => `- ${ingredientMarkdown(i)}`)].join("\n"));
+        return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...grouped(ingredients, ingredientMarkdown)].join("\n"));
       }
       const factor = servings / base;
-      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...ingredients.map((i) => `- ${scaledMarkdown(i, factor)}`), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
+      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...grouped(ingredients, (i) => scaledMarkdown(i, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
     }),
   },
   {
