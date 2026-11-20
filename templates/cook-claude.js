@@ -42,7 +42,11 @@
     lines.push(
       "1. Ingredients first: go through them one at a time so I can get each one out. Wait for me to say \"got it\" before the next. " +
         "Only with the first one, tell me to say \"got it\" when I have it; after that just name each ingredient, without repeating that.\n" +
-        "2. Then the method, one step at a time. Tell me when a step needs a timer and how long, and wait for me before moving on."
+        "2. Then the method, one step at a time. Tell me when a step needs a timer and how long, and wait for me before moving on.\n" +
+        "3. In every step, say how much of each ingredient it uses, even when the step itself doesn't: take the amounts from the ingredient list" +
+        (n && n !== recipe.serves ? ", scaled to " + n : "") +
+        ". For example, if the step says \"mix the soy sauce with the ginger paste\" and the list has 2 tsp soy sauce and 2 tbsp ginger paste, " +
+        "say \"mix 2 tsp soy sauce with 2 tbsp ginger paste\". If an ingredient is split across steps, say how much goes in this one (or \"the rest\")."
     );
     lines.push("Keep every reply short and easy to follow by voice. I'm cooking, so my hands are busy.");
     lines.push(

@@ -141,7 +141,8 @@ screen on" (sun icon; filled `--accent-strong` with "Screen stays on" when on), 
 Claude"** (the same pill in `--accent-ink` text with an `--accent` outline and the "opens elsewhere"
 arrow; a `--current-soft` tint on hover). It is a plain link (`templates/cook-claude.js`) to a new
 Claude chat (`claude.ai/new?q=…`, new tab) whose prompt holds the whole recipe as plain text at the
-servings picked, asks Claude to go through the ingredients and then the steps one at a time, short
+servings picked, asks Claude to go through the ingredients and then the steps one at a time (each step
+restating the amount of every ingredient it uses, which the method text usually leaves out), short
 enough for voice, and names the slug for `get_recipe` in case the Favourite recipes connector is
 there. On a recipe without the servings control the prompt has Claude ask how many people first.
 On a phone the pills wrap under the servings, side by side, flush left. The bar is hidden until its scripts
