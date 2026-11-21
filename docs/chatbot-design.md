@@ -591,7 +591,7 @@ it went wrong, and so the model trial (Q9) has real numbers.
 - Debugging: a thumbs-down or a failed Save links straight to the trace with every tool call.
 - Security: refused write attempts and failed token checks show up as events and can be filtered.
 
-## 9. UI (to add to design.md when built)
+## 9. UI
 
 Follow `design.md`: stroke icons (a speech-bubble icon, no emoji), orange accent, purple only for
 draft kickers, calm states.
@@ -755,4 +755,4 @@ Open (Petro will settle these):
 
 ## 14. Switches
 
-Three levels, from small to complete: `CHAT_PUBLIC_ENABLED=false` on Vercel (editors only, server-enforced) with `CHAT_PUBLIC=false` in the site build (the bubble hides for visitors); `CHAT_ENABLED=false` on Vercel (every `/chat` route answers 503 `{ disabled: true }` before any other work; `/mcp` and `/stocktake` carry on); and no `CHAT_API_URL` in the site build (no chat code at all). The server variables are read per request; Vercel applies a changed value on the next deployment (Redeploy). The panel shows a locked state for each case (design.md).
+Three levels, from small to complete: `CHAT_PUBLIC_ENABLED=false` on Vercel (editors only, server-enforced) with `CHAT_PUBLIC=false` in the site build (the bubble hides for visitors); `CHAT_ENABLED=false` on Vercel (every `/chat` route answers 503 `{ disabled: true }` before any other work; `/mcp` and `/stocktake` carry on); and no `CHAT_API_URL` in the site build (no chat code at all). The server variables are read per request; Vercel applies a changed value on the next deployment (Redeploy). The panel shows a locked state for each case.

@@ -47,7 +47,7 @@ shopping-list.json  the shopping list for next week's recipes, written via the M
 build.js            reads recipes/*.md (+ shopping-list.json, checks ingredients against data/ingredients.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 templates/          build-time renderers (layout, index, next-week, tiles, recipe, ingredients, shopping-list, status) and the browser scripts (.claude/rules/site.md)
 styles/style.css    the one stylesheet, copied verbatim into dist/
-design.md           UI design notes: palette tokens, the house icon language, components and interaction rules
+design.md           UI principles: palette tokens, type, the house icon language, shared components
 dist/               build output — gitignored, never hand-edit, regenerated every build
 mcp-server/         separate backend on Vercel: /mcp, /stocktake, /chat (not part of the site; mcp-server/CLAUDE.md)
 supabase/           `supabase init` layout: migrations/ (rate limits, chats, the tray, photo buckets, photo_reads), config.toml for `supabase start`

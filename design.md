@@ -1,84 +1,92 @@
 # UI design
 
-How the site looks and behaves. Keep this file in step with `styles/style.css` and the
-templates: when a change adds or alters a pattern, update the matching section here.
+The principles behind how the site looks and behaves, and the small vocabulary (colours, type, icons, components) every page
+is built from. This is not a spec of each page: exact copy, sizes, flows and states live in the templates and `styles/style.css`
+(and, for the chat, in `docs/chatbot-design.md`). Change this file only when a principle, a token or a shared component changes,
+not for every new feature or tweak.
 
-The site is static HTML + one stylesheet + small vanilla JS (see CLAUDE.md).
-Every page must read fine with JS off; JS only adds interaction on top.
+The site is static HTML + one stylesheet + small browser scripts (see CLAUDE.md). Every page must read fine with JS off; JS
+only adds interaction on top.
 
-The look is **"Journal"**: a family cookbook you flick through. Recipe names and headings in a
-serif, everything you read while cooking in a plain sans, black ink on white, square-cornered
-photos. Photos lead every list, because that's how we pick what to cook next.
+The look is **"Journal"**: a family cookbook you flick through. Names and headings in a serif, everything you read while
+cooking in a plain sans, black ink on white, square-cornered photos. Photos lead every list, because that's how we pick what
+to cook next.
 
 ## Principles
 
-- **Phone first.** Most use is on a phone, in the kitchen or the shop. Lay out for a 390px
-  wide screen with a 16px gutter, then let wider screens breathe (the shopping page caps at
-  560px, recipe pages use a two-column layout from 720px).
-- **Icons over words, but never a puzzle.** Prefer an icon plus a number to a sentence. Keep
-  one short hint where a gesture isn't obvious (for example "slide or tap sides = some", "tap = all"), and
-  give every icon-only control an `aria-label`.
-- **Photos first, chrome quiet.** No boxes, borders or shadows around recipes: a photo, a
-  small-caps kicker, the name, one short meta line. Status lives in words (kickers, filter
-  names), not tinted cards or dashed borders.
-- **No emoji in the UI.** Meta reads as plain words ("20 min · 566 kcal"); icons are the stroke
-  SVGs below.
-- **One accent.** Orange is the only accent colour, and also this week's colour. Two reserved
-  hues besides it: purple for drafts, teal (`--next`) for next week. No other colours for state
-  (no green, red or blue); error messages are the one exception (a muted red box).
-- **Calm states.** Highlight with low-opacity tints of the accent, not solid fills. A screen
-  full of "done" rows should still look quiet.
-- **Batch writes.** Every save is a commit and a site deploy, so editing UIs collect changes
-  locally and send them with one explicit **Save** (with a count), plus an undo that drops
-  unsaved changes. Never save on every tap.
-- **Touch targets ≥ 44px**, and visible focus rings (`:focus-visible`, 2px accent outline).
+- **Phone first.** Most use is on a phone, in the kitchen or the shop. Lay out for a 390px screen with a 16px gutter, then let
+  wider screens breathe (one breakpoint, 720px, where two-column layouts and floating panels start).
+- **Photos first, chrome quiet.** No boxes, borders or shadows around recipes: a photo, a small-caps kicker, the name, one
+  short meta line. Status lives in words (kickers, headings), not tinted cards or dashed borders.
+- **One tile.** A recipe looks the same wherever it's listed (home grid, next week, chat cards): square photo, kicker, serif
+  name, "20 min · 412 kcal". No feature slots or special layouts.
+- **Icons over words, but never a puzzle.** Prefer an icon plus a number to a sentence. Keep one short hint where a gesture
+  isn't obvious, and give every icon-only control an `aria-label`.
+- **No emoji in the UI.** Meta reads as plain words; icons are the stroke SVGs below.
+- **One accent, and colour means something.** Orange is the only accent and also this week's colour. Two reserved hues besides
+  it: purple only for drafts, teal only for next week. No other colours for state (no green, red or blue); error messages are
+  the one exception (a muted red box).
+- **Calm states.** Highlight with low-opacity tints of the accent, not solid fills. A screen full of "done" rows should still
+  look quiet. Solid accent fills are for the one primary action on screen.
+- **Batch writes.** Every save is a commit and a site deploy, so editing UIs collect changes locally and send them with one
+  explicit **Save** (with a count), plus a way to drop unsaved changes. Never save on every tap.
+- **A person commits.** Anything that writes (Save, Finalise, Save now) is a button a person taps, with fixed text drawn by
+  the page, never a model's wording and never triggered by the model. Likewise the chat never navigates on its own: it offers
+  a link to tap.
+- **Only the latest is live.** In a conversation, only the last message's chips, questions and cards can be used; older ones
+  fade and are disabled (or stay as plain links).
+- **Say what's happening in plain words.** While something works, one quiet line ("Looking through the recipes…"), never tool
+  names, ids or internals. When the user can't see why something is missing (a locked chat, an empty week), say so in one line.
+- **Keep the cooking controls in reach.** On a recipe page, what you need with messy hands (servings, keep screen on) stays one
+  tap away while you scroll.
+- **Local is local.** Things only you care about (ticks while shopping, folded sections, servings picks) stay in your browser
+  and never write to the site.
+- **Safe rendering.** Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
+  origin.
+- **Touch targets ≥ 44px**, visible focus rings (`:focus-visible`, 2px accent outline), and motion that still makes sense with
+  `prefers-reduced-motion`.
 
 ## Colour tokens
 
-Defined on `:root` in `styles/style.css`, with dark-mode values under
-`@media (prefers-color-scheme: dark)`. Always use the tokens, never raw hex values in rules.
+Defined on `:root` in `styles/style.css`, with dark-mode values under `@media (prefers-color-scheme: dark)`. Always use the
+tokens, never raw hex values in rules.
 
-| Token | Light | Use |
+| Token | Light | Role |
 | --- | --- | --- |
 | `--bg` | `#ffffff` | Page background |
 | `--surface` | `#ffffff` | Cards, lists, sheets |
 | `--raised` | `#ffffff` | The selected segment or tab sitting on a `--track` |
 | `--text` | `#161514` | Body text |
 | `--text-muted` | `#6f6c68` | Secondary text, kickers, meta lines |
-| `--border` | `#e7e5e1` | Rules under the top bar and meta row, card borders, dotted ingredient lines |
+| `--border` | `#e7e5e1` | Rules and card borders |
 | `--line` | `#efedea` | Dividers between rows inside a card |
-| `--track` | `#f3f2ef` | Background of segmented controls and tabs; image placeholder |
+| `--track` | `#f3f2ef` | Background of segmented controls, tabs and small pills; image placeholder |
 | `--accent` | `#bc5422` | Icons, focus rings, small marks (not small text) |
-| `--accent-ink` | `#a44617` | Accent-coloured text: this week's kickers (the meal on the home page, "This week" on recipe pages) and tab, "Step n", active wake lock |
+| `--accent-ink` | `#a44617` | Accent-coloured text (this week, step numbers, active states) |
 | `--accent-strong` | `#a8491b` | Filled primary buttons, with `--on-accent` text |
-| `--current-soft` | `#fbf1ea` | Soft accent panels: the "Home checked" card, saved state |
-| `--fill-some` / `--fill-all` | accent at 5% / 10% | Fill-bar rows on the "At home" tab |
+| `--current-soft` | `#fbf1ea` | Soft accent panels: saved state, picked options, the user's chat bubble |
+| `--fill-some` / `--fill-all` | accent at 5% / 10% | Partial / full fill bars |
 | `--fill-edge` | accent at 55% | The marker where a partial fill ends |
 | `--icon-muted` | `#a39a90` | Inactive icons (an empty house, an unticked circle) |
-| `--draft` / `--draft-soft` | plum `#6e4d96` | Draft recipes only: the italic "A draft: …" line under a draft's title |
-| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only: the home page's "Next week · n" link, the Next week page's kickers, the recipe-page kicker |
+| `--draft` / `--draft-soft` | plum `#6e4d96` | Drafts only |
+| `--next` | teal `#2b6c6e` (dark `#7fc4c1`) | Next week only |
 
 ## Type
 
-Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks (`--serif`,
-`--sans` on `:root`), so the page still reads if they don't load:
+Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks (`--serif`, `--sans`), so the page still
+reads if they don't load:
 
-- **Newsreader** (`--serif`), weight 400 only, for names and headings: the top-bar brand
-  (italic), the index headline (1.9–2.75rem), tile names (1.1rem, 1.25rem from 720px, clamped to
-  three lines), recipe titles (2.1–3rem), recipe h2s (1.55rem), the shopping title, and its
-  aisle names (500, `font-variant-caps: all-small-caps`, 0.06em letter-spacing). Tight tracking (-0.01 to -0.025em).
+- **Newsreader** (`--serif`), weight 400, for names and headings: the brand (italic), page and recipe titles, tile names, section
+  headings (aisles in small caps, like a cookbook index). Tight tracking.
 - **Public Sans** (`--sans`) for everything else: ingredients, steps, controls, meta.
-- **Kicker** (`.kicker`): 0.7rem, 600, uppercase, 0.12em letter-spacing, `--text-muted`;
-  `.kicker-current` accent ink (this week), `.kicker-next` teal ("Next week"). On the home page this week's
-  kickers say the meal ("Lunch") in accent ink, since the "This week" heading already names the section; on
-  recipe pages the kicker says "This week". Kickers never name the draft status.
+- **Kicker** (`.kicker`): small uppercase sans with wide letter-spacing, `--text-muted` by default; in accent ink for this week,
+  teal for next week. Kickers never name the draft status: a draft is marked only by one italic plum line on its own page.
 
 Numbers use `font-variant-numeric: tabular-nums` so quantities line up.
 
 ## Icon language
 
-Inline stroke SVGs, 24×24 viewBox, 2px stroke, `currentColor`, `aria-hidden` (the control
-around them carries the label). No emoji in controls.
+Inline stroke SVGs, 24×24 viewBox, 2px stroke, `currentColor`, `aria-hidden` (the control around them carries the label).
 
 The **house** tells how much of an item is at home:
 
@@ -89,292 +97,30 @@ The **house** tells how much of an item is at home:
 | Solid house (`--accent`) | Enough at home |
 | House with a cross | Clear everything at home |
 
-Others: **arrow out of a box** (opens in another app or site: "Cook with Claude"), **cart** (the list / left to buy), **↔ arrows** (slide), **check** (ticked, saved),
-**− / +** (fewer / more servings),
-**undo arrow** (drop unsaved changes), **person** (sign in), **×** (close).
-
-The definitions are duplicated in `templates/shopping-list.js` (static page) and
-`templates/shopping.js` (interactive page); keep them identical.
-
-## Recipe list (index)
-
-Top bar: italic serif brand on the left, cart icon + "Shopping list" on the right, a rule
-underneath. No headline: straight into a search field drawn as an underline with a search icon,
-and the filters as plain words (active one bold and underlined): All (preselected) and the courses,
-nothing else, so the row fits a phone. Weeks are not filters.
-
-**Week heading** (`.week-head`), between the filters and the grid: "This week" on the left (accent
-ink, kicker style; only when this week has recipes) and, on the right, a teal **"Next week · n →"**
-link to the Next week page, or a quiet muted "Next week: not planned" when next week is empty. While a
-course is picked or a search is typed, the "This week" label hides (the grid isn't this week any
-more) but the link stays.
-
-The grid is **two tiles side by side** on a phone, `auto-fill, minmax(220px, 1fr)` from 720px.
-Every recipe is the same tile, with no feature slot: square photo (no radius), kicker (the course,
-in accent ink for this week's recipes and muted for the rest; never "draft" or "To try"), serif name, then
-"20 min · 412 kcal". This week's recipes come first, **sorted by meal** in the filters' order (Breakfast,
-Lunch, Dinner, Snack; a recipe with two courses goes by its first), drafts first inside each meal, so the
-week reads as lunches next to lunches with no extra dividers; a "The rest of the book" divider spans the grid where the others start; it hides while a
-filter or a search is active.
-
-**Next week stays out of the way.** Home tiles never say "Next week": next week's recipes sit in
-the rest of the book like any other. A draft that's only in next week isn't on the home page at all
-(so search can't find it) until the switch makes it this week's.
-
-## Next week page
-
-`next-week.html` (`templates/next-week.js`), reached only from the home page's week link. Top bar
-as everywhere (the shopping list stays there: no button on this page), a back link (chevron +
-"This week"), a teal kicker "Planning · n recipes", the serif title "Next week" (`.page-title`), then
-next week's recipes in the same grid, alphabetical, every kicker "Next week" in teal. When nothing
-is planned it says so in one italic serif line. Always built, so the link never breaks.
-
-## Recipe page
-
-Back link (chevron + "All recipes"), kicker ("This week" and/or "Next week", then course and tags), serif title, and for
-drafts one italic serif line in plum saying it's a draft (the only place a draft is marked). Then the photo: edge to edge at 4:5 on a phone,
-3:2 inside the column from 720px. Under it a meta row ("**20** min · Serves **4** · **566** kcal
-each"), then the **cook bar**, the page's two cooking controls, ruled off underneath: "Serves" +
-the segmented control (1/2/4, the same `.seg` as the shopping page; it opens on 4, whatever
-the recipe serves) on the left, and two pills on the right (`.cook-actions`): "Keep
-screen on" (sun icon; filled `--accent-strong` with "Screen stays on" when on), then **"Cook with
-Claude"** (the same pill in `--accent-ink` text with an `--accent` outline and the "opens elsewhere"
-arrow; a `--current-soft` tint on hover). It is a plain link (`templates/cook-claude.js`) to a new
-Claude chat (`claude.ai/new?q=…`, new tab) whose prompt holds the whole recipe as plain text at the
-servings picked, asks Claude to go through the ingredients and then the steps one at a time (each step
-restating the amount of every ingredient it uses, which the method text usually leaves out), short
-enough for voice, and names the slug for `get_recipe` in case the Favourite recipes connector is
-there. On a recipe without the servings control the prompt has Claude ask how many people first.
-On a phone the pills wrap under the servings, side by side, flush left. The bar is hidden until its scripts
-run; once the servings control shows, the static "Serves 4" fact in the meta row is hidden.
-Ingredients have no bullets and a dotted rule between rows; each instruction is headed "Step n"
-in an accent-ink kicker. A recipe made of parts heads each part's ingredients with its section name
-(`.ingredient-section`: the same small caps as the step kicker but in `--text-muted`, so the accent stays
-the steps', with a solid `--border` rule under it). Lines with no section come first, under no heading. The
-tray's recipe card shows the same sections as a bold line over each part (`.tray-detail-section`).
-From 720px the ingredients and the instructions sit side by side, with no scroll snapping. The page
-scrolls normally and carries the instructions. The cook bar sticks to the top of the screen once it
-gets there (opaque, ruled off underneath), so the servings and "Keep screen on" are always one tap
-away. The ingredients pane sticks just under it, at most one screen tall with its own scroll, so a long
-list scrolls to its end without moving the steps; a pane at its end hands the scroll back to the page.
+Others: **arrow out of a box** (opens in another app or site), **arrow** (goes to another page), **cart** (the list / left
+to buy), **check** (ticked, saved), **− / +** (fewer / more), **undo arrow** (drop unsaved changes), **person** (sign in),
+**×** (close or drop), **thumbs** (feedback).
 
 ## Components
 
-- **Card** (`.shop-card`, `.shop-list`): `--surface`, 1px `--border`, 14px radius. Rows inside
-  are divided by `--line`.
-- **Segmented control** (`.seg`): buttons on a `--track` pill; the selected one is `--raised`,
-  bold, with a light shadow. Used for servings (1/2/4); 4 is the default on recipe pages, the
-  shopping page opens on the agent's plan (with a "Plan" segment when it isn't one number).
-- **Stepper** (`.stepper`): − count + on the same `--track` pill as `.seg`, 44px buttons, the
-  count bold and tabular; a button at the limit (1 or 12) is disabled and muted. Used for the
-  servings of single recipes.
-- **Tabs** (`.tabs`): the same look as the segmented control, full width, icon + count per tab.
+The shared pieces, in `styles/style.css`. Reuse one before inventing a new one; a new pattern that several screens will share
+gets a line here.
+
+- **Tile**: the one recipe tile (see "One tile").
+- **Card** (`.shop-card`): `--surface`, 1px `--border`, 14px radius, rows divided by `--line`. Also the look of review cards
+  in the chat.
+- **Segmented control** (`.seg`) and **tabs** (`.tabs`): buttons on a `--track` pill, the selected one `--raised` and bold.
   A small accent dot on a tab means unsaved changes there.
-- **Pill button** (`.pill`): rounded outline button, for secondary actions such as "Sign in".
-- **Avatar** (`.avatar`): the signed-in editor's initial on `--accent-strong`; opens a small
-  menu with the email, "Set a password" and "Sign out".
-- **Primary button** (`.save-button`): full width, 52px tall, `--accent-strong` with
-  `--on-accent` text. A count badge can sit inside it.
-- **Text button** (`.text-button`): accent-ink text, no border; `.is-quiet` is muted and
-  underlined for low-priority actions.
-- **Icon button** (`.icon-button`): 48px square (or round), outline, icon only, `aria-label`.
-- **Bottom sheet** (`.sheet`): slides up over a dimmed backdrop for short tasks (sign-in).
-  Grip, title + one line of explanation, a close button, then the form. Escape or a tap on the
-  backdrop closes it; focus moves into it.
-- **Collapsible section** (`.shop-section`): a `<details open>` whose summary is the section
-  label, a muted item count and a chevron (pointing right when folded). The whole heading row is
-  the tap target, it works without JS, and which sections are folded is remembered in the
-  browser (`localStorage`) and shared by both tabs of the shopping page.
-- **Status line** (`.shopping-status`): a soft accent box for messages, muted red for errors.
-
-## Shopping page
-
-`templates/shopping-list.js` renders the static page; `templates/shopping.js` re-renders the
-interactive part from the embedded JSON.
-
-Under the serif title, the list's recipes appear as **photo bubbles**: overlapping 36px circles
-(2px `--bg` ring) followed by "For N recipes · list made <date>". Opening that summary lists each
-recipe as a link with its round photo and serif name. Aisle
-section names are serif small caps, like a cookbook index.
-
-Each list row also shows **which recipes the item is for**, as the same photo bubbles in small:
-24px circles (2px `--surface` ring) between the name and the quantity, at most three, then a muted
-"+n". With JS they are a button (`aria-label` "For <recipe names>"); tapping it opens a line of
-chips under the row, each a link to the recipe with its round photo and title on `--track` (long
-titles end in "…"), and tapping again closes it. The tick and the quantity are both labels for
-the row's checkbox, so tapping anywhere but the photos still ticks. Without JS the photos show
-but don't open. A ticked row's photos fade to half.
-
-**Everyone** sees: back link and (when sign-in is configured) a "Sign in" pill; the title; "For N
-recipes · list made <date>", which expands to the recipe links (each with its planned servings,
-"for 2", muted on the right); the servings card; the "Home
-checked <date>" card (when a stocktake exists or sign-in is configured) with **Update**; the
-list, sectioned by aisle (tap a section's heading to fold it away), where each row is a round tick (kept in this browser), the name (+ a
-muted note) and the quantity on the right. Partly stocked items show only what's left to buy
-with the half-filled house; fully stocked items fold into "Already at home (N)". "Start again
-(untick all)" appears once something is ticked.
-
-The **servings card** opens on the agent's plan (servings per recipe). Top row: "Servings" and
-the segmented control: "Plan" (only when the plan isn't the same 1/2/4 for every recipe;
-otherwise that number is the plan) plus 1/2/4, each of which sets every recipe. No segment is
-selected when the recipes are on a mix of your own. Under a `--line` rule, "Per recipe" (with
-"· as planned" or "· your mix" in accent ink) and a chevron opens a fold: one row per recipe with
-its round photo, serif name (two lines at most) and a stepper. A recipe changed from the plan has
-its count in accent ink and "custom" muted under its name. Quantities follow at once: each
-recipe's share of an item scales with its own servings. The picks stay in this browser until the
-agent changes the plan. Without JS there is no card and the list shows the planned amounts.
-
-**Sign-in** is the bottom sheet: email + password (`autocomplete="username"` /
-`"current-password"`, so the browser fills them) → "Sign in". The fallback, "No password? Email me
-a code", leads to a 6-digit code field (`autocomplete="one-time-code"`) → "Sign in"; the email
-also has a magic link for the same device. After a code or link sign-in the same sheet offers
-**Set a password** (`autocomplete="new-password"`, "Not now" to skip; not offered again once this
-browser has used a password); it's also in the avatar menu. After signing in the page opens the
-At home tab.
-
-**The signed-in editor** also gets the tabs: cart + count left to buy, house + count at home.
-On the **At home** tab every row is a fill bar:
-
-- the row's background fills from the left in proportion to the amount at home
-  (`--fill-some`, or `--fill-all` when there's enough), with a thin `--fill-edge` marker at the
-  end of a partial fill;
-- **sliding** horizontally across the row sets the amount (snapped to a sensible step; vertical
-  movement scrolls the page). Sliding all the way means "enough";
-- **tapping** the row's right half adds one step, the left half takes one away (same steps as
-  sliding; reaching the full amount means "enough");
-- the **house** button on the right toggles enough / none;
-- the amount reads "1 / 4" while partial, otherwise the full quantity;
-- a changed row gets a 3px accent stripe on its left edge;
-- a visually hidden range input in each row gives keyboard and screen-reader access (the row
-  shows the focus ring);
-- the round house-with-cross button clears every row;
-- a sticky bar at the bottom holds undo + **Save (n)** while there are unsaved changes, and
-  "✓ Saved <date>" otherwise.
-
-## Chat
-
-`templates/chat.js` (+ the `.chat-*` rules at the end of `styles/style.css`), on every page of a build that has `CHAT_API_URL`.
-
-- **Bubble** (`.chat-bubble`): 56px round, `--accent-strong` with `--on-accent` speech-bubble stroke icon, bottom right, 16px +
-  safe-area inset. With the panel closed it carries a notice: a `--accent-strong` ring turning around it while an answer (or a Save) is on its way
-  ("still answering" in its label; a still dashed ring with reduced motion), then a small `--on-accent` dot once it has arrived (an answer,
-  an error or a save: "new reply"), until the panel is opened. Both last for the tab across pages. It lifts above a sticky `.save-bar` / `.cook-bar` that reaches the bottom
-  of the screen (shopping page Save bar), hides while a sheet is open (`body.sheet-open`), and is covered by the panel on phones.
-- **Panel** (`.chat-panel`): a full-height sheet on phones (sized with `visualViewport`, so the input stays above the keyboard; the page behind
-  doesn't scroll; its surface carries on below it, under iOS Safari's translucent address pill and keyboard toolbar, so the page never
-  shows through; no safe-area gap under the input while the keyboard is up), a 400×640 floating panel anchored above the bubble from 720px. Header: serif title, "New chat" text button, round close
-  button. Escape closes it.
-- **Messages:** the user's in a `--current-soft` bubble on the right; the bot's as plain text on the surface (no box), at most paragraphs,
-  bold, bullet/numbered lists and links. Model text never goes through `innerHTML`, and a link is only a link when it points at the site's own
-  origin (anything else is shown as plain text).
-- **Status line** (`.chat-status`): one quiet muted italic line while it works ("Thinking…", "Looking through the recipes…"), never tool names,
-  led by a small segmented spinner (eight `--accent-strong` ticks going round clockwise, the bright one leading, 16px) so it's plain something is moving (still with reduced motion);
-  gone when the answer is done. Errors are the muted red box (`.chat-error`).
-- **Suggested replies** (`.chat-chip`): outline pills (1px `--border`, 44px tall, sentence case, no emoji) under the last bot message. Only the
-  last message's chips are live; older rows fade to 40% and are disabled.
-- **Context chip** (`.chat-context`): "On: Steamed Rice" on a `--track` pill above the input, dismissable with ×; it tells the user what "this
-  recipe" means.
-- **First run:** the empty chat shows one short line, "Ask me about recipes on this site.", plus the page's starter chips; nothing longer,
-  so it stays visible when the phone keyboard opens. (History is still in `localStorage` for visitors, last ~20 turns, dropped after two weeks.)
-- **Recipe cards** (`.chat-cards` / `.chat-card`, from the `show_recipes` tool): the site's tile look (square photo, small-caps kicker, serif
-  title clamped to 2 lines, "20 min · 412 kcal") in a sideways scrolling row that runs to the panel's edges, 8.75rem wide, snapping at the
-  start. Kicker: "This week" (accent), "Next week" (teal), "Draft" (purple, only when it is in neither week), else the course in muted text.
-  Built by the server from our recipe files, never from model text; tapping one opens the recipe page (inert while a reply is streaming).
-- **Navigation button** (`.chat-nav`, `offer_navigation`): an outline pill in `--accent-ink` with a stroke arrow ("Open Steamed Rice"), shown
-  only once the reply is complete. It is a plain link the user must tap; the chat never navigates on its own. Only the last message's is live.
-- **Action chips** (`.chat-chip.is-nav`): a suggested reply that opens a page rather than sending text; same pill, accent outline plus the arrow.
-- **Account** (`.chat-account`, signed-in builds only): in the header, a round person button (the compact `.pill`) that opens the shared sign-in
-  sheet, or the avatar with its menu (email, Set a password, Sign out), exactly as on the shopping page; the sheet is titled "Sign in to the chat".
-  Signing in keeps the panel open (a magic link that reloads the page reopens it with the draft). A signed-in account that isn't an editor gets a
-  quiet `.chat-banner` under the header: "Signed in as x — this account can't edit, so the chat is read-only."
-- **Chats list** (editors): a list icon button in the header swaps the log for "Your chats" (`.chat-chats`): serif heading, a muted note ("A chat
-  is deleted two weeks after its last message."), then rows with the title, a muted "Today · until Sat" line and a trash icon button; the open
-  chat is on `--current-soft`. Delete asks inline ("Delete this chat?" Cancel / Delete). The header title is the open chat's title. "New chat" leaves
-  the list. On sign-out the panel goes back to the visitor's chat and nothing of the editor's is kept in the browser but the open chat's id.
-- **Feedback controls** (editors, `.chat-feedback`): under each turn's last message, before its chips, two 32px round icon buttons (thumbs up and
-  down, 17px stroke icons in `--icon-muted`, `aria-label` "Good reply" / "Bad reply", `aria-pressed`; a pressed one is filled `--accent-strong`)
-  and a muted note ("Thanks"; after Send "Sent: Wrong amounts" or "Sent"). Thumbs down opens a bordered box: "What went wrong? (optional)", reason
-  chips (several can be picked; picked ones get the accent border on `--current-soft`), a one-line "Add a note", and Skip / Send. Tapping the other
-  thumb switches the score; tapping the chosen one clears it. Earlier turns' rows are dimmed to half opacity and still work. Visitors see none of it.
-- **Starter chips** (`.chat-starters`): the empty chat's first suggestions, by page (recipe: "Swap an ingredient", "Scale it for 6", "Add to
-  next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
-- **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
-  tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
-  Pages in the same tab are one visit, so moving around with the panel closed keeps the conversation too.
-- **A new visit starts a new chat** (a new tab, or the site opened again later; a per-tab `sessionStorage` marker, `recipes-chat-visit`), for
-  visitors and editors alike. The tray stays (it's the household's, on the server) and an editor's earlier chats are still in the Chats list.
-  Two exceptions: a magic link that signs in from the chat continues the visit it was sent from, and an editor with an unseen reply (the dot)
-  gets that conversation instead of a blank one.
-- **Photo attachments** (`.chat-attach`, editors only): a 44px round outline icon button (the stroke "picture" icon, `--text-muted`) to the left of the
-  input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 8 photos;
-  the button disables at 8. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
-  round × on the corner; they're downscaled to 1600px JPEG in the browser first and **uploaded at once, one by one** (`POST /chat/uploads`) while the
-  editor types: an uploading thumbnail is dimmed with a small "Uploading…" label, a failed one is faded with a **Retry** button on it. Sending while
-  uploads run says "Sending as soon as the photos are uploaded…" and sends when they're up. A muted line says when a file couldn't be read. A sent
-  message shows its photos as 88px rounded thumbnails above its text, in the user's bubble, and again (signed URLs) when the chat is reopened.
-  Tapping one enlarges it (`.chat-viewer`): the photo whole, `object-fit: contain`, on a near-black backdrop covering the panel, with its number
-  badge bottom-left; tapping anywhere on it (or Escape) goes back to the chat, focus on the thumbnail. It stays open while the conversation is
-  redrawn (a photo-reading poll) and closes with a different chat or the panel.
-  Visitors have no button.
-- **Photo numbers** (`.chat-photo-num`): every photo carries its number in the chat as a small round badge bottom-left (white `--surface` pill,
-  `--shadow`, 0.75rem semibold, tabular figures), on the waiting thumbnails and the sent ones. Numbers run on through the whole conversation
-  (the second message's photos are 7, 8…), because the chat talks about them by number ("photos 4 and 5 may be one recipe"). Neutral, never a week colour.
-- **Notes from the site** (`.chat-event`): a short line the server adds to the conversation ("Photos read: 5 recipes, 1 to check"): centred, a
-  `--track` pill, `--text-muted` 0.8rem, no bubble and no thumbs. The bot's answer to it follows as a normal reply.
-- **Reading progress** (`.chat-reading`, a `.chat-status` line, last in the conversation): "Reading photos… 4 of 6", then "Adding them to the tray…"
-  while the follow-up runs. While photos are being read the panel checks the conversation every 5s (15s with the panel closed; the bubble's ring
-  turns meanwhile and the dot shows when the answer arrives), and a new page load shows the dot if a reply came while away. A message sent while the
-  follow-up answers waits with "Sending when I'm done…" and goes when it's finished.
-- **Action chips that commit** (`.chat-chip.is-action`: Save to site, Finalise list): solid `--accent-strong` like the primary button, fixed text
-  drawn by the panel ("Save to site (3)"), never the model's wording.
-- Input: 16px text (no iOS zoom), grows to ~5 lines; Enter sends on desktop, a new line on touch; round `--accent-strong` send button.
-- **Questions** (`.chat-question`, `ask_user`): the question in bold, then **solid** chips (`--accent-strong`, `--on-accent`; a suggestion is an
-  outline chip). The input's placeholder reads "Or type an answer" while one is live. `multi` chips toggle (`--current-soft` with an accent
-  inset border) and a solid "Done" sends them together. Only the last message's question is live.
-- **Drafts review card** (`.chat-review`, editors, at Finalise after *Promote it*): one card (`--surface`, 1px `--border`, 14px radius, rows
-  divided by `--line`) listing every draft of this week. Each row is the recipe's 44px photo, its title (a link to the recipe, one line,
-  ellipsis) and a muted meta line ("Also planned for next week" when it is), then a thumbs up and a thumbs down: the feedback row's icons at
-  44px tap size (`--icon-muted`, the picked one filled `--accent-strong`, `aria-pressed`). Up = liked (promoted), down = not for us (removed);
-  tapping the picked thumb again clears it. No thumb means not decided: the draft is kept for the coming week. A row starts on the thumb the
-  tray already holds. The foot says "No thumb: kept for the coming week." next to a solid "Done", always enabled, which sends every thumb in
-  one message. While it is open the input says "Or type an answer", the tray folds to its head line on a phone, and the tray's Finalise list
-  button scrolls to the card instead of starting again. Once answered it fades to 40% like an old question; its recipe links still work.
-- **Optional items card** (`.chat-review.chat-optional`, editors, at the end of Finalise list): the drafts review card's look (`--surface`,
-  1px `--border`, 14px radius, rows divided by `--line`), headed "Optional this week" with a muted line "Only garnishes and extras. Everything
-  else is on the list." One row per item that only optional ingredients need: the photos of the recipes it is for (up to three 28px rounded
-  squares, overlapping), the item's name (semibold) over a muted line with its amount and the recipe titles ("5ml · for Satay Salmon"), and a
-  square **tick box** at 44px tap size: ticked = kept (filled `--accent-strong` with an `--on-accent` check), unticked = an `--icon-muted`
-  outline and the name struck through in muted ink. Every row starts ticked (or as an earlier answer left it). The foot says "Ticked items stay
-  on the list." next to a solid **Done**, always enabled, which sends every answer at once; the editor's message reads "Leaving off: sesame seeds
-  and chilli oil." (or "Keeping all the optional items."). It behaves like the drafts card: "Or type an answer" while open, the tray's Finalise
-  list scrolls to it, it fades to 40% once answered. Dropped items are simply off this week's list; kept ones show "optional" as their note on
-  the shopping page.
-- **Plan tray** (`.chat-tray`, editors only, between the log and the input): a hairline-topped strip. A small-caps head line "Tray · 8 changes ·
-  until Fri" with a chevron (tap to fold); a sideways row of small cards (`.tray-card`, 9.5rem, snapping), grouped in Save order (switch, this
-  week's drafts promote/remove, new, added to next week, edits, list, servings), newest first inside a group; then one full-width primary button
-  (`.save-button` look): **Finalise list** while the tray changes next week and the list hasn't been reviewed (or a change brought a new flag or optional item),
-  "Reviewing the list…" while the model reviews it, **Save to site (n)** when ready. On a phone the tray folds itself to its header line while a reply streams and when the reader scrolls up, and opens on a tap, a new card or the end of the turn. A fold the reader chose (a tap on the head) is theirs: it stays folded for the rest of the tab's visit (`sessionStorage`), across turns, sent messages and pages, until they tap it open; while it is, a change to the tray (a card added or dropped) shows as a small accent dot (`.tray-dot`) after "Tray · n changes" instead of opening it. The cards, details and notices scroll inside the tray (`.tray-scroll`, the tray is at most 63% of the panel / 26rem: enough for a full row of cards, ~16rem, so no card is ever clipped by the button) and the button is its own row below, so it never covers them; an opened detail is scrolled into view. While the on-screen keyboard is open the strip folds to the head line and opens again
-  when it closes or a message is sent. A card has the kind as a kicker (New in the draft purple, Next week teal, Switch accent, the rest muted),
-  a serif title, a muted sub line, "Added by Name: reason", × to drop (a round button on the corner), and quiet text buttons: **Save now** (quick
-  fixes only) and **New photo**. A newly added card gets the accent border on `--current-soft` for a few seconds and the row scrolls to it. A
-  new recipe shows "Making the photo…" on its photo until ready; tapping it opens its staged ingredients and steps, tapping the list card
-  previews it by aisle. The **List card** is live: the server rebuilds it with every tray change ("52 items for 5 recipes", sub "Reviewed" or
-  "Changed since the review: Finalise list"); it has no ×, since it follows next week; its preview starts with the patches made at review
-  ("Changes: round lime up; …"), and a patch that no longer applies shows as a quiet italic `--text-muted` line (`.tray-note`) on the card.
-  A **Catalogue** card (muted kicker) holds ingredient catalogue changes from the review. A problem is a muted red line on the card (and red border); a clash is flagged the same way and tapping the card asks
-  the bot, which resolves it with chips. A day before it expires a `--current-soft` notice says "The tray expires tomorrow" with a chip for the
-  button that applies.
-- **Reading entries in the tray** (`.tray-reading`): photos being read anywhere in the household show above the cards as quiet italic `--text-muted`
-  lines, "Reading 3 photos · Sam" (or "· you"). They aren't tray items: nothing to save, never in the shopping list's hash, and the other editor's
-  photos are never shown, only the count and the name. With nothing staged yet, the strip shows just these lines. While another editor's photos are
-  being read, a line above Save says "Sam has 3 photos still being read." (Save still works).
-- **Week balance** (`.tray-balance`): one muted 0.82rem line under the tray's head, "Next week after Save: 5 recipes · 3 dinners · ~420 kcal each ·
-  2 h 15 min in all", from numbers the server computed; hidden while the tray is folded. **At home card**: kicker "At home" (muted, like Edit), title
-  "At home: 2 items", sub "Eggs 6, Basmati rice"; tapping opens the list of what was recorded; **Save now** works on it.
-- **Locked panel** (`.chat-locked`, no input, no tray, no "New chat"): a serif title and a muted line, shown in place of the conversation when the chat
-  can't be used: "The chat is switched off for now." (server `disabled`; the bubble is then gone on later pages of the tab session), "Chat is for
-  signed-in editors" with a solid Sign in button (server `signin`), or "This account can't use the chat" for a signed-in account that isn't an editor.
-  With the build variable `CHAT_PUBLIC=false` the bubble itself is only shown to a signed-in visitor.
-- **Publishing cards** (`.chat-card.is-publishing`): after Save the summary's new recipes are inert, half-faded cards with the kicker
-  "Publishing…" until the server sees their page, then they turn into normal cards.
-- **Action chips** (`.chat-chip.is-action`): solid chips that press the tray's own button ("Finalise list", "Save to site (n)"), with fixed text: still a tap by a person (see "Action chips that commit" above).
+- **Stepper** (`.stepper`): − count + on the same track; buttons at a limit are disabled.
+- **Primary button** (`.save-button`): full width, `--accent-strong`, can carry a count. One per screen.
+- **Pill** (`.pill`) and **chip** (`.chat-chip`): rounded outline buttons for secondary actions and suggested replies; solid
+  only when tapping it commits or answers a question.
+- **Text button** (`.text-button`): accent-ink text, no border; `.is-quiet` for low-priority actions.
+- **Icon button** (`.icon-button`): square or round, outline, icon only, `aria-label`.
+- **Bottom sheet** (`.sheet`): slides up over a dimmed backdrop for short tasks; Escape or a tap on the backdrop closes it,
+  focus moves into it.
+- **Collapsible section**: a `<details open>` whose whole heading row is the tap target, so it works without JS.
+- **Fill bar**: a row whose background fills in proportion to an amount (`--fill-some` / `--fill-all`), set by sliding or
+  tapping, with a hidden range input for keyboard and screen readers.
+- **Photo bubbles**: overlapping round recipe photos with a ring, showing which recipes something is for.
+- **Status line**: one quiet line for progress and messages; a muted red box for errors.

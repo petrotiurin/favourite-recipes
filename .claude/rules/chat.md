@@ -65,7 +65,7 @@ the model only when the server flags something (`reviewFlags`), answering with O
 List card and re-applied by item id; `remember: true` on a merge / move / rename stages an `update_catalogue` change on one Catalogue
 card); then the **optional items card** (`lib/optional-review.js`, `POST /chat { action: "review_optional", answers: { item: "keep" | "drop" } }`,
 once only, no model call; the model's UI tool `review_optional` shows it again; drops are this week's patches only; the panel draws it
-in `templates/chat.js`, `optionalEl`, `.chat-optional` in `design.md`); then Save. A later change keeps Save unless it brings a new
+in `templates/chat.js`, `optionalEl`, `.chat-optional`); then Save. A later change keeps Save unless it brings a new
 flag or optional item. "Not yet" to the promote question is answered by the server without a model call (`lib/shortcuts.js`), and so
 is "Promote it": it stages the switch and shows the **drafts review card** (`lib/draft-review.js`, `.chat-review` in
 `templates/chat.js`), every draft of this week in one card with a thumbs up (promote) / down (remove), no thumb = kept for the coming
