@@ -8,9 +8,10 @@ paths:
 
 # The site's templates and browser scripts
 
-`design.md` is the UI reference: colour tokens (the orange accent for this week, purple only for drafts, teal only for next week,
-no other hues such as green), the house icon language, the shared components and the interaction rules. Read it before changing any
-page's look or behaviour, and update it in the same change when you add or alter a pattern.
+`design.md` holds the UI principles: colour tokens (the orange accent for this week, purple only for drafts, teal only for next
+week, no other hues such as green), the house icon language and the shared components. Read it before changing any page's look or
+behaviour. Update it only when a principle, a token or a shared component changes; page-specific details (copy, sizes, flows,
+states) belong in the code, not there.
 
 `templates/` holds two kinds of file. Build-time renderers, JS functions that return HTML strings (`layout.js`, `index.js`,
 `next-week.js`, `tiles.js`, `recipe.js`, `ingredients.js` for the ingredient lines and their `data-qty`, `shopping-list.js`,
