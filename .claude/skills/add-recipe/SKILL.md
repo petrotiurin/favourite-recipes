@@ -7,7 +7,7 @@ description: Add a new recipe to the favourite-recipes static site — collects 
 
 > Handing over recipes to plan for next week, or want a shopping list too? Use the `plan-recipes` skill instead (it works through the recipes MCP server and builds the shopping list). This skill is for editing the repo's files directly.
 
-This site is 100% static (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/` (with its ingredients as frontmatter data, adding any new ingredient to `data/ingredients.json`), save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
+The site is built into static files (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/` (with its ingredients as frontmatter data, adding any new ingredient to `data/ingredients.json`), save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
 
 ## 1. Collect the recipe
 
@@ -19,7 +19,7 @@ From whatever the user gives you (pasted text, a photo of a recipe card, a link,
 - **Total minutes** — a single number. If the source gives prep+cook separately, sum them.
 - **Serves** — a single number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
 - **Calories** — kcal per serving, a single whole number. Always required. Use the source's figure if it gives one (Emily English recipes usually state "xxx kcal per portion"); otherwise estimate from the ingredient quantities divided by `serves`, and tell the user it's an estimate.
-- **Ingredients** — a full list, each with an amount
+- **Ingredients** — a full list, each with an amount (only "to taste" / "to serve" items have none)
 - **Instructions** — numbered steps
 - **One hero image**
 

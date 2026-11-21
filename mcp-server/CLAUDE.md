@@ -1,0 +1,34 @@
+# The backend (`mcp-server/`)
+
+The recipe site's backend on Vercel, **not part of the site**: the only place with secrets and the only writer to the repo.
+Settings, routes and deploys are in `README.md`; the chat's design is in `../docs/chatbot-design.md` and its working notes in
+`../.claude/rules/chat.md`; the shopping list's format in `../.claude/rules/shopping-list.md`.
+
+- It serves the MCP tools for agents (`/mcp`: add/edit recipes by committing `recipes/*.md` and `images/recipes/*` to `main`),
+  `/stocktake` and `/chat` for the site. It never ships anything into `dist/`.
+- Every write is a commit to `main` and every commit is a site deploy, so writes are batched (`batch_changes`, one Save per tray).
+- It holds the validation rules: its tools mirror the `add-recipe` skill rules in `lib/recipe-format.js` (keep the two in sync if
+  the format changes).
+- **One tool registry, one dispatcher**: every tool is defined once in `lib/tools.js` (name, description, zod schema,
+  `access: "read" | "stage" | "write"`, handler) and every call, MCP or chat, goes through `dispatch(name, args, caller)`, which
+  checks `caller.role` (`public` may only run `read`; `editor` and `agent` run all; a tool with no `access` counts as `write`).
+  `lib/server.js` registers the MCP tools from the registry with a frozen `{ role: "agent" }` caller. The functions that commit
+  (`ChangeSet.commit` / `commitChanges` in `lib/github.js`, `saveStocktake`, the recipe and shopping-list writers) take the caller
+  and assert the role themselves. A new tool goes in the registry with its access level, and the registry test
+  (`test/tools.test.js`) covers it automatically. `toolDefinitions(role)` turns the zod schemas into OpenAI-style function tools.
+- `lib/cache.js`: a short in-memory cache (60s, cleared on commit) behind `search_recipes` and the chat catalogue.
+- `lib/catalogue.js`: the ingredient catalogue (`../data/ingredients.json`): name resolution, conversions, the write-time ingredient
+  checks, `applyCatalogueChange`.
+- `workflows/`: the agent workflows the server serves (`plan-recipes.md`, `ocado-shop.md`, `sainsburys-shop.md`) as MCP prompts and
+  through `get_workflow_guide`; `shared/` holds the rules every shop flow includes (change a shared rule there, shop-specific
+  products in the shop's own guide). A server deploy updates them for every client.
+- Local harness: `npm run dev` (`scripts/dev.js`): backend on :8787 and the built site on :4000 with fake GitHub / OpenRouter /
+  Supabase (`scripts/fakes.js`) and sign-in accounts; the test accounts and ports are at the top of `scripts/dev.js`.
+
+## Calling real APIs from Node in a cloud session
+
+In a Claude Code cloud session, API keys (e.g. OpenRouter) are added by the session's HTTPS proxy, not kept in environment variables.
+`curl` goes through the proxy, but Node's built-in `fetch` ignores `HTTPS_PROXY` and connects directly, so the key is never added: OpenRouter
+answers 401 ("No cookie auth credentials found"), which the photo reader reports as "out of credit". Run such scripts with
+`NODE_USE_ENV_PROXY=1` and give the code a placeholder key (e.g. `OPENROUTER_CHAT_VISION_KEY=proxy-injected`) so it doesn't skip the call;
+the proxy replaces the `Authorization` header.
