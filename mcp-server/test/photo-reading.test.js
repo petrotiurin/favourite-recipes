@@ -354,7 +354,9 @@ test("a recipe already in the book is flagged and refused: add it to next week i
   const [slug] = [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3));
   const md = github.files.get(`recipes/${slug}.md`).toString();
   const title = md.match(/^title: (.*)$/m)[1].replace(/^["']|["']$/g, "");
-  const names = [...md.matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]).slice(0, 4);
+  // ingredients live in the frontmatter now (`- { amount: .., name: .., ... }`), not as **bold** in the body
+  const names = [...md.matchAll(/^\s*- \{[^}\n]*?\bname: ([^,}\n]+)/gm)].map((m) => m[1].trim()).slice(0, 4);
+  assert.ok(names.length >= 2, "the fixture recipe has structured ingredients");
   reads[await colourKey(RED)] = fakeRead(title, { recipe: { ingredients: names.map((name) => ({ quantity: "1", name, note: "" })) } });
   const { conversation_id } = await say("add this", { images: [asUrl(await solid(RED))] });
   assert.match(notes(conversation_id)[0].content.content, new RegExp(`already in the book \\(${slug}\\)`));
