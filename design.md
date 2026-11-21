@@ -300,6 +300,11 @@ On the **At home** tab every row is a fill bar:
   next week"; home: "Something quick tonight", "Light and healthy"; next week: "What's planned?"; shopping: "What's left to buy?"). Same chip component.
 - **Across page loads:** the panel's open state, conversation id and unsent draft are kept in `sessionStorage`, the history in `localStorage`, so
   tapping a card or button reopens the panel on the new page scrolled to the end (without focusing the input); the context chip shows the new page.
+  Pages in the same tab are one visit, so moving around with the panel closed keeps the conversation too.
+- **A new visit starts a new chat** (a new tab, or the site opened again later; a per-tab `sessionStorage` marker, `recipes-chat-visit`), for
+  visitors and editors alike. The tray stays (it's the household's, on the server) and an editor's earlier chats are still in the Chats list.
+  Two exceptions: a magic link that signs in from the chat continues the visit it was sent from, and an editor with an unseen reply (the dot)
+  gets that conversation instead of a blank one.
 - **Photo attachments** (`.chat-attach`, editors only): a 44px round outline icon button (the stroke "picture" icon, `--text-muted`) to the left of the
   input, opening the camera / photo library (`<input type=file accept="image/*" multiple>`; no `capture`, so a phone offers both). Up to 8 photos;
   the button disables at 8. Picked photos wait above the input as 60px rounded thumbnails (`.chat-attachments`, 1px `--border`) with a small
