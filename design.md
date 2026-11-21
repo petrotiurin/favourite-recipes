@@ -3,7 +3,7 @@
 How the site looks and behaves. Keep this file in step with `styles/style.css` and the
 templates: when a change adds or alters a pattern, update the matching section here.
 
-The site is static HTML + one stylesheet + small vanilla JS (see CLAUDE.md, "Hard constraint").
+The site is static HTML + one stylesheet + small vanilla JS (see CLAUDE.md).
 Every page must read fine with JS off; JS only adds interaction on top.
 
 The look is **"Journal"**: a family cookbook you flick through. Recipe names and headings in a
