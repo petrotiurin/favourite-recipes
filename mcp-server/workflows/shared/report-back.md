@@ -8,6 +8,7 @@ Each shop guide adds its own closing line (totals, slot) after it.
 First read the basket/trolley page (`get_page_text`): check quantities, no duplicates, nothing missing.
 
 Keep it short. **Don't list the items added**: the user checks the basket themselves. Only what needs their attention:
+- **Swaps the household rules made** (always list these as a highlight at the end): hard cheese replaced by cheddar, pouch rice replaced by regular rice, tinned sweetcorn bought frozen; plus "bread/sourdough: buy locally" for what was skipped.
 - **Judgment calls and deviations**: substitutions, whole-vs-sliced, unverified pack counts, tiny packs, items assumed from a cut-off line, per-kg estimates, optional / "to serve" items bought, multibuys used, non-negotiables bought below the star cutoff, anything skipped or out of stock.
 - **Unavailable picks** (favourites included) and what replaced them, flagged separately so the user can decide.
 - **Small overages that forced an extra pack**: the need was only slightly over a whole number of packs (e.g. Greek yoghurt: 470g needed vs a 450g pack, so 2 packs). Fine to add; list item, need, pack size and count so the user can drop it.
