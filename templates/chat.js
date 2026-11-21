@@ -692,7 +692,25 @@
   }
   var RA = window.RecipeAuth || null; // present only when the build has Supabase sign-in (templates/auth.js)
   var apiBase = apiUrl.replace(/\/+$/, "");
-  var anonChat = loadChat(); // the visitor's chat, kept in this browser
+  // A new visit (a new tab, or the site opened again later) starts a new conversation; the tray stays (it is the household's, on
+  // the server), and an editor's earlier chats stay in the Chats list. Pages loaded in the same tab are the same visit, so moving
+  // around with the panel closed keeps the conversation. The marker is in sessionStorage (per tab, survives page loads); a magic
+  // link that just signed in from the chat (PENDING_KEY, fresh) continues the visit it was sent from. If sessionStorage can't be
+  // used, nothing counts as a new visit (the conversation is kept, as before).
+  var VISIT_KEY = "recipes-chat-visit";
+  var newVisit = (function () {
+    try {
+      if (sessionStorage.getItem(VISIT_KEY) === "1") return false;
+      sessionStorage.setItem(VISIT_KEY, "1");
+      if (sessionStorage.getItem(VISIT_KEY) !== "1") return false;
+    } catch (e) {
+      return false;
+    }
+    var signin = readJson(localStorage, "recipes-chat-signin");
+    return !(signin && Date.now() - Number(signin.t) < 30 * 60 * 1000);
+  })();
+  if (newVisit) writeJson(localStorage, STORE_KEY, null);
+  var anonChat = loadChat(); // the visitor's chat, kept in this browser (for this visit)
   var chat = anonChat; // what the panel shows: anonChat, or an editor's server chat { server: true, id (server id or null), messages }
   var mode = "public"; // "public" | "editor" (decided by the server from the token: GET /chat/me)
   var me = { signedIn: false, email: "" };
@@ -2003,6 +2021,7 @@
     renderAll();
   }
 
+  var visitResumeId = null; // set by refreshMe on a new visit: the conversation with a reply this browser hasn't seen
   var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var loadSeq = 0;
   function enterEditor() {
@@ -2014,8 +2033,15 @@
     streaming = null;
     setBusy(false);
     mode = "editor";
-    var stored = readJson(localStorage, EDITOR_KEY);
-    var wantId = (UUID.test(loadUi().id || "") && loadUi().id) || (stored && stored.email === me.email && UUID.test(stored.id || "") && stored.id) || null;
+    // A new visit starts a new chat (the last one stays in the Chats list) unless a reply in it hasn't been seen yet; later sign-ins
+    // on this page (an expired session signed in again) come back to the stored one as before.
+    var stored = newVisit ? null : readJson(localStorage, EDITOR_KEY);
+    var wantId = (UUID.test(loadUi().id || "") && loadUi().id) || (UUID.test(visitResumeId || "") && visitResumeId) || (stored && stored.email === me.email && UUID.test(stored.id || "") && stored.id) || null;
+    if (newVisit) {
+      newVisit = false;
+      visitResumeId = null;
+      if (!wantId) writeJson(localStorage, EDITOR_KEY, null);
+    }
     chat = { server: true, id: null, title: "", messages: [] };
     paintHeader();
     renderAll();
@@ -2096,6 +2122,8 @@
           if (last && j.role === "editor") {
             if (!seenAt()) markSeen(last); // first time on this browser: nothing is "new"
             else if (last > seenAt() && panel.hidden) {
+              // a new visit opens the chat with the unseen reply (a follow-up after the photos were read), not a blank one
+              if (newVisit && typeof j.last_reply.conversation_id === "string") visitResumeId = j.last_reply.conversation_id;
               unread = true;
               paintNotice();
               saveUi();

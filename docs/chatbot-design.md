@@ -257,7 +257,8 @@ Git is out: every commit is a site deploy. We already have a Supabase project.
   (last ~20 turns).
 
 UI: the panel header has a "Chats" list (title, last updated) and "New chat". The server titles a
-chat after its first exchange. A chat open in the panel stays open across page loads (see §7).
+chat after its first exchange. A chat open in the panel stays open across page loads in the same visit; a new visit
+starts a new chat (see §7.3).
 
 **History is per user** (decided, Q4): each editor sees only their own chats, on any of their
 devices. The shared thing between editors is the plan tray (D5), not the conversations, so a tray
@@ -480,6 +481,11 @@ index: active filter and search text) and sends it with every message.
 - It's a static site, so navigating is a full page load. `chat.js` has to restore the panel: open
   state and the active conversation id in `sessionStorage`, history re-fetched (editor) or read
   from `localStorage` (anonymous). The new page's context is picked up on the next message.
+- That restore is within one visit (one tab: a `sessionStorage` marker, `recipes-chat-visit`). A new
+  visit starts a new conversation, signed in or not: the visitor's stored history is cleared and an
+  editor's last conversation isn't reopened (it stays in the Chats list); the tray is untouched. A
+  magic link back from a sign-in started in the chat counts as the same visit, and an editor whose
+  newest reply hasn't been seen (`/chat/me` `last_reply`) gets that conversation.
 - Don't offer to navigate while a reply is still streaming; it would cut the stream.
 - **Deploy lag:** a recipe saved a minute ago has no page yet. Cards and links for just-saved
   recipes show "Publishing…" and stay disabled until the page exists (the server can check with a

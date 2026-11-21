@@ -28,7 +28,8 @@ sends it from the `#page-context` JSON every page has), and per-IP rate limits (
 `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing apply (`lib/langfuse.js`, Langfuse JS SDK v6
 over OpenTelemetry: one `agent` trace per turn with a generation per model call and a `retriever` / `tool` observation per tool
 call; see design 8.1; change tracing with the `langfuse` skill, `.claude/skills/langfuse/`, installed from github.com/langfuse/skills;
-`npx skills update` refreshes it). The widget is `templates/chat.js` (safe renderer, history in `localStorage`); it only exists on
+`npx skills update` refreshes it). The widget is `templates/chat.js` (safe renderer, history in `localStorage`; a new visit, i.e. a tab
+without the `recipes-chat-visit` sessionStorage marker, starts a new chat for everyone, the tray stays; design 7.3); it only exists on
 builds that set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
 
 ## Sign-in and per-user chats
