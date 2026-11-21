@@ -138,7 +138,8 @@
           "amounts": {
             "fish-pie-en-croute": 2,
             "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 1.5
-          }
+          },
+          "have": true
         },
         {
           "name": "Granny Smith apples",
@@ -173,7 +174,8 @@
             "my-ultimate-christmas-salad": 0.17,
             "smoked-salmon-cream-cheese-flatbreads": null,
             "super-greens-broccoli-and-smoked-cheddar-soup": null
-          }
+          },
+          "have": true
         },
         {
           "name": "Limes",
@@ -218,7 +220,8 @@
           "amounts": {
             "my-ultimate-christmas-salad": 0.17,
             "smoked-salmon-cream-cheese-flatbreads": 0.33
-          }
+          },
+          "have": true
         },
         {
           "name": "Shallots",
@@ -255,7 +258,8 @@
             "crispy-baked-cod-katsu-curry": 1,
             "sesame-avocado-chopped-chicken-bowl": 2,
             "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad": 0.5
-          }
+          },
+          "have": 6
         },
         {
           "name": "Strawberries",
@@ -396,7 +400,8 @@
             "crispy-baked-cod-katsu-curry": 1,
             "fish-pie-en-croute": 1,
             "healthy-christmas-spice-granola": 2
-          }
+          },
+          "have": true
         },
         {
           "name": "Feta cheese",
@@ -494,7 +499,8 @@
           "quantity": "10g",
           "recipes": [
             "smoked-salmon-cream-cheese-flatbreads"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chickpeas",
@@ -520,14 +526,16 @@
           "amounts": {
             "crispy-baked-cod-katsu-curry": 5,
             "sesame-avocado-chopped-chicken-bowl": 5
-          }
+          },
+          "have": true
         },
         {
           "name": "Jalapeños",
           "quantity": "7.5g",
           "recipes": [
             "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sweetcorn",
@@ -541,7 +549,8 @@
           "quantity": "16g",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         }
       ]
     },
@@ -553,14 +562,16 @@
           "quantity": "2g",
           "recipes": [
             "smoked-salmon-cream-cheese-flatbreads"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Balsamic vinegar",
           "quantity": "5ml",
           "recipes": [
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Black pepper",
@@ -571,14 +582,16 @@
             "hot-honey-sticky-fig-cottage-cheese-toasts",
             "maple-chicken-breakfast-sausage-muffins",
             "my-ultimate-christmas-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Cajun seasoning",
           "quantity": "4g",
           "recipes": [
             "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chia seeds",
@@ -604,14 +617,16 @@
           "quantity": "1",
           "recipes": [
             "fish-pie-en-croute"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chilli flakes",
           "quantity": "0.6g",
           "recipes": [
             "hot-honey-sticky-fig-cottage-cheese-toasts"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Chinese five spice",
@@ -632,7 +647,8 @@
           "quantity": "2g",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Dried cranberries",
@@ -660,7 +676,8 @@
             "50g-protein-toasties-the-bct-brie-cranberry-turkey": 3,
             "maple-chicken-breakfast-sausage-muffins": 1.5,
             "my-ultimate-christmas-salad": 0.5
-          }
+          },
+          "have": true
         },
         {
           "name": "Ground allspice",
@@ -674,14 +691,16 @@
           "quantity": "2g",
           "recipes": [
             "healthy-christmas-spice-granola"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Ground turmeric",
           "quantity": "1.5g",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Honey",
@@ -737,21 +756,24 @@
           "amounts": {
             "fish-pie-en-croute": 10,
             "my-ultimate-christmas-salad": 5
-          }
+          },
+          "have": true
         },
         {
           "name": "Olive oil",
           "recipes": [
             "hot-honey-sticky-fig-cottage-cheese-toasts",
             "roasted-strawberry-cheesecake-chia-puddings"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Onion granules",
           "quantity": "1.5g",
           "recipes": [
             "maple-chicken-breakfast-sausage-muffins"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Panko breadcrumbs",
@@ -798,28 +820,32 @@
             "my-ultimate-christmas-salad",
             "smoked-salmon-cream-cheese-flatbreads",
             "sticky-cajun-honey-chicken-with-avocado-cream-and-charred-corn-salad"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sesame oil",
           "quantity": "10ml",
           "recipes": [
             "sesame-avocado-chopped-chicken-bowl"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Sesame seeds",
           "quantity": "9g",
           "recipes": [
             "smoked-salmon-cream-cheese-flatbreads"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Soft light brown sugar",
           "quantity": "8g",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Soy sauce",
@@ -831,34 +857,39 @@
           "amounts": {
             "crispy-baked-cod-katsu-curry": 5,
             "sesame-avocado-chopped-chicken-bowl": 20
-          }
+          },
+          "have": true
         },
         {
           "name": "Sriracha",
           "quantity": "20ml",
           "recipes": [
             "sesame-avocado-chopped-chicken-bowl"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tahini",
           "quantity": "90g",
           "recipes": [
             "healthy-christmas-spice-granola"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Tomato ketchup",
           "quantity": "15ml",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Vegetable oil",
           "recipes": [
             "crispy-baked-cod-katsu-curry"
-          ]
+          ],
+          "have": true
         },
         {
           "name": "Walnuts",
@@ -873,9 +904,11 @@
           "note": "optional",
           "recipes": [
             "fish-pie-en-croute"
-          ]
+          ],
+          "have": true
         }
       ]
     }
-  ]
+  ],
+  "stocktake": "2026-11-21T11:49:53.053Z"
 }
