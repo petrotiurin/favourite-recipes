@@ -242,7 +242,7 @@
   function noteHtml(item) {
     return item.note ? '<span class="shop-note">' + esc(item.note) + "</span>" : "";
   }
-  /** An aisle section; tapping its heading folds it away (a <details>, so it also works without JS). */
+  /** An aisle section; tapping its heading folds it away (a <details>, so folding needs no script). */
   function sectionHtml(name, count, rows) {
     var open = state.collapsed.indexOf(name) === -1;
     return (

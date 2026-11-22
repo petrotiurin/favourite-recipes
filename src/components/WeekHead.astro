@@ -1,0 +1,17 @@
+---
+// The week heading above the home page's grid: "This week" on the left (when this week has recipes) and, on the right, a teal link to
+// next-week.html with next week's count, or a quiet "not planned" when next week is empty. Nothing when both are empty.
+import Icon from "./Icon.astro";
+
+interface Props {
+  thisWeek: number;
+  nextWeek: number;
+}
+const { thisWeek, nextWeek } = Astro.props;
+---
+{(thisWeek > 0 || nextWeek > 0) && (
+  <div class="week-head">
+    {thisWeek > 0 ? <h2 class="week-label">This week</h2> : <span></span>}
+    {nextWeek > 0 ? <a class="week-link" href="next-week.html">Next week &middot; {nextWeek}<Icon name="arrow" /></a> : <span class="week-empty">Next week: not planned</span>}
+  </div>
+)}

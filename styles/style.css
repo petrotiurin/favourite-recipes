@@ -517,7 +517,7 @@ main:has(.tile-grid.is-searching) .week-label {
 }
 
 /* Cooking controls under the facts: servings on the left, "Keep screen on" on the
-   right. Hidden until servings.js or wakelock.js fills it, so no-JS pages skip it. */
+   right. Hidden until servings.js or wakelock.js fills it, so a page they don't run on skips it. */
 .cook-bar {
   display: flex;
   flex-wrap: wrap;
@@ -1394,7 +1394,7 @@ footer.site-footer {
   text-decoration: line-through;
 }
 
-/* With JS a row is: the tick + name label, the recipe photos button, the quantity (a second label
+/* Once shopping.js has run a row is: the tick + name label, the recipe photos button, the quantity (a second label
    for the same checkbox, so tapping it still ticks), then the recipe names once the photos are tapped. */
 .shop-row {
   display: flex;

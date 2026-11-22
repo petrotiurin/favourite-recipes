@@ -18,7 +18,7 @@ left, until the migration reaches it:
 | `need()` in `templates/shopping.js` (browser script) | `neededAmount` in `shared/shopping-list.ts` | `shared/test/shopping-list.test.ts`; goes when the shopping list becomes an island (step 7) |
 
 `shopping.js`'s `formatNumber` / `withUnit` (how a quantity is written on the shopping page) is also its own, and the static page's
-`fmtAmount` in `templates/shopping-list.js`: they belong to the shopping page's single render in step 7.
+`fmtAmount` in `src/lib/shopping.ts`: they belong to the shopping page's single render in step 7.
 
 The recipe format's prose, `.claude/skills/add-recipe/SKILL.md` (and the schema in the root `CLAUDE.md`), describes what `shared/recipe.ts` enforces; change
 them together until the skill is rewritten around the schema (`docs/typescript-migration.md` step 10).

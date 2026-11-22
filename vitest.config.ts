@@ -4,6 +4,6 @@ import { getViteConfig } from "astro/config";
 export default getViteConfig({
   test: {
     environment: "happy-dom",
-    include: ["src/**/*.test.ts", "tests/**/*.test.ts", "shared/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "shared/**/*.test.ts"],
   },
 });

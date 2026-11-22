@@ -1,4 +1,4 @@
-// Serves the site's existing browser scripts, the stylesheet and the recipe photos exactly as they are (no bundling, no hashing):
+// Serves the site's browser scripts (templates/*.js, until they become islands), the stylesheet and the recipe photos exactly as they are (no bundling, no hashing):
 // the dev server answers them and the build copies them into dist/ next to the pages. Which scripts go in depends on the same
 // env vars as before: auth.js only with SUPABASE_URL + SUPABASE_ANON_KEY, chat.js only with CHAT_API_URL.
 import fs from "node:fs";

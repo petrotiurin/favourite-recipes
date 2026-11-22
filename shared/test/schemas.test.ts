@@ -2,8 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { describe, expect, it } from "vitest";
-// @ts-ignore templates/ is untyped JS until step 4 replaces it
-import { layout } from "../../templates/layout.js";
 import { catalogueSchema } from "../catalogue.ts";
 import { chatEventSchema, chatEventData } from "../chat-events.ts";
 import { chatPageSchema, pageContextSchema } from "../page-context.ts";
@@ -77,11 +75,13 @@ describe("ingredient problems are the messages a write is refused with", () => {
 });
 
 describe("the page context", () => {
-  const embedded = (pageContext: object) => JSON.parse(layout({ title: "t", content: "", pageContext }).match(/id="page-context">(.*)<\/script>/)![1]);
-  it("is what the layout embeds, whatever the page", () => {
+  // What the layout embeds (src/components/components.test.ts renders the layout and reads it back through this schema).
+  it("is the page, and for a recipe its slug and title", () => {
     for (const ctx of [{ page: "index" }, { page: "next-week" }, { page: "shopping" }, { page: "recipe", slug: "pancakes", title: "Pancakes <b>&</b>" }]) {
-      expect(pageContextSchema.parse(embedded(ctx))).toEqual(ctx);
+      expect(pageContextSchema.parse(ctx)).toEqual(ctx);
     }
+    expect(pageContextSchema.safeParse({ page: "recipe", slug: "pancakes" }).success).toBe(false);
+    expect(pageContextSchema.safeParse({}).success).toBe(false);
   });
   it("and the chat's page adds what the visitor did on it", () => {
     for (const page of [{ page: "recipe", slug: "pancakes", servings: 4 }, { page: "index", search: "soup", filter: "Dinner" }, { page: "shopping" }, { page: "recipe", dismissed: true }]) {

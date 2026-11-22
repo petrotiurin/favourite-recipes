@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`) and 3 (schemas) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas) and 4 (pages and components) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -248,7 +248,7 @@ step.
    gets `../shared`; `.claude/rules/kept-in-step.md` shrunk (deleted at steps 6, 7 and 10).
 3. **Schemas** (done): the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
    recipe format uses them.
-4. **Pages and components:** layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
+4. **Pages and components** (done): layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
    rules (4.5).
 5. **Photos** sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
@@ -328,3 +328,20 @@ step.
   before this is relied on; the likely fixes are `installCommand` in `mcp-server/vercel.json` that also installs `../shared` (it has the dependency declared),
   or an npm workspace at the repo root. Not changed here.
 - Still by hand: the prose of the `add-recipe` skill and the root `CLAUDE.md` schema (step 10; `kept-in-step.md` says so).
+
+### Step 4 as built
+
+- **`src/components/`** (`.astro`, no browser JS): `Layout` (head, the `#page-context` JSON through `pageContextSchema` and `scriptJson`, footer, the `auth.js` / `chat.js` script tags from
+  `src/lib/env.ts`), `SiteBar`, `Tile`, `WeekHead`, `IngredientList` (the lines from `ingredientHtml`, so `data-qty` is unchanged), `ServingsPicker`, `ShopItem`, `Icon`. The pages are
+  `src/pages/index`, `next-week`, `shopping-list` and `recipes/[slug]` (the Markdown body is `render(entry)` from the collection). `src/lib/`: `status.ts` (was `templates/status.js`),
+  `week.ts` (the home page's order), `shopping.ts` (the shopping page's numbers and the `#shopping-data` data), `recipe-text.ts` (`recipePlainText`, nobody outside the recipe page used it),
+  `env.ts`, `json.ts`, `site-data.ts`. The renderers in `templates/` and `marked` are gone; the browser scripts in `templates/` stay and are copied as before.
+- **Same HTML hooks:** every id, class and `data-*` the scripts use, `#page-context`, `#cook-recipe` and `#shopping-data` (parsed and deep-compared) are unchanged. Links stay relative to the page (`rootPrefix`),
+  as before, and `style.css` is still the copied file, linked by name: bundling it with a hashed name (section 3) waits for step 6, with the reload-once guard (4.11).
+- **Checked against HEAD before this step** (both built in a worktree, with and without the four dummy env vars, plus a shopping list with nothing, everything at home and awkward characters): the
+  pages' DOM (tags, attributes, text) and all JSON blocks are equal except for three things: Astro's Markdown adds `id` to the `##` headings of recipe bodies (`id="instructions"`, `id="notes"`); `<body class="">`
+  is now `<body>` on the two pages with no body class; and escaping in the raw text (`&#39;` for `'`) that parses to the same text.
+- **Markdown:** Astro 7's default processor is Sätteri; it adds smart punctuation by default, which `marked` never did, so `astro.config.ts` turns it off (`satteri({ features: { smartPunctuation: false } })`,
+  `@astrojs/markdown-satteri` is a direct dependency for that). With it off all 72 recipe bodies came out as before.
+- **Tests:** Vitest for each `src/lib` file; `src/components/components.test.ts` renders `IngredientList`, `Layout`, `Tile`, `WeekHead` and `ShopItem` through the Container API. It needs
+  `// @vitest-environment node`: under happy-dom the `.astro` files compile for the browser and the container can't render them. The layout's page-context test moved from `shared/test/schemas.test.ts` there.

@@ -1,17 +1,16 @@
-// What the pages need from the repo's data files (from the old build.js, step 1 of docs/typescript-migration.md): the recipes (from the
-// collection, checked by its schema), the shopping list and the stocktake sign-in values. The renderers in templates/ still turn these into HTML.
+// What the pages need from the repo's data files: the recipes (from the collection, checked by its schema) and the shopping list.
 import fs from "node:fs";
 import path from "node:path";
-import { getCollection } from "astro:content";
+import { getCollection, type CollectionEntry } from "astro:content";
 import type { RecipeFrontmatter } from "../../shared/recipe.ts";
-import { loadShoppingList } from "../../shared/shopping-list.ts";
-import { byStatusThenTitle } from "../../templates/status.js";
+import { loadShoppingList, type ShoppingList } from "../../shared/shopping-list.ts";
+import { byStatusThenTitle } from "./status.ts";
 
 const ROOT = process.cwd();
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
 
-/** A recipe as the renderers read it: its frontmatter (validated by the recipes collection, src/content.config.ts) plus `body` (the Markdown) and `file`. */
-export type Recipe = RecipeFrontmatter & { body: string; file: string };
+/** A recipe as the pages read it: its frontmatter (validated by the recipes collection, src/content.config.ts) plus `body` (the Markdown), `file` and the collection `entry` (what Astro renders the Markdown from). */
+export type Recipe = RecipeFrontmatter & { body: string; file: string; entry: CollectionEntry<"recipes"> };
 
 let cached: Recipe[] | undefined;
 
@@ -28,7 +27,7 @@ export async function getRecipes(): Promise<Recipe[]> {
       const file = path.basename(entry.filePath ?? `${entry.id}.md`);
       const body = entry.body ?? "";
       if (/^##\s+Ingredients\b/im.test(body)) errors.push(`${file}: the ingredients live in the frontmatter now; remove the "## Ingredients" section`);
-      return { ...entry.data, body, file } as Recipe;
+      return { ...entry.data, body, file, entry } as Recipe;
     });
     if (errors.length) throw new Error(`Recipe bodies don't check out:\n- ${errors.join("\n- ")}`);
     cached = recipes.sort(byStatusThenTitle);
@@ -41,20 +40,10 @@ export async function getRecipes(): Promise<Recipe[]> {
  * until the agent writes a new one: switching weeks doesn't touch it, so after the switch it still shows the list made for what is now
  * this week. It is blank only when there is no list. The recipes it links to are the ones it was built from that still exist.
  */
-export function getShoppingList(allRecipes: Recipe[]): { list: any; recipes: Recipe[] } | null {
+export function getShoppingList(allRecipes: Recipe[]): { list: ShoppingList; recipes: Recipe[] } | null {
   if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
   const list = loadShoppingList(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"), (message) => console.warn(message));
   if (!list) return null;
   const covered = new Set(Array.isArray(list.recipes) ? list.recipes : []);
   return { list, recipes: allRecipes.filter((r) => covered.has(r.slug)) };
-}
-
-/**
- * The shopping page's stocktake editor: Supabase Auth (magic-link sign-in) plus the MCP server's /stocktake endpoint. All three are
- * public values, passed in by the deploy workflow from the repo's Actions variables; without them the page is read-only.
- */
-export function stocktakeAuth() {
-  const { SUPABASE_URL, SUPABASE_ANON_KEY, STOCKTAKE_API_URL } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !STOCKTAKE_API_URL) return null;
-  return { supabaseUrl: SUPABASE_URL.replace(/\/$/, ""), supabaseKey: SUPABASE_ANON_KEY, api: STOCKTAKE_API_URL };
 }

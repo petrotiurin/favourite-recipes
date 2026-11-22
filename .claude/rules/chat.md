@@ -14,7 +14,7 @@ A recipe chat assistant: a bubble on every page, read-only for visitors, the ful
 editors. `docs/chatbot-design.md` is its design and the source of truth: read it before working on any of it, and update it in the
 same change when the design moves (this file too, when a rule or a file's job below changes).
 
-**The rules it must keep:** `templates/chat.js` is vanilla JS that talks only to `/chat` (and Supabase Auth through the shared
+**The rules it must keep:** `templates/chat.js` is a script on top of pages the build already wrote in full (if it fails to load or `/chat` is down, the page is unaffected); it talks only to `/chat` (and Supabase Auth through the shared
 `auth.js`); auth is enforced on the server by the dispatcher (`mcp-server/lib/tools.js`), never by the prompt; a role is never read
 from the request body; in chat an editor's writes never commit until Save.
 

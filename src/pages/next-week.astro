@@ -1,8 +1,26 @@
 ---
-import { renderNextWeek } from "../../templates/next-week.js";
-import { isNextWeek } from "../../templates/status.js";
+// next-week.html: the recipes being planned (`next: true`), each labelled "Next week" in teal. Always written, so the home page's link
+// never 404s; says so when nothing is planned yet.
+import Layout from "../components/Layout.astro";
+import SiteBar from "../components/SiteBar.astro";
+import Icon from "../components/Icon.astro";
+import Tile from "../components/Tile.astro";
 import { getRecipes } from "../lib/site-data.ts";
+import { nextWeekRecipes } from "../lib/week.ts";
 
-const html = renderNextWeek((await getRecipes()).filter(isNextWeek).sort((a, b) => a.title.localeCompare(b.title)));
+const recipes = nextWeekRecipes(await getRecipes());
+const n = recipes.length;
 ---
-<Fragment set:html={html} />
+<Layout title="Next week — Our Favourite Recipes" pageContext={{ page: "next-week" }}>
+  <SiteBar />
+  <main>
+    <a class="back-link" href="index.html"><Icon name="back" />This week</a>
+    <header class="page-head">
+      <p class="kicker kicker-next">Planning &middot; {n} recipe{n === 1 ? "" : "s"}</p>
+      <h1 class="page-title">Next week</h1>
+    </header>
+    {n > 0
+      ? <div class="tile-grid">{recipes.map((r) => <Tile recipe={r} kicker={{ cls: "kicker-next", label: "Next week" }} />)}</div>
+      : <p class="page-empty">Nothing planned for next week yet.</p>}
+  </main>
+</Layout>

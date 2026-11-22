@@ -40,7 +40,7 @@ describe what the project is now. Proposed shape:
 > shopping list. It has three parts:
 >
 > 1. **The site** (GitHub Pages): static HTML/CSS built from `recipes/*.md` and
->    `shopping-list.json`. Every page is complete and readable with JS off.
+>    `shopping-list.json`. Every page is still written to HTML by the build; JS may add features that only exist with JS.
 > 2. **Enhancements** (`templates/*.js`): hand-written vanilla JS, copied verbatim into `dist/`. No
 >    frameworks, no bundler, no npm packages in `dist/` (small pinned CDN libraries only if truly
 >    needed). They may call **our own backend** and Supabase Auth, never third-party APIs directly.
@@ -60,7 +60,7 @@ to the code) and the env vars it needs. The directory layout gains `templates/ch
 What the chat must still respect under the new rules:
 
 - `templates/chat.js` is vanilla JS and talks only to `/chat` (and Supabase Auth via the shared
-  `auth.js`). With JS off there's no bubble and nothing else changes; if `/chat` is down, the
+  `auth.js`). The page is written without the chat, so if the script doesn't load there's no bubble and nothing else changes; if `/chat` is down, the
   bubble shows an error and the page is unaffected.
 
 ## 3. Architecture

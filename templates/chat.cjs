@@ -1,6 +1,6 @@
 // The recipe chat (docs/chatbot-design.md). A bubble bottom right opens a panel that talks to the backend's POST /chat (the
 // script tag's data-api) and streams the answer in. Vanilla JS, no dependencies. It is only ever added to a page when the build
-// was given CHAT_API_URL, and with JS off nothing appears.
+// was given CHAT_API_URL (the page itself is complete without it).
 // Two modes: a visitor's chat (history in this browser, sent with each turn) and a signed-in editor's (templates/auth.js signs
 // in; the server owns the history, the client only sends its message and the conversation id; chats list, thumbs up / down).
 //

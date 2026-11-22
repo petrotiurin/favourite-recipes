@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHiddenUntilNextWeek, byStatusThenTitle } from "../templates/status.js";
+import { isHiddenUntilNextWeek, byStatusThenTitle } from "./status.ts";
 
 describe("recipe status", () => {
   it("hides a draft that is only in next week from the home page", () => {

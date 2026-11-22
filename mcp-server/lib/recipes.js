@@ -21,7 +21,7 @@ export const pageUrl = (slug) => `${config.siteUrl}/recipes/${slug}.html`;
 
 export class UserError extends Error {}
 
-// Keep in sync with templates/status.js. Two weeks, both independent of `draft`:
+// Keep in sync with src/lib/status.ts. Two weeks, both independent of `draft`:
 //   `current: true` = this week (what's being cooked now), `next: true` = next week (what the shopping list is for).
 // A recipe can be in both (cooked two weeks running). Order: this week (drafts first), next week, the rest.
 export const isDraft = (r) => r.draft === true;
