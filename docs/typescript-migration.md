@@ -38,7 +38,7 @@ both.
 ```
 src/build/          the build (today build.js) and the HTML renderers (today templates/{layout,index,...}.js), TypeScript, ESM
 src/client/         browser entry points: search, servings, wakelock, cook-claude, shopping, auth, chat → bundled into dist/*.js
-shared/             logic and types used by the build, the browser and the backend (where it lives: question 5.1)
+shared/             logic and types used by the build, the browser and the backend (section 4.2), own package.json "type": "module"
 tsconfig.json       one strict config, type-checked with tsc --noEmit in the Pages workflow
 ```
 
