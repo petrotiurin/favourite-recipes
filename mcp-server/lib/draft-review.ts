@@ -10,6 +10,7 @@
 import { recipeSummaries } from "./recipes.ts";
 import { cardFor } from "./chat-ui.ts";
 import { stageMany, loadTray } from "./tray.ts";
+import type { TrayItemOf } from "./types/tray.ts";
 
 /** The thumbs a row can send, and what each answer is called in the stored message. No thumb = "keep". */
 export const THUMBS = ["liked", "remove"];
@@ -88,7 +89,7 @@ export async function stageReview(drafts: any, answers: any, caller: any, { trac
   const carried = pick("keep", { next: false });
   const staying = pick("keep");
   const before = (await loadTray())?.items || [];
-  const otherCarry = (before.find((i: any) => i.kind === "switch")?.op.carry_over || []).filter((s: any) => !slugs.has(s));
+  const otherCarry = (before.find((i): i is TrayItemOf<"switch"> => i.kind === "switch")?.op.carry_over || []).filter((s: any) => !slugs.has(s));
   const carryOver = [...otherCarry, ...carried.map((r: any) => r.slug)];
   const ops = [
     { action: "start_next_week", ...(carryOver.length ? { carry_over: carryOver } : {}) },

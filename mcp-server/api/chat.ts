@@ -187,10 +187,10 @@ export async function GET(request: any) {
       const rows = await getMessages(convo.id);
       const messages = messagesForPanel(rows);
       for (const m of messages) {
-        if (!m.images) continue;
+        if (m.role !== "user" || !m.images) continue;
         const urls = await Promise.all(m.images.map((p: any) => signedUploadUrl(p)));
-        m.photo_numbers = m.photo_numbers.filter((_: any, i: any) => urls[i]); // a photo that's gone keeps its number for the others
-        m.images = urls.filter(Boolean);
+        m.photo_numbers = m.photo_numbers!.filter((_: any, i: any) => urls[i]); // a photo that's gone keeps its number for the others
+        m.images = urls.filter(Boolean) as string[];
       }
       const reads = await readsOf(convo.id).catch(() => []);
       const st = statusOf(reads);
@@ -726,7 +726,7 @@ export async function POST(request: any) {
         };
         const optionalStep = async (line: any) => {
           const st = await finaliseState(caller);
-          const card = st?.optionalOpen?.length ? await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items) : null;
+          const card = st?.optionalOpen?.length ? await optionalCard(st.built!.optional, st.list?.op.edits || [], st.built!.droppedOptional, st.items) : null;
           if (card) {
             const text = [line, optionalLine(card.items.length)].filter(Boolean).join(" ");
             return { text, ui: { optional: card }, event: { type: "optional", ...card } };

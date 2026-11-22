@@ -32,7 +32,7 @@ export async function POST(request: any) {
     return reply({ error: err.message }, 503);
   }
   const editor = await verifyEditor(request);
-  if (editor.error) return reply({ error: editor.error }, editor.status);
+  if (editor.error !== undefined) return reply({ error: editor.error }, editor.status);
 
   let body;
   try {

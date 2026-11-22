@@ -7,6 +7,9 @@ import { ChangeSet } from "./github.ts";
 import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";
 import { ingredientProblems } from "../../shared/recipe.ts";
 import { SECTIONS, SHOP_UNITS, ITEM_ID } from "../../shared/catalogue.ts";
+import type { Catalogue, CatalogueEntry } from "../../shared/catalogue.ts";
+import type { Ingredient } from "../../shared/recipe.ts";
+import type { BookIngredients, CatalogueChange, CatalogueChangeResult, CatalogueChangesResult, Repoint } from "./types/catalogue.ts";
 
 export const CATALOGUE_PATH = "data/ingredients.json";
 export { SECTIONS, SHOP_UNITS };
@@ -14,42 +17,43 @@ export { SECTIONS, SHOP_UNITS };
 export class CatalogueError extends Error {}
 
 const ID_RE = ITEM_ID;
+const CHANGE_KINDS = ["add", "alias", "set", "merge", "remove"] as const;
 const ENTRY_KEYS = ["name", "section", "unit", "per", "aliases", "staple", "skip"];
 
 // --- reading and writing ------------------------------------------------------------------------------------------------------
 
-export function parseCatalogue(text: any) {
+export function parseCatalogue(text: string | null | undefined): Catalogue {
   if (!text) return {};
-  const data = JSON.parse(text);
+  const data: unknown = JSON.parse(text);
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new CatalogueError(`${CATALOGUE_PATH} must be a JSON object keyed by item id`);
-  return data;
+  return data as Catalogue;
 }
 
 /** Sorted by id, each entry's keys in a fixed order, so a change is a small diff. */
-export function serializeCatalogue(catalogue: any) {
-  const out: Record<string, any> = {};
+export function serializeCatalogue(catalogue: Catalogue): string {
+  const out: Record<string, Record<string, unknown>> = {};
   for (const id of Object.keys(catalogue).sort()) {
-    const e = catalogue[id];
+    const e: Record<string, unknown> = catalogue[id];
     out[id] = Object.fromEntries([...ENTRY_KEYS.filter((k) => e[k] !== undefined), ...Object.keys(e).filter((k) => !ENTRY_KEYS.includes(k))].map((k) => [k, e[k]]));
   }
   return `${JSON.stringify(out, null, 2)}\n`;
 }
 
 /** The catalogue. Without a ChangeSet: a read, cached like the recipe index. With one: fresh from the branch plus what the set has staged. */
-export async function loadCatalogue(cs?: any) {
+export async function loadCatalogue(cs?: ChangeSet): Promise<Catalogue> {
   if (cs) return parseCatalogue((await cs.read(CATALOGUE_PATH))?.toString("utf8"));
   return cached(`catalogue:${config.repo}@${config.branch}`, async () => parseCatalogue((await new ChangeSet().read(CATALOGUE_PATH))?.toString("utf8")));
 }
 
-export function writeCatalogue(cs: any, catalogue: any) {
+export function writeCatalogue(cs: ChangeSet, catalogue: Catalogue) {
   cs.write(CATALOGUE_PATH, Buffer.from(serializeCatalogue(catalogue)));
 }
 
 // --- names --------------------------------------------------------------------------------------------------------------------
 
-const norm = (s: any) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+const norm = (s: unknown): string => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 /** The forms a name is matched under: as written, and a naive singular / plural ("limes" ~ "lime", "tomatoes" ~ "tomato"). */
-function forms(name: any) {
+function forms(name: unknown): string[] {
   const n = norm(name);
   const out = new Set([n]);
   if (n.endsWith("ies")) out.add(`${n.slice(0, -3)}y`);
@@ -60,13 +64,17 @@ function forms(name: any) {
 }
 
 /** The names that belong to an item: its own name and its aliases, lower-cased. */
-export const namesOf = (entry: any) => [entry.name, ...(entry.aliases || [])].map(norm).filter(Boolean);
+export const namesOf = (entry: Pick<CatalogueEntry, "name" | "aliases">): string[] => [entry.name, ...(entry.aliases || [])].map(norm).filter(Boolean);
 
 /** Map(name form -> id) over the whole catalogue. Exact names win over a singular/plural form of another item's name. */
-export function nameIndex(catalogue: any) {
-  const exact = new Map();
-  const loose = new Map();
-  for (const [id, e] of Object.entries<any>(catalogue)) {
+export interface NameIndex {
+  exact: Map<string, string>;
+  loose: Map<string, string>;
+}
+export function nameIndex(catalogue: Catalogue): NameIndex {
+  const exact = new Map<string, string>();
+  const loose = new Map<string, string>();
+  for (const [id, e] of Object.entries(catalogue)) {
     for (const n of namesOf(e)) {
       if (!exact.has(n)) exact.set(n, id);
       for (const f of forms(n)) if (!loose.has(f)) loose.set(f, id);
@@ -79,11 +87,11 @@ export function nameIndex(catalogue: any) {
 const SIZE_WORDS = /^(?:(?:small|medium|large|big|extra[- ]large|ripe|fresh)\s+)+/;
 
 /** The item a recipe's ingredient name resolves to, or null. A name with a size word in front ("large leek") falls back to the name without it. */
-export function resolveItem(name: any, catalogue: any, index = nameIndex(catalogue)) {
-  const look = (n: any) => {
-    if (index.exact.has(n)) return index.exact.get(n);
-    for (const f of forms(n)) if (index.exact.has(f)) return index.exact.get(f);
-    for (const f of forms(n)) if (index.loose.has(f)) return index.loose.get(f);
+export function resolveItem(name: unknown, catalogue: Catalogue, index: NameIndex = nameIndex(catalogue)): string | null {
+  const look = (n: string): string | null => {
+    if (index.exact.has(n)) return index.exact.get(n)!;
+    for (const f of forms(n)) if (index.exact.has(f)) return index.exact.get(f)!;
+    for (const f of forms(n)) if (index.loose.has(f)) return index.loose.get(f)!;
     return null;
   };
   const n = norm(name);
@@ -91,10 +99,10 @@ export function resolveItem(name: any, catalogue: any, index = nameIndex(catalog
 }
 
 /** Up to `n` ids whose names share words with `name`, best first (for "Closest: …" in a problem). */
-export function closestItems(name: any, catalogue: any, n = 3) {
+export function closestItems(name: unknown, catalogue: Catalogue, n = 3): string[] {
   const words = new Set(norm(name).split(/[^a-z0-9]+/).filter((w) => w.length > 2).flatMap(forms));
   const scored: [number, string][] = [];
-  for (const [id, e] of Object.entries<any>(catalogue)) {
+  for (const [id, e] of Object.entries(catalogue)) {
     const theirs = new Set([id.replace(/-/g, " "), ...namesOf(e)].join(" ").split(/[^a-z0-9]+/).filter((w) => w.length > 2).flatMap(forms));
     const score = [...words].filter((w) => theirs.has(w)).length;
     if (score) scored.push([score, id]);
@@ -104,7 +112,7 @@ export function closestItems(name: any, catalogue: any, n = 3) {
 
 // --- conversions --------------------------------------------------------------------------------------------------------------
 
-const FIXED: Record<string, any> = {
+const FIXED: Record<string, Record<string, number>> = {
   g: { g: 1, kg: 1000 },
   ml: { ml: 1, l: 1000, tsp: 5, tbsp: 15, cup: 240 },
 };
@@ -113,18 +121,21 @@ const FIXED: Record<string, any> = {
  * How much of the item's shopping unit one recipe unit is (`unit` undefined = a plain count), or null when there's no rule and no `per`.
  * Fixed rules: g <-> kg, ml <-> l, tsp / tbsp / cup -> 5 / 15 / 240 ml; a count is a count; a named unit is itself. Otherwise the item's `per`.
  */
-export function factorFor(entry: any, unit: any) {
+export function factorFor(entry: CatalogueEntry, unit: string | undefined): number | null {
   const u = unit || "count";
   const per = entry.per || {};
   if (per[u] !== undefined) return per[u];
   const shop = entry.unit;
-  if (FIXED[shop]?.[u] !== undefined) return FIXED[shop][u];
+  if (shop !== undefined && FIXED[shop]?.[u] !== undefined) return FIXED[shop][u];
   if (shop === u) return 1;
   return null;
 }
 
+/** The fields of an ingredient the conversions read (a recipe's line, with or without its `item` filled). */
+type IngredientLike = Pick<Ingredient, "name" | "amount" | "unit" | "item">;
+
 /** The ingredient's amount (the top of a range: buy enough) in the item's shopping unit, or null when it has no amount. Throws if it can't convert. */
-export function shopAmount(ing: any, entry: any) {
+export function shopAmount(ing: IngredientLike, entry: CatalogueEntry): number | null {
   if (ing.amount === undefined || ing.amount === null) return null;
   const amount = Array.isArray(ing.amount) ? ing.amount[1] : ing.amount;
   const f = factorFor(entry, ing.unit);
@@ -132,49 +143,49 @@ export function shopAmount(ing: any, entry: any) {
   return amount * f;
 }
 
-const conversionProblem = (ing: any, entry: any) =>
+const conversionProblem = (ing: IngredientLike, entry: CatalogueEntry): string =>
   `${entry.name} (${ing.item}) is bought in ${entry.unit === "count" ? "a count" : entry.unit} and has no conversion from ${ing.unit || "a count"}. ` +
   `Add \`per: { ${ing.unit || "count"}: … }\` for ${ing.item} (how many ${entry.unit === "count" ? "of it" : entry.unit} one ${ing.unit || "of them"} is), or use another unit.`;
 
 /** Does an ingredient with this unit need a conversion for this item at all? Staples and skipped items never do, nor amount-less ones. */
-export const needsConversion = (ing: any, entry: any) => !entry.staple && !entry.skip && ing.amount !== undefined && ing.amount !== null;
+export const needsConversion = (ing: IngredientLike, entry: CatalogueEntry): boolean => !entry.staple && !entry.skip && ing.amount !== undefined && ing.amount !== null;
 
 // --- the write-time checks (section 4) ----------------------------------------------------------------------------------------
 
-const positive = (n: any) => typeof n === "number" && Number.isFinite(n) && n > 0;
+const positive = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;
 
 /** Schema problems with one ingredient (no catalogue needed): the rules and messages of shared/recipe.ts, the ones the site's build checks too. */
 export const ingredientSchemaErrors = ingredientProblems;
 
 /** Problems with one ingredient against the catalogue (it resolves, and converts). `ing.item` must be filled. */
-function catalogueErrors(ing: any, catalogue: any, where: any) {
-  const entry = catalogue[ing.item];
+function catalogueErrors(ing: IngredientLike, catalogue: Catalogue, where: string): string[] {
+  const entry: CatalogueEntry | undefined = catalogue[ing.item!];
   if (!entry) return [`${where}: item "${ing.item}" isn't in the catalogue`];
   if (needsConversion(ing, entry) && factorFor(entry, ing.unit) === null) return [`${where}: ${conversionProblem(ing, entry)}`];
   return [];
 }
 
 /** Fixed key order and no empty fields, so the frontmatter is tidy. */
-export function tidyIngredient(ing: any) {
-  const out: Record<string, any> = {};
-  if (ing.amount !== undefined && ing.amount !== null) out.amount = ing.amount;
-  if (ing.unit) out.unit = ing.unit;
-  out.name = String(ing.name).trim();
-  if (String(ing.note || "").trim()) out.note = String(ing.note).trim();
-  if (ing.optional === true) out.optional = true;
-  if (String(ing.section || "").trim()) out.section = String(ing.section).trim();
-  if (ing.item) out.item = ing.item;
-  return out;
+export function tidyIngredient(ing: Ingredient): Ingredient {
+  return {
+    ...(ing.amount !== undefined && ing.amount !== null ? { amount: ing.amount } : {}),
+    ...(ing.unit ? { unit: ing.unit } : {}),
+    name: String(ing.name).trim(),
+    ...(String(ing.note || "").trim() ? { note: String(ing.note).trim() } : {}),
+    ...(ing.optional === true ? { optional: true as const } : {}),
+    ...(String(ing.section || "").trim() ? { section: String(ing.section).trim() } : {}),
+    ...(ing.item ? { item: ing.item } : {}),
+  };
 }
 
 /**
  * Section 4: checks a recipe's ingredients and fills each `item` from its name (a given item is kept). Resolves { ingredients, errors }:
  * the tidied list, and every problem with what would fix it.
  */
-export function checkIngredients(ingredients: any, catalogue: any) {
+export function checkIngredients(ingredients: Ingredient[] | null | undefined, catalogue: Catalogue): { ingredients: Ingredient[]; errors: string[] } {
   const index = nameIndex(catalogue);
-  const errors: any[] = [];
-  const out = (ingredients || []).map((raw: any, i: any) => {
+  const errors: string[] = [];
+  const out = (ingredients || []).map((raw, i): Ingredient => {
     const schema = ingredientSchemaErrors(raw, i);
     if (schema.length) {
       errors.push(...schema);
@@ -195,7 +206,7 @@ export function checkIngredients(ingredients: any, catalogue: any) {
       return checked({ ...rest, item });
     }
     return checked(ing);
-    function checked(x: any) {
+    function checked(x: Ingredient): Ingredient {
       errors.push(...catalogueErrors(x, catalogue, where));
       return x;
     }
@@ -207,11 +218,11 @@ export function checkIngredients(ingredients: any, catalogue: any) {
 // --- changing the catalogue (section 5) ----------------------------------------------------------------------------------------
 
 const MAX_PER: Record<string, number> = { tsp: 20, tbsp: 50, cup: 500, pinch: 5, handful: 200 };
-function perErrors(id: any, per: any) {
+function perErrors(id: string, per: unknown): string[] {
   if (per === undefined) return [];
   if (!per || typeof per !== "object" || Array.isArray(per)) return [`${id}: per is an object, e.g. { "tbsp": 10 }`];
-  const errors: any[] = [];
-  for (const [u, v] of Object.entries<any>(per as Record<string, any>)) {
+  const errors: string[] = [];
+  for (const [u, v] of Object.entries(per)) {
     if (u !== "count" && !(UNITS as readonly string[]).includes(u)) errors.push(`${id}: per "${u}" isn't a recipe unit (${UNITS.join(", ")}, or count)`);
     else if (!positive(v)) errors.push(`${id}: per ${u} must be a positive number`);
     else if (v > (MAX_PER[u] ?? 5000)) errors.push(`${id}: per ${u} = ${v} is far outside a sane range (at most ${MAX_PER[u] ?? 5000})`);
@@ -219,29 +230,31 @@ function perErrors(id: any, per: any) {
   return errors;
 }
 
-function entryErrors(id: any, e: any) {
-  const errors: any[] = [];
+const oneOf = (list: readonly string[], value: unknown): boolean => list.includes(value as string);
+
+function entryErrors(id: string, e: Partial<CatalogueEntry>): string[] {
+  const errors: string[] = [];
   if (!String(e.name || "").trim()) errors.push(`${id}: name is required (the shopping-list name, e.g. "Red onions")`);
-  if (!e.skip && !SECTIONS.includes(e.section)) errors.push(`${id}: section must be one of ${SECTIONS.join(", ")}`);
-  if (!e.staple && !e.skip && !SHOP_UNITS.includes(e.unit)) errors.push(`${id}: unit must be one of ${SHOP_UNITS.join(", ")}`);
-  if (e.unit !== undefined && !SHOP_UNITS.includes(e.unit)) errors.push(`${id}: unit must be one of ${SHOP_UNITS.join(", ")}`);
-  if (e.aliases !== undefined && !(Array.isArray(e.aliases) && e.aliases.every((a: any) => String(a).trim()))) errors.push(`${id}: aliases is a list of names`);
-  for (const k of ["staple", "skip"]) if (e[k] !== undefined && e[k] !== true) errors.push(`${id}: ${k} is true or left out`);
+  if (!e.skip && !oneOf(SECTIONS, e.section)) errors.push(`${id}: section must be one of ${SECTIONS.join(", ")}`);
+  if (!e.staple && !e.skip && !oneOf(SHOP_UNITS, e.unit)) errors.push(`${id}: unit must be one of ${SHOP_UNITS.join(", ")}`);
+  if (e.unit !== undefined && !oneOf(SHOP_UNITS, e.unit)) errors.push(`${id}: unit must be one of ${SHOP_UNITS.join(", ")}`);
+  if (e.aliases !== undefined && !(Array.isArray(e.aliases) && e.aliases.every((a) => String(a).trim()))) errors.push(`${id}: aliases is a list of names`);
+  for (const k of ["staple", "skip"] as const) if (e[k] !== undefined && e[k] !== true) errors.push(`${id}: ${k} is true or left out`);
   return [...errors, ...perErrors(id, e.per)];
 }
 
 /** Names (and aliases) that another item already has: [{ name, owner }]. */
-function nameClashes(catalogue: any, id: any, names: any) {
-  const owners = new Map();
-  for (const [other, e] of Object.entries<any>(catalogue)) if (other !== id) for (const n of namesOf(e)) owners.set(n, other);
-  return names.map(norm).filter((n: any) => owners.has(n)).map((n: any) => ({ name: n, owner: owners.get(n) }));
+function nameClashes(catalogue: Catalogue, id: string, names: string[]): { name: string; owner: string }[] {
+  const owners = new Map<string, string>();
+  for (const [other, e] of Object.entries(catalogue)) if (other !== id) for (const n of namesOf(e)) owners.set(n, other);
+  return names.map(norm).filter((n) => owners.has(n)).map((n) => ({ name: n, owner: owners.get(n)! }));
 }
 
-const clashText = (c: any) => `"${c.name}" already belongs to ${c.owner}: use that item (set \`item: ${c.owner}\`), or pick another name`;
+const clashText = (c: { name: string; owner: string }): string => `"${c.name}" already belongs to ${c.owner}: use that item (set \`item: ${c.owner}\`), or pick another name`;
 
 /** How many recipes use each item: Map(id -> [slug]). `recipes`: [{ slug, ingredients }]. */
-export function usage(recipes: any) {
-  const used = new Map();
+export function usage(recipes: BookIngredients[]): Map<string, string[]> {
+  const used = new Map<string, string[]>();
   for (const r of recipes) for (const ing of r.ingredients || []) if (ing.item) used.set(ing.item, [...new Set([...(used.get(ing.item) || []), r.slug])]);
   return used;
 }
@@ -256,26 +269,25 @@ export function usage(recipes: any) {
  * `recipes` ([{ slug, ingredients }]) is the book after the write this change rides on. Resolves { catalogue, line, repoint? ({ from, into }) },
  * or throws a CatalogueError saying what to fix. Pure.
  */
-export function applyCatalogueChange(catalogue: any, change: any, recipes: any[] = []) {
+export function applyCatalogueChange(catalogue: Catalogue, change: CatalogueChange, recipes: BookIngredients[] = []): CatalogueChangeResult {
   const next = structuredClone(catalogue);
-  const kinds = ["add", "alias", "set", "merge", "remove"].filter((k) => change?.[k] !== undefined);
+  const kinds = CHANGE_KINDS.filter((k) => change?.[k] !== undefined);
   if (kinds.length !== 1) throw new CatalogueError("A catalogue change is exactly one of add, alias, set, merge, remove");
   const kind = kinds[0];
-  const c = change[kind];
   const used = usage(recipes);
-  const usedBy = (id: any) => {
+  const usedBy = (id: string) => {
     const n = (used.get(id) || []).length;
     return n ? ` (used by ${n} recipe${n === 1 ? "" : "s"})` : "";
   };
-  let line;
-  let repoint: { from: any; into: any } | null = null;
-  const need = (id: any) => {
+  let line: string;
+  let repoint: Repoint | null = null;
+  const need = (id: string): CatalogueEntry => {
     if (!next[id]) throw new CatalogueError(`No catalogue item "${id}"`);
     return next[id];
   };
   switch (kind) {
     case "add": {
-      const { id, ...entry } = c;
+      const { id, ...entry } = change.add!;
       if (!ID_RE.test(String(id || ""))) throw new CatalogueError(`"${id}" isn't a valid id: kebab-case, e.g. "red-onion"`);
       if (next[id]) throw new CatalogueError(`"${id}" is already in the catalogue (${next[id].name}): use it, or set its fields with { set: { item: "${id}", … } }`);
       const errors = entryErrors(id, entry);
@@ -286,6 +298,7 @@ export function applyCatalogueChange(catalogue: any, change: any, recipes: any[]
       break;
     }
     case "alias": {
+      const c = change.alias!;
       const e = need(c.item);
       const n = norm(c.name);
       if (!n) throw new CatalogueError("alias: name is required");
@@ -297,19 +310,20 @@ export function applyCatalogueChange(catalogue: any, change: any, recipes: any[]
       break;
     }
     case "set": {
-      const e = need(c.item);
-      const { item, ...fields } = c;
+      const { item, ...fields } = change.set!;
+      const e = need(item);
       if (!Object.keys(fields).length) throw new CatalogueError(`set: nothing to change for ${item}`);
-      const merged = { ...e, ...fields, ...(fields.per ? { per: { ...(fields.unit && fields.unit !== e.unit ? {} : e.per || {}), ...fields.per } } : {}) };
+      const merged: CatalogueEntry = { ...e, ...fields, ...(fields.per ? { per: { ...(fields.unit && fields.unit !== e.unit ? {} : e.per || {}), ...fields.per } } : {}) };
       if (fields.unit && fields.unit !== e.unit && !fields.per) delete merged.per; // a new unit means new conversions
       const errors = entryErrors(item, merged);
       const clashes = fields.name ? nameClashes(next, item, [fields.name]) : [];
       if (errors.length || clashes.length) throw new CatalogueError([...errors, ...clashes.map(clashText)].join("; "));
       next[item] = merged;
-      line = `Catalogue: ${merged.name} ${Object.keys(fields).map((k) => (k === "per" ? `conversions ${JSON.stringify(fields.per)}` : `${k} ${JSON.stringify(fields[k])}`)).join(", ")}${usedBy(item)}`;
+      line = `Catalogue: ${merged.name} ${Object.keys(fields).map((k) => (k === "per" ? `conversions ${JSON.stringify(fields.per)}` : `${k} ${JSON.stringify((fields as Record<string, unknown>)[k])}`)).join(", ")}${usedBy(item)}`;
       break;
     }
     case "merge": {
+      const c = change.merge!;
       const into = need(c.into);
       const from = need(c.from);
       if (c.into === c.from) throw new CatalogueError("merge: into and from are the same item");
@@ -320,20 +334,21 @@ export function applyCatalogueChange(catalogue: any, change: any, recipes: any[]
       break;
     }
     case "remove": {
+      const c = change.remove!;
       need(c.item);
-      if ((used.get(c.item) || []).length) throw new CatalogueError(`${c.item} is used by ${used.get(c.item).join(", ")}: it can't be removed`);
+      if ((used.get(c.item) || []).length) throw new CatalogueError(`${c.item} is used by ${used.get(c.item)!.join(", ")}: it can't be removed`);
       delete next[c.item];
       line = `Catalogue: removed ${c.item}`;
       break;
     }
   }
   // Nothing in the book may stop converting or point at a missing item.
-  const after = repoint ? recipes.map((r) => ({ ...r, ingredients: (r.ingredients || []).map((i: any) => (i.item === repoint.from ? { ...i, item: repoint.into } : i)) })) : recipes;
-  const broken: any[] = [];
+  const after = repoint ? recipes.map((r) => ({ ...r, ingredients: (r.ingredients || []).map((i) => (i.item === repoint!.from ? { ...i, item: repoint!.into } : i)) })) : recipes;
+  const broken: string[] = [];
   for (const r of after) {
     for (const ing of r.ingredients || []) {
       if (!ing.item) continue;
-      const entry = next[ing.item];
+      const entry: CatalogueEntry | undefined = next[ing.item];
       if (!entry) broken.push(`${r.slug}: ${ing.name} would point at a missing item ${ing.item}`);
       else if (needsConversion(ing, entry) && factorFor(entry, ing.unit) === null) broken.push(`${r.slug}: ${ing.name} (${ing.unit || "count"}) would no longer convert to ${entry.unit}; add per: { ${ing.unit || "count"}: … }`);
     }
@@ -343,24 +358,25 @@ export function applyCatalogueChange(catalogue: any, change: any, recipes: any[]
 }
 
 /** Applies several changes in order (each checked against the result of the ones before). Resolves { catalogue, lines, repoints }. */
-export function applyCatalogueChanges(catalogue: any, changes: any, recipes: any[] = []) {
+export function applyCatalogueChanges(catalogue: Catalogue, changes: CatalogueChange[] | null | undefined, recipes: BookIngredients[] = []): CatalogueChangesResult {
   let cat = catalogue;
   let book = recipes;
-  const lines: any[] = [];
-  const repoints: any[] = [];
+  const lines: string[] = [];
+  const repoints: Repoint[] = [];
   for (const [k, change] of (changes || []).entries()) {
-    let out;
+    let out: CatalogueChangeResult;
     try {
       out = applyCatalogueChange(cat, change, book);
-    } catch (err: any) {
+    } catch (err) {
       if (err instanceof CatalogueError) throw new CatalogueError(`catalogue[${k}]: ${err.message}`);
       throw err;
     }
     cat = out.catalogue;
     lines.push(out.line);
     if (out.repoint) {
+      const { from, into } = out.repoint;
       repoints.push(out.repoint);
-      book = book.map((r) => ({ ...r, ingredients: (r.ingredients || []).map((i: any) => (i.item === out.repoint!.from ? { ...i, item: out.repoint!.into } : i)) }));
+      book = book.map((r) => ({ ...r, ingredients: (r.ingredients || []).map((i) => (i.item === from ? { ...i, item: into } : i)) }));
     }
   }
   return { catalogue: cat, lines, repoints };

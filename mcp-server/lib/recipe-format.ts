@@ -1,10 +1,11 @@
 import matter from "gray-matter";
 import { recipeFrontmatterSchema } from "../../shared/recipe.ts";
+import type { RecipeData, RecipeSection, StoredIngredient } from "./types/recipe.ts";
 
 // How a recipe file is written. The fields and their order are shared/recipe.ts's schema (the site's build validates with it); the prose
 // rules of .claude/skills/add-recipe/SKILL.md are the one thing still kept in step by hand.
 
-export function slugify(title: any) {
+export function slugify(title: string): string {
   return title
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
@@ -16,40 +17,41 @@ export function slugify(title: any) {
 }
 
 // Plain YAML scalar when safe, otherwise a JSON (= YAML double-quoted) string.
-function yamlScalar(value: any, { inFlow = false }: any = {}) {
+function yamlScalar(value: unknown, { inFlow = false }: { inFlow?: boolean } = {}): string {
   const s = String(value);
   const unsafe =
     /^[\s\-?:,[\]{}#&*!|>'"%@`]|: | #|:$|\s$/.test(s) || (inFlow && /[,[\]{}]/.test(s)) || /^(true|false|null|yes|no|on|off|~|[-+]?[\d.][\d.eE+-]*)$/i.test(s);
   return unsafe || s === "" ? JSON.stringify(s) : s;
 }
 
-function yamlFlowList(items: any) {
-  return `[${items.map((i: any) => yamlFlowValue(i)).join(", ")}]`;
+function yamlFlowList(items: unknown[]): string {
+  return `[${items.map((i) => yamlFlowValue(i)).join(", ")}]`;
 }
 
-function yamlFlowValue(v: any) {
+function yamlFlowValue(v: unknown): string {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   if (Array.isArray(v)) return yamlFlowList(v);
   return yamlScalar(v, { inFlow: true });
 }
 
 /** One flow mapping on one line: "{ amount: 200, unit: g, name: jasmine rice, item: jasmine-rice }". */
-const yamlFlowMap = (obj: any) => `{ ${Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}: ${yamlFlowValue(v)}`).join(", ")} }`;
+const yamlFlowMap = (obj: object): string => `{ ${Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}: ${yamlFlowValue(v)}`).join(", ")} }`;
 
 // `ingredients` goes last: it is the long one (docs/structured-ingredients.md section 1).
 const KEY_ORDER = Object.keys(recipeFrontmatterSchema.shape);
 
-export function renderFrontmatter(data: any) {
+export function renderFrontmatter(data: Record<string, unknown>): string {
   const keys = [...KEY_ORDER.filter((k) => k in data && k !== "ingredients"), ...Object.keys(data).filter((k) => !KEY_ORDER.includes(k)), ...("ingredients" in data ? ["ingredients"] : [])];
-  const lines: any[] = [];
+  const lines: string[] = [];
   for (const key of keys) {
     const value = data[key];
     if (value === undefined || value === null) continue;
     if (Array.isArray(value)) {
-      if (key === "tags" && value.length === 0) continue; // omit the key entirely if no tags
-      if (value.some((v) => v && typeof v === "object" && !Array.isArray(v))) {
-        lines.push(`${key}:`, ...value.map((v) => `  - ${yamlFlowMap(v)}`));
-      } else lines.push(`${key}: ${yamlFlowList(value)}`);
+      const list: unknown[] = value;
+      if (key === "tags" && list.length === 0) continue; // omit the key entirely if no tags
+      if (list.some((v) => v && typeof v === "object" && !Array.isArray(v))) {
+        lines.push(`${key}:`, ...list.map((v) => `  - ${yamlFlowMap(v as object)}`));
+      } else lines.push(`${key}: ${yamlFlowList(list)}`);
     } else if (typeof value === "number" || typeof value === "boolean") {
       lines.push(`${key}: ${value}`);
     } else {
@@ -60,18 +62,18 @@ export function renderFrontmatter(data: any) {
 }
 
 /** A recipe's ingredients (frontmatter data), [] when it has none recorded. */
-export const ingredientsOf = (data: any) => (Array.isArray(data?.ingredients) ? data.ingredients : []);
+export const ingredientsOf = (data: { ingredients?: unknown } | null | undefined): StoredIngredient[] => (Array.isArray(data?.ingredients) ? (data.ingredients as StoredIngredient[]) : []);
 
 const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s+/;
 
-export function normalizeInstruction(step: any) {
+export function normalizeInstruction(step: string): string {
   return step.replace(LIST_MARKER, "").replace(/\s+/g, " ").trim();
 }
 
 /** Soft check: warn when an ingredient is mentioned in the method without being bolded. */
-export function instructionWarnings(ingredients: any, instructions: any) {
-  const warnings: any[] = [];
-  const steps = instructions.map((s: any) => s.replace(/\*\*[^*]+\*\*/g, " "));
+export function instructionWarnings(ingredients: { name: string }[], instructions: string[]): string[] {
+  const warnings: string[] = [];
+  const steps = instructions.map((s) => s.replace(/\*\*[^*]+\*\*/g, " "));
   const bolded = instructions.join(" ").match(/\*\*[^*]+\*\*/g) || [];
   if (instructions.length && !bolded.length) {
     warnings.push("No ingredient is bolded in the instructions. Bold every ingredient mention, e.g. 'stir in the **oats**'.");
@@ -81,7 +83,7 @@ export function instructionWarnings(ingredients: any, instructions: any) {
     const name = ing.name.trim().toLowerCase();
     if (!name) continue;
     const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-    steps.forEach((s: any, idx: any) => {
+    steps.forEach((s, idx) => {
       if (re.test(s)) warnings.push(`Step ${idx + 1} mentions "${ing.name}" without bolding it.`);
     });
   }
@@ -97,12 +99,12 @@ const QTY_BEFORE_INGREDIENT = new RegExp(
 );
 
 /** Soft check: warn when the method repeats an amount that belongs in the ingredient list. */
-export function instructionQuantityWarnings(instructions: any) {
-  const warnings: any[] = [];
-  instructions.forEach((s: any, idx: any) => {
+export function instructionQuantityWarnings(instructions: string[]): string[] {
+  const warnings: string[] = [];
+  instructions.forEach((s, idx) => {
     for (const m of s.matchAll(QTY_BEFORE_INGREDIENT)) {
       const amount = m[0].replace(/\s*(?:of\s+)?(?:the\s+)?\*\*$/i, "").trim();
-      const name = s.slice(m.index + m[0].length).match(/^[^*]+/)?.[0] || "ingredient";
+      const name = s.slice(m.index! + m[0].length).match(/^[^*]+/)?.[0] || "ingredient";
       warnings.push(
         `Step ${idx + 1} repeats a quantity ("${amount} ${name}"). The servings selector only rescales the ingredient list, ` +
           `so refer to it instead: "the **${name}**", "half the **${name}**", "the remaining **${name}**".`
@@ -112,13 +114,13 @@ export function instructionQuantityWarnings(instructions: any) {
   return warnings;
 }
 
-export function renderInstructions(steps: any) {
-  return steps.map((s: any, i: any) => `${i + 1}. ${normalizeInstruction(s)}`).join("\n");
+export function renderInstructions(steps: string[]): string {
+  return steps.map((s, i) => `${i + 1}. ${normalizeInstruction(s)}`).join("\n");
 }
 
 /** Splits a recipe body into its "## " sections, keeping any preamble. */
-export function parseSections(body: any) {
-  const sections: any[] = [];
+export function parseSections(body: string): RecipeSection[] {
+  const sections: { heading: string | null; content: string[] }[] = [];
   let current: { heading: string | null; content: string[] } = { heading: null, content: [] };
   for (const line of body.split("\n")) {
     const m = line.match(/^##\s+(.+?)\s*$/);
@@ -135,39 +137,39 @@ export function parseSections(body: any) {
     .filter((s) => s.heading !== null || s.content);
 }
 
-export function renderSections(sections: any) {
+export function renderSections(sections: RecipeSection[]): string {
   return (
     sections
-      .map((s: any) => (s.heading === null ? s.content : `## ${s.heading}\n\n${s.content}`.trimEnd()))
+      .map((s) => (s.heading === null ? s.content : `## ${s.heading}\n\n${s.content}`.trimEnd()))
       .join("\n\n")
       .trim() + "\n"
   );
 }
 
 /** Free text after the numbered list in an Instructions section (e.g. a nutrition line). */
-export function trailingText(instructionsContent: any) {
+export function trailingText(instructionsContent: string): string {
   const lines = instructionsContent.split("\n");
   let lastListLine = -1;
-  lines.forEach((l: any, i: any) => {
+  lines.forEach((l, i) => {
     if (/^\s*\d+[.)]\s+/.test(l) || (lastListLine === i - 1 && /^\s{2,}\S/.test(l))) lastListLine = i;
   });
   return lastListLine === -1 ? "" : lines.slice(lastListLine + 1).join("\n").trim();
 }
 
-export function parseRecipe(raw: any) {
+export function parseRecipe(raw: string): { data: RecipeData; sections: RecipeSection[] } {
   // Passing options disables gray-matter's global cache, whose returned objects
   // would otherwise be shared (and mutated by us) across calls.
   const { data, content } = matter(raw, {});
-  return { data: structuredClone(data), sections: parseSections(content) };
+  return { data: structuredClone(data) as RecipeData, sections: parseSections(content) };
 }
 
-export function serializeRecipe(data: any, sections: any) {
+export function serializeRecipe(data: Record<string, unknown>, sections: RecipeSection[]): string {
   return `${renderFrontmatter(data)}\n${renderSections(sections)}`;
 }
 
 /** Replace (or insert, or with content null remove) one "## heading" section. */
-export function setSection(sections: any, heading: any, content: any, { after }: any = {}) {
-  const idx = sections.findIndex((s: any) => s.heading?.toLowerCase() === heading.toLowerCase());
+export function setSection(sections: RecipeSection[], heading: string, content: string | null, { after }: { after?: string } = {}): RecipeSection[] {
+  const idx = sections.findIndex((s) => s.heading?.toLowerCase() === heading.toLowerCase());
   if (content === null) {
     if (idx !== -1) sections.splice(idx, 1);
     return sections;
@@ -175,7 +177,7 @@ export function setSection(sections: any, heading: any, content: any, { after }:
   if (idx !== -1) {
     sections[idx] = { heading: sections[idx].heading, content };
   } else {
-    const afterIdx = after ? sections.findIndex((s: any) => s.heading?.toLowerCase() === after.toLowerCase()) : -1;
+    const afterIdx = after ? sections.findIndex((s) => s.heading?.toLowerCase() === after.toLowerCase()) : -1;
     sections.splice(afterIdx === -1 ? sections.length : afterIdx + 1, 0, { heading, content });
   }
   return sections;

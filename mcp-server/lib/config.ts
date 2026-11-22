@@ -66,7 +66,7 @@ export const config = {
 };
 
 export function assertConfigured() {
-  const missing: any[] = [];
+  const missing: string[] = [];
   if (!config.githubToken) missing.push("GITHUB_TOKEN");
   if (!config.authToken) missing.push("MCP_AUTH_TOKEN");
   if (missing.length) {
@@ -84,7 +84,7 @@ export function assertStocktakeConfigured() {
 }
 
 export function assertChatConfigured() {
-  const missing: any[] = [];
+  const missing: string[] = [];
   if (!config.githubToken) missing.push("GITHUB_TOKEN");
   if (!config.chatPublicKey) missing.push("OPENROUTER_CHAT_PUBLIC_KEY");
   if (missing.length) throw new Error(`The chat is not set up: missing environment variables ${missing.join(", ")}`);

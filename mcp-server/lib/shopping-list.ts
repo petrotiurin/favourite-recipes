@@ -1,4 +1,5 @@
 import { ChangeSet, assertCanCommit } from "./github.ts";
+import type { CommitResult } from "./github.ts";
 import { listRecipes, isNextWeek, bookIngredients } from "./recipes.ts";
 import { loadCatalogue, shopAmount, SECTIONS, CatalogueError } from "./catalogue.ts";
 import { config, SHOPPING_LIST_PATH } from "./config.ts";
@@ -6,6 +7,29 @@ import { cached } from "./cache.ts";
 import { createHash } from "node:crypto";
 import { sameIngredient } from "./ingredient-match.ts";
 import { BASE_SERVINGS, DEFAULT_SERVINGS, parseQuantity, neededAmount as exactNeededAmount, loadShoppingList } from "../../shared/shopping-list.ts";
+import type { Plan } from "../../shared/shopping-list.ts";
+import type { Catalogue } from "../../shared/catalogue.ts";
+import type { Caller, Now } from "./types/common.ts";
+import type { BookRecipe, ListRow } from "./types/recipe.ts";
+import type {
+  BuiltList,
+  ListEdit,
+  ListStatus,
+  OptionalItem,
+  Remaining,
+  ReviewFlag,
+  Section,
+  Servings,
+  ShoppingItem,
+  ShoppingList,
+  ShoppingRow,
+  BuiltSection,
+  ShoppingSectionInput,
+  StaleEdit,
+  StockItem,
+  StockUpdate,
+  StoredShoppingList,
+} from "./types/shopping.ts";
 
 // The shopping list is for NEXT WEEK's recipes (`next: true`). The agent combines their
 // ingredients itself; this module only validates and stores the result as shopping-list.json
@@ -29,14 +53,14 @@ export class ShoppingListError extends Error {}
 // Kitchen measures the shopping list must not use: the agent converts them to g / ml / counts (recipes keep theirs).
 const KITCHEN_MEASURE = /\b(tbsps?|tsps?|tablespoons?|teaspoons?|cups?|oz|ounces?|lbs?|pounds?|heaped|pinch(es)?|handfuls?)\b/i;
 
-export function validateSections(sections: any) {
-  const errors: any[] = [];
+export function validateSections(sections: ShoppingSectionInput[] | undefined) {
+  const errors: string[] = [];
   if (!sections?.length) errors.push("sections: at least one section is required");
-  const seen = new Map();
-  (sections || []).forEach((s: any, i: any) => {
+  const seen = new Map<string, string>();
+  (sections || []).forEach((s, i) => {
     if (!s.name?.trim()) errors.push(`sections[${i}]: name is required (e.g. "Fresh produce")`);
     if (!s.items?.length) errors.push(`sections[${i}] "${s.name}": at least one item is required`);
-    (s.items || []).forEach((item: any, j: any) => {
+    (s.items || []).forEach((item, j) => {
       if (item.quantity && KITCHEN_MEASURE.test(item.quantity)) {
         errors.push(`"${item.name}": quantity "${item.quantity}" uses a kitchen measure: convert it to g or ml (or a count) and add the amounts into ONE number`);
       } else if (item.quantity && item.quantity.includes("+")) {
@@ -60,10 +84,10 @@ export function validateSections(sections: any) {
  * dish each ingredient goes into. Each slug must be a next-week recipe, and every next-week recipe
  * must have at least one item (a recipe with nothing on the list was most likely left out).
  */
-export function validateItemRecipes(sections: any, nextSlugs: any) {
-  const next = new Set<any>(nextSlugs);
-  const used = new Set();
-  const errors: any[] = [];
+export function validateItemRecipes(sections: ShoppingSectionInput[], nextSlugs: string[]) {
+  const next = new Set(nextSlugs);
+  const used = new Set<string>();
+  const errors: string[] = [];
   for (const s of sections) {
     for (const item of s.items) {
       if (!item.recipes?.length) {
@@ -89,41 +113,42 @@ export function validateItemRecipes(sections: any, nextSlugs: any) {
  * (`amounts`: slug -> number in the item's unit), so the page can scale each recipe on its own.
  * They must add up to the quantity. A one-recipe item doesn't need it.
  */
-function amountErrors(item: any) {
-  const slugs = [...new Set<any>(item.recipes)];
+function amountErrors(item: ShoppingSectionInput["items"][number]): string[] {
+  const slugs = [...new Set(item.recipes)];
   const q = parseQuantity(item.quantity);
   const example = `e.g. amounts: { ${slugs.slice(0, 2).map((s, i) => `"${s}": ${i ? 1 : 2}`).join(", ")} }`;
-  if (!item.amounts || !Object.keys(item.amounts).length) {
+  const amounts = item.amounts;
+  if (!amounts || !Object.keys(amounts).length) {
     return slugs.length > 1 && q
       ? [`"${item.name}": amounts is required for an item with several recipes: how much of "${item.quantity}" (2 servings) each recipe needs, in the same unit, ${example}`]
       : [];
   }
   if (!q) return [`"${item.name}": amounts needs a quantity that is one number (and unit), e.g. "400g" or "3"`];
-  const keys = Object.keys(item.amounts);
-  const errors: any[] = [];
+  const keys = Object.keys(amounts);
+  const errors: string[] = [];
   const extra = keys.filter((k) => !slugs.includes(k));
   const missing = slugs.filter((k) => !keys.includes(k));
   if (extra.length || missing.length) {
     errors.push(`"${item.name}": amounts must have exactly the item's recipes (${slugs.join(", ")})${missing.length ? `, missing ${missing.join(", ")}` : ""}${extra.length ? `, not in recipes: ${extra.join(", ")}` : ""}`);
   }
-  if (keys.some((k) => !(item.amounts[k] > 0))) errors.push(`"${item.name}": every amount must be a positive number`);
-  const total = keys.reduce((n, k) => n + (Number(item.amounts[k]) || 0), 0);
+  if (keys.some((k) => !(amounts[k] > 0))) errors.push(`"${item.name}": every amount must be a positive number`);
+  const total = keys.reduce((n, k) => n + (Number(amounts[k]) || 0), 0);
   if (!errors.length && Math.abs(total - q.amount) > Math.max(0.05, q.amount * 0.01)) {
     errors.push(`"${item.name}": amounts add up to ${round(total)}, but quantity is "${item.quantity}": they must match`);
   }
   return errors;
 }
 
-const round = (n: any) => Math.round(n * 100) / 100;
+const round = (n: number): number => Math.round(n * 100) / 100;
 
 /** The planned servings for each of `slugs`: the given ones, else what `previous` planned, else DEFAULT_SERVINGS. */
-export function resolveServings(slugs: any, given: any = {}, previous: any = {}) {
+export function resolveServings(slugs: Iterable<string>, given: Servings = {}, previous: Servings | null = {}): Servings {
   return Object.fromEntries([...slugs].sort().map((slug) => [slug, given[slug] ?? previous?.[slug] ?? DEFAULT_SERVINGS]));
 }
 
-export function validateServings(servings: any, allowed: any, what: any) {
-  const ok = new Set<any>(allowed);
-  const errors = Object.entries<any>(servings || {}).flatMap(([slug, n]) => [
+export function validateServings(servings: Servings | undefined, allowed: Iterable<string>, what: string) {
+  const ok = new Set(allowed);
+  const errors = Object.entries(servings || {}).flatMap(([slug, n]) => [
     ...(ok.has(slug) ? [] : [`servings: "${slug}" is not ${what} (${[...ok].join(", ")})`]),
     ...(Number.isInteger(n) && n >= 1 && n <= MAX_SERVINGS ? [] : [`servings: "${slug}" must be a whole number from 1 to ${MAX_SERVINGS}`]),
   ]);
@@ -131,16 +156,17 @@ export function validateServings(servings: any, allowed: any, what: any) {
 }
 
 /** The stored file from validated sections: dates it, records the recipes and the plan, tidies every item. */
-export function assembleShoppingList(sections: any, slugs: any, now = new Date(), servings = resolveServings(slugs)) {
+export function assembleShoppingList(sections: ShoppingSectionInput[], slugs: string[], now = new Date(), servings: Servings = resolveServings(slugs)): StoredShoppingList {
   return {
     updated: now.toISOString().slice(0, 10),
     recipes: [...slugs].sort(),
     servings,
-    sections: sections.map((s: any) => ({
+    sections: sections.map((s) => ({
       name: s.name.trim(),
-      items: s.items.map((item: any) => {
-        const recipes = [...new Set<any>(item.recipes || [])];
-        const amounts = recipes.length > 1 && item.amounts ? Object.fromEntries(recipes.map((slug) => [slug, round(item.amounts[slug])])) : null;
+      items: s.items.map((item) => {
+        const recipes = [...new Set(item.recipes || [])];
+        const given = item.amounts;
+        const amounts = recipes.length > 1 && given ? Object.fromEntries(recipes.map((slug) => [slug, round(given[slug])])) : null;
         return {
           name: item.name.trim(),
           ...(item.quantity?.trim() ? { quantity: item.quantity.trim() } : {}),
@@ -153,7 +179,7 @@ export function assembleShoppingList(sections: any, slugs: any, now = new Date()
   };
 }
 
-export const serializeShoppingList = (list: any) => `${JSON.stringify(list, null, 2)}\n`;
+export const serializeShoppingList = (list: ShoppingList): string => `${JSON.stringify(list, null, 2)}\n`;
 
 // --- Stocktake: what's already at home -------------------------------------------------------------
 // Saved from the shopping page by a signed-in editor (api/stocktake.ts). Each item may carry
@@ -163,25 +189,25 @@ export const serializeShoppingList = (list: any) => `${JSON.stringify(list, null
 
 export class StocktakeError extends ShoppingListError {
   declare status: number;
-  constructor(message: any, status = 400) {
+  constructor(message: string, status = 400) {
     super(message);
     this.status = status;
   }
 }
 
-const itemKey = (item: any) => `${String(item?.name ?? "").trim().toLowerCase()}\n${String(item?.quantity ?? "").trim()}`;
+const itemKey = (item: { name?: unknown; quantity?: unknown } | null | undefined): string => `${String(item?.name ?? "").trim().toLowerCase()}\n${String(item?.quantity ?? "").trim()}`;
 
 /** slug -> planned servings for every recipe the list covers (DEFAULT_SERVINGS where it has none, e.g. older lists). */
-export const planOf = (list: any) => resolveServings(list?.recipes || [], list?.servings || {});
+export const planOf = (list: Pick<ShoppingList, "recipes" | "servings"> | null | undefined): Servings => resolveServings(list?.recipes || [], list?.servings || {});
 
 /** How much of an item the plan needs (shared/shopping-list.ts), rounded to 2 decimals: null without an amount. */
-export function neededAmount(item: any, plan: any) {
+export function neededAmount(item: ShoppingItem, plan: Plan): number | null {
   const need = exactNeededAmount(item, plan);
   return need === null ? null : round(need);
 }
 
 /** What's left to buy for one item at the planned servings: { status: "buy" | "partial" | "home", need, remaining }. */
-export function remainingFor(item: any, plan: any = {}) {
+export function remainingFor(item: ShoppingItem, plan: Plan = {}): Remaining {
   const need = neededAmount(item, plan);
   if (item.have === true) return { status: "home", need, remaining: 0 };
   if (typeof item.have !== "number" || need === null) return { status: "buy", need, remaining: need };
@@ -193,19 +219,20 @@ export function remainingFor(item: any, plan: any = {}) {
  * Applies a stocktake sent by the page. `items` must be exactly the stored list's items (name +
  * quantity), so a page loaded before the agent replaced the list can't write onto the new one.
  */
-export function applyStocktake(list: any, items: any, now = new Date()) {
+export function applyStocktake(list: ShoppingList | null | undefined, items: unknown, now = new Date()): ShoppingList {
   if (!list?.sections?.length) throw new StocktakeError("There is no shopping list to save a stocktake for.", 409);
   if (!Array.isArray(items)) throw new StocktakeError("items must be an array.");
-  const sent = new Map<any, any>(items.map((i) => [itemKey(i), i]));
-  const stored = list.sections.flatMap((s: any) => s.items);
-  if (sent.size !== items.length || sent.size !== stored.length || stored.some((i: any) => !sent.has(itemKey(i)))) {
+  const sentItems: StockItem[] = items;
+  const sent = new Map(sentItems.map((i) => [itemKey(i), i]));
+  const stored = list.sections.flatMap((s) => s.items);
+  if (sent.size !== items.length || sent.size !== stored.length || stored.some((i) => !sent.has(itemKey(i)))) {
     throw new StocktakeError("The shopping list has changed since this page was loaded. Reload the page and do the stocktake again.", 409);
   }
-  const errors: any[] = [];
-  const sections = list.sections.map((s: any) => ({
+  const errors: string[] = [];
+  const sections = list.sections.map((s) => ({
     ...s,
-    items: s.items.map(({ have: _old, ...item }: any) => {
-      const have = sent.get(itemKey(item)).have;
+    items: s.items.map(({ have: _old, ...item }): ShoppingItem => {
+      const have = sent.get(itemKey(item))!.have;
       if (have === undefined || have === false || have === 0) return item;
       if (have === true) return { ...item, have };
       if (typeof have !== "number" || !Number.isFinite(have) || have < 0) {
@@ -221,27 +248,27 @@ export function applyStocktake(list: any, items: any, now = new Date()) {
 }
 
 /** A fingerprint of the list's items (name + quantity): what a staged stocktake was made against. */
-export const listSignature = (list: any) => createHash("sha1").update(JSON.stringify((list?.sections || []).flatMap((s: any) => s.items).map(itemKey))).digest("hex").slice(0, 16);
+export const listSignature = (list: ShoppingList | null | undefined): string => createHash("sha1").update(JSON.stringify((list?.sections || []).flatMap((s) => s.items).map(itemKey))).digest("hex").slice(0, 16);
 
 /**
  * Resolves what the user said is at home ({ name, have: true | amount | false/0 to clear }) against the stored list's items: the name as written
  * (any case), else the one item it is the same ingredient as. Returns the list's whole item set with those `have`s changed (the shape
  * applyStocktake wants), and what changed.
  */
-export function mergeStocktake(list: any, updates: any) {
+export function mergeStocktake(list: ShoppingList | null | undefined, updates: unknown): { items: StockItem[]; changed: StockItem[] } {
   if (!list?.sections?.length) throw new StocktakeError("There is no shopping list to record what's at home against.", 409);
-  const stored = list.sections.flatMap((s: any) => s.items);
-  const changed = new Map(); // item -> have
-  const unknown: any[] = [];
-  for (const u of Array.isArray(updates) ? updates : []) {
+  const stored = list.sections.flatMap((s) => s.items);
+  const changed = new Map<ShoppingItem, boolean | number | undefined>(); // item -> have
+  const unknown: string[] = [];
+  for (const u of (Array.isArray(updates) ? updates : []) as (StockUpdate | null | undefined)[]) {
     const name = String(u?.name ?? "").trim();
-    const exact = stored.filter((i: any) => i.name.trim().toLowerCase() === name.toLowerCase());
-    const close = exact.length ? exact : stored.filter((i: any) => sameIngredient(i.name, name));
-    if (close.length !== 1) unknown.push(close.length ? `"${name}" matches several items (${close.map((i: any) => i.name).join(", ")}): use the exact name` : `"${name}"`);
-    else changed.set(close[0], u.have);
+    const exact = stored.filter((i) => i.name.trim().toLowerCase() === name.toLowerCase());
+    const close = exact.length ? exact : stored.filter((i) => sameIngredient(i.name, name));
+    if (close.length !== 1) unknown.push(close.length ? `"${name}" matches several items (${close.map((i) => i.name).join(", ")}): use the exact name` : `"${name}"`);
+    else changed.set(close[0], u!.have);
   }
-  if (unknown.length) throw new StocktakeError(`Not on the shopping list: ${unknown.join(", ")}. The list's items are: ${stored.map((i: any) => i.name).join(", ")}.`);
-  const items = stored.map((i: any) => ({ name: i.name, quantity: i.quantity, have: changed.has(i) ? changed.get(i) : i.have }));
+  if (unknown.length) throw new StocktakeError(`Not on the shopping list: ${unknown.join(", ")}. The list's items are: ${stored.map((i) => i.name).join(", ")}.`);
+  const items = stored.map((i) => ({ name: i.name, quantity: i.quantity, have: changed.has(i) ? changed.get(i) : i.have }));
   return { items, changed: [...changed].map(([i, have]) => ({ name: i.name, quantity: i.quantity, have })) };
 }
 
@@ -250,7 +277,7 @@ export function mergeStocktake(list: any, updates: any) {
  * `signature`: the list signature the update was made against; a different list now is a 409 (Reload and do it again). Without a ChangeSet it
  * commits; with one (the plan tray's dry run and Save) it only stages the file.
  */
-export async function updateStocktake(updates: any, batch: any, caller: any, { signature, now = new Date() }: any = {}) {
+export async function updateStocktake(updates: unknown, batch: ChangeSet | null | undefined, caller: Caller | null | undefined, { signature, now = new Date() }: { signature?: string; now?: Date } = {}) {
   assertCanCommit(caller);
   const cs = batch || new ChangeSet();
   const stored = await readStoredList(cs);
@@ -264,17 +291,17 @@ export async function updateStocktake(updates: any, batch: any, caller: any, { s
 }
 
 /** Commits the stocktake to shopping-list.json (one commit = one site deploy). */
-export async function saveStocktake(items: any, caller: any, now = new Date()) {
+export async function saveStocktake(items: unknown, caller: Caller | null | undefined, now = new Date()): Promise<{ list: ShoppingList; commit: CommitResult; counts: { home: number; partial: number } }> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = new ChangeSet();
   const list = applyStocktake(await readStoredList(cs), items, now);
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(list)));
-  const all = list.sections.flatMap((s: any) => s.items);
-  const counts: Record<string, number> = { home: 0, partial: 0 };
+  const all = list.sections.flatMap((s) => s.items);
+  const counts = { home: 0, partial: 0 };
   const plan = planOf(list);
   for (const item of all) {
     const { status } = remainingFor(item, plan);
-    if (status in counts) counts[status]++;
+    if (status === "home" || status === "partial") counts[status]++;
   }
   const commit = await cs.commit(
     `Update shopping list stocktake (${counts.home} of ${all.length} items at home, ${counts.partial} partly)\n\nSaved from the shopping page.`,
@@ -283,17 +310,17 @@ export async function saveStocktake(items: any, caller: any, now = new Date()) {
   return { list, commit, counts };
 }
 
-const fmtAmount = (amount: any, unit: any) => `${amount}${!unit ? "" : /^(g|kg|ml|l)$/i.test(unit) ? unit : ` ${unit}`}`;
+const fmtAmount = (amount: number | boolean | null | undefined, unit: string): string => `${amount}${!unit ? "" : /^(g|kg|ml|l)$/i.test(unit) ? unit : ` ${unit}`}`;
 
 /** The planned servings as text, e.g. "- spicy-tuna-loaded-sweet-potato: 1". */
-export const servingsLines = (list: any) => Object.entries<any>(planOf(list)).map(([slug, n]) => `- ${slug}: ${n}`);
+export const servingsLines = (list: ShoppingList | null | undefined): string[] => Object.entries(planOf(list)).map(([slug, n]) => `- ${slug}: ${n}`);
 
 /** What to buy at the planned servings (minus the stocktake, if any) and what to skip, for get_shopping_list. */
-export function stocktakeLines(list: any) {
+export function stocktakeLines(list: ShoppingList | null | undefined): string[] {
   if (!list?.sections?.length) return [];
   const plan = planOf(list);
-  const buy: any[] = [];
-  const home: any[] = [];
+  const buy: string[] = [];
+  const home: string[] = [];
   for (const s of list.sections) {
     for (const item of s.items) {
       const { status, need, remaining } = remainingFor(item, plan);
@@ -323,26 +350,26 @@ export function stocktakeLines(list: any) {
  * (the site keeps showing the old list until it is rewritten), "not planned" when next week is empty (e.g. just
  * after start_next_week: the page keeps showing the last list, now for this week), "none" when there's no list.
  */
-export function shoppingListStatus(list: any, nextSlugs: any) {
+export function shoppingListStatus(list: ShoppingList | null | undefined, nextSlugs: string[]): ListStatus {
   if (!list || !Array.isArray(list.sections) || !list.sections.length) return "none";
   if (!nextSlugs.length) return "not planned";
   const covered = [...(list.recipes || [])].sort().join("\n");
   return covered === [...nextSlugs].sort().join("\n") ? "current" : "outdated";
 }
 
-export async function readStoredList(cs: any) {
+export async function readStoredList(cs: ChangeSet): Promise<ShoppingList | null> {
   const raw = await cs.read(SHOPPING_LIST_PATH);
   return raw ? loadShoppingList(raw.toString("utf8")) : null;
 }
 
 /** A read (no ChangeSet): the stored list comes from a short cache shared with the recipe index; with a ChangeSet it is fresh. */
-export async function getShoppingList(cs?: any) {
+export async function getShoppingList(cs?: ChangeSet): Promise<{ list: ShoppingList | null; next: ListRow[]; status: ListStatus }> {
   const [list, recipes] = await Promise.all([
     cs ? readStoredList(cs) : cached(`shopping-list:${config.repo}@${config.branch}`, () => readStoredList(new ChangeSet())),
     listRecipes(cs),
   ]);
   const next = recipes.filter(isNextWeek);
-  return { list, next, status: shoppingListStatus(list, next.map((r: any) => r.slug)) };
+  return { list, next, status: shoppingListStatus(list, next.map((r) => r.slug)) };
 }
 
 /**
@@ -350,7 +377,7 @@ export async function getShoppingList(cs?: any) {
  * `servings` (slug -> people) plans individual recipes; the others keep what the previous list
  * planned for them, else DEFAULT_SERVINGS.
  */
-export async function updateShoppingList(sections: any, batch: any, servings: any = {}, caller: any) {
+export async function updateShoppingList(sections: ShoppingSectionInput[], batch: ChangeSet | null | undefined, servings: Servings = {}, caller: Caller | null | undefined) {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   validateSections(sections);
@@ -360,7 +387,7 @@ export async function updateShoppingList(sections: any, batch: any, servings: an
       'Next week has no recipes, so there is nothing to shop for. Plan it first: create_recipe with week: "next", or set_week_recipes with week: "next". The page keeps showing the last list until then.'
     );
   }
-  const slugs = next.map((r: any) => r.slug);
+  const slugs = next.map((r) => r.slug);
   validateServings(servings, slugs, "a next-week recipe");
   validateItemRecipes(sections, slugs);
   const previous = await readStoredList(cs);
@@ -376,7 +403,7 @@ export async function updateShoppingList(sections: any, batch: any, servings: an
  * without rebuilding the list: quantities stay at the 2-serving base and the stocktake (absolute
  * amounts) is kept. The page opens on the new plan once the site redeploys.
  */
-export async function setShoppingServings(servings: any, batch: any, caller: any) {
+export async function setShoppingServings(servings: Servings, batch: ChangeSet | null | undefined, caller: Caller | null | undefined) {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const list = await readStoredList(cs);
@@ -386,9 +413,9 @@ export async function setShoppingServings(servings: any, batch: any, caller: any
   if (!Object.keys(servings || {}).length) throw new ShoppingListError("servings: give at least one recipe, e.g. { \"slug\": 1 }");
   validateServings(servings, list.recipes || [], "on the shopping list");
   const before = planOf(list);
-  const changed = Object.entries<any>(servings).filter(([slug, n]) => before[slug] !== n);
+  const changed = Object.entries(servings).filter(([slug, n]) => before[slug] !== n);
   if (!changed.length) return { list, changed, commit: null, subject: null };
-  const updated = { ...list, servings: resolveServings(list.recipes, servings, before) };
+  const updated = { ...list, servings: resolveServings(list.recipes || [], servings, before) };
   cs.write(SHOPPING_LIST_PATH, Buffer.from(serializeShoppingList(updated)));
   const subject = `Set shopping list servings (${changed.map(([slug, n]) => `${slug}: ${n}`).join(", ")})`;
   const commit = batch ? null : await cs.commit(`${subject}\n\nUpdated via the recipes MCP server.`, caller);
@@ -401,17 +428,18 @@ export async function setShoppingServings(servings: any, batch: any, caller: any
 // reviews the result, with small patches (applyListEdits), and the user decides about the optional items.
 
 const plural: Record<string, string> = { clove: "cloves", can: "cans", slice: "slices", bunch: "bunches", sprig: "sprigs", piece: "pieces" };
-const roundShare = (n: any, unit: any) => (unit === "g" || unit === "ml" ? (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) : Math.round(n * 1000) / 1000);
-const sumOf = (shares: any) => Object.values<any>(shares).reduce((a, b) => a + b, 0);
+const roundShare = (n: number, unit: string | null | undefined): number => (unit === "g" || unit === "ml" ? (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) : Math.round(n * 1000) / 1000);
+const sumOf = (shares: Record<string, number>): number => Object.values(shares).reduce((a, b) => a + b, 0);
+const pluralOf = (unit: string | null | undefined): string | undefined => (unit ? plural[unit] : undefined);
 
 /**
  * One row per catalogue item next week needs: { item, name, section, unit, shares: { slug: amount at 2 servings }, recipes, optional, notes }.
  * `recipes`: [{ slug, serves, ingredients }]. Resolves { rows: Map, empty: [slugs with no ingredients], problems: [text] }. Pure.
  */
-export function listRows(recipes: any, catalogue: any) {
-  const rows = new Map();
-  const empty: any[] = [];
-  const problems: any[] = [];
+export function listRows(recipes: Pick<BookRecipe, "slug" | "serves" | "ingredients">[], catalogue: Catalogue): { rows: Map<string, ShoppingRow>; empty: string[]; problems: string[] } {
+  const rows = new Map<string, ShoppingRow>();
+  const empty: string[] = [];
+  const problems: string[] = [];
   for (const r of [...recipes].sort((a, b) => a.slug.localeCompare(b.slug))) {
     const ingredients = r.ingredients || [];
     if (!ingredients.length) {
@@ -428,16 +456,16 @@ export function listRows(recipes: any, catalogue: any) {
       if (entry.skip) continue;
       let row = rows.get(ing.item);
       if (!row) {
-        row = { item: ing.item, name: entry.name, section: SECTIONS.includes(entry.section) ? entry.section : "Pantry", unit: entry.staple ? null : entry.unit, shares: {}, recipes: [], optional: true, notes: [] };
+        row = { item: ing.item, name: entry.name, section: entry.section && SECTIONS.includes(entry.section) ? entry.section : "Pantry", unit: entry.staple ? null : entry.unit, shares: {}, recipes: [], optional: true, notes: [] };
         rows.set(ing.item, row);
       }
       if (!row.recipes.includes(r.slug)) row.recipes.push(r.slug);
       row.optional = row.optional && ing.optional === true;
       if (entry.staple) continue;
-      let amount;
+      let amount: number | null;
       try {
         amount = shopAmount(ing, entry);
-      } catch (err: any) {
+      } catch (err) {
         if (!(err instanceof CatalogueError)) throw err;
         problems.push(`${r.slug}: ${err.message}`);
         continue;
@@ -450,8 +478,8 @@ export function listRows(recipes: any, catalogue: any) {
 }
 
 /** What a patch is called in the review and on the card, in plain words. */
-export function editLabel(edit: any, rows?: any) {
-  const name = (id: any) => rows?.get(id)?.name || id;
+export function editLabel(edit: ListEdit, rows?: Map<string, ShoppingRow>): string {
+  const name = (id: string) => rows?.get(id)?.name || id;
   if (edit.drop) return `leave off ${name(edit.drop)}`;
   if (edit.round_up) return `round ${name(edit.round_up)} up`;
   if (edit.merge) return `${name(edit.merge[1])} merged into ${name(edit.merge[0])}`;
@@ -463,32 +491,32 @@ export function editLabel(edit: any, rows?: any) {
 }
 
 /** Which item a patch is about (the key review patches are kept and replaced by). */
-export const editTarget = (edit: any) => edit.drop || edit.round_up || edit.merge?.[1] || edit.note?.item || edit.move?.item || edit.rename?.item || edit.scale?.item || null;
-const editKind = (edit: any) => ["drop", "round_up", "merge", "note", "move", "rename", "scale"].find((k) => edit[k] !== undefined);
+export const editTarget = (edit: ListEdit): string | null => edit.drop || edit.round_up || edit.merge?.[1] || edit.note?.item || edit.move?.item || edit.rename?.item || edit.scale?.item || null;
+const editKind = (edit: ListEdit): string | undefined => (["drop", "round_up", "merge", "note", "move", "rename", "scale"] as const).find((k) => edit[k] !== undefined);
 /** Two patches replace each other when they do the same kind of thing to the same item (a newer note replaces the older one). */
-export const sameEdit = (a: any, b: any) => editKind(a) === editKind(b) && editTarget(a) === editTarget(b);
+export const sameEdit = (a: ListEdit, b: ListEdit): boolean => editKind(a) === editKind(b) && editTarget(a) === editTarget(b);
 
 /**
  * Applies review patches to the rows, in order. A patch whose item is gone (the recipe that needed it was removed) or that can't apply is
  * returned in `stale` with why, and skipped. Resolves { rows, stale: [{ edit, why }] }. Pure (rows are copied).
  */
-export function applyListEdits(rows: any, edits: any[] = [], plan: any = {}) {
-  const out = new Map<any, any>([...rows].map(([id, r]) => [id, { ...r, shares: { ...r.shares }, recipes: [...r.recipes], notes: [...r.notes] }]));
-  const stale: any[] = [];
+export function applyListEdits(rows: Map<string, ShoppingRow>, edits: ListEdit[] = [], plan: Plan = {}): { rows: Map<string, ShoppingRow>; stale: StaleEdit[] } {
+  const out = new Map<string, ShoppingRow>([...rows].map(([id, r]) => [id, { ...r, shares: { ...r.shares }, recipes: [...r.recipes], notes: [...r.notes] }]));
+  const stale: StaleEdit[] = [];
   for (const edit of edits) {
     const target = editTarget(edit);
-    const row = out.get(target);
+    const row = target === null ? undefined : out.get(target);
     if (!row) {
       stale.push({ edit, why: `${editLabel(edit, rows)} no longer applies: ${target} isn't on the list any more` });
       continue;
     }
-    if (edit.drop) out.delete(target);
+    if (edit.drop) out.delete(target!);
     else if (edit.round_up) {
       // whole at the planned servings (what the shopping page shows), the extra going to the recipe that needs most of it
       const planned = plannedTotal(row, plan);
-      if (!Object.keys(row.shares).length || (row.unit !== "count" && !plural[row.unit])) stale.push({ edit, why: `${row.name} isn't counted, so it can't be rounded up` });
+      if (!Object.keys(row.shares).length || (row.unit !== "count" && !pluralOf(row.unit))) stale.push({ edit, why: `${row.name} isn't counted, so it can't be rounded up` });
       else {
-        const top = Object.entries<any>(row.shares).sort((a, b) => b[1] - a[1])[0][0];
+        const top = Object.entries(row.shares).sort((a, b) => b[1] - a[1])[0][0];
         row.shares[top] += ((Math.ceil(planned - 1e-9) - planned) * BASE_SERVINGS) / servingsIn(plan, top);
       }
     } else if (edit.merge) {
@@ -497,11 +525,11 @@ export function applyListEdits(rows: any, edits: any[] = [], plan: any = {}) {
       else if (into === row) stale.push({ edit, why: "merging an item with itself" });
       else if (into.unit !== row.unit) stale.push({ edit, why: `${into.name} (${into.unit || "no amount"}) and ${row.name} (${row.unit || "no amount"}) aren't bought in the same unit` });
       else {
-        for (const [slug, n] of Object.entries<any>(row.shares)) into.shares[slug] = (into.shares[slug] || 0) + n;
+        for (const [slug, n] of Object.entries(row.shares)) into.shares[slug] = (into.shares[slug] || 0) + n;
         into.recipes = [...new Set([...into.recipes, ...row.recipes])];
         into.optional = into.optional && row.optional;
         into.notes = [...new Set([...into.notes, ...row.notes])];
-        out.delete(target);
+        out.delete(target!);
       }
     } else if (edit.note) row.notes = [String(edit.note.text).trim()].filter(Boolean);
     else if (edit.move) {
@@ -517,20 +545,20 @@ export function applyListEdits(rows: any, edits: any[] = [], plan: any = {}) {
   return { rows: out, stale };
 }
 
-const servingsIn = (plan: any, slug: any) => plan?.[slug] ?? DEFAULT_SERVINGS;
+const servingsIn = (plan: Plan | undefined, slug: string): number => plan?.[slug] ?? DEFAULT_SERVINGS;
 /** An item's total at the planned servings (each recipe's share scaled by its servings / 2), as the shopping page shows it. */
-const plannedTotal = (row: any, plan: any) => Object.entries<any>(row.shares).reduce((n, [slug, a]) => n + (a * servingsIn(plan, slug)) / BASE_SERVINGS, 0);
+const plannedTotal = (row: ShoppingRow, plan: Plan): number => Object.entries(row.shares).reduce((n, [slug, a]) => n + (a * servingsIn(plan, slug)) / BASE_SERVINGS, 0);
 
-const words = (name: any) => String(name).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2).map((w) => w.replace(/(es|s)$/, ""));
+const words = (name: unknown): string[] => String(name).toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2).map((w) => w.replace(/(es|s)$/, ""));
 
 /** What the server asks the model to look at (section 6, step 2): [{ key, item, text }]. Keys are stable, so a reviewed flag stays reviewed. */
-export function reviewFlags(rows: any, empty: any[] = [], plan: any = {}) {
-  const flags: any[] = [];
+export function reviewFlags(rows: Map<string, ShoppingRow>, empty: string[] = [], plan: Plan = {}): ReviewFlag[] {
+  const flags: ReviewFlag[] = [];
   const list = [...rows.values()];
   for (const row of list) {
     const total = sumOf(row.shares);
     const planned = plannedTotal(row, plan);
-    if ((row.unit === "count" || plural[row.unit]) && planned > 0 && Math.abs(planned - Math.round(planned)) > 0.01) flags.push({ key: `fraction:${row.item}`, item: row.item, text: `${Math.round(planned * 100) / 100} ${row.name.toLowerCase()} at the planned servings is a fraction: round up (round_up) or leave it` });
+    if ((row.unit === "count" || pluralOf(row.unit)) && planned > 0 && Math.abs(planned - Math.round(planned)) > 0.01) flags.push({ key: `fraction:${row.item}`, item: row.item, text: `${Math.round(planned * 100) / 100} ${row.name.toLowerCase()} at the planned servings is a fraction: round up (round_up) or leave it` });
     if (((row.unit === "g" || row.unit === "ml") && total > 3000) || (row.unit === "count" && total > 30)) flags.push({ key: `large:${row.item}`, item: row.item, text: `${row.name}: ${Math.round(total)}${row.unit === "count" ? "" : row.unit} is a lot: check it` });
   }
   for (let i = 0; i < list.length; i++) {
@@ -550,14 +578,14 @@ export function reviewFlags(rows: any, empty: any[] = [], plan: any = {}) {
 }
 
 /** The rows as the stored list's sections (the format the site's shopping island, src/islands/Shopping.tsx, reads): aisles in order, items by name, 2-serving quantities and shares. */
-export function rowsToSections(rows: any) {
-  const bySection = new Map<any, any>(SECTIONS.map((s) => [s, []]));
+export function rowsToSections(rows: Map<string, ShoppingRow>): BuiltSection[] {
+  const bySection = new Map<string, BuiltSection["items"]>(SECTIONS.map((s) => [s, []]));
   for (const row of [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-    const shares = Object.fromEntries(Object.entries<any>(row.shares).map(([slug, n]) => [slug, roundShare(n, row.unit)] as [string, number]).filter(([, n]) => n > 0));
+    const shares = Object.fromEntries(Object.entries(row.shares).map(([slug, n]) => [slug, roundShare(n, row.unit)] as [string, number]).filter(([, n]) => n > 0));
     const total = Math.round(sumOf(shares) * 100) / 100;
     const quantity = total > 0 && row.unit ? (row.unit === "g" || row.unit === "ml" ? `${total}${row.unit}` : row.unit === "count" ? `${total}` : `${total} ${total > 1 ? plural[row.unit] || row.unit : row.unit}`) : "";
     const note = [...row.notes, ...(row.optional ? ["optional"] : [])].join(", ");
-    const item = {
+    const item: BuiltSection["items"][number] = {
       name: row.name,
       ...(quantity ? { quantity } : {}),
       ...(note ? { note } : {}),
@@ -574,16 +602,16 @@ export function rowsToSections(rows: any) {
  * The whole list for next week: `recipes` (next week's, with their ingredients), the catalogue, and review patches. Resolves { sections,
  * rows (after the patches), optional: [{ item, name, quantity, recipes }] (items only optional ingredients need), flags, stale, empty, problems }.
  */
-export function buildShoppingList(recipes: any, catalogue: any, edits: any[] = [], plan: any = {}) {
+export function buildShoppingList(recipes: Pick<BookRecipe, "slug" | "serves" | "ingredients">[], catalogue: Catalogue, edits: ListEdit[] = [], plan: Plan = {}): BuiltList {
   const { rows: raw, empty, problems } = listRows(recipes, catalogue);
   const { rows, stale } = applyListEdits(raw, edits, plan);
   const sections = rowsToSections(rows);
-  const quantityOf = new Map<any, any>(sections.flatMap((s) => s.items).map((i) => [i.name, i.quantity]));
+  const quantityOf = new Map(sections.flatMap((s) => s.items).map((i) => [i.name, i.quantity]));
   const optional = [...rows.values()].filter((r) => r.optional).map((r) => ({ item: r.item, name: r.name, quantity: quantityOf.get(r.name) || "", recipes: [...r.recipes].sort() }));
   // optional items an answer left off: still asked about (unticked) if the card is shown again
   const droppedOptional = [...raw.values()]
     .filter((r) => r.optional && !rows.has(r.item) && edits.some((e) => e.drop === r.item))
-    .map((r) => ({ item: r.item, name: r.name, quantity: rowsToSections(new Map<any, any>([[r.item, r]]))[0]?.items[0]?.quantity || "", recipes: [...r.recipes].sort() }));
+    .map((r) => ({ item: r.item, name: r.name, quantity: rowsToSections(new Map([[r.item, r]]))[0]?.items[0]?.quantity || "", recipes: [...r.recipes].sort() }));
   return { sections, rows, optional, droppedOptional, flags: reviewFlags(rows, empty, plan), stale, empty, problems };
 }
 
@@ -591,7 +619,7 @@ export function buildShoppingList(recipes: any, catalogue: any, edits: any[] = [
  * update_shopping_list with build: true: builds next week's list from the recipes in the ChangeSet (the batch's or tray's earlier changes
  * included), applies the review patches, and stages (or commits) it. Resolves { list, next, built, commit, subject }.
  */
-export async function buildAndSaveShoppingList({ edits = [] }: any = {}, batch: any, servings: any = {}, caller: any) {
+export async function buildAndSaveShoppingList({ edits = [] }: { edits?: ListEdit[] } = {}, batch: ChangeSet | null | undefined, servings: Servings = {}, caller: Caller | null | undefined) {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const book = await bookIngredients(cs);
@@ -599,7 +627,7 @@ export async function buildAndSaveShoppingList({ edits = [] }: any = {}, batch: 
   if (!next.length) {
     throw new ShoppingListError('Next week has no recipes, so there is nothing to shop for. Plan it first: create_recipe with week: "next", or set_week_recipes with week: "next". The page keeps showing the last list until then.');
   }
-  const slugs = next.map((r: any) => r.slug);
+  const slugs = next.map((r) => r.slug);
   validateServings(servings, slugs, "a next-week recipe");
   const previous = await readStoredList(cs);
   const plan = resolveServings(slugs, servings, previous?.servings);
@@ -615,12 +643,12 @@ export async function buildAndSaveShoppingList({ edits = [] }: any = {}, batch: 
 }
 
 /** What the built list asks the agent to look at: the flags, the optional items, patches that no longer apply. */
-export function builtReport(built: any) {
+export function builtReport(built: BuiltList | null | undefined): string[] {
   if (!built) return [];
   return [
-    ...(built.flags.length ? ["To review (patch with edits only if needed):", ...built.flags.map((f: any) => `- [${f.key}] ${f.text}`)] : ["Nothing flagged for review."]),
-    ...(built.optional.length ? [`Optional items (only garnishes and extras need them; ask the user which to keep, all kept by default, and drop the others with edits: [{ drop: id }]): ${built.optional.map((o: any) => `${o.name} (${o.item})`).join(", ")}`] : []),
-    ...(built.stale.length ? [`Patches that didn't apply: ${built.stale.map((x: any) => x.why).join("; ")}`] : []),
+    ...(built.flags.length ? ["To review (patch with edits only if needed):", ...built.flags.map((f) => `- [${f.key}] ${f.text}`)] : ["Nothing flagged for review."]),
+    ...(built.optional.length ? [`Optional items (only garnishes and extras need them; ask the user which to keep, all kept by default, and drop the others with edits: [{ drop: id }]): ${built.optional.map((o) => `${o.name} (${o.item})`).join(", ")}`] : []),
+    ...(built.stale.length ? [`Patches that didn't apply: ${built.stale.map((x) => x.why).join("; ")}`] : []),
   ];
 }
 

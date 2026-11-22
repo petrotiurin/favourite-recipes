@@ -110,7 +110,7 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
   const { recipeIngredients } = await import("../lib/recipes.ts");
   const { STAPLES } = await import("../lib/recipes.ts");
   const book = await recipeIngredients();
-  const target = book.find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3);
+  const target = book.find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3)!;
   const names: string[] = [...new Set<string>(target.ingredients.filter((n: any) => !STAPLES.test(n)).map((n: any) => n.toLowerCase()))];
   await putStocktake(names);
   const out = await tools.dispatch("recipes_from_home", { limit: 5 }, tools.makeCaller({ role: "public" }));
@@ -129,7 +129,7 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
 
 test("the shopping page's starter and the chat flow: ask what can be made, get cards", async () => {
   const { recipeIngredients, STAPLES } = await import("../lib/recipes.ts");
-  const target = (await recipeIngredients()).find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3);
+  const target = (await recipeIngredients()).find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3)!;
   await putStocktake(target.ingredients.filter((n: any) => !STAPLES.test(n)));
   const res = await post({ messages: [{ role: "user", content: "What can I make from what's at home?" }], page: { page: "shopping" } });
   const evs = await events(res);
@@ -224,7 +224,7 @@ test("weekBalance: recipes, dinners, average kcal and total time, from recipe da
   const { weekBalance } = await import("../lib/tray.ts");
   assert.equal(weekBalance([]), null);
   assert.deepEqual(weekBalance([{ course: ["Dinner"], calories: 500, total_mins: 30 }, { course: ["Lunch", "Dinner"], calories: 301, total_mins: 45 }, { course: ["Snack"], calories: 100, total_mins: 5 }]), { recipes: 3, dinners: 2, avg_kcal: 300, total_mins: 80 });
-  assert.deepEqual(weekBalance([{ course: [], total_mins: 10 }]), { recipes: 1, dinners: 0, avg_kcal: null, total_mins: 10 });
+  assert.deepEqual(weekBalance([{ course: [], total_mins: 10 }] as any), { recipes: 1, dinners: 0, avg_kcal: null, total_mins: 10 });
 });
 
 test("the tray reports next week as it will be after Save (staged recipes included), computed on the server", async () => {
@@ -284,13 +284,13 @@ test("history replay keeps ask_user calls, their results and the tapped answers;
     row("tool", { role: "tool", tool_call_id: "p1", content: "Staged." }),
     row("assistant", { role: "assistant", content: "Done." }),
   ];
-  const h = store.historyForModel(rows);
+  const h: any[] = store.historyForModel(rows);
   assert.deepEqual(h.map((m) => m.role), ["user", "assistant", "tool", "user", "assistant", "tool", "assistant"]);
   assert.equal(h[1].tool_calls[0].function.name, "ask_user");
   assert.equal(h[3].content, "Liked");
   assert.ok(!("ui" in h[1]), "panel extras don't go to the model");
   // a cap that would cut between the question and its result starts at the next user message instead
-  const capped = store.historyForModel(rows, 5);
+  const capped: any[] = store.historyForModel(rows, 5);
   assert.equal(capped[0].role, "user");
   assert.equal(capped[0].content, "Liked");
   assert.ok(capped.every((m, i) => m.role !== "tool" || capped[i - 1]?.tool_calls || capped[i - 1]?.role === "tool"));

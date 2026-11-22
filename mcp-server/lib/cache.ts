@@ -2,25 +2,25 @@
 // Per serverless instance, short-lived, and cleared whenever this instance commits, so it never hides our own writes.
 export const CACHE_TTL_MS = 60_000;
 
-const entries = new Map(); // key -> { at, value }
+const entries = new Map<string, { at: number; value: Promise<unknown> }>(); // key -> { at, value }
 
 /** Returns the cached value for key if it is younger than ttl, else runs load() (concurrent callers share one load). */
-export async function cached(key: any, load: any, { ttl = CACHE_TTL_MS, now = Date.now }: any = {}) {
+export async function cached<T>(key: string, load: () => Promise<T>, { ttl = CACHE_TTL_MS, now = Date.now }: { ttl?: number; now?: () => number } = {}): Promise<T> {
   const hit = entries.get(key);
-  if (hit && now() - hit.at < ttl) return hit.value;
+  if (hit && now() - hit.at < ttl) return hit.value as Promise<T>;
   const value = load();
   entries.set(key, { at: now(), value });
   try {
     return await value;
-  } catch (err: any) {
+  } catch (err) {
     if (entries.get(key)?.value === value) entries.delete(key); // never cache a failure
     throw err;
   }
 }
 
-const onClear: any[] = [];
+const onClear: (() => void)[] = [];
 /** Other short-lived read caches (the branch snapshot in lib/github.ts) register here so one clearCache() drops them all. */
-export const registerClear = (fn: any) => onClear.push(fn);
+export const registerClear = (fn: () => void) => onClear.push(fn);
 
 export function clearCache() {
   entries.clear();

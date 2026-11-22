@@ -18,6 +18,7 @@ import { PHOTO_READER_PROMPT_VERSION } from "./photo-reader-prompt.ts";
 import { background } from "./background.ts";
 import { startTrace } from "./langfuse.ts";
 import { userEmail } from "./auth.ts";
+import type { PhotoReadRow } from "./types/rows.ts";
 
 export const MAX_UNREPORTED = 30; // photos per conversation not reported yet
 export const MAX_ATTEMPTS = 2;
@@ -33,16 +34,16 @@ export const deps = { sleep: (ms: any) => new Promise((r) => setTimeout(r, ms)) 
 // --- the table ----------------------------------------------------------------------------------------------------------------------
 
 export async function readsOf(conversationId: any) {
-  return (await rest("photo_reads", { query: q({ select: "*", conversation_id: `eq.${conversationId}`, order: "n.asc" }) })) || [];
+  return (await rest<PhotoReadRow[]>("photo_reads", { query: q({ select: "*", conversation_id: `eq.${conversationId}`, order: "n.asc" }) })) || [];
 }
 
 async function patchRead(id: any, patch: any, extra: any = {}) {
-  return rest("photo_reads", { method: "PATCH", prefer: "return=representation", query: q({ id: `eq.${id}`, ...extra }), body: patch });
+  return rest<PhotoReadRow[]>("photo_reads", { method: "PATCH", prefer: "return=representation", query: q({ id: `eq.${id}`, ...extra }), body: patch });
 }
 
 /** Photos being read or waiting, across the household: [{ user_id, name, conversation_id }]. For the tray's "Reading 3 photos · Sam". */
 export async function householdReading() {
-  return (await rest("photo_reads", { query: q({ select: "user_id,name,conversation_id", status: "in.(queued,reading)" }) })) || [];
+  return (await rest<Pick<PhotoReadRow, "user_id" | "name" | "conversation_id">[]>("photo_reads", { query: q({ select: "user_id,name,conversation_id", status: "in.(queued,reading)" }) })) || [];
 }
 
 /** The tray strip's entries: [{ name, count, mine }], one per editor with photos still being read. */
@@ -97,7 +98,7 @@ export async function enqueuePhotos({ conversationId, caller, photos, origin }: 
   const take = fresh.slice(0, room);
   let queued: any[] = [];
   if (take.length) {
-    queued = (await rest("photo_reads", {
+    queued = (await rest<PhotoReadRow[]>("photo_reads", {
       method: "POST",
       prefer: "return=representation,resolution=ignore-duplicates",
       query: q({ on_conflict: "conversation_id,path" }),
@@ -130,7 +131,7 @@ export async function drain(conversationId: any, { origin, startedAt = clock.now
         startDrainer(conversationId, { origin, fresh: true });
         return;
       }
-      const claimed = (await rest("rpc/claim_photo_reads", { method: "POST", body: { p_conversation: conversationId, p_max: config.chatVisionConcurrency, p_cap: config.chatVisionConcurrency, p_lease_ms: readLeaseMs(), p_max_attempts: MAX_ATTEMPTS } })) || [];
+      const claimed = (await rest<PhotoReadRow[]>("rpc/claim_photo_reads", { method: "POST", body: { p_conversation: conversationId, p_max: config.chatVisionConcurrency, p_cap: config.chatVisionConcurrency, p_lease_ms: readLeaseMs(), p_max_attempts: MAX_ATTEMPTS } })) || [];
       if (claimed.length) {
         await Promise.all(claimed.map((row: any) => readOne(row)));
         continue;
@@ -153,7 +154,7 @@ export async function drain(conversationId: any, { origin, startedAt = clock.now
         await deps.sleep(Math.min(wait, 5000)); // the quiet period: photos sent a few seconds apart go into one report
         continue;
       }
-      const lot = (await rest("rpc/claim_photo_report", { method: "POST", body: { p_conversation: conversationId, p_lease_ms: reportLeaseMs() } })) || [];
+      const lot = (await rest<PhotoReadRow[]>("rpc/claim_photo_report", { method: "POST", body: { p_conversation: conversationId, p_lease_ms: reportLeaseMs() } })) || [];
       if (!lot.length) return; // someone else is reporting
       await report(conversationId, lot, { origin });
       // photos queued while the report was being built wait for the next one
@@ -265,7 +266,7 @@ export async function report(conversationId: any, lot: any, { origin }: any = {}
   const email = convo ? await userEmail(convo.user_id) : null;
   const editor = !!email && config.shoppingEditors.includes(email);
   const { makeCaller } = await import("./tools.ts");
-  const caller = editor ? makeCaller({ role: "editor", email, userId: convo.user_id, ip: "server" }) : null;
+  const caller = editor ? makeCaller({ role: "editor", email, userId: convo!.user_id, ip: "server" }) : null;
   const trace = startTrace({ name: "photo report", sessionId: conversationId, userId: owner, tags: ["editor", "photos"], version: PHOTO_READER_PROMPT_VERSION, input: `photos ${lot.map((r: any) => r.n).join(", ")}` });
 
   const { groups, pairs } = groupPhotos(rows);
@@ -447,7 +448,7 @@ export async function applyCorrections(conversationId: any, { join = [], split =
     const r = rows.find((x: any) => x.id === id);
     // a skipped photo isn't reported; a read photo comes back into the next report; a queued one stays queued
     const p = { ...patch };
-    if (r.status === "skipped" && p.status !== "skipped") delete p.reported_at;
+    if (r!.status === "skipped" && p.status !== "skipped") delete p.reported_at;
     await patchRead(id, p);
   }
   if (touched.size) startDrainer(conversationId, { origin });

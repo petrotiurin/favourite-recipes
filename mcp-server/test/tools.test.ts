@@ -162,7 +162,7 @@ test("the functions that commit throw for a public caller (or none), before touc
     cs.write("recipes/a.md", Buffer.from("x"));
     await assert.rejects(() => cs.commit("m", caller), /Refusing to commit/);
     await assert.rejects(() => saveStocktake([], caller), /Refusing to commit/);
-    await assert.rejects(() => createRecipe({}, undefined, caller), /Refusing to commit/);
+    await assert.rejects(() => createRecipe({} as any, undefined, caller), /Refusing to commit/);
     await assert.rejects(() => promoteRecipe("lemon-chicken", undefined, caller), /Refusing to commit/);
   }
   assert.deepEqual(calls, []);
@@ -233,8 +233,8 @@ test("the recipe index is cached for a minute and shared by search and the catal
 
   const soup = cat.find((r: any) => r.slug === "tomato-soup");
   assert.deepEqual(soup, { slug: "tomato-soup", title: "Tomato Soup", course: ["Lunch", "Dinner"], tags: [], mins: 25, kcal: 150, status: "regular", week: "none", ingredients: ["tomatoes", "basil"] });
-  assert.equal(cat.find((r: any) => r.slug === "porridge").week, "both");
-  assert.equal(cat.find((r: any) => r.slug === "chicken-nut-salad").status, "draft");
-  assert.deepEqual(cat.find((r: any) => r.slug === "lemon-chicken").ingredients, ["chicken breasts", "lemon"], "pantry staples are left out");
+  assert.equal(cat.find((r: any) => r.slug === "porridge")!.week, "both");
+  assert.equal(cat.find((r: any) => r.slug === "chicken-nut-salad")!.status, "draft");
+  assert.deepEqual(cat.find((r: any) => r.slug === "lemon-chicken")!.ingredients, ["chicken breasts", "lemon"], "pantry staples are left out");
   assert.match(catalogueText(cat), /^porridge \| Porridge \| Breakfast \| Vegetarian \| 10 min \| 220 kcal \| draft, this week \+ next week \| oats, milk$/m);
 });

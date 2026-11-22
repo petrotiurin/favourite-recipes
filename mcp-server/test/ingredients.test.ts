@@ -7,7 +7,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import matter from "gray-matter";
-import { checkIngredients, applyCatalogueChange, applyCatalogueChanges, parseCatalogue, factorFor, shopAmount, resolveItem } from "../lib/catalogue.ts";
+import { checkIngredients as checkIngredientsT, applyCatalogueChange as applyCatalogueChangeT, applyCatalogueChanges as applyCatalogueChangesT, parseCatalogue, factorFor as factorForT, shopAmount as shopAmountT, resolveItem } from "../lib/catalogue.ts";
+
+// The tests feed deliberately wrong shapes (a bad unit, a partial entry): these take them loosely.
+const checkIngredients = checkIngredientsT as (ingredients: any, catalogue: any) => { ingredients: any[]; errors: string[] };
+const factorFor = factorForT as (entry: any, unit?: any) => number | null;
+const shopAmount = shopAmountT as (ing: any, entry: any) => number | null;
+const applyCatalogueChange = applyCatalogueChangeT as (catalogue: any, change: any, recipes?: any) => any;
+const applyCatalogueChanges = applyCatalogueChangesT as (catalogue: any, changes: any, recipes?: any) => any;
 
 const ROOT = new URL("../../", import.meta.url);
 const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data } as any));
@@ -22,7 +29,7 @@ test("every recipe in the book passes the write-time checks, and every name reso
 });
 
 test("the write-time checks: schema, the item filled from the name, conversions, with what would fix it", () => {
-  const cat = {
+  const cat: any = {
     capers: { name: "Capers", section: "Tins & jars", unit: "g", aliases: ["baby capers"] },
     lime: { name: "Limes", section: "Fresh produce", unit: "count", per: { juice: 1 } },
     milk: { name: "Milk", section: "Dairy & eggs", unit: "ml" },

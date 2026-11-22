@@ -4,12 +4,14 @@
 import { createHmac } from "node:crypto";
 import net from "node:net";
 import { config } from "./config.ts";
+import { errorMessage } from "./errors.ts";
+import type { Caller, Now } from "./types/common.ts";
 
 /**
  * What a visitor is counted as: an IPv4 address as is, an IPv6 address by its /64 (one household or one rented block, so rotating
  * the low 64 bits buys nothing).
  */
-export function visitorKey(ip: any) {
+export function visitorKey(ip: unknown): string {
   const s = String(ip || "unknown").trim().toLowerCase();
   if (net.isIPv6(s)) {
     const mapped = s.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
@@ -24,13 +26,13 @@ export function visitorKey(ip: any) {
 }
 
 /** A stable, non-reversible id for a visitor's address (IPv6 by /64). */
-export function hashIp(ip: any) {
+export function hashIp(ip: unknown): string {
   const salt = config.ipHashSalt || config.supabaseServiceKey || "favourite-recipes-chat";
   return createHmac("sha256", salt).update(visitorKey(ip)).digest("hex").slice(0, 24);
 }
 
 /** The caller's IP as Vercel (or the dev harness) reports it. */
-export function clientIp(request: any) {
+export function clientIp(request: Request): string {
   const forwarded = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
   return forwarded || request.headers.get("x-real-ip") || "unknown";
 }
@@ -39,7 +41,16 @@ let warned = false;
 let warnedFallback = false;
 // Visitors are limited per hashed IP (and all together), signed-in editors (generous) per Supabase user id.
 // `fallback` is the (small) limit used by the in-memory limiter when Supabase isn't there.
-const WINDOWS: Record<string, any> = {
+interface RateWindow {
+  name: string;
+  seconds: number;
+  /** A key shared by every caller (one cap across all visitors), else the caller's own. */
+  shared?: string;
+  limit: () => number;
+  fallback: number;
+  say: string;
+}
+const WINDOWS: Record<string, RateWindow[]> = {
   public: [
     { name: "hour", seconds: 3600, limit: () => config.chatPublicHourlyLimit, fallback: 10, say: "You've sent a lot of messages in the last hour. Give it a little while and try again." },
     { name: "day", seconds: 86400, limit: () => config.chatPublicDailyLimit, fallback: 30, say: "That's all the chat messages for today. Try again tomorrow." },
@@ -51,7 +62,7 @@ const WINDOWS: Record<string, any> = {
   ],
 };
 
-async function hit(key: any, seconds: any) {
+async function hit(key: string, seconds: number): Promise<number> {
   const res = await fetch(`${config.supabaseUrl}/rest/v1/rpc/rate_limit_hit`, {
     method: "POST",
     headers: {
@@ -67,23 +78,30 @@ async function hit(key: any, seconds: any) {
 
 // The fallback when Supabase is missing or failing: fixed windows kept in this instance's memory. Not shared between instances, but a
 // failing database no longer means "no limits".
-const memory = new Map(); // "key|window" -> count
-function memoryHit(key: any, seconds: any, now: any) {
+const memory = new Map<string, number>(); // "key|window" -> count
+function memoryHit(key: string, seconds: number, now: Now): number {
   const window = Math.floor(now() / 1000 / seconds);
   const k = `${key}|${window}`;
   if (memory.size > 5000) for (const old of [...memory.keys()].slice(0, 2500)) memory.delete(old);
-  memory.set(k, (memory.get(k) || 0) + 1);
-  return memory.get(k);
+  const n = (memory.get(k) || 0) + 1;
+  memory.set(k, n);
+  return n;
 }
 const supabaseUp = () => !!(config.supabaseUrl && config.supabaseServiceKey);
 
+interface RateEntry {
+  key: string;
+  seconds: number;
+  fallback: number;
+}
+
 /** Counts hits for [{ key, seconds, fallback }], in Supabase when it works, else in memory (with the small fallback limits). */
-async function count(entries: any, now: any) {
+async function count(entries: RateEntry[], now: Now): Promise<{ counts: number[]; limits: number[] | null }> {
   if (supabaseUp()) {
     try {
-      return { counts: await Promise.all(entries.map((e: any) => hit(e.key, e.seconds))), limits: null };
-    } catch (err: any) {
-      console.error("Rate limit check failed, using the in-memory limiter:", err.message);
+      return { counts: await Promise.all(entries.map((e) => hit(e.key, e.seconds))), limits: null };
+    } catch (err) {
+      console.error("Rate limit check failed, using the in-memory limiter:", errorMessage(err));
     }
   } else if (!warned) {
     warned = true;
@@ -93,7 +111,7 @@ async function count(entries: any, now: any) {
     warnedFallback = true;
     console.warn("Chat rate limiting is on its in-memory fallback because Supabase failed.");
   }
-  return { counts: entries.map((e: any) => memoryHit(e.key, e.seconds, now)), limits: entries.map((e: any) => e.fallback) };
+  return { counts: entries.map((e) => memoryHit(e.key, e.seconds, now)), limits: entries.map((e) => e.fallback) };
 }
 
 /**
@@ -102,11 +120,11 @@ async function count(entries: any, now: any) {
  * Visitors count per address (IPv6 per /64) and against one cap shared by every visitor. If Supabase isn't configured or fails, a small
  * per-instance in-memory limiter applies instead (never "everything goes through"); OpenRouter's credit limit is the last stop (D3).
  */
-export async function checkRateLimit(caller: any, { now = Date.now }: any = {}) {
+export async function checkRateLimit(caller: Pick<Caller, "role" | "userId" | "ip">, { now = Date.now }: { now?: Now } = {}): Promise<{ ok: true } | { ok: false; retryAfter: number; message: string }> {
   const windows = WINDOWS[caller.role] || WINDOWS.public;
   const who = caller.role === "editor" && caller.userId ? caller.userId : hashIp(caller.ip);
   const id = `${caller.role}:${who}`;
-  const entries = windows.map((w: any) => ({ key: `${w.shared || id}:${w.name}`, seconds: w.seconds, fallback: w.fallback }));
+  const entries = windows.map((w) => ({ key: `${w.shared || id}:${w.name}`, seconds: w.seconds, fallback: w.fallback }));
   const { counts, limits } = await count(entries, now);
   for (const [i, w] of windows.entries()) {
     if (counts[i] > (limits ? limits[i] : w.limit())) {
@@ -122,7 +140,7 @@ export async function checkRateLimit(caller: any, { now = Date.now }: any = {}) 
  * The panel's own requests (GET /chat/plan, /chat/status, dropping an item, a new photo) per editor: generous (config.chatPanelHourlyLimit, 600/hour),
  * so polling and normal use never trip it, but a loop can't turn into unbounded work. { ok: true } or { ok: false, retryAfter }.
  */
-export async function checkPanelLimit(userId: any, { now = Date.now }: any = {}) {
+export async function checkPanelLimit(userId: string | undefined, { now = Date.now }: { now?: Now } = {}): Promise<{ ok: true } | { ok: false; retryAfter: number }> {
   const { counts, limits } = await count([{ key: `panel:${userId}:hour`, seconds: 3600, fallback: 1200 }], now);
   if (counts[0] > (limits ? limits[0] : config.chatPanelHourlyLimit)) {
     console.warn(`Panel rate limit hit by editor ${userId}`);
@@ -135,13 +153,13 @@ export async function checkPanelLimit(userId: any, { now = Date.now }: any = {})
 // Every request with a token makes /chat ask Supabase who it is. Failures are counted per visitor, and once a visitor has failed too
 // often this hour /chat refuses (429) before asking Supabase again. The count is kept in memory per instance and seeded from the
 // shared counter, which is also what the logs and audits look at. Only a hashed address is ever logged, never the token.
-const failures = new Map(); // "key|hour" -> count
+const failures = new Map<string, number>(); // "key|hour" -> count
 
-export function authBlocked(ip: any, { now = Date.now }: any = {}) {
+export function authBlocked(ip: unknown, { now = Date.now }: { now?: Now } = {}): boolean {
   return (failures.get(`${hashIp(ip)}|${Math.floor(now() / 3600_000)}`) || 0) >= config.authFailureHourlyLimit;
 }
 
-export async function recordAuthFailure(ip: any, { now = Date.now, reason = "bad token" }: any = {}) {
+export async function recordAuthFailure(ip: unknown, { now = Date.now, reason = "bad token" }: { now?: Now; reason?: string } = {}) {
   const key = `${hashIp(ip)}|${Math.floor(now() / 3600_000)}`;
   let n = (failures.get(key) || 0) + 1;
   if (failures.size > 5000) failures.clear();

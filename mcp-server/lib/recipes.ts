@@ -1,6 +1,8 @@
 import { config, COURSES, CARD_ASPECT } from "./config.ts";
 import { cached } from "./cache.ts";
 import { ChangeSet, isAllowedPath, assertCanCommit } from "./github.ts";
+import type { FileChange } from "./github.ts";
+import { errorMessage } from "./errors.ts";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.ts";
 import { generateDishImage } from "./image-generation.ts";
 import {
@@ -14,34 +16,63 @@ import {
   ingredientsOf,
 } from "./recipe-format.ts";
 import { loadCatalogue, writeCatalogue, checkIngredients, applyCatalogueChanges, CatalogueError } from "./catalogue.ts";
+import type { Catalogue } from "../../shared/catalogue.ts";
+import type { CatalogueChange, CatalogueChangesResult } from "./types/catalogue.ts";
+import type { Caller, Week } from "./types/common.ts";
+import type {
+  BookCatalogueRow,
+  BookRecipe,
+  CreateRecipeInput,
+  CreateRecipeResult,
+  DishSubject,
+  Ingredient,
+  ImageInput,
+  IndexEntry,
+  IngredientRow,
+  ListRow,
+  PromoteRecipeResult,
+  RecipeData,
+  RecipeSection,
+  RecipeSummary,
+  RemoveDraftResult,
+  SearchFilters,
+  SearchRow,
+  SetWeekResult,
+  StartNextWeekResult,
+  StoredIngredient,
+  SwitchReport,
+  UpdateRecipeInput,
+  UpdateRecipeResult,
+} from "./types/recipe.ts";
+import type { TrayOp } from "./types/tray.ts";
 
-const recipePath = (slug: any) => `recipes/${slug}.md`;
-const imagePathFor = (slug: any, ext = "jpg") => `images/recipes/${slug}.${ext}`;
-export const pageUrl = (slug: any) => `${config.siteUrl}/recipes/${slug}.html`;
+const recipePath = (slug: string) => `recipes/${slug}.md`;
+const imagePathFor = (slug: string, ext = "jpg") => `images/recipes/${slug}.${ext}`;
+export const pageUrl = (slug: string) => `${config.siteUrl}/recipes/${slug}.html`;
 
 export class UserError extends Error {}
 
 // Keep in sync with src/lib/status.ts. Two weeks, both independent of `draft`:
 //   `current: true` = this week (what's being cooked now), `next: true` = next week (what the shopping list is for).
 // A recipe can be in both (cooked two weeks running). Order: this week (drafts first), next week, the rest.
-export const isDraft = (r: any) => r.draft === true;
-export const isThisWeek = (r: any) => r.current === true;
-export const isNextWeek = (r: any) => r.next === true;
-const rank = (r: any) => (isThisWeek(r) ? (isDraft(r) ? 0 : 1) : isNextWeek(r) ? 2 : 3);
-export const WEEKS = ["this", "next"];
-const WEEK_KEY: Record<string, string> = { this: "current", next: "next" };
-const WEEK_NAME: Record<string, string> = { this: "this week", next: "next week" };
+export const isDraft = (r: { draft?: unknown }): boolean => r.draft === true;
+export const isThisWeek = (r: { current?: unknown }): boolean => r.current === true;
+export const isNextWeek = (r: { next?: unknown }): boolean => r.next === true;
+const rank = (r: { draft?: unknown; current?: unknown; next?: unknown }): number => (isThisWeek(r) ? (isDraft(r) ? 0 : 1) : isNextWeek(r) ? 2 : 3);
+export const WEEKS = ["this", "next"] as const;
+const WEEK_KEY = { this: "current", next: "next" } as const satisfies Record<Week, "current" | "next">;
+const WEEK_NAME: Record<Week, string> = { this: "this week", next: "next week" };
 
-function assertSlug(slug: any) {
+function assertSlug(slug: string) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new UserError(`"${slug}" is not a valid recipe slug`);
 }
 
 // Every function that reads or writes takes an optional ChangeSet: reads see what it has staged,
 // writes are staged into it. Without one, the function commits its own changes straight away;
 // with one (batch_changes), the caller commits everything together.
-const via = (verb: any) => `\n\n${verb} via the recipes MCP server.`;
+const via = (verb: string): string => `\n\n${verb} via the recipes MCP server.`;
 
-const listRow = (data: any) => ({
+const listRow = (data: RecipeData): ListRow => ({
   slug: data.slug,
   title: data.title,
   course: data.course || [],
@@ -60,12 +91,12 @@ const listRow = (data: any) => ({
  * instance, however many calls ask), so a flood of list_recipes calls can't turn into a flood of GitHub requests. With a ChangeSet (the
  * write paths: batch_changes, the plan tray) it reads fresh from the branch, plus whatever the set has staged.
  */
-export async function listRecipes(cs?: any) {
-  if (!cs) return (await recipeIndex()).map((r: any) => listRow(r.data));
-  const files = (await cs.list("recipes")).filter((f: any) => f.endsWith(".md"));
+export async function listRecipes(cs?: ChangeSet): Promise<ListRow[]> {
+  if (!cs) return (await recipeIndex()).map((r) => listRow(r.data));
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const recipes = await Promise.all(
-    files.map(async (f: any) => {
-      const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
+    files.map(async (f) => {
+      const { data } = parseRecipe((await cs.read(`recipes/${f}`))!.toString("utf8"));
       return listRow(data);
     })
   );
@@ -77,14 +108,14 @@ export async function listRecipes(cs?: any) {
 
 // Everything search needs about each recipe, read from GitHub like listRecipes does and cached for a minute
 // (cleared on our own commits), so the bot knows a recipe minutes before the site redeploys.
-async function loadRecipeIndex() {
+async function loadRecipeIndex(): Promise<IndexEntry[]> {
   const cs = new ChangeSet();
-  const files = (await cs.list("recipes")).filter((f: any) => f.endsWith(".md"));
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   const rows = await Promise.all(
-    files.map(async (f) => {
-      const raw = (await cs.read(`recipes/${f}`)).toString("utf8");
+    files.map(async (f): Promise<IndexEntry> => {
+      const raw = (await cs.read(`recipes/${f}`))!.toString("utf8");
       const { data, sections } = parseRecipe(raw);
-      const ingredients = ingredientsOf(data).map((i: any) => String(i.name).trim());
+      const ingredients = ingredientsOf(data).map((i) => String(i.name).trim());
       return {
         data,
         markdown: raw,
@@ -109,7 +140,7 @@ async function loadRecipeIndex() {
 
 const recipeIndex = () => cached(`recipe-index:${config.repo}@${config.branch}`, loadRecipeIndex);
 
-const norm = (x: any) => String(x).trim().toLowerCase();
+const norm = (x: unknown): string => String(x).trim().toLowerCase();
 
 /**
  * Filters the book. All filters are optional and combine with AND:
@@ -117,20 +148,20 @@ const norm = (x: any) => String(x).trim().toLowerCase();
  * course, tags (all of them), max_calories, max_minutes, draft, week ("this" | "next" | "none").
  * Returns compact rows in the list_recipes order (this week, next week, the rest).
  */
-export async function searchRecipes({ text, include_ingredients = [], exclude_ingredients = [], course, tags = [], max_calories, max_minutes, draft, week }: any = {}) {
+export async function searchRecipes({ text, include_ingredients = [], exclude_ingredients = [], course, tags = [], max_calories, max_minutes, draft, week }: SearchFilters = {}): Promise<SearchRow[]> {
   const words = norm(text || "").split(/\s+/).filter(Boolean);
-  const has = (r: any, term: any) => r.ingredients.some((name: any) => name.toLowerCase().includes(norm(term)));
-  const matches = (r: any) =>
+  const has = (r: IndexEntry, term: string) => r.ingredients.some((name) => name.toLowerCase().includes(norm(term)));
+  const matches = (r: IndexEntry) =>
     words.every((w) => r.text.includes(w)) &&
-    include_ingredients.every((t: any) => has(r, t)) &&
-    !exclude_ingredients.some((t: any) => has(r, t)) &&
-    (!course || r.course.some((c: any) => norm(c) === norm(course))) &&
-    tags.every((t: any) => r.tags.some((x: any) => norm(x) === norm(t))) &&
+    include_ingredients.every((t) => has(r, t)) &&
+    !exclude_ingredients.some((t) => has(r, t)) &&
+    (!course || r.course.some((c) => norm(c) === norm(course))) &&
+    tags.every((t) => r.tags.some((x) => norm(x) === norm(t))) &&
     (max_calories === undefined || (r.calories !== undefined && r.calories <= max_calories)) &&
     (max_minutes === undefined || (r.total_mins !== undefined && r.total_mins <= max_minutes)) &&
     (draft === undefined || r.draft === draft) &&
     (week === undefined || (week === "this" ? r.current : week === "next" ? r.next : !r.current && !r.next));
-  return (await recipeIndex()).filter(matches).map(({ ingredients, items, text, image, data, markdown, ...row }: any) => ({ ...row, url: pageUrl(row.slug) }));
+  return (await recipeIndex()).filter(matches).map(({ ingredients, items, text, image, data, markdown, ...row }) => ({ ...row, url: pageUrl(row.slug) }));
 }
 
 // Pantry staples say little about what a dish is, so the catalogue leaves them out of its key ingredients.
@@ -138,24 +169,24 @@ export const STAPLES = /^(salt|pepper|black pepper|sea salt|water|olive oil|oil|
 
 /** What the chat's UI tools need about each recipe (title, photo path, status, week, numbers), from the same cache as search. */
 /** Every recipe's ingredient names with its list row, from the cached index (for matching against what's at home). */
-export async function recipeIngredients() {
-  return (await recipeIndex()).map((r: any) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n: any) => n.trim()), items: r.items }));
+export async function recipeIngredients(): Promise<IngredientRow[]> {
+  return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.ingredients.map((n) => n.trim()), items: r.items }));
 }
 
-export async function recipeSummaries() {
-  return (await recipeIndex()).map(({ ingredients, items, text, data, markdown, ...row }: any) => row);
+export async function recipeSummaries(): Promise<RecipeSummary[]> {
+  return (await recipeIndex()).map(({ ingredients, items, text, data, markdown, ...row }) => row);
 }
 
 /**
  * Every recipe's structured ingredients: [{ slug, title, serves, next, current, draft, ingredients }]. Without a ChangeSet from the cached
  * index; with one, fresh from the branch plus what the set has staged (what buildShoppingList and the catalogue checks work from).
  */
-export async function bookIngredients(cs: any) {
-  if (!cs) return (await recipeIndex()).map((r: any) => ({ ...listRow(r.data), ingredients: r.items }));
-  const files = (await cs.list("recipes")).filter((f: any) => f.endsWith(".md"));
+export async function bookIngredients(cs?: ChangeSet | null): Promise<BookRecipe[]> {
+  if (!cs) return (await recipeIndex()).map((r) => ({ ...listRow(r.data), ingredients: r.items }));
+  const files = (await cs.list("recipes")).filter((f) => f.endsWith(".md"));
   return Promise.all(
-    files.map(async (f: any) => {
-      const { data } = parseRecipe((await cs.read(`recipes/${f}`)).toString("utf8"));
+    files.map(async (f) => {
+      const { data } = parseRecipe((await cs.read(`recipes/${f}`))!.toString("utf8"));
       return { ...listRow(data), ingredients: ingredientsOf(data) };
     })
   );
@@ -166,23 +197,23 @@ export async function bookIngredients(cs: any) {
  * (minus `slug`, the recipe being written, whose ingredients are checked after), the file written, merged items re-pointed in the recipes that
  * used them. Resolves { catalogue, lines }. Throws a UserError saying what to fix.
  */
-export async function stageCatalogueChanges(changes: any, cs: any, { exceptSlug }: any = {}) {
+export async function stageCatalogueChanges(changes: CatalogueChange[] | null | undefined, cs: ChangeSet, { exceptSlug }: { exceptSlug?: string } = {}): Promise<{ catalogue: Catalogue; lines: string[] }> {
   const before = await loadCatalogue(cs);
   if (!changes?.length) return { catalogue: before, lines: [] };
-  const book = (await bookIngredients(cs)).filter((r: any) => r.slug !== exceptSlug);
-  let out;
+  const book = (await bookIngredients(cs)).filter((r) => r.slug !== exceptSlug);
+  let out: CatalogueChangesResult;
   try {
     out = applyCatalogueChanges(before, changes, book);
-  } catch (err: any) {
+  } catch (err) {
     if (err instanceof CatalogueError) throw new UserError(`Catalogue change rejected: ${err.message}`);
     throw err;
   }
   writeCatalogue(cs, out.catalogue);
   for (const { from, into } of out.repoints) {
     for (const r of book) {
-      if (!r.ingredients.some((i: any) => i.item === from)) continue;
-      const { data, sections } = parseRecipe((await cs.read(recipePath(r.slug))).toString("utf8"));
-      data.ingredients = ingredientsOf(data).map((i: any) => (i.item === from ? { ...i, item: into } : i));
+      if (!r.ingredients.some((i) => i.item === from)) continue;
+      const { data, sections } = parseRecipe((await cs.read(recipePath(r.slug)))!.toString("utf8"));
+      data.ingredients = ingredientsOf(data).map((i) => (i.item === from ? { ...i, item: into } : i));
       cs.write(recipePath(r.slug), Buffer.from(serializeRecipe(data, sections)));
     }
   }
@@ -190,18 +221,18 @@ export async function stageCatalogueChanges(changes: any, cs: any, { exceptSlug 
 }
 
 /** Checks a recipe's ingredients against the catalogue and fills each `item` (section 4). Throws one UserError listing every problem. */
-function checkedIngredients(ingredients: any, catalogue: any) {
+function checkedIngredients(ingredients: Ingredient[], catalogue: Catalogue): StoredIngredient[] {
   const { ingredients: out, errors } = checkIngredients(ingredients, catalogue);
   if (errors.length) throw new UserError(`Recipe rejected:\n- ${errors.join("\n- ")}`);
-  return out;
+  return out as StoredIngredient[]; // no problems means every `item` was filled
 }
 
 /**
  * A compact catalogue of the whole book for the chat prompt: one row per recipe with its key ingredients.
  * Same cache as search_recipes. status: "draft" | "regular"; week: "this" | "next" | "both" | "none".
  */
-export async function catalogue({ keyIngredients = 6 }: any = {}) {
-  return (await recipeIndex()).map((r: any) => ({
+export async function catalogue({ keyIngredients = 6 }: { keyIngredients?: number } = {}): Promise<BookCatalogueRow[]> {
+  return (await recipeIndex()).map((r) => ({
     slug: r.slug,
     title: r.title,
     course: r.course,
@@ -210,42 +241,42 @@ export async function catalogue({ keyIngredients = 6 }: any = {}) {
     kcal: r.calories,
     status: r.draft ? "draft" : "regular",
     week: r.current && r.next ? "both" : r.current ? "this" : r.next ? "next" : "none",
-    ingredients: [...new Set<any>(r.ingredients.filter((n: any) => !STAPLES.test(n.trim())).map((n: any) => n.toLowerCase()))].slice(0, keyIngredients),
+    ingredients: [...new Set(r.ingredients.filter((n) => !STAPLES.test(n.trim())).map((n) => n.toLowerCase()))].slice(0, keyIngredients),
   }));
 }
 
 /** One line per recipe: "slug | Title | Dinner | High Protein | 30 min | 620 kcal | draft, this week | salmon, rice, ...". */
-export function catalogueText(rows: any) {
-  const weeks: Record<string, string> = { this: "this week", next: "next week", both: "this week + next week", none: "" };
+export function catalogueText(rows: BookCatalogueRow[]): string {
+  const weeks: Record<BookCatalogueRow["week"], string> = { this: "this week", next: "next week", both: "this week + next week", none: "" };
   return rows
-    .map((r: any) =>
+    .map((r) =>
       [r.slug, r.title, r.course.join("/"), r.tags.join("/"), `${r.mins} min`, `${r.kcal} kcal`, [r.status === "draft" ? "draft" : "", weeks[r.week]].filter(Boolean).join(", "), r.ingredients.join(", ")].join(" | ")
     )
     .join("\n");
 }
 
 /** One recipe's data and Markdown. Without a ChangeSet: a read, from the cached recipe index. With one: fresh from the branch (and its staged edits). */
-export async function getRecipe(slug: any, cs?: any) {
+export async function getRecipe(slug: string, cs?: ChangeSet | null): Promise<{ data: RecipeData; markdown: string }> {
   assertSlug(slug);
-  let markdown;
+  let markdown: string | undefined;
   if (cs) {
     const raw = await cs.read(recipePath(slug));
     if (raw) markdown = raw.toString("utf8");
   } else {
-    markdown = (await recipeIndex()).find((r: any) => r.slug === slug)?.markdown;
+    markdown = (await recipeIndex()).find((r) => r.slug === slug)?.markdown;
   }
   if (!markdown) throw new UserError(`No recipe with slug "${slug}". Use list_recipes to see slugs.`);
   const { data } = parseRecipe(markdown);
   return { data, markdown };
 }
 
-export async function readRecipeImage(imageFrontmatter: any) {
+export async function readRecipeImage(imageFrontmatter: unknown): Promise<Buffer | null> {
   const path = String(imageFrontmatter || "").replace(/^\//, "");
   return path ? new ChangeSet().read(path) : null;
 }
 
 /** Starts generating a dish photo; the error is left for whoever awaits it, so an unused failure isn't an unhandled rejection. */
-function startGeneration(recipe: any) {
+function startGeneration(recipe: DishSubject): Promise<Buffer> {
   const pending = generateDishImage(recipe);
   pending.catch(() => {});
   return pending;
@@ -256,12 +287,13 @@ function startGeneration(recipe: any) {
  * Each operation then awaits its own in resolveImageInput. (update_recipe generates when it runs: it needs the stored recipe.)
  * A dry run generates nothing: those operations are checked without writing a photo.
  */
-export function startImageGenerations(operations: any, { dryRun = false }: any = {}) {
-  return operations.map((op: any) => {
-    if (!op.image?.generate) return op;
-    if (dryRun) return { ...op, image: { ...op.image, skip: true } };
+export function startImageGenerations(operations: TrayOp[], { dryRun = false }: { dryRun?: boolean } = {}): TrayOp[] {
+  return operations.map((op) => {
+    const image = "image" in op ? op.image : undefined;
+    if (!image?.generate) return op;
+    if (dryRun) return { ...op, image: { ...image, skip: true } } as TrayOp;
     if (op.action !== "create_recipe") return op;
-    return { ...op, image: { ...op.image, pending: startGeneration({ title: op.title, ingredients: op.ingredients, description: op.image.description }) } };
+    return { ...op, image: { ...image, pending: startGeneration({ title: op.title, ingredients: op.ingredients, description: image.description }) } };
   });
 }
 
@@ -269,11 +301,12 @@ export function startImageGenerations(operations: any, { dryRun = false }: any =
  * Turns the tool's image input into a normalised JPEG buffer (or null for "already uploaded").
  * `recipe` ({ title, ingredients }) is what a generated photo is drawn from.
  */
-async function resolveImageInput(image: any, slug: any, cs: any, recipe: any) {
-  const provided = ["url", "base64", "uploaded", "generate"].filter((k) => image?.[k]);
+async function resolveImageInput(input: ImageInput | undefined, slug: string, cs: ChangeSet, recipe: DishSubject): Promise<Buffer | null> {
+  const provided = (["url", "base64", "uploaded", "generate"] as const).filter((k) => input?.[k]);
   if (provided.length !== 1) {
     throw new UserError("image must have exactly one of: generate: true, url, base64, uploaded: true");
   }
+  const image = input!; // exactly one of its keys is set
   if (image.uploaded) {
     const existing = await cs.read(imagePathFor(slug));
     if (!existing) {
@@ -288,24 +321,24 @@ async function resolveImageInput(image: any, slug: any, cs: any, recipe: any) {
     try {
       const generated = await (image.pending || startGeneration({ ...recipe, description: image.description }));
       return (await normalizeImage(generated, { aspect: CARD_ASPECT })).buffer;
-    } catch (err: any) {
+    } catch (err) {
       throw new UserError(
-        `Generating the photo for "${slug}" failed (${err.message}). Try again, or fall back to create_image_upload_link and image: { uploaded: true }.`
+        `Generating the photo for "${slug}" failed (${errorMessage(err)}). Try again, or fall back to create_image_upload_link and image: { uploaded: true }.`
       );
     }
   }
   const source = image.url ? await downloadImage(image.url) : decodeBase64Image(image.base64);
   try {
     return (await normalizeImage(source)).buffer;
-  } catch (err: any) {
-    throw new UserError(err.message);
+  } catch (err) {
+    throw new UserError(errorMessage(err));
   }
 }
 
-function validateCommon({ course, total_mins, serves, calories, ingredients, instructions }: any) {
-  const errors: any[] = [];
+function validateCommon({ course, total_mins, serves, calories, ingredients, instructions }: Partial<Pick<CreateRecipeInput, "course" | "total_mins" | "serves" | "calories" | "ingredients" | "instructions">>) {
+  const errors: string[] = [];
   if (course) {
-    const bad = course.filter((c: any) => !COURSES.includes(c));
+    const bad = course.filter((c) => !(COURSES as readonly string[]).includes(c));
     if (bad.length) errors.push(`course: ${bad.join(", ")} not allowed (use ${COURSES.join(", ")})`);
     if (!course.length) errors.push("course: pick at least one");
   }
@@ -315,7 +348,7 @@ function validateCommon({ course, total_mins, serves, calories, ingredients, ins
   if (ingredients && !ingredients.length) errors.push("ingredients: at least one is required");
   if (instructions) {
     if (!instructions.length) errors.push("instructions: at least one step is required");
-    instructions.forEach((s: any, i: any) => {
+    instructions.forEach((s, i) => {
       if (!s.trim()) errors.push(`instructions[${i}] is empty`);
       if (/\n/.test(s.trim())) errors.push(`instructions[${i}]: one step per array item, no line breaks`);
     });
@@ -323,11 +356,11 @@ function validateCommon({ course, total_mins, serves, calories, ingredients, ins
   if (errors.length) throw new UserError(`Recipe rejected:\n- ${errors.join("\n- ")}`);
 }
 
-function tidyTags(tags: any) {
-  return [...new Set<any>((tags || []).map((t: any) => t.trim()).filter(Boolean))];
+function tidyTags(tags: string[] | undefined): string[] {
+  return [...new Set((tags || []).map((t) => t.trim()).filter(Boolean))];
 }
 
-export async function createRecipe(input: any, batch: any, caller: any) {
+export async function createRecipe(input: CreateRecipeInput, batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<CreateRecipeResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const title = input.title.trim();
@@ -342,7 +375,7 @@ export async function createRecipe(input: any, batch: any, caller: any) {
   const { catalogue, lines: catalogueLines } = await stageCatalogueChanges(input.catalogue, cs, { exceptSlug: slug });
   const ingredients = checkedIngredients(input.ingredients, catalogue);
   const imageBuffer = await resolveImageInput(input.image, slug, cs, { title, ingredients: input.ingredients });
-  const data = {
+  const data: RecipeData = {
     title,
     slug,
     image: `/${imagePathFor(slug)}`,
@@ -356,7 +389,7 @@ export async function createRecipe(input: any, batch: any, caller: any) {
     ...(input.week ? { [WEEK_KEY[input.week]]: true } : {}),
     ingredients,
   };
-  const sections = [{ heading: "Instructions", content: renderInstructions(input.instructions) }];
+  const sections: RecipeSection[] = [{ heading: "Instructions", content: renderInstructions(input.instructions) }];
   if (input.notes?.trim()) sections.push({ heading: "Notes", content: input.notes.trim() });
 
   const markdown = serializeRecipe(data, sections);
@@ -369,7 +402,7 @@ export async function createRecipe(input: any, batch: any, caller: any) {
 }
 
 /** Turns a draft into a regular recipe by dropping `draft: true` from its frontmatter. Its weeks are unchanged. */
-export async function promoteRecipe(slug: any, batch: any, caller: any) {
+export async function promoteRecipe(slug: string, batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<PromoteRecipeResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const { markdown: before } = await getRecipe(slug, cs);
@@ -387,16 +420,16 @@ export async function promoteRecipe(slug: any, batch: any, caller: any) {
  * Adds recipes to / takes them out of this week (`current: true`) or next week (`next: true`), all in one commit.
  * Drafts and regular recipes alike. A recipe can be in both weeks.
  */
-export async function setWeekRecipes(slugs: any, week: any, add: any, batch: any, caller: any) {
+export async function setWeekRecipes(slugs: string[], week: Week, add: boolean, batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<SetWeekResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
-  if (!WEEKS.includes(week)) throw new UserError(`week must be one of: ${WEEKS.join(", ")}`);
+  if (!(WEEKS as readonly string[]).includes(week)) throw new UserError(`week must be one of: ${WEEKS.join(", ")}`);
   const key = WEEK_KEY[week];
   const cs = batch || new ChangeSet();
-  const unique = [...new Set<any>(slugs)];
-  const updates: any[] = [];
-  const changed: any[] = [];
-  const unchanged: any[] = [];
-  const titles: any[] = [];
+  const unique = [...new Set(slugs)];
+  const updates: [string, Buffer][] = [];
+  const changed: string[] = [];
+  const unchanged: string[] = [];
+  const titles: string[] = [];
   for (const slug of unique) {
     const { markdown: before } = await getRecipe(slug, cs);
     const { data, sections } = parseRecipe(before);
@@ -426,18 +459,18 @@ export async function setWeekRecipes(slugs: any, week: any, add: any, batch: any
  * this week as well. The shopping list isn't touched: it was built for next week, so it now covers this week and
  * the page keeps showing it until a new next week is planned and a new list saved.
  */
-export async function startNextWeek(carryOver: any[] = [], batch: any, caller: any) {
+export async function startNextWeek(carryOver: string[] = [], batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<StartNextWeekResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const recipes = await listRecipes(cs);
-  const bySlug = new Map<any, any>(recipes.map((r: any) => [r.slug, r]));
-  const carry = new Set<any>(carryOver);
+  const bySlug = new Map(recipes.map((r) => [r.slug, r]));
+  const carry = new Set(carryOver);
   const bad = [...carry].filter((slug) => !bySlug.get(slug)?.current);
   if (bad.length) {
     throw new UserError(`carry_over: ${bad.map((s) => `"${s}"`).join(", ")} ${bad.length === 1 ? "is" : "are"} not in this week, so there's nothing to carry over.`);
   }
 
-  const report: Record<string, string[]> = { started: [], stayed: [], carried: [], left: [], droppedDrafts: [] };
+  const report: SwitchReport = { started: [], stayed: [], carried: [], left: [], droppedDrafts: [] };
   let writes = 0;
   for (const r of recipes) {
     const nowThis = r.next === true || carry.has(r.slug);
@@ -465,7 +498,7 @@ export async function startNextWeek(carryOver: any[] = [], batch: any, caller: a
  * Deletes a draft the family didn't like: recipes/<slug>.md and its photo, in one commit. Only drafts can be
  * removed (a safety net: regular recipes are the family's keepers and can't be deleted through the server).
  */
-export async function removeDraft(slug: any, batch: any, caller: any) {
+export async function removeDraft(slug: string, batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<RemoveDraftResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const { markdown } = await getRecipe(slug, cs);
@@ -481,7 +514,7 @@ export async function removeDraft(slug: any, batch: any, caller: any) {
   }
 
   cs.remove(recipePath(slug));
-  const removedImages: any[] = [];
+  const removedImages: string[] = [];
   for (const path of new Set([String(data.image || "").replace(/^\//, ""), imagePathFor(slug)])) {
     if (path && isAllowedPath(path) && path.startsWith("images/recipes/") && (await cs.read(path))) {
       cs.remove(path);
@@ -494,7 +527,7 @@ export async function removeDraft(slug: any, batch: any, caller: any) {
   return { slug, title: data.title, removedImages, commit, subject };
 }
 
-export async function updateRecipe(input: any, batch: any, caller: any) {
+export async function updateRecipe(input: UpdateRecipeInput, batch: ChangeSet | null | undefined, caller: Caller | null | undefined): Promise<UpdateRecipeResult> {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   const cs = batch || new ChangeSet();
   const { slug } = input;
@@ -502,8 +535,8 @@ export async function updateRecipe(input: any, batch: any, caller: any) {
   validateCommon(input);
 
   const { data, sections } = parseRecipe(before);
-  const changes: any[] = [];
-  const summary: any[] = [];
+  const changes: FileChange[] = [];
+  const summary: string[] = [];
 
   if (input.title !== undefined) { data.title = input.title.trim(); summary.push("title"); }
   if (input.course !== undefined) { data.course = input.course; summary.push("course"); }
@@ -553,7 +586,7 @@ export async function updateRecipe(input: any, batch: any, caller: any) {
   if (markdown !== before) changes.unshift({ path: recipePath(slug), content: Buffer.from(markdown) });
   if (!changes.length && !catalogueLines.length) return { slug, markdown, commit: null, subject: null, warnings: ["No changes: the recipe already matches"] };
 
-  for (const c of changes) (c.delete ? cs.remove(c.path) : cs.write(c.path, c.content));
+  for (const c of changes) ("delete" in c ? cs.remove(c.path) : cs.write(c.path, c.content));
   const subject = `Update recipe: ${data.title} (${summary.join(", ")})`;
   const commit = batch ? null : await cs.commit(subject + via("Updated"), caller);
 
@@ -566,7 +599,7 @@ export async function updateRecipe(input: any, batch: any, caller: any) {
  * the recipe already exists with a different image path (e.g. an old .webp),
  * repoints its frontmatter and removes the old file in the same commit.
  */
-export async function saveUploadedImage(slug: any, rawBuffer: any, caller: any) {
+export async function saveUploadedImage(slug: string, rawBuffer: Buffer, caller: Caller | null | undefined) {
   assertCanCommit(caller); // defence in depth: callers must say who they are, see lib/tools.ts
   assertSlug(slug);
   const { buffer } = await normalizeImage(rawBuffer);

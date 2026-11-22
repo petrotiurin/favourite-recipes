@@ -8,7 +8,7 @@ import { buildShoppingList, validateSections, neededAmount } from "../lib/shoppi
 import { parseCatalogue } from "../lib/catalogue.ts";
 
 const ROOT = new URL("../../", import.meta.url);
-const CAT = {
+const CAT: any = {
   lime: { name: "Limes", section: "Fresh produce", unit: "count", per: { juice: 1, zest: 1 } },
   rice: { name: "Basmati rice", section: "Pantry", unit: "g", per: { cup: 190 } },
   milk: { name: "Milk", section: "Dairy & eggs", unit: "ml" },
@@ -114,7 +114,7 @@ test("patches: round_up at the planned servings, merge, note, move, rename, drop
   assert.ok(it["Garlic bulbs"]);
   assert.ok(!it["Sesame seeds"]);
   assert.equal(b.stale.length, 1, "only the missing item is stale (scaling salt, which has no amount, is a no-op)");
-  assert.match(b.stale.find((x) => x.edit.drop === "no-such-item").why, /isn't on the list any more/);
+  assert.match(b.stale.find((x) => x.edit.drop === "no-such-item")!.why, /isn't on the list any more/);
   // a merge across units is refused on its own
   const bad = buildShoppingList([curry, bowl], CAT, [{ merge: ["rice", "milk"] }]);
   assert.match(bad.stale[0].why, /aren't bought in the same unit/);
@@ -123,7 +123,7 @@ test("patches: round_up at the planned servings, merge, note, move, rename, drop
 
 test("the real book: next week's list builds for every recipe, valid by construction, in milliseconds", () => {
   const catalogue = parseCatalogue(readFileSync(new URL("data/ingredients.json", ROOT), "utf8"));
-  const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data }));
+  const book: any[] = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data }));
   const t0 = performance.now();
   const b = buildShoppingList(book, catalogue);
   assert.ok(performance.now() - t0 < 500);

@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { MAX_IMAGE_EDGE } from "./config.ts";
-import { q, rest, isUuid, StoreError } from "./chat-store.ts";
+import { q, rows, isUuid, StoreError } from "./chat-store.ts";
 import { storage, objectPath, SIGNED_URL_SECONDS } from "./tray-store.ts";
 import { config } from "./config.ts";
 
@@ -135,7 +135,7 @@ export async function sweepOrphans({ now = Date.now(), force = false }: any = {}
     if (!res.ok) return 0;
     const folders = (await res.json()).map((o: any) => o.name).filter(isUuid).slice(0, 200);
     if (!folders.length) return 0;
-    const alive = new Set((await rest("conversations", { query: q({ select: "id", id: `in.(${folders.join(",")})` }) })).map((r: any) => r.id));
+    const alive = new Set((await rows<{ id: string }>("conversations", { query: q({ select: "id", id: `in.(${folders.join(",")})` }) })).map((r: any) => r.id));
     let removed = 0;
     for (const id of folders.filter((f: any) => !alive.has(f))) {
       await removeConversationUploads(id);

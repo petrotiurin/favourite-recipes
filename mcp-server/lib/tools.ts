@@ -14,6 +14,7 @@ import { SECTIONS, SHOP_UNITS } from "./catalogue.ts";
 import { ingredientsOf } from "./recipe-format.ts";
 import { recipesFromHome } from "./at-home.ts";
 import { runOperation, weekLines, switchLines } from "./operations.ts";
+import type { TrayItemOf } from "./types/tray.ts";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads, finaliseState } from "./tray.ts";
 import { getMessages } from "./chat-store.ts";
 import { readsOf, enqueuePhotos, applyCorrections, readerConfigured } from "./photo-queue.ts";
@@ -660,16 +661,16 @@ const STAGE_TOOLS: ToolDef[] = [
           lines.push(`- ${data.title} (${slug}, serves ${data.serves}): ${ingredientsOf(data).map((i: any) => ingredientMarkdown(i).replace(/\*\*/g, "")).join("; ") || "no ingredients recorded"}`);
         }
       }
-      const listItem = tray?.items?.find((i: any) => i.kind === "list");
+      const listItem = tray?.items?.find((i): i is TrayItemOf<"list"> => i.kind === "list");
       const r = listItem && results.get(listItem.id);
       if (r?.result?.built) {
         const { built } = r.result;
         lines.push("", "Shopping list built by the site (2-serving amounts; item id | name | quantity | note | recipes):");
-        for (const sec of r.result.list.sections) {
+        for (const sec of r.result.list!.sections) {
           const byName = new Map<any, any>([...built.rows.values()].map((row) => [row.name, row.item]));
-          for (const i of sec.items) lines.push(`${sec.name}: ${byName.get(i.name)} | ${i.name} | ${i.quantity || ""} | ${i.note || ""} | ${i.recipes.join(",")}`);
+          for (const i of sec.items) lines.push(`${sec.name}: ${byName.get(i.name)} | ${i.name} | ${i.quantity || ""} | ${i.note || ""} | ${i.recipes!.join(",")}`);
         }
-        if ((listItem.op.edits || []).length) lines.push(`Patches already staged: ${listItem.op.edits.map((e: any) => editLabel(e, built.rows)).join("; ")}`);
+        if ((listItem!.op.edits || []).length) lines.push(`Patches already staged: ${listItem!.op.edits!.map((e: any) => editLabel(e, built.rows)).join("; ")}`);
         lines.push(...builtReport(built));
       } else if (r?.error) lines.push("", `The shopping list can't be built: ${r.error}`);
       else lines.push("", "No shopping list in the tray (the tray doesn't change next week).");
@@ -999,7 +1000,7 @@ export const TOOLS: ToolDef[] = [
       return ok(
         [
           `Removed draft "${title}" (${slug}): deleted recipes/${slug}.md${removedImages.map((p) => ` and ${p}`).join("")}.`,
-          `Committed to main: ${commit.url}`,
+          `Committed to main: ${commit!.url}`,
           `The site updates in about a minute at ${config.siteUrl}/`,
         ].join("\n")
       );

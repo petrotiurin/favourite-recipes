@@ -5,6 +5,7 @@ import { getShoppingList } from "./shopping-list.ts";
 import { recipeIngredients, STAPLES } from "./recipes.ts";
 import { sameIngredient } from "./ingredient-match.ts";
 import { loadCatalogue } from "./catalogue.ts";
+import type { Catalogue } from "../../shared/catalogue.ts";
 
 export { sameIngredient };
 
@@ -23,7 +24,7 @@ export async function recipesFromHome({ limit = 8, maxMissing = 99 }: any = {}) 
   const home = atHomeNames(list);
   if (!home.length) return { stocktake: list?.stocktake || null, home, rows: [] };
   const rows: any[] = [];
-  const catalogue = await loadCatalogue().catch(() => ({}));
+  const catalogue = await loadCatalogue().catch((): Catalogue => ({}));
   const homeNames = new Set(home.map((h: any) => h.trim().toLowerCase()));
   for (const r of await recipeIngredients()) {
     // By catalogue item first (the list's names come from the catalogue), then by words. Staples and never-bought items don't count.
@@ -42,5 +43,5 @@ export async function recipesFromHome({ limit = 8, maxMissing = 99 }: any = {}) 
     rows.push({ slug: r.slug, title: r.title, draft: r.draft, mins: r.total_mins, kcal: r.calories, have, total: counted.length, missing });
   }
   rows.sort((a, b) => a.missing.length - b.missing.length || b.have / b.total - a.have / a.total || a.title.localeCompare(b.title));
-  return { stocktake: list.stocktake, home, rows: rows.slice(0, limit) };
+  return { stocktake: list!.stocktake, home, rows: rows.slice(0, limit) };
 }

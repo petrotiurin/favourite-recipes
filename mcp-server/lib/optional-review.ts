@@ -18,7 +18,7 @@ export const MAX_OPTIONAL_ITEMS = 30;
  * is the built list's optional items (listState().built.optional, after earlier drops: those are off the list, so they come back unticked).
  * `edits` are the list card's patches: an item already dropped by an answer is shown unticked.
  */
-export async function optionalCard(optional: any, edits: any[] = [], dropped = [], trayItems: any[] = []) {
+export async function optionalCard(optional: any, edits: any[] = [], dropped: any[] = [], trayItems: any[] = []) {
   const all = [...optional, ...dropped].slice(0, MAX_OPTIONAL_ITEMS);
   if (!all.length) return null;
   const book = new Map<any, any>((await recipeSummaries().catch(() => [])).map((r: any) => [r.slug, r]));

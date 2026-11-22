@@ -43,7 +43,7 @@ export async function applyPlan({ caller, itemId, trace }: any) {
   if (!one && !listState(all, fresh.results).reviewed) throw new PlanError("Finalise the list first: the tray changes next week, so the shopping list needs its review before saving.", 409);
   const broken = picked.filter((i: any) => fresh.results.get(i.id)?.error);
   if (broken.length) {
-    throw new PlanError(`${broken.length === 1 ? "A change has" : `${broken.length} changes have`} a problem, so nothing was saved: ${fresh.results.get(broken[0].id).error}`, 409, { problems: broken.map((i: any) => ({ id: i.id, error: fresh.results.get(i.id).error })) });
+    throw new PlanError(`${broken.length === 1 ? "A change has" : `${broken.length} changes have`} a problem, so nothing was saved: ${fresh.results.get(broken[0].id)!.error}`, 409, { problems: broken.map((i: any) => ({ id: i.id, error: fresh.results.get(i.id)!.error })) });
   }
   for (const i of picked) {
     if (!i.photo) continue;
@@ -55,7 +55,7 @@ export async function applyPlan({ caller, itemId, trace }: any) {
     const inNext = new Set([...(await listRecipes()).filter(isNextWeek).map((r: any) => r.slug), ...all.filter((i: any) => i.kind === "next" && i.op.add).map(slugOfItem)]);
     if (!saveNowRule(item, inNext)) throw new PlanError("That change goes in with the week's plan: use Save to site.", 409);
     const alone = await replay([item], caller);
-    if (alone.results.get(item.id)?.error) throw new PlanError(`That change has a problem: ${alone.results.get(item.id).error}`, 409);
+    if (alone.results.get(item.id)?.error) throw new PlanError(`That change has a problem: ${alone.results.get(item.id)!.error}`, 409);
   }
 
   // 2. Clashes: something it was staged against changed on the site. Nothing is committed; the cards are flagged and the bot resolves them.
