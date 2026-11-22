@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, not started**; rewritten around Astro (2026-11-22). The decisions are in section 4, the open questions in
+Status: **decided, not started**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -136,7 +136,7 @@ the islands ship a script that takes them over in the browser. Everything else i
 | Keep screen on, Cook with Claude | recipe | `client:visible` |
 | Shopping list and stocktake | shopping | `client:load` |
 | Sign-in | where the shopping list or chat needs it | with them |
-| Chat | every page, when `CHAT_API_URL` is set | question 5.2 |
+| Chat | every page, when `CHAT_API_URL` is set | `client:idle`: once the page has loaded and settled |
 
 - An island's data is passed as props; Astro writes them into the page next to the island. That replaces the `#shopping-data` and
   `#cook-recipe` blocks. `#page-context` stays, written by the layout, for the chat.
@@ -196,25 +196,25 @@ deploy, at the same time.
   in the same week.
 - **Rollback:** revert the merge commit; both sides redeploy as they were.
 
-## 5. Open questions
-
-### 5.1 Recipe photos: as they are, or sized by Astro?
+### 4.13 Recipe photos are sized by Astro
 
 Today every tile loads the full photo: the backend stores each one as a JPEG up to 1600px on the long edge, and a tile shows it
-about 180px wide on a phone. 72 recipes, 19 MB of photos.
+about 180px wide on a phone (72 recipes, 19 MB of photos). Astro's `<Image>` / `<Picture>` make a few smaller sizes of each photo
+in a modern format (WebP, AVIF where it pays) at build time, with `srcset` so the phone picks the size it needs; tiles, the recipe
+page's hero and the chat's recipe cards all use them.
 
-- **A. Sized by Astro:** its `<Image>` / `<Picture>` make a few smaller sizes of each photo in a modern format (WebP or AVIF) at build
-  time, and the phone picks the one it needs. The home page's photos shrink to a fraction of their size. `images/recipes/` and the
-  frontmatter's `image:` don't change. Costs build time (each photo resized every build, unless the Actions cache keeps them).
-- **B. As they are:** copied into `dist/` unchanged, as today.
+- `images/recipes/` and the frontmatter's `image:` don't change: the backend keeps writing the same files. The pages find each
+  photo from its `image:` path (an `import.meta.glob` over `images/recipes/`), and a recipe whose photo is missing fails the build
+  as it should.
+- The originals aren't published any more, only the sized copies. Anything outside the site that links straight to
+  `/images/recipes/<slug>.jpg` (the chat's cards, the backend's tool results) is checked in step 5 and either moved to the sized
+  copies or keeps a copied original.
+- **Build time:** every photo is resized on every build unless the sized copies are cached. The Pages workflow caches Astro's
+  image cache (`node_modules/.astro`) with `actions/cache`, so a build only resizes new photos.
 
-### 5.2 When does the chat's script load?
+## 5. Open questions
 
-Today `chat.js` loads in full on every page.
-
-- **A. When the browser is idle** after the page has loaded (`client:idle`). Built into Astro.
-- **B. When the bubble is tapped:** the bubble is plain HTML, the chat's code loads on the first tap. Lightest; needs a small custom
-  Astro directive, and the first tap waits for the download.
+None at the moment. New ones go here as the work turns them up.
 
 ## 6. Order
 
@@ -232,7 +232,7 @@ step.
 4. **Pages and components:** layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
    rules (4.5).
-5. **Photos**, as 5.1 decides.
+5. **Photos** sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
 6. **Small islands:** search, servings, wake-lock, cook with Claude.
 7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
 8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
