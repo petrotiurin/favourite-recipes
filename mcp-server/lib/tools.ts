@@ -487,12 +487,12 @@ interface PhotoRecipe {
  * them before), label }. Only the conversation the turn belongs to can resolve its photo ids; anything else is "not in this chat".
  */
 async function photoRecipe(id: string, ctx: ToolContext): Promise<PhotoRecipe> {
-  const ns: number[] | null = parsePhotoId(id);
+  const ns = parsePhotoId(id);
   if (!ns) throw new UserError(`"${id}" isn't a photo id: use the id from the site's note, like "photo-3" or "photo-3+4".`);
   const conversationId = ctx.chat?.conversationId;
-  const rows: PhotoReadRow[] = conversationId ? await readsOf(conversationId) : [];
+  const rows = conversationId ? await readsOf(conversationId) : [];
   const byN = new Map<number, PhotoReadRow>(rows.map((r) => [r.n, r]));
-  const label: string = photoLabel(ns);
+  const label = photoLabel(ns);
   const gone = ns.filter((n) => !byN.has(n));
   if (gone.length) throw new UserError(`${gone.map((n) => `photo-${n}`).join(", ")} isn't a photo that was read in this chat.`);
   const members = ns.flatMap((n) => byN.get(n) ?? []); // every n is in byN (gone is empty)
@@ -509,7 +509,8 @@ async function photoRecipe(id: string, ctx: ToolContext): Promise<PhotoRecipe> {
   if (!read) throw new UserError(`${label} hasn't been read together yet: wait for the site's note.`);
   if (read.kind === "dish") throw new UserError(`${label} is a photo of a dish, not a recipe. It can be a recipe's photo (photo_from_attachment) if the user asks.`);
   if (read.kind !== "recipe") throw new UserError(`${label} isn't a recipe.`);
-  const { fields, estimated }: { fields: Record<string, unknown>; estimated: string[] } = fieldsFromRead(read);
+  const { fields: readFields, estimated } = fieldsFromRead(read);
+  const fields: Record<string, unknown> = { ...readFields }; // a copy: the empty ones are dropped below
   for (const [k, v] of Object.entries(fields)) if (Array.isArray(v) && !v.length && k !== "tags") delete fields[k];
   if (!fields.title) delete fields.title;
   return { fields, estimated, rows: members, staged: [...new Set(members.map((r) => r.tray_item_id).filter((x): x is string => !!x))], label };
@@ -741,6 +742,9 @@ const STAGE_TOOLS: ToolDef[] = [
   }),
 ];
 
+/** A split given as a list of pairs (the first element is itself a list), not as one pair. */
+const isPairList = (split: number[] | number[][]): split is number[][] => Array.isArray(split[0]);
+
 const photoNums = z.number().int().min(1).max(10_000);
 export const TOOLS: ToolDef[] = [
   defineTool({
@@ -769,17 +773,17 @@ export const TOOLS: ToolDef[] = [
         // a turn the server started has no words from the user: it asks (Same recipe / Two recipes) instead of reading again on its own
         throw new UserError("Not in this turn: ask the user with ask_user, and their answer will come back as their next message.");
       }
-      const pairs = split === undefined ? [] : Array.isArray(split[0]) ? split : [split];
+      const pairs: number[][] = split === undefined ? [] : isPairList(split) ? split : [split];
       if (join?.length || pairs.length || skip?.length) {
         // a join or split means another paid read: each counts as one message toward the editor's limit, like a new photo
         for (let i = 0; i < (join?.length || 0) + pairs.length; i++) {
           if (!(await checkRateLimit(ctx.caller)).ok) throw new UserError("You've sent a lot in the last hour, so the photos can't be read again right now. Try again in a while.");
         }
-        const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] } as Parameters<typeof applyCorrections>[1], { caller: ctx.caller, origin: ctx.origin });
+        const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] }, { caller: ctx.caller, origin: ctx.origin });
         const rereads = (join?.length || 0) + pairs.length > 0;
         return ok([...lines, rereads ? "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn." : "Nothing is read again: tell the user what was skipped."].join("\n"));
       }
-      const reads: PhotoReadRow[] = await readsOf(conversationId);
+      const reads = await readsOf(conversationId);
       const queuedPaths = new Set<string>(reads.map((r) => r.path));
       const all = ctx.chat?.photos || [];
       const latest = (ctx.chat?.attachments || []).map((a) => all.find((p) => p.path === a.path)).filter((p): p is PhotoNumber => !!p);
@@ -793,7 +797,7 @@ export const TOOLS: ToolDef[] = [
       for (; allowed < todo.length; allowed++) if (!(await checkRateLimit(ctx.caller)).ok) break; // each photo read counts as one message toward the editor's limit
       if (!allowed) throw new UserError("You've sent a lot in the last hour, so the photos can't be read right now. Try again in a while.");
       const out = await enqueuePhotos({ conversationId, caller: ctx.caller, photos: todo.slice(0, allowed), origin: ctx.origin });
-      const ns = out.queued.map((r: { n: number }) => r.n).sort((a: number, b: number) => a - b);
+      const ns = out.queued.map((r) => r.n).sort((a, b) => a - b);
       const refused = out.refused + (todo.length - allowed);
       return ok(JSON.stringify({
         queued: ns.length,
