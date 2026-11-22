@@ -29,4 +29,4 @@ function tile(r, { kicker, cls = "" }) {
 
 const courseLabel = (r) => escapeHtml((r.course || []).join(" · "));
 
-module.exports = { escapeHtml, siteBar, tile, courseLabel };
+export { escapeHtml, siteBar, tile, courseLabel };

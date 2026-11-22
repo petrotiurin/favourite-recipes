@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, not started**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, step 1 (groundwork) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -71,8 +71,9 @@ Vite is underneath.
   plain files into `dist/`, and GitHub Pages serves them. A page that tried to render per visit fails the build. No load on any
   server, and the backend is untouched.
 - **The URLs:** `site: "https://petrotiurin.github.io"`, `base: "/favourite-recipes"`, `build.format: "file"` (writes
-  `recipes/<slug>.html`, not `recipes/<slug>/index.html`). Links inside pages go through the base. **To check in step 1:** that
-  `astro dev` also answers the `.html` URLs.
+  `recipes/<slug>.html`, not `recipes/<slug>/index.html`). Links inside pages go through the base. **Checked in step 1 (Astro 7.4.13):**
+  `astro dev` answers `/favourite-recipes/index.html`, `next-week.html`, `shopping-list.html` and `recipes/<slug>.html` with 200 (`/favourite-recipes/recipes/pancakes`
+  without the extension answers too, which the built site doesn't; the root `/` is a 404 in dev because of the base).
 - **Recipe Markdown** is rendered by Astro's Markdown (remark, GitHub-flavoured) instead of `marked`. The two can differ in small
   ways, so step 4 compares the pages' text before and after.
 - **The build time** grows by some seconds; visitors don't see it.
@@ -113,8 +114,13 @@ once as zod schemas in `shared/`, with their TypeScript types inferred (`z.infer
 - The browser imports only types (`import type`), so zod isn't in any browser script.
 - **One zod for everything:** Astro brings its own zod (`astro/zod`), and `defineCollection` expects a schema from that zod's major
   version. `shared/` depends on the same major version, and the backend moves to it too: today it's on zod 3 with
-  `zod-to-json-schema`, and zod 4 has `z.toJSONSchema` built in. **To check in step 1:** which zod the Astro we install uses, and
-  that a schema from `shared/` is accepted by `defineCollection`.
+  `zod-to-json-schema`, and zod 4 has `z.toJSONSchema` built in.
+- **Checked in step 1:** Astro 7.4.13 depends on **zod 4.6.7** (`astro/zod` is that copy; npm dedupes it with a root `zod`). A schema
+  written against a *separate* install of zod 4.6.7 (a stand-in for `shared/`, its own `package.json` and `node_modules`) is accepted by
+  `defineCollection` with the `glob` loader: all 72 recipes load, defaults (`.default([])`) apply, and a recipe that breaks the schema
+  fails the build with `InvalidContentEntryDataError` naming the file and field. A zod **3** schema (the backend's `zod@3.25.76`, a plain `z.object({ title })` test) loads the entries
+  but the build warns `An error was encountered while creating the JSON schema ... reading 'def'` (Astro's zod 4 `toJSONSchema` can't read
+  a zod 3 schema), so it's unsupported; the `zod/v4` subpath of zod 3.25 loaded without a warning, but it wasn't tested further. So `shared/` and the backend use `zod@^4` (the same major as Astro), with no need for the two to be the same copy.
 
 ### 4.5 The JS-off rule goes; pages are still HTML
 
@@ -234,7 +240,7 @@ None at the moment. New ones go here as the work turns them up.
 Commits on the one branch (4.12), in this order. Each leaves a site that builds and works, so the branch can be checked at every
 step.
 
-1. **Groundwork:** Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`. Astro with the Preact integration,
+1. **Groundwork** (done): Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`. Astro with the Preact integration,
    `astro.config.ts` (static, base, `build.format: "file"`), strict tsconfig, Vitest, `npm run build` / `dev`. The first pages are
    thin: each `.astro` page calls the existing renderer and outputs its HTML (`<Fragment set:html={…} />`), and the existing
    scripts are served as they are. The same site, built by Astro. The checks marked "to check in step 1" (4.1, 4.4).
@@ -252,3 +258,15 @@ step.
 9. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
 10. **Docs and skills:** the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
     `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files.
+
+### Step 1 as built
+
+- `build.js` is gone already (not at step 4): its loaders and the ingredient check live in `src/lib/site-data.ts`; the pages in
+  `src/pages/` call the existing renderers in `templates/` (now ES modules) with `<Fragment set:html>`. `compressHTML` is off, so the
+  output is byte for byte what `build.js` wrote (the only extra files are Astro's `_astro/` Preact chunks, which no page loads yet).
+- The existing scripts, `styles/style.css` and `images/` are copied by `src/integrations/static-files.ts` (build and dev), under
+  their old names; `auth.js` / `chat.js` only with the same env vars as before. Their sources were renamed `templates/auth.cjs` and
+  `templates/chat.cjs`, because the root `"type": "module"` would otherwise load them as ES modules and the backend's tests that
+  `require` them (`module.exports` at the end) would break; the published names are unchanged.
+- `BUILD_OUT_DIR` still picks another output folder (`astro.config.ts`); the backend's tests build with
+  `node node_modules/astro/bin/astro.mjs build`.

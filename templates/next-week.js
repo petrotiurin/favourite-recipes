@@ -1,5 +1,5 @@
-const { layout } = require("./layout");
-const { siteBar, tile } = require("./tiles");
+import { layout } from "./layout.js";
+import { siteBar, tile } from "./tiles.js";
 
 const ICON_BACK =
   '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -29,4 +29,4 @@ ${body}
   return layout({ title: "Next week — Our Favourite Recipes", content, rootPrefix: "", pageContext: { page: "next-week" } });
 }
 
-module.exports = { renderNextWeek };
+export { renderNextWeek };

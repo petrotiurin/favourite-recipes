@@ -1,5 +1,5 @@
-const crypto = require("crypto");
-const { layout } = require("./layout");
+import crypto from "node:crypto";
+import { layout } from "./layout.js";
 
 function escapeHtml(str) {
   return String(str)
@@ -182,6 +182,9 @@ function pageData(list, bySlug, auth, plan) {
  * `list` is the agent-written shopping-list.json (made for next week's recipes),
  * or null when there is none. `recipes` are the recipes the list was built from (for the links).
  * `auth` ({ supabaseUrl, supabaseKey, api }) turns on the editor's stocktake, or null.
+ * @param {any} list
+ * @param {any[]} recipes
+ * @param {any} [auth]
  */
 function renderShoppingList(list, recipes, auth = null) {
   let body;
@@ -226,4 +229,4 @@ ${body}
   return layout({ title: "Shopping list — Our Favourite Recipes", bodyClass: "shopping-page", content, rootPrefix: "", pageContext: { page: "shopping" } });
 }
 
-module.exports = { renderShoppingList };
+export { renderShoppingList };

@@ -1,6 +1,6 @@
-const { layout } = require("./layout");
-const { ingredientHtml, ingredientText, hasAmounts, ingredientGroups } = require("./ingredients");
-const { isThisWeek, isNextWeek } = require("./status");
+import { layout } from "./layout.js";
+import { ingredientHtml, ingredientText, hasAmounts, ingredientGroups } from "./ingredients.js";
+import { isThisWeek, isNextWeek } from "./status.js";
 
 function escapeHtml(str) {
   return String(str)
@@ -129,4 +129,4 @@ ${bodyHtmlOut}
   });
 }
 
-module.exports = { renderRecipe, recipePlainText };
+export { renderRecipe, recipePlainText };

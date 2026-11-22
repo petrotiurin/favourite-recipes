@@ -1,0 +1,8 @@
+---
+import { renderShoppingList } from "../../templates/shopping-list.js";
+import { getRecipes, getShoppingList, stocktakeAuth } from "../lib/site-data.ts";
+
+const shopping = getShoppingList(getRecipes());
+const html = renderShoppingList(shopping?.list ?? null, shopping?.recipes ?? [], stocktakeAuth());
+---
+<Fragment set:html={html} />

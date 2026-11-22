@@ -1,0 +1,8 @@
+---
+import { renderNextWeek } from "../../templates/next-week.js";
+import { isNextWeek } from "../../templates/status.js";
+import { getRecipes } from "../lib/site-data.ts";
+
+const html = renderNextWeek(getRecipes().filter(isNextWeek).sort((a, b) => a.title.localeCompare(b.title)));
+---
+<Fragment set:html={html} />

@@ -136,4 +136,4 @@ function sectionErrors(ingredients) {
 /** Does the list have any amount the servings selector could rescale? */
 const hasAmounts = (ingredients) => (ingredients || []).some((i) => i.amount !== undefined && i.amount !== null && !(OF_UNITS.has(i.unit) && i.amount === 1));
 
-module.exports = { UNITS, ingredientMarkdown, ingredientText, ingredientHtml, hasAmounts, displayAmount, ingredientGroups, sectionErrors };
+export { UNITS, ingredientMarkdown, ingredientText, ingredientHtml, hasAmounts, displayAmount, ingredientGroups, sectionErrors };

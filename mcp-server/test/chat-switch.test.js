@@ -107,7 +107,7 @@ test("the build adds data-public=\"false\" to the chat script only with CHAT_PUB
     try {
       const clean = { ...process.env };
       for (const k of ["CHAT_API_URL", "CHAT_PUBLIC"]) delete clean[k];
-      const r = spawnSync("node", ["build.js"], { cwd: root, env: { ...clean, BUILD_OUT_DIR: out, ...env }, encoding: "utf8" });
+      const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...clean, BUILD_OUT_DIR: out, ...env }, encoding: "utf8" });
       assert.equal(r.status, 0, r.stderr);
       return readFileSync(`${out}/index.html`, "utf8");
     } finally {

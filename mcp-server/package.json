@@ -5,7 +5,7 @@
   "description": "MCP server that lets an agent add/edit recipes by committing to the favourite-recipes repo",
   "type": "module",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

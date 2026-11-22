@@ -2,17 +2,15 @@
 // and the server's copies agree), the write-time checks, catalogue changes, and the site build's check.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-import { readdirSync, readFileSync, mkdtempSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
+import { readdirSync, readFileSync, mkdtempSync, writeFileSync, mkdirSync, cpSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import matter from "gray-matter";
 import * as server from "../lib/ingredient-line.js";
+import * as site from "../../templates/ingredients.js";
 import { checkIngredients, applyCatalogueChange, applyCatalogueChanges, parseCatalogue, factorFor, shopAmount, resolveItem } from "../lib/catalogue.js";
 
-const require = createRequire(import.meta.url);
-const site = require("../../templates/ingredients.js");
 const ROOT = new URL("../../", import.meta.url);
 const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data }));
 const catalogue = parseCatalogue(readFileSync(new URL("data/ingredients.json", ROOT), "utf8"));
@@ -120,15 +118,15 @@ test("catalogue changes are checked: ids, names that belong to another item, sec
 
 test("the site build refuses a recipe whose ingredient points at no catalogue item, or that still has an Ingredients section", () => {
   const dir = mkdtempSync(join(tmpdir(), "build-"));
-  for (const p of ["build.js", "package.json", "templates", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
-  cpSync(new URL("node_modules", ROOT), join(dir, "node_modules"), { recursive: true, dereference: false });
+  for (const p of ["astro.config.ts", "tsconfig.json", "package.json", "src", "templates", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
+  symlinkSync(new URL("node_modules", ROOT).pathname, join(dir, "node_modules"));
   mkdirSync(join(dir, "recipes"));
   mkdirSync(join(dir, "data"));
   writeFileSync(join(dir, "data/ingredients.json"), JSON.stringify({ rice: { name: "Rice", section: "Pantry", unit: "g" } }));
   const fm = "title: Rice\nslug: rice\nimage: /images/recipes/rice.jpg\ncourse: [Dinner]\ntotal_mins: 20\nserves: 2\ncalories: 300";
-  const build = () => execFileSync("node", ["build.js"], { cwd: dir, env: { ...process.env, BUILD_OUT_DIR: join(dir, "dist") }, stdio: "pipe" }).toString();
+  const build = () => execFileSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: dir, env: { ...process.env, BUILD_OUT_DIR: join(dir, "dist") }, stdio: "pipe" }).toString();
   writeFileSync(join(dir, "recipes/rice.md"), `---\n${fm}\ningredients:\n  - { amount: 200, unit: g, name: rice, item: rice }\n---\n\n## Instructions\n\n1. Cook the **rice**.\n`);
-  assert.match(build(), /Built 1 recipe/);
+  assert.match(build(), /4 page\(s\) built/);
   const html = readFileSync(join(dir, "dist/recipes/rice.html"), "utf8");
   assert.match(html, /<li><span class="qty" data-qty="200">200<\/span>g <strong>rice<\/strong><\/li>/);
   assert.match(html, /class="servings-picker"/);

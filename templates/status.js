@@ -12,4 +12,4 @@ const isHiddenUntilNextWeek = (r) => isDraft(r) && isNextWeek(r) && !isThisWeek(
 const rank = (r) => (isThisWeek(r) ? (isDraft(r) ? 0 : 1) : 2);
 const byStatusThenTitle = (a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title);
 
-module.exports = { isDraft, isThisWeek, isNextWeek, isHiddenUntilNextWeek, rank, byStatusThenTitle };
+export { isDraft, isThisWeek, isNextWeek, isHiddenUntilNextWeek, rank, byStatusThenTitle };

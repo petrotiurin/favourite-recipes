@@ -1,6 +1,6 @@
-const { layout } = require("./layout");
-const { isThisWeek, isNextWeek, isHiddenUntilNextWeek } = require("./status");
-const { siteBar, tile, courseLabel } = require("./tiles");
+import { layout } from "./layout.js";
+import { isThisWeek, isNextWeek, isHiddenUntilNextWeek } from "./status.js";
+import { siteBar, tile, courseLabel } from "./tiles.js";
 
 const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
@@ -80,4 +80,4 @@ ${tiles}
   return layout({ title: "Our Favourite Recipes", content, rootPrefix: "", pageContext: { page: "index" } });
 }
 
-module.exports = { renderIndex };
+export { renderIndex };

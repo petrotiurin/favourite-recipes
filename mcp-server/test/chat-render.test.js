@@ -1,10 +1,10 @@
-// The chat widget's safe renderer (templates/chat.js), run in node: model text becomes DOM nodes, never HTML,
+// The chat widget's safe renderer (templates/chat.cjs), run in node: model text becomes DOM nodes, never HTML,
 // and only links to the site's own origin stay links.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
-const chat = createRequire(import.meta.url)("../../templates/chat.js");
+const chat = createRequire(import.meta.url)("../../templates/chat.cjs");
 const ORIGIN = "https://site.test";
 
 // A tiny DOM, enough for renderInto: it records what was built, so we can see that nothing was parsed as HTML.

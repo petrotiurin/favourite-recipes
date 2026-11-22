@@ -53,4 +53,4 @@ ${content}
 `;
 }
 
-module.exports = { layout };
+export { layout };

@@ -253,7 +253,7 @@ test("the tray reports next week as it will be after Save (staged recipes includ
   assert.equal(t.balance.recipes, 2);
   assert.ok(t.balance.avg_kcal > 0 && t.balance.total_mins >= 20);
   assert.ok(t.balance.dinners >= 1, "the staged pasta is a dinner");
-  const chatJs = createRequire(import.meta.url)("../../templates/chat.js");
+  const chatJs = createRequire(import.meta.url)("../../templates/chat.cjs");
   assert.match(chatJs.balanceLine({ recipes: 5, dinners: 3, avg_kcal: 420, total_mins: 135 }), /^Next week after Save: 5 recipes · 3 dinners · ~420 kcal each · 2 h 15 min in all$/);
   assert.equal(chatJs.balanceLine(null), "");
   assert.equal(chatJs.cleanTray({ items: [], balance: { recipes: "5", dinners: -1, avg_kcal: 1e9, total_mins: 12 } }, "https://x", "").balance.recipes, 0, "non-numbers are dropped");
@@ -317,7 +317,7 @@ test("history replay keeps ask_user calls, their results and the tapped answers;
   assert.ok(capped.every((m, i) => m.role !== "tool" || capped[i - 1]?.tool_calls || capped[i - 1]?.role === "tool"));
 });
 
-test("build.js can write to another folder (BUILD_OUT_DIR), leaving ../dist alone", async () => {
+test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), leaving ../dist alone", async () => {
   const { mkdtempSync, existsSync, statSync, rmSync } = await import("node:fs");
   const { spawnSync } = await import("node:child_process");
   const { tmpdir } = await import("node:os");
@@ -325,7 +325,7 @@ test("build.js can write to another folder (BUILD_OUT_DIR), leaving ../dist alon
   const out = mkdtempSync(`${tmpdir()}/recipes-dist-`);
   const before = existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null;
   try {
-    const r = spawnSync("node", ["build.js"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
+    const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(`${out}/index.html`));
     assert.ok(existsSync(`${out}/chat.js`));

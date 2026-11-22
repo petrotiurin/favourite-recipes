@@ -1,0 +1,13 @@
+---
+import { marked } from "marked";
+import { renderRecipe } from "../../../templates/recipe.js";
+import { getRecipes } from "../../lib/site-data.ts";
+
+export function getStaticPaths() {
+  return getRecipes().map((recipe) => ({ params: { slug: recipe.slug }, props: { recipe } }));
+}
+
+const { recipe } = Astro.props;
+const html = renderRecipe(recipe, marked.parse(recipe.body) as string);
+---
+<Fragment set:html={html} />
