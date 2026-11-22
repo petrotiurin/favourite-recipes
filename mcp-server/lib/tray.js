@@ -10,7 +10,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { config } from "./config.js";
 import { ChangeSet, assertAllowedPath, branchSnapshot } from "./github.js";
 import { slugify, parseRecipe, ingredientsOf } from "./recipe-format.js";
-import { ingredientText } from "./ingredient-line.js";
+import { ingredientText } from "../../shared/ingredient-line.ts";
 import { listRecipes, isNextWeek, isDraft, recipeSummaries, removeDraft, UserError } from "./recipes.js";
 import { ShoppingListError, sameEdit, editLabel } from "./shopping-list.js";
 import { runOperation } from "./operations.js";

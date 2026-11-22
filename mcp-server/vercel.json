@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../shared",
   "functions": {
     "api/*.js": { "maxDuration": 300, "includeFiles": "workflows/**" }
   },

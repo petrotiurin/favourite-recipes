@@ -16,7 +16,7 @@ The family's cooking app: the recipe book, this week's and next week's plans, an
    and every commit is a site deploy, so writes are batched.
 
 More context loads when you work in an area: `mcp-server/CLAUDE.md` for the backend, and `.claude/rules/` for the site's
-templates (`site.md`), the chat (`chat.md`), the shopping list (`shopping-list.md`) and code that exists twice (`kept-in-step.md`).
+templates (`site.md`), the chat (`chat.md`), the shopping list (`shopping-list.md`) and code that still exists twice (`kept-in-step.md`).
 For the reasoning behind them: `design.md` (UI: read it before changing any page's look or behaviour), `docs/chatbot-design.md`
 (the chat), `docs/structured-ingredients.md` (ingredients as data), `docs/parallel-photo-reading.md` (photo reading).
 
@@ -49,6 +49,7 @@ templates/          build-time renderers (layout, index, next-week, tiles, recip
 styles/style.css    the one stylesheet, copied verbatim into dist/
 design.md           UI principles: palette tokens, type, the house icon language, shared components
 dist/               build output — gitignored, never hand-edit, regenerated every build
+shared/             logic used by both the site and the backend (ingredient line, scaling rounding, shopping-list reading and amounts); .ts, own package.json, imported by both (docs/typescript-migration.md 4.3)
 mcp-server/         separate backend on Vercel: /mcp, /stocktake, /chat (not part of the site; mcp-server/CLAUDE.md)
 supabase/           `supabase init` layout: migrations/ (rate limits, chats, the tray, photo buckets, photo_reads), config.toml for `supabase start`
 docs/               design docs (chatbot-design.md, structured-ingredients.md, parallel-photo-reading.md)
@@ -94,7 +95,7 @@ in the `note`), `unit` (one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice,
 `name`, `note`, `optional`, `section` (the part of the dish, e.g. "Sauce": a small heading on the page over that part's lines; a section's lines sit
 together, lines without one first; the shopping list ignores it), and `item`: the id of what it's bought as in the **ingredient catalogue**, `data/ingredients.json` (shopping-list name,
 aisle, shopping unit, conversions `per`, `aliases`, `staple` / `skip`). The page's ingredient list, the servings selector (`data-qty` written by
-`templates/ingredients.js`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.
+`shared/ingredient-line.ts`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.
 The MCP server fills `item` from the name, checks every amount converts, and refuses a write with the
 exact fix (set `item`, or send a `catalogue` change with the recipe: `{ add }`, `{ alias }`, `{ set }`; `mcp-server/lib/catalogue.js`); the build fails on
 an unknown `item` or unit. Only the server (or the `add-recipe` skill) writes the catalogue.

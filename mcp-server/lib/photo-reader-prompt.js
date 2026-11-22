@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { COURSES } from "./config.js";
 import { recipeRules } from "./workflows.js";
-import { UNITS } from "./ingredient-line.js";
+import { UNITS } from "../../shared/ingredient-line.ts";
 
 const JOB = `You read recipe screenshots and photos for a family recipe book. You report only what is visible in the image(s) and fill the JSON schema you are given. Nothing else: no chat, no advice, no extra keys.
 

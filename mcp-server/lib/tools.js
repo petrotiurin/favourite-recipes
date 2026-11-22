@@ -9,7 +9,7 @@ import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
-import { UNITS, scaledMarkdown, ingredientMarkdown, ingredientGroups } from "./ingredient-line.js";
+import { UNITS, scaledMarkdown, ingredientMarkdown, ingredientGroups } from "../../shared/ingredient-line.ts";
 import { SECTIONS, SHOP_UNITS } from "./catalogue.js";
 import { ingredientsOf } from "./recipe-format.js";
 import { recipesFromHome } from "./at-home.js";

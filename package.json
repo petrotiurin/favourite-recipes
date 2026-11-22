@@ -5,7 +5,7 @@
   "description": "Static GitHub Pages site for our favourite recipes",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && vitest run && astro build",
+    "build": "tsc -p shared && astro check && vitest run && astro build",
     "test": "vitest run"
   },
   "dependencies": {

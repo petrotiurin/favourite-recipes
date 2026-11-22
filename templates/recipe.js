@@ -1,5 +1,5 @@
 import { layout } from "./layout.js";
-import { ingredientHtml, ingredientText, hasAmounts, ingredientGroups } from "./ingredients.js";
+import { ingredientHtml, ingredientText, hasAmounts, ingredientGroups } from "../shared/ingredient-line.ts";
 import { isThisWeek, isNextWeek } from "./status.js";
 
 function escapeHtml(str) {

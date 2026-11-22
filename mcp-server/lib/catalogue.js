@@ -4,7 +4,7 @@
 import { config } from "./config.js";
 import { cached } from "./cache.js";
 import { ChangeSet } from "./github.js";
-import { UNITS, sectionErrors } from "./ingredient-line.js";
+import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";
 
 export const CATALOGUE_PATH = "data/ingredients.json";
 /** The shopping list's fixed aisles, in the order the list shows them. */

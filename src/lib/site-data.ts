@@ -4,7 +4,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { UNITS, sectionErrors } from "../../templates/ingredients.js";
+import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";
+import { loadShoppingList } from "../../shared/shopping-list.ts";
 import { byStatusThenTitle } from "../../templates/status.js";
 
 const ROOT = process.cwd();
@@ -75,19 +76,10 @@ export function getRecipes(): Recipe[] {
  */
 export function getShoppingList(allRecipes: Recipe[]): { list: any; recipes: Recipe[] } | null {
   if (!fs.existsSync(SHOPPING_LIST_FILE)) return null;
-  let list;
-  try {
-    list = JSON.parse(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"));
-  } catch (err) {
-    console.warn(`Ignoring shopping-list.json: ${(err as Error).message}`);
-    return null;
-  }
-  const sections = (Array.isArray(list.sections) ? list.sections : []).filter(
-    (s: any) => s && s.name && Array.isArray(s.items) && s.items.length,
-  );
-  if (!sections.length) return null;
+  const list = loadShoppingList(fs.readFileSync(SHOPPING_LIST_FILE, "utf8"), (message) => console.warn(message));
+  if (!list) return null;
   const covered = new Set(Array.isArray(list.recipes) ? list.recipes : []);
-  return { list: { ...list, sections }, recipes: allRecipes.filter((r) => covered.has(r.slug)) };
+  return { list, recipes: allRecipes.filter((r) => covered.has(r.slug)) };
 }
 
 /**

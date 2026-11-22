@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, step 1 (groundwork) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork) and 2 (`shared/`) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -101,7 +101,7 @@ With `shared/package.json` saying `{ "type": "module" }` it returned 200, so Ver
   never redeploys the backend.
 - `deploy.yml` needs nothing: it only ignores `mcp-server/**`, so a `shared/` change rebuilds the site.
 - One shared change deploys both sides, so it must keep both working in the same commit.
-- `.claude/rules/kept-in-step.md` is deleted once its five pieces are in `shared/`.
+- `.claude/rules/kept-in-step.md` is deleted once its pieces are single-sourced: step 2 left it with the two browser scripts and the recipe-format prose (see "Step 2 as built").
 
 ### 4.4 Data shapes are zod schemas in `shared/`
 
@@ -244,8 +244,8 @@ step.
    `astro.config.ts` (static, base, `build.format: "file"`), strict tsconfig, Vitest, `npm run build` / `dev`. The first pages are
    thin: each `.astro` page calls the existing renderer and outputs its HTML (`<Fragment set:html={…} />`), and the existing
    scripts are served as they are. The same site, built by Astro. The checks marked "to check in step 1" (4.1, 4.4).
-2. **`shared/`:** the five kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
-   gets `../shared`; delete `.claude/rules/kept-in-step.md`.
+2. **`shared/`** (done): the kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
+   gets `../shared`; `.claude/rules/kept-in-step.md` shrunk (deleted at steps 6, 7 and 10).
 3. **Schemas:** the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
    recipe format uses them.
 4. **Pages and components:** layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
@@ -270,3 +270,31 @@ step.
   `require` them (`module.exports` at the end) would break; the published names are unchanged.
 - `BUILD_OUT_DIR` still picks another output folder (`astro.config.ts`); the backend's tests build with
   `node node_modules/astro/bin/astro.mjs build`.
+
+### Step 2 as built
+
+- `shared/` (`package.json` `"type": "module"`; `tsconfig.json` strict, `erasableSyntaxOnly`, `allowImportingTsExtensions`, `noEmit`, nodenext,
+  checked by `tsc -p shared`, the first part of `npm run build`; the root tsconfig includes it too, so `astro check` sees it):
+  `ingredient-line.ts` (was `templates/ingredients.js` and `mcp-server/lib/ingredient-line.js`, identical but for the server's
+  `scaledMarkdown`, which is now there for both), `quantity.ts` (`formatQuantity`, was `mcp-server/lib/scaling.js` and `format()` in
+  `servings.js`), `shopping-list.ts` (`BASE_SERVINGS`, `DEFAULT_SERVINGS`, `parseQuantity`, `neededAmount`, `loadShoppingList`).
+  Both sides import them by relative path with the `.ts` extension; the backend's `lib/shopping-list.js` re-exports what its callers
+  used and keeps its own 2-decimal `neededAmount` wrapper (the shared one isn't rounded, as the site's never was).
+- **Differences between the copies, and what was kept:** (1) `neededAmount`: the backend rounded to 2 decimals, the site didn't, and
+  `servingsOf` was `??` on the server and `||` on the site. Shared: unrounded and `||` (a 0 or missing plan value means
+  `DEFAULT_SERVINGS`; the server validates 1..12 on write, so nothing stored changes); the backend wraps it with `round`. (2) `loadShoppingList`:
+  the site dropped sections with no name or no items and gave null for a list with none, warned about unparsable files, and would have thrown
+  on a JSON `null`; the backend returned the parsed file as it was and silently null for bad JSON. Shared: the site's rule plus a guard for a
+  non-object; the backend now also gets null for a file with no usable section, and so loses nothing it could use (status "none", no
+  stocktake to apply). The backend passes no `warn`, so it stays silent. (3) The ingredient line, `parseQuantity` and the rounding were the same.
+- **The browser scripts keep their own copies until step 6/7** (the least throwaway option: a build-time bundle of the shared functions
+  would be deleted when the scripts become islands): `servings.js` `format()` and `shopping.js` `need()` stay as they are, each guarded by
+  a test in `shared/test/` that evaluates the script's function and compares it with the shared one over many inputs; the tests go with the copies.
+  `shopping.js`'s `formatNumber` and the static page's `fmtAmount` are other duplicates, not on the original list, and wait for step 7.
+- **Recipe format:** the code half (`mcp-server/lib/recipe-format.js`) has no copy on the site; the site's check is `checkIngredients` in
+  `src/lib/site-data.ts` (uses the shared `UNITS` and `sectionErrors`). The rest is the prose of the `add-recipe` skill and the root
+  `CLAUDE.md`, so `kept-in-step.md` stays for it until steps 3 and 10.
+- Tests: the line, sections and book checks of `mcp-server/test/ingredients.test.js` and the rounding part of `phase6.test.js` moved to
+  `shared/test/` (Vitest, in the root config, so `npm run build` runs them); the backend keeps the catalogue and site-build tests.
+- **Not checked: Vercel with `.ts` imports from `.js` functions** (4.10). `api/*.js` now import `../../shared/*.ts` through `lib/`.
+  `node --test` is fine on Node 24, a Vercel preview is the open check before this branch is relied on.

@@ -136,7 +136,7 @@
     return state.servings[slug] || data.fallback;
   }
   // Each recipe's share of the 2-serving amount times its servings / base; items without `amounts`
-  // (older lists) scale by their recipes' average. Keep in sync with neededAmount in shopping-list.js.
+  // (older lists) scale by their recipes' average. Keep in step with neededAmount in shared/shopping-list.ts (shared/test/shopping-list.test.ts checks it).
   function need(item) {
     if (item.amount === undefined) return null;
     if (item.amounts) {

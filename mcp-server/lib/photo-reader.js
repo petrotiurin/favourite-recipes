@@ -2,7 +2,7 @@
 // call per photo (or per group of consecutive screenshots), with no tools, no conversation and nothing private in its prompt. Everything here
 // apart from readPhotos() is pure: normalising what the model returned, grouping neighbouring photos, turning a read into a create_recipe
 // operation and matching it against the tray and the book.
-import { UNITS } from "./ingredient-line.js";
+import { UNITS } from "../../shared/ingredient-line.ts";
 import { config, COURSES } from "./config.js";
 import { readerSystemPrompt, readerInstruction, READER_SCHEMA, PHOTO_READER_PROMPT_VERSION } from "./photo-reader-prompt.js";
 

@@ -1,5 +1,5 @@
-// Structured ingredients and the ingredient catalogue (docs/structured-ingredients.md sections 1, 2, 4, 5): the line renderer (the site's
-// and the server's copies agree), the write-time checks, catalogue changes, and the site build's check.
+// Structured ingredients and the ingredient catalogue (docs/structured-ingredients.md sections 2, 4, 5): the write-time checks, catalogue
+// changes, and the site build's check. The ingredient line itself is tested in shared/test/ingredient-line.test.ts.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, mkdtempSync, writeFileSync, mkdirSync, cpSync, symlinkSync } from "node:fs";
@@ -7,50 +7,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import matter from "gray-matter";
-import * as server from "../lib/ingredient-line.js";
-import * as site from "../../templates/ingredients.js";
 import { checkIngredients, applyCatalogueChange, applyCatalogueChanges, parseCatalogue, factorFor, shopAmount, resolveItem } from "../lib/catalogue.js";
 
 const ROOT = new URL("../../", import.meta.url);
 const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data }));
 const catalogue = parseCatalogue(readFileSync(new URL("data/ingredients.json", ROOT), "utf8"));
-
-test("the site and the server render every ingredient of the book the same", () => {
-  assert.deepEqual(server.UNITS, site.UNITS);
-  let n = 0;
-  for (const r of book) {
-    for (const ing of r.ingredients) {
-      assert.equal(server.ingredientMarkdown(ing), site.ingredientMarkdown(ing), `${r.slug}: ${ing.name}`);
-      assert.equal(server.ingredientHtml(ing), site.ingredientHtml(ing), `${r.slug}: ${ing.name}`);
-      assert.equal(server.ingredientText(ing), site.ingredientText(ing));
-      n++;
-    }
-  }
-  assert.ok(n > 500, "the whole book was compared");
-});
-
-test("lines render the fixed way per unit", () => {
-  const md = server.ingredientMarkdown;
-  assert.equal(md({ amount: 200, unit: "g", name: "jasmine rice" }), "200g **jasmine rice**");
-  assert.equal(md({ amount: 4, name: "salmon fillets", note: "about 140g each" }), "4 **salmon fillets**, about 140g each");
-  assert.equal(md({ amount: [2, 3], unit: "tbsp", name: "red curry paste" }), "2–3 tbsp **red curry paste**");
-  assert.equal(md({ amount: 0.75, unit: "can", name: "coconut milk" }), "¾ can **coconut milk**");
-  assert.equal(md({ amount: 2, unit: "clove", name: "garlic", note: "minced" }), "2 cloves **garlic**, minced");
-  assert.equal(md({ amount: 1, unit: "juice", name: "lime" }), "Juice of 1 **lime**");
-  assert.equal(md({ amount: 0.5, unit: "zest", name: "lemon" }), "Zest of ½ **lemon**");
-  assert.equal(md({ amount: 1, unit: "pinch", name: "salt" }), "Pinch of **salt**");
-  assert.equal(md({ amount: 2, unit: "handful", name: "spinach" }), "2 handfuls of **spinach**");
-  assert.equal(md({ amount: 0.33, unit: "cup", name: "oats" }), "⅓ cup **oats**");
-  assert.equal(md({ amount: 1, unit: "sheet", name: "puff pastry" }), "1 sheet **puff pastry**");
-  assert.equal(md({ amount: 2, unit: "stick", name: "celery" }), "2 sticks **celery**");
-  assert.equal(md({ amount: 1, unit: "head", name: "broccoli" }), "1 head **broccoli**");
-  assert.equal(md({ amount: 37.5, unit: "g", name: "sugar" }), "37.5g **sugar**");
-  assert.equal(md({ name: "sesame seeds", note: "to serve", optional: true }), "**sesame seeds**, to serve, optional");
-  assert.equal(md({ amount: 500, unit: "g", name: "Greek yogurt", note: "(0% or full-fat)" }), "500g **Greek yogurt** (0% or full-fat)");
-  // the page tags every number for the servings selector, and the unit word for its plural
-  assert.equal(server.ingredientHtml({ amount: 1, unit: "clove", name: "garlic" }), '<span class="qty" data-qty="1">1</span> <span class="qty-unit" data-one="clove" data-many="cloves">clove</span> <strong>garlic</strong>');
-  assert.equal(server.ingredientHtml({ amount: 2, name: "<b>" }, { scalable: false }), "2 <strong>&lt;b&gt;</strong>");
-});
 
 test("every recipe in the book passes the write-time checks, and every name resolves to the item it was given", () => {
   for (const r of book) {
@@ -118,7 +79,7 @@ test("catalogue changes are checked: ids, names that belong to another item, sec
 
 test("the site build refuses a recipe whose ingredient points at no catalogue item, or that still has an Ingredients section", () => {
   const dir = mkdtempSync(join(tmpdir(), "build-"));
-  for (const p of ["astro.config.ts", "tsconfig.json", "package.json", "src", "templates", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
+  for (const p of ["astro.config.ts", "tsconfig.json", "package.json", "src", "templates", "shared", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
   symlinkSync(new URL("node_modules", ROOT).pathname, join(dir, "node_modules"));
   mkdirSync(join(dir, "recipes"));
   mkdirSync(join(dir, "data"));
@@ -136,26 +97,9 @@ test("the site build refuses a recipe whose ingredient points at no catalogue it
   assert.throws(build, /remove the "## Ingredients" section/);
 });
 
-test("sections: grouped in order on both renderers, kept by the write-time checks, refused when split up", () => {
-  const list = [
-    { amount: 2, name: "chicken breasts" },
-    { amount: 1, unit: "tbsp", name: "soy sauce", section: "Marinade" },
-    { amount: 2, unit: "tbsp", name: "soy sauce", section: "Sauce" },
-    { amount: 1, unit: "tsp", name: "honey", section: "Sauce" },
-  ];
-  const groups = server.ingredientGroups(list);
-  assert.deepEqual(groups.map((g) => [g.section, g.items.length]), [[null, 1], ["Marinade", 1], ["Sauce", 2]]);
-  assert.deepEqual(site.ingredientGroups(list), groups);
-  assert.deepEqual(server.sectionErrors(list), []);
-  // every line of the book agrees too
-  for (const r of book) assert.deepEqual(site.sectionErrors(r.ingredients), server.sectionErrors(r.ingredients), r.slug);
-
+test("the write-time checks keep the sections of a line list", () => {
+  const list = [{ amount: 2, name: "chicken breasts" }, { amount: 1, unit: "tbsp", name: "soy sauce", section: "Marinade" }, { amount: 2, unit: "tbsp", name: "soy sauce", section: "Sauce" }, { amount: 1, unit: "tsp", name: "honey", section: "Sauce" }];
   const split = [{ name: "a", section: "Sauce" }, { name: "b", section: "Pickle" }, { name: "c", section: "Sauce" }];
-  assert.match(server.sectionErrors(split).join(), /"Sauce" lines must sit together/);
-  assert.deepEqual(site.sectionErrors(split), server.sectionErrors(split));
-  assert.match(server.sectionErrors([{ name: "a", section: "Sauce" }, { name: "b" }]).join(), /lines without a section go first/);
-  assert.match(server.sectionErrors([{ name: "a", section: "  " }]).join(), /short name/);
-
   const { ingredients, errors } = checkIngredients(list, catalogue);
   assert.deepEqual(errors, []);
   assert.deepEqual(ingredients.map((i) => i.section), [undefined, "Marinade", "Sauce", "Sauce"]);

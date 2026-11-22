@@ -13,7 +13,7 @@ Object.assign(process.env, {
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.js");
 let github, openrouter, supabase, images;
 const realFetch = globalThis.fetch;
-let chat, tools, scaling, background, config, photos;
+let chat, tools, background, config, photos;
 before(async () => {
   globalThis.fetch = async (url, init) => {
     const s = String(url);
@@ -25,7 +25,6 @@ before(async () => {
   };
   chat = await import("../api/chat.js");
   tools = await import("../lib/tools.js");
-  scaling = await import("../lib/scaling.js");
   background = await import("../lib/background.js");
   photos = await import("../lib/tray-photos.js");
   ({ config } = await import("../lib/config.js"));
@@ -53,23 +52,6 @@ const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.d
 const slugs = () => [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3)).sort();
 
 // --- 1. cooking help --------------------------------------------------------------------------------------------------------
-
-test("scaling rounds like the recipe page and scales the data's amounts", async () => {
-  const require = createRequire(import.meta.url);
-  const fs = require("node:fs");
-  // the page's format() and the server's formatQuantity agree
-  const src = fs.readFileSync(new URL("../../templates/servings.js", import.meta.url), "utf8");
-  const format = new Function(`${src.match(/var FRACTIONS = \[[\s\S]*?\];/)[0]}\n${src.match(/function format\(value\) \{[\s\S]*?\n  \}/)[0]}\nreturn format;`)();
-  for (const v of [0.1, 0.3, 0.5, 0.74, 1, 1.4, 2.66, 3.9, 9.99, 12.4, 37.5]) assert.equal(scaling.formatQuantity(v), format(v), String(v));
-  const { scaledMarkdown } = await import("../lib/ingredient-line.js");
-  assert.equal(scaledMarkdown({ amount: 150, unit: "g", name: "Greek yogurt", note: "diced" }, 1.5), "225g **Greek yogurt**, diced");
-  assert.equal(scaledMarkdown({ amount: 0.5, name: "lemon" }, 3), "1½ **lemon**");
-  assert.equal(scaledMarkdown({ amount: 1, unit: "clove", name: "garlic" }, 2), "2 cloves **garlic**");
-  assert.equal(scaledMarkdown({ amount: [1, 2], unit: "tsp", name: "paprika" }, 2), "2–4 tsp **paprika**");
-  assert.equal(scaledMarkdown({ amount: 1, name: "onion" }, 1), "1 **onion**");
-  assert.equal(scaling.formatQuantity(0.1), "⅛");
-  assert.equal(scaling.formatQuantity(12.4), "12");
-});
 
 test("scale_recipe is a read tool for everyone, scales to N, and refuses to multiply a non-scalable list", async () => {
   const slug = slugs()[0];

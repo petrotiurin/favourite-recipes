@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { layout } from "./layout.js";
+import { BASE_SERVINGS, DEFAULT_SERVINGS, parseQuantity, neededAmount } from "../shared/shopping-list.ts";
 
 function escapeHtml(str) {
   return String(str)
@@ -15,18 +16,6 @@ function formatDate(iso) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
-// The saved list is written for this many servings of every recipe; the page rescales from it.
-const BASE_SERVINGS = 2;
-// The list's `servings` plans each recipe (set by the agent); a recipe without a plan gets this.
-// Keep both in sync with mcp-server/lib/shopping-list.js.
-const DEFAULT_SERVINGS = 4;
-
-/** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }; else null. Keep in sync with mcp-server/lib/shopping-list.js. */
-function parseQuantity(quantity) {
-  const m = String(quantity ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*([^\d\s].*)?$/);
-  return m ? { amount: parseFloat(m[1]), unit: (m[2] || "").trim() } : null;
-}
-
 const fmtAmount = (amount, unit) => `${Math.round(amount * 100) / 100}${!unit ? "" : /^(g|kg|ml|l)$/i.test(unit) ? unit : ` ${unit}`}`;
 
 /** slug -> planned servings for every recipe the list covers. */
@@ -37,22 +26,6 @@ function planOf(list) {
     plan[slug] = Number.isInteger(n) && n > 0 ? n : DEFAULT_SERVINGS;
   }
   return plan;
-}
-
-/**
- * How much of an item the plan needs: each recipe's share of the 2-serving quantity (`amounts`, or
- * all of it for a one-recipe item) times its servings / BASE_SERVINGS; items without `amounts` (older
- * lists) scale by the average of their recipes' servings. null when the quantity has no amount.
- * Keep in sync with neededAmount in mcp-server/lib/shopping-list.js and need() in templates/shopping.js.
- */
-function neededAmount(item, plan) {
-  const q = parseQuantity(item.quantity);
-  if (!q) return null;
-  const servingsOf = (slug) => plan[slug] || DEFAULT_SERVINGS;
-  if (item.amounts) return Object.entries(item.amounts).reduce((n, [slug, a]) => n + (a * servingsOf(slug)) / BASE_SERVINGS, 0);
-  const slugs = item.recipes && item.recipes.length ? item.recipes : Object.keys(plan);
-  const mean = slugs.length ? slugs.reduce((n, slug) => n + servingsOf(slug), 0) / slugs.length : DEFAULT_SERVINGS;
-  return (q.amount * mean) / BASE_SERVINGS;
 }
 
 /** The quantity text at the planned servings. */

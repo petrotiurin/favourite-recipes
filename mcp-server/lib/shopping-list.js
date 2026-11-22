@@ -5,6 +5,7 @@ import { config, SHOPPING_LIST_PATH } from "./config.js";
 import { cached } from "./cache.js";
 import { createHash } from "node:crypto";
 import { sameIngredient } from "./ingredient-match.js";
+import { BASE_SERVINGS, DEFAULT_SERVINGS, parseQuantity, neededAmount as exactNeededAmount, loadShoppingList } from "../../shared/shopping-list.ts";
 
 // The shopping list is for NEXT WEEK's recipes (`next: true`). The agent combines their
 // ingredients itself; this module only validates and stores the result as shopping-list.json
@@ -12,16 +13,15 @@ import { sameIngredient } from "./ingredient-match.js";
 // recipes it was built from. The site shows the saved list until a new one is saved: after
 // the switch (start_next_week) those recipes are this week's and the list stays, so it
 // covers this week until next week is planned and a new list saved (keep in sync with
-// loadShoppingList in build.js).
+// loadShoppingList in shared/shopping-list.ts, which the site reads it with too).
 
 export const shoppingPageUrl = () => `${config.siteUrl}/shopping-list.html`;
 
 // Every quantity on the list is written for BASE_SERVINGS of each recipe. The list also stores
 // `servings` (slug -> how many people each recipe is cooked for this week, set by the agent):
 // the page opens on that plan and rescales each recipe's share of every item. A recipe without
-// a planned value gets DEFAULT_SERVINGS. Keep these in sync with templates/shopping-list.js.
-export const BASE_SERVINGS = 2;
-export const DEFAULT_SERVINGS = 4;
+// a planned value gets DEFAULT_SERVINGS. Both constants, parseQuantity and the maths of neededAmount are in shared/shopping-list.ts.
+export { BASE_SERVINGS, DEFAULT_SERVINGS, parseQuantity };
 export const MAX_SERVINGS = 12;
 
 export class ShoppingListError extends Error {}
@@ -160,7 +160,6 @@ export const serializeShoppingList = (list) => `${JSON.stringify(list, null, 2)}
 // `have`: true (got enough of it) or a number (that much at home, in the item's own unit, e.g. 2 of
 // "4" lemons or 150 of "400g" rice). `have` is an absolute amount, so it isn't rescaled with the
 // servings selector. A new list from update_shopping_list starts without a stocktake.
-// Keep parseQuantity in sync with templates/shopping-list.js.
 
 export class StocktakeError extends ShoppingListError {
   constructor(message, status = 400) {
@@ -169,31 +168,15 @@ export class StocktakeError extends ShoppingListError {
   }
 }
 
-/** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }, "2 heads" -> { amount: 2, unit: "heads" }; else null. */
-export function parseQuantity(quantity) {
-  const m = String(quantity ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*([^\d\s].*)?$/);
-  return m ? { amount: parseFloat(m[1]), unit: (m[2] || "").trim() } : null;
-}
-
 const itemKey = (item) => `${String(item?.name ?? "").trim().toLowerCase()}\n${String(item?.quantity ?? "").trim()}`;
 
 /** slug -> planned servings for every recipe the list covers (DEFAULT_SERVINGS where it has none, e.g. older lists). */
 export const planOf = (list) => resolveServings(list?.recipes || [], list?.servings || {});
 
-/**
- * How much of an item the plan needs: each recipe's share of the 2-serving quantity (`amounts`, or
- * the whole quantity for a one-recipe item) scaled by its servings / BASE_SERVINGS. Items without
- * `amounts` (older lists) scale by the average of their recipes' servings. null without an amount.
- * Keep in sync with neededAmount in templates/shopping-list.js and templates/shopping.js.
- */
+/** How much of an item the plan needs (shared/shopping-list.ts), rounded to 2 decimals: null without an amount. */
 export function neededAmount(item, plan) {
-  const q = parseQuantity(item.quantity);
-  if (!q) return null;
-  const servingsOf = (slug) => plan[slug] ?? DEFAULT_SERVINGS;
-  if (item.amounts) return round(Object.entries(item.amounts).reduce((n, [slug, a]) => n + (a * servingsOf(slug)) / BASE_SERVINGS, 0));
-  const slugs = item.recipes?.length ? item.recipes : Object.keys(plan);
-  const mean = slugs.length ? slugs.reduce((n, slug) => n + servingsOf(slug), 0) / slugs.length : DEFAULT_SERVINGS;
-  return round((q.amount * mean) / BASE_SERVINGS);
+  const need = exactNeededAmount(item, plan);
+  return need === null ? null : round(need);
 }
 
 /** What's left to buy for one item at the planned servings: { status: "buy" | "partial" | "home", need, remaining }. */
@@ -348,12 +331,7 @@ export function shoppingListStatus(list, nextSlugs) {
 
 export async function readStoredList(cs) {
   const raw = await cs.read(SHOPPING_LIST_PATH);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw.toString("utf8"));
-  } catch {
-    return null;
-  }
+  return raw ? loadShoppingList(raw.toString("utf8")) : null;
 }
 
 /** A read (no ChangeSet): the stored list comes from a short cache shared with the recipe index; with a ChangeSet it is fresh. */
