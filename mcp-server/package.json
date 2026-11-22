@@ -9,7 +9,7 @@
   },
   "scripts": {
     "postinstall": "npm ci --prefix ../shared --omit=dev --no-audit --no-fund",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.{js,ts}",
     "dev": "node scripts/dev.js"
   },
   "dependencies": {
