@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 
 function safeEqual(a, b) {
   const ab = Buffer.from(String(a));

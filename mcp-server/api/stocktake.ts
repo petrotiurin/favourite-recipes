@@ -1,5 +1,5 @@
-import { config, assertStocktakeConfigured } from "../lib/config.js";
-import { verifyEditor } from "../lib/auth.js";
+import { config, assertStocktakeConfigured } from "../lib/config.ts";
+import { verifyEditor } from "../lib/auth.ts";
 import { saveStocktake, StocktakeError } from "../lib/shopping-list.js";
 import { makeCaller } from "../lib/tools.js";
 
