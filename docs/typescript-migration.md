@@ -31,7 +31,7 @@ both.
   No server-side rendering, no other hosting.
 - The browser only calls our backend, Supabase Auth and the site's own files. No secrets in the browser.
 - The backend stays the only writer to the repo. Recipes, `shopping-list.json` and `data/ingredients.json` keep their formats.
-- Pages are still rendered to HTML at build time from `recipes/*.md` (unless question 5.6 decides otherwise).
+- Pages are still rendered to HTML at build time from `recipes/*.md` (unless question 5.3 decides otherwise).
 
 ## 3. Proposed shape (updated as questions are decided)
 
@@ -44,7 +44,7 @@ tsconfig.json       one strict config, type-checked with tsc --noEmit in the Pag
 
 - **Running the build:** `node src/build/build.ts`. Node 24 runs TypeScript directly by stripping the types (section 4), so no
   `tsx` or compile step for the build itself.
-- **Browser bundles:** a bundler (question 5.3) turns each `src/client/*.ts` entry into one `dist/<name>.js`. It still copies
+- **Browser bundles:** a bundler (Vite, section 4.4) turns each `src/client/*.ts` entry into one `dist/<name>.js`. It still copies
   `auth.js` only when `SUPABASE_URL` + `SUPABASE_ANON_KEY` are set and `chat.js` only when `CHAT_API_URL` is set, as today.
 - **Shared code** replaces the `kept-in-step.md` table, and that file is deleted. The backend's tests import the shared modules
   instead of reading `templates/` files.
@@ -63,71 +63,89 @@ tsconfig.json       one strict config, type-checked with tsc --noEmit in the Pag
   `.ts` extension (`import { x } from "./status.ts"`; tsconfig `allowImportingTsExtensions`).
 - Local development needs Node 24 too: add an `.nvmrc` with `24`.
 
+### 4.2 Shared code lives in a top-level `shared/`
+
+Tested on a preview deploy of the backend (2026-11-22): a function in `mcp-server/api/` importing `../../shared/x.js` builds and
+runs, so the Vercel project ships files outside its root directory. The first try failed with "Named export not found… is a
+CommonJS module": Node reads a file's module type from the nearest `package.json`, and the root one has no `"type": "module"`.
+With `shared/package.json` saying `{ "type": "module" }` it returned 200, so Vercel also ships that `package.json`.
+
+- `shared/` has its own `package.json` (`"type": "module"`, no dependencies of its own unless needed by both sides).
+- `mcp-server/vercel.json`: `ignoreCommand` becomes `git diff --quiet HEAD^ HEAD -- . ../shared`, or a change only in `shared/`
+  never redeploys the backend.
+- `deploy.yml` needs nothing: it only ignores `mcp-server/**`, so a `shared/` change rebuilds the site.
+- One shared change deploys both sides. It must therefore keep both working in the same commit.
+
+### 4.3 The backend moves to TypeScript in this migration
+
+After the site, as its own steps (section 6). Vercel builds `.ts` functions in `api/`, and the tests run on `.ts` with Node 24.
+**To test on a preview first:** that Vercel's build accepts relative imports written with the `.ts` extension (the form Node's type
+stripping needs), from `api/` into `lib/` and into `../shared/`. If it doesn't, tsconfig's `rewriteRelativeImportExtensions` or
+a build step for the backend is needed. Checked the same way as 4.2, before the backend's first converted file.
+
+### 4.4 Vite bundles the browser code
+
+- `vite build` with one input per browser entry (`src/client/*.ts`, `build.rollupOptions.input`), output into `dist/`
+  without emptying it (`emptyOutDir: false`: the HTML comes from our build). `auth` and `chat` are left out of the inputs when their
+  env vars aren't set, as today.
+- Our build writes the HTML, not Vite: Vite's `index.html` entry model isn't used for the pages.
+- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`). That makes 5.6 nearly
+  free.
+- **Dev server (to design):** `vite` serves the pages our build writes, and in dev `layout` links `/src/client/<name>.ts` so Vite
+  can hot-reload them; the build re-runs on a change to a recipe or a renderer. To work out in step 1.
+
 ## 5. Open questions
 
-### 5.1 Where does `shared/` live?
-
-The Vercel project's root directory is `mcp-server/` (confirmed from the build log). Whether its build can read files outside that
-folder depends on the project setting Build and Deployment → Root Directory → "Include files outside the root directory in the
-Build Step", which the tools available to Claude don't return.
-
-- **A. Top level, `shared/`** (needs the setting on). Both sides import `../shared/…`. Also change the backend's
-  `ignoreCommand` in `mcp-server/vercel.json` from `git diff --quiet HEAD^ HEAD -- .` to `… -- . ../shared`, or a change only in
-  `shared/` never redeploys the backend.
-- **B. Inside the backend, `mcp-server/shared/`.** Works whatever the setting. The site imports from there, and
-  `deploy.yml` needs `!mcp-server/shared/**` next to its `paths-ignore: mcp-server/**`, or a shared change never rebuilds the site.
-
-Either way, one shared change deploys both sides.
-
-### 5.2 Does the backend move to TypeScript too, and when?
-
-Vercel runs `.ts` functions in `api/` natively. Options: in this migration; later as a separate one; never (it stays JS and
-imports the shared modules; with Node 24 it can import `.ts` directly).
-
-### 5.3 Which bundler?
-
-- **esbuild:** one dependency, very fast, bundles TypeScript, no config file needed. The build calls it from `build.ts`.
-- **Vite:** dev server with hot reload; more setup, and it wants to own the HTML, which our build already writes.
-- **No bundler, `tsc` per file + native `<script type="module">`:** no new dependency, but every import is a separate request
-  and npm packages can't be used.
-
-### 5.4 How strict, and how fast?
+### 5.1 How strict, and how fast?
 
 - Strict from the start for new and converted files, converting file by file (rename `.js` → `.ts` when its turn comes).
 - Or a first pass with `allowJs` + `checkJs` over the untouched JS, then tightening.
 The open part is `chat.js`: converting 3,200 lines in one go vs splitting it into modules first (render, stream, tray, panel).
 
-### 5.5 Typed data contracts, and validated at runtime?
+### 5.2 Typed data contracts, and validated at runtime?
 
 The shapes the build, the browser and the backend share: a recipe's frontmatter and ingredients, `shopping-list.json`, the
 catalogue, the page-context JSON, the `/chat` events. Options: TypeScript types only; or zod schemas in `shared/` (the backend
 already uses zod) with the types inferred from them, so the build also validates recipes with the same rules as the server.
 Zod stays out of the browser bundles either way.
 
-### 5.6 What replaces the JS-off rule?
+### 5.3 What replaces the JS-off rule? Where are pages rendered?
 
-- Keep rendering every page to HTML at build time, but JS-only features are allowed (recommended: free with the current build, fast first paint).
-- Or let some pages render in the browser from data the build embeds.
+- **A. At build time, as today**, with JS-only features allowed on top.
+- **B. In the browser**, from data the build embeds (or fetches).
+- **C. Both, from one code:** pages are components, rendered to HTML by the build and taken over in the browser by the same code
+  (pre-rendering + hydration). Needs a UI library (5.4).
+
+What B costs, for this site:
+- **First view on a weak signal.** An empty page until the script downloads and runs. Most use is on a phone, and the shopping
+  list is opened in the shop.
+- **One script error blanks the page.** Today a broken `shopping.js` still leaves a readable list.
+- **Shared links.** WhatsApp/iMessage previews and search engines read the HTML: `<head>` tags can still be written at build time,
+  the body can't.
+
+What A costs: the pages that are interactive anyway are rendered twice, once at build time and once in the browser. The shopping
+page today: `templates/shopping-list.js` writes the no-JS list, `shopping.js` redraws it. C removes that without B's costs.
+
 Either way `design.md`, `docs/chatbot-design.md` §2, `.claude/rules/site.md` and `chat.md`, and the "works without JS" code
 comments get rewritten.
 
-### 5.7 A UI library for the browser code?
+### 5.4 A UI library for the browser code?
 
-`chat.js` and `shopping.js` build a lot of DOM by hand. Options: none (plain DOM, now typed); a small one (Preact, Lit). This
-can be decided separately and later.
+`chat.js` and `shopping.js` build a lot of DOM by hand. Options: none (plain DOM, now typed); a small one (Preact, Lit). Needed if 5.3 picks C (Preact
+is the usual fit: small, and Vite pre-renders it).
 
-### 5.8 Tests for the site
+### 5.5 Tests for the site
 
 There are no tests at the root today: the backend's tests check the site's scripts. Proposed: `node --test` at the root over
 `.ts` tests (no runner to install), run in the Pages workflow before the build, and the backend's tests over shared code
 move with it.
 
-### 5.9 File names and caching
+### 5.6 File names and caching
 
 Today `dist/` has fixed names (`chat.js`), so a phone may run yesterday's script against today's HTML. Bundling makes it easy to
 emit hashed names (`chat-3f9a.js`) that `layout` writes into the page. Worth doing in this migration or not.
 
-### 5.10 How it ships
+### 5.7 How it ships
 
 Every merge to `main` deploys the site. Options: one PR per step in section 6, each deploying a working site; or one large PR.
 
@@ -139,5 +157,5 @@ Every merge to `main` deploys the site. Options: one PR per step in section 6, e
 4. `shopping` and `auth`: `window.RecipeAuth` becomes an import.
 5. `chat`.
 6. The build and its renderers.
-7. The backend, if 5.2 says so.
-8. Rewrite the rules and docs that say vanilla JS or JS-off (5.6).
+7. The backend (section 4.3), after a preview test of `.ts` imports on Vercel.
+8. Rewrite the rules and docs that say vanilla JS or JS-off (5.3).
