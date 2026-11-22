@@ -5,17 +5,15 @@ import { config } from "./config.js";
 import { cached } from "./cache.js";
 import { ChangeSet } from "./github.js";
 import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";
+import { ingredientProblems } from "../../shared/recipe.ts";
+import { SECTIONS, SHOP_UNITS, ITEM_ID } from "../../shared/catalogue.ts";
 
 export const CATALOGUE_PATH = "data/ingredients.json";
-/** The shopping list's fixed aisles, in the order the list shows them. */
-export const SECTIONS = ["Fresh produce", "Meat & fish", "Dairy & eggs", "Bakery", "Tins & jars", "Pantry", "Frozen"];
-/** Named recipe units an item can also be bought / counted in. */
-const NAMED = ["clove", "can", "slice", "bunch", "sprig", "piece"];
-export const SHOP_UNITS = ["g", "ml", "count", ...NAMED];
+export { SECTIONS, SHOP_UNITS };
 
 export class CatalogueError extends Error {}
 
-const ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ID_RE = ITEM_ID;
 const ENTRY_KEYS = ["name", "section", "unit", "per", "aliases", "staple", "skip"];
 
 // --- reading and writing ------------------------------------------------------------------------------------------------------
@@ -143,28 +141,10 @@ export const needsConversion = (ing, entry) => !entry.staple && !entry.skip && i
 
 // --- the write-time checks (section 4) ----------------------------------------------------------------------------------------
 
-const TO_TASTE = /\bto (taste|serve)\b/i;
 const positive = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
 
-/** Schema problems with one ingredient (no catalogue needed). */
-export function ingredientSchemaErrors(ing, i) {
-  const where = `ingredients[${i}]${ing?.name ? ` (${ing.name})` : ""}`;
-  const errors = [];
-  if (!ing || typeof ing !== "object") return [`ingredients[${i}]: must be an object`];
-  if (!String(ing.name || "").trim()) errors.push(`${where}: name is empty`);
-  if (/\*/.test(ing.name || "")) errors.push(`${where}: name must be plain text, the page adds the bold`);
-  if (/\*\*/.test(ing.note || "")) errors.push(`${where}: note must not contain bold`);
-  if (ing.unit !== undefined && !UNITS.includes(ing.unit)) errors.push(`${where}: unit "${ing.unit}" isn't one of ${UNITS.join(", ")} (none = a count). Convert it, e.g. oz -> g`);
-  if (ing.amount === undefined || ing.amount === null) {
-    if (!TO_TASTE.test(ing.note || "")) errors.push(`${where}: every ingredient needs an amount, or a note saying "to taste" / "to serve"`);
-    if (ing.unit !== undefined && !["pinch", "handful"].includes(ing.unit)) errors.push(`${where}: a unit needs an amount`);
-  } else if (Array.isArray(ing.amount)) {
-    if (!(ing.amount.length === 2 && positive(ing.amount[0]) && positive(ing.amount[1]) && ing.amount[0] < ing.amount[1])) errors.push(`${where}: a range is [min, max], both positive, min below max`);
-  } else if (!positive(ing.amount)) errors.push(`${where}: amount must be a positive number (decimals, e.g. 0.75), or a range [min, max]`);
-  if (ing.optional !== undefined && typeof ing.optional !== "boolean") errors.push(`${where}: optional is true or left out`);
-  if (ing.item !== undefined && !ID_RE.test(String(ing.item))) errors.push(`${where}: item "${ing.item}" isn't a catalogue id (kebab-case)`);
-  return errors;
-}
+/** Schema problems with one ingredient (no catalogue needed): the rules and messages of shared/recipe.ts, the ones the site's build checks too. */
+export const ingredientSchemaErrors = ingredientProblems;
 
 /** Problems with one ingredient against the catalogue (it resolves, and converts). `ing.item` must be filled. */
 function catalogueErrors(ing, catalogue, where) {

@@ -3,6 +3,7 @@ import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { clearCache } from "../lib/cache.js";
+import { checkEvent } from "./chat-event-check.js";
 
 Object.assign(process.env, {
   GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test",
@@ -45,7 +46,7 @@ let ip = 0;
 const post = (body, token) => chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
 async function events(res) {
   const out = [];
-  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
 const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");

@@ -2,6 +2,6 @@
 import { renderIndex } from "../../templates/index.js";
 import { getRecipes } from "../lib/site-data.ts";
 
-const html = renderIndex(getRecipes());
+const html = renderIndex(await getRecipes());
 ---
 <Fragment set:html={html} />

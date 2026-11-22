@@ -44,7 +44,7 @@ recipes/            source of truth: one .md file per recipe (frontmatter + body
 images/recipes/     source of truth: one hero image per recipe
 data/ingredients.json the ingredient catalogue: one entry per thing we buy (list name, aisle, shopping unit, conversions, aliases); written by the MCP server
 shopping-list.json  the shopping list for next week's recipes, written via the MCP server (.claude/rules/shopping-list.md)
-build.js            reads recipes/*.md (+ shopping-list.json, checks ingredients against data/ingredients.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
+build.js            reads recipes/*.md (+ shopping-list.json; the frontmatter is validated by the zod schema in shared/recipe.ts and every ingredient `item` checked against data/ingredients.json, in src/content.config.ts) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 templates/          build-time renderers (layout, index, next-week, tiles, recipe, ingredients, shopping-list, status) and the browser scripts (.claude/rules/site.md)
 styles/style.css    the one stylesheet, copied verbatim into dist/
 design.md           UI principles: palette tokens, type, the house icon language, shared components

@@ -3,6 +3,7 @@
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
+import { checkEvent } from "./chat-event-check.js";
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
@@ -67,7 +68,7 @@ async function events(res) {
   const out = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) {
     const name = block.match(/^event: (.*)$/m)[1];
-    out.push({ name, data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+    out.push(checkEvent({ name, data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   }
   return out;
 }

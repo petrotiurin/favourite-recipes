@@ -17,7 +17,7 @@ export interface Ingredient {
 /** What the renderers accept: ingredients come from frontmatter or from a model, so the checks below must cope with anything. */
 type Loose = Partial<Ingredient> | null | undefined;
 
-export const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "clove", "can", "slice", "bunch", "sprig", "piece", "sheet", "stick", "head", "pinch", "handful", "juice", "zest"];
+export const UNITS = ["g", "kg", "ml", "l", "tsp", "tbsp", "cup", "clove", "can", "slice", "bunch", "sprig", "piece", "sheet", "stick", "head", "pinch", "handful", "juice", "zest"] as const;
 // Written right after the number: "200g", "1.5l".
 const METRIC = new Set(["g", "kg", "ml", "l"]);
 // "1 clove" / "2 cloves". tsp and tbsp stay as they are.
@@ -135,25 +135,38 @@ export function ingredientGroups<T extends Loose>(ingredients: readonly T[] | nu
   return groups;
 }
 
+/** A problem with a list's sections: which line, and what is wrong (without the line's own name). */
+export interface SectionIssue {
+  index: number;
+  message: string;
+}
+
 /** Problems with a list's sections: a name that is blank or too long, lines without a section after a section, a section split in two. */
-export function sectionErrors(ingredients: readonly Loose[] | null | undefined): string[] {
-  const errors: string[] = [];
+export function sectionIssues(ingredients: readonly Loose[] | null | undefined): SectionIssue[] {
+  const issues: SectionIssue[] = [];
   const seen = new Set<string>();
   let prev: string | undefined;
-  (ingredients || []).forEach((ing, i) => {
+  (ingredients || []).forEach((ing, index) => {
     if (!ing || typeof ing !== "object" || ing.section === undefined) {
-      if (prev) errors.push(`ingredients[${i}]${ing?.name ? ` (${ing.name})` : ""}: lines without a section go first, before "${prev}"; give it a section or move it up`);
+      if (prev) issues.push({ index, message: `lines without a section go first, before "${prev}"; give it a section or move it up` });
       return;
     }
-    const where = `ingredients[${i}]${ing.name ? ` (${ing.name})` : ""}`;
     const name = typeof ing.section === "string" ? ing.section.trim() : "";
-    if (!name) return void errors.push(`${where}: section is a short name ("Sauce") or left out`);
-    if (name.length > 40 || /[*\n]/.test(name)) errors.push(`${where}: section "${name}" must be a short plain name ("Sauce", "For the dressing")`);
-    if (name !== prev && seen.has(name.toLowerCase())) errors.push(`${where}: the "${name}" lines must sit together; move it next to the others`);
+    if (!name) return void issues.push({ index, message: `section is a short name ("Sauce") or left out` });
+    if (name.length > 40 || /[*\n]/.test(name)) issues.push({ index, message: `section "${name}" must be a short plain name ("Sauce", "For the dressing")` });
+    if (name !== prev && seen.has(name.toLowerCase())) issues.push({ index, message: `the "${name}" lines must sit together; move it next to the others` });
     seen.add(name.toLowerCase());
     prev = name;
   });
-  return errors;
+  return issues;
+}
+
+/** `ingredients[3] (soy sauce)`: how a problem names its line. */
+export const ingredientWhere = (ing: Loose, i: number): string => `ingredients[${i}]${ing?.name ? ` (${ing.name})` : ""}`;
+
+/** sectionIssues as one sentence each, "ingredients[3] (soy sauce): …". */
+export function sectionErrors(ingredients: readonly Loose[] | null | undefined): string[] {
+  return sectionIssues(ingredients).map(({ index, message }) => `${ingredientWhere(ingredients![index], index)}: ${message}`);
 }
 
 /** Does the list have any amount the servings selector could rescale? */

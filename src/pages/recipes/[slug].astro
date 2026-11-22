@@ -3,8 +3,8 @@ import { marked } from "marked";
 import { renderRecipe } from "../../../templates/recipe.js";
 import { getRecipes } from "../../lib/site-data.ts";
 
-export function getStaticPaths() {
-  return getRecipes().map((recipe) => ({ params: { slug: recipe.slug }, props: { recipe } }));
+export async function getStaticPaths() {
+  return (await getRecipes()).map((recipe) => ({ params: { slug: recipe.slug }, props: { recipe } }));
 }
 
 const { recipe } = Astro.props;

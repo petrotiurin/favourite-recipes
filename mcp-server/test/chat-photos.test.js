@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 import { randomBytes } from "node:crypto";
 import { clearCache } from "../lib/cache.js";
+import { checkEvent } from "./chat-event-check.js";
 
 Object.assign(process.env, {
   GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test",
@@ -60,7 +61,7 @@ const post = (body, token = "owner-token") =>
 const get = (route, token = "owner-token") => chat.GET(new Request(`https://mcp.test/api/chat?route=${route}`, { headers: { authorization: `Bearer ${token}`, "x-forwarded-for": `198.51.100.${++ip % 250}` } }));
 async function events(res) {
   const out = [];
-  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
 const say = async (message, extra = {}) => {

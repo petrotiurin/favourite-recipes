@@ -2,6 +2,7 @@
 // and only ever point at the site's own origin.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { checkEvent } from "./chat-event-check.js";
 
 process.env.GITHUB_TOKEN = "gh-test";
 process.env.MCP_AUTH_TOKEN = "secret";
@@ -66,7 +67,7 @@ async function turn(turns, content = "hi") {
   scripted = turns;
   const res = await chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${++n}` }, body: JSON.stringify({ messages: [{ role: "user", content }] }) }));
   const out = [];
-  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
 const SITE = "https://site.test/favourite-recipes";

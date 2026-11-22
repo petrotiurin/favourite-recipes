@@ -1,70 +1,37 @@
-// What the pages need from the repo's data files, moved here unchanged from the old build.js (step 1 of
-// docs/typescript-migration.md): the recipes, the check of their ingredients against the catalogue, the shopping list and the
-// stocktake sign-in values. The renderers in templates/ still turn these into HTML.
+// What the pages need from the repo's data files (from the old build.js, step 1 of docs/typescript-migration.md): the recipes (from the
+// collection, checked by its schema), the shopping list and the stocktake sign-in values. The renderers in templates/ still turn these into HTML.
 import fs from "node:fs";
 import path from "node:path";
-import matter from "gray-matter";
-import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";
+import { getCollection } from "astro:content";
+import type { RecipeFrontmatter } from "../../shared/recipe.ts";
 import { loadShoppingList } from "../../shared/shopping-list.ts";
 import { byStatusThenTitle } from "../../templates/status.js";
 
 const ROOT = process.cwd();
-const RECIPES_DIR = path.join(ROOT, "recipes");
 const SHOPPING_LIST_FILE = path.join(ROOT, "shopping-list.json");
-const CATALOGUE_FILE = path.join(ROOT, "data", "ingredients.json");
 
-/** A recipe as the renderers read it: its frontmatter plus `body` (the Markdown) and `file`. */
-export type Recipe = Record<string, any> & { slug: string; title: string; body: string; file: string };
-
-function loadRecipes(): Recipe[] {
-  const files = fs.readdirSync(RECIPES_DIR).filter((f) => f.endsWith(".md"));
-  return files.map((file) => {
-    const raw = fs.readFileSync(path.join(RECIPES_DIR, file), "utf8");
-    const { data, content } = matter(raw);
-    if (!data.title || !data.slug || !data.image || !data.total_mins || !data.serves || !data.calories) {
-      throw new Error(`Recipe ${file} is missing required frontmatter (title, slug, image, total_mins, serves, calories)`);
-    }
-    return { ...data, body: content, file } as Recipe;
-  });
-}
-
-/**
- * Every recipe's ingredients are data (docs/structured-ingredients.md): check each one has a known unit and points at an item in the ingredient
- * catalogue (data/ingredients.json), so a recipe added by hand with a typo fails the build instead of making a wrong shopping list. The MCP
- * server checks the rest (names, conversions) when it writes a recipe.
- */
-function checkIngredients(recipes: Recipe[]) {
-  const catalogue = fs.existsSync(CATALOGUE_FILE) ? JSON.parse(fs.readFileSync(CATALOGUE_FILE, "utf8")) : {};
-  const errors: string[] = [];
-  for (const r of recipes) {
-    if (r.ingredients === undefined) {
-      errors.push(`${r.file}: no \`ingredients\` in the frontmatter (use \`ingredients: []\` when they aren't recorded yet)`);
-      continue;
-    }
-    if (!Array.isArray(r.ingredients)) {
-      errors.push(`${r.file}: \`ingredients\` must be a list`);
-      continue;
-    }
-    if (/^##\s+Ingredients\b/im.test(r.body)) errors.push(`${r.file}: the ingredients live in the frontmatter now; remove the "## Ingredients" section`);
-    r.ingredients.forEach((ing: any, i: number) => {
-      const where = `${r.file}: ingredients[${i}]${ing && ing.name ? ` (${ing.name})` : ""}`;
-      if (!ing || typeof ing !== "object" || !String(ing.name || "").trim()) errors.push(`${where}: needs a name`);
-      else if (!ing.item) errors.push(`${where}: no \`item\` (the catalogue id it's bought as)`);
-      else if (!catalogue[ing.item]) errors.push(`${where}: item "${ing.item}" isn't in data/ingredients.json`);
-      if (ing && ing.unit !== undefined && !UNITS.includes(ing.unit)) errors.push(`${where}: unit "${ing.unit}" isn't one of ${UNITS.join(", ")}`);
-    });
-    for (const e of sectionErrors(r.ingredients)) errors.push(`${r.file}: ${e}`);
-  }
-  if (errors.length) throw new Error(`Recipe ingredients don't check out:\n- ${errors.join("\n- ")}`);
-}
+/** A recipe as the renderers read it: its frontmatter (validated by the recipes collection, src/content.config.ts) plus `body` (the Markdown) and `file`. */
+export type Recipe = RecipeFrontmatter & { body: string; file: string };
 
 let cached: Recipe[] | undefined;
 
-/** All recipes, checked, this week first (drafts first), then the rest; alphabetical within each group. */
-export function getRecipes(): Recipe[] {
+/**
+ * All recipes, this week first (drafts first), then the rest; alphabetical within each group. Their frontmatter was checked by the
+ * collection's schema and the catalogue when it loaded (a recipe that breaks either fails the build); the body is checked here: the
+ * ingredients live in the frontmatter, so no "## Ingredients" section may be left in it.
+ */
+export async function getRecipes(): Promise<Recipe[]> {
   if (!cached) {
-    cached = loadRecipes().sort(byStatusThenTitle);
-    checkIngredients(cached);
+    const entries = await getCollection("recipes");
+    const errors: string[] = [];
+    const recipes = entries.map((entry) => {
+      const file = path.basename(entry.filePath ?? `${entry.id}.md`);
+      const body = entry.body ?? "";
+      if (/^##\s+Ingredients\b/im.test(body)) errors.push(`${file}: the ingredients live in the frontmatter now; remove the "## Ingredients" section`);
+      return { ...entry.data, body, file } as Recipe;
+    });
+    if (errors.length) throw new Error(`Recipe bodies don't check out:\n- ${errors.join("\n- ")}`);
+    cached = recipes.sort(byStatusThenTitle);
   }
   return cached;
 }

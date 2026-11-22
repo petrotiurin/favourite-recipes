@@ -1,7 +1,8 @@
 import matter from "gray-matter";
+import { recipeFrontmatterSchema } from "../../shared/recipe.ts";
 
-// Formatting rules mirror .claude/skills/add-recipe/SKILL.md and the
-// frontmatter schema in the root CLAUDE.md. Keep them in sync.
+// How a recipe file is written. The fields and their order are shared/recipe.ts's schema (the site's build validates with it); the prose
+// rules of .claude/skills/add-recipe/SKILL.md are the one thing still kept in step by hand.
 
 export function slugify(title) {
   return title
@@ -36,7 +37,7 @@ function yamlFlowValue(v) {
 const yamlFlowMap = (obj) => `{ ${Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${k}: ${yamlFlowValue(v)}`).join(", ")} }`;
 
 // `ingredients` goes last: it is the long one (docs/structured-ingredients.md section 1).
-const KEY_ORDER = ["title", "slug", "image", "course", "tags", "total_mins", "serves", "calories", "scalable", "current", "next", "draft", "ingredients"];
+const KEY_ORDER = Object.keys(recipeFrontmatterSchema.shape);
 
 export function renderFrontmatter(data) {
   const keys = [...KEY_ORDER.filter((k) => k in data && k !== "ingredients"), ...Object.keys(data).filter((k) => !KEY_ORDER.includes(k)), ...("ingredients" in data ? ["ingredients"] : [])];

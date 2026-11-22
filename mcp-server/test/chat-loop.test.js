@@ -1,6 +1,7 @@
 // The agent loop's guards: no repeated text within a turn, thinking never shown, a turn never ends in silence, provider errors made friendly.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { checkEvent } from "./chat-event-check.js";
 
 Object.assign(process.env, { GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", EDITORS: "owner@example.com", OPENROUTER_CHAT_PUBLIC_KEY: "or-public-test", CHAT_PUBLIC_MODEL: "test/model", CHAT_PUBLIC_HOURLY_LIMIT: "1000", CHAT_PUBLIC_DAILY_LIMIT: "1000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000" });
 const { createFakeGitHub, createFakeSupabase } = await import("../scripts/fakes.js");
@@ -57,7 +58,7 @@ async function turn(turns, content = "hi") {
   scripted = turns;
   const res = await chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${++n % 250}` }, body: JSON.stringify({ messages: [{ role: "user", content }] }) }));
   const out = [];
-  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
 const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");

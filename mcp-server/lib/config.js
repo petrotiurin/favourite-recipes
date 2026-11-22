@@ -1,4 +1,5 @@
 // All configuration comes from Vercel environment variables.
+import { COURSES } from "../../shared/recipe.ts";
 export const config = {
   githubToken: process.env.GITHUB_TOKEN,
   repo: process.env.GITHUB_REPO || "petrotiurin/favourite-recipes",
@@ -90,7 +91,7 @@ export function assertChatConfigured() {
 }
 
 export const SHOPPING_LIST_PATH = "shopping-list.json";
-export const COURSES = ["Breakfast", "Lunch", "Dinner", "Snack", "Drink"];
+export { COURSES };
 export const MAX_IMAGE_EDGE = 1600;
 export const CARD_ASPECT = 4 / 3; // the index tiles crop to 4:3 (styles/style.css)
 

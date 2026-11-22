@@ -7,8 +7,9 @@ Settings, routes and deploys are in `README.md`; the chat's design is in `../doc
 - It serves the MCP tools for agents (`/mcp`: add/edit recipes by committing `recipes/*.md` and `images/recipes/*` to `main`),
   `/stocktake` and `/chat` for the site. It never ships anything into `dist/`.
 - Every write is a commit to `main` and every commit is a site deploy, so writes are batched (`batch_changes`, one Save per tray).
-- It holds the validation rules: its tools mirror the `add-recipe` skill rules in `lib/recipe-format.js` (keep the two in sync if
-  the format changes).
+- It holds the validation rules. A recipe's fields and ingredient rules are the zod schemas in `../shared/recipe.ts` (the site's build
+  validates every recipe with the same ones): the tools take their ingredient fields from there and `lib/catalogue.js` reports its problems
+  with their messages. `lib/recipe-format.js` is how the file is written. The `add-recipe` skill's prose is the part kept in step by hand.
 - **One tool registry, one dispatcher**: every tool is defined once in `lib/tools.js` (name, description, zod schema,
   `access: "read" | "stage" | "write"`, handler) and every call, MCP or chat, goes through `dispatch(name, args, caller)`, which
   checks `caller.role` (`public` may only run `read`; `editor` and `agent` run all; a tool with no `access` counts as `write`).

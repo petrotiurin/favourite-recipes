@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork) and 2 (`shared/`) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`) and 3 (schemas) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -246,7 +246,7 @@ step.
    scripts are served as they are. The same site, built by Astro. The checks marked "to check in step 1" (4.1, 4.4).
 2. **`shared/`** (done): the kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
    gets `../shared`; `.claude/rules/kept-in-step.md` shrunk (deleted at steps 6, 7 and 10).
-3. **Schemas:** the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
+3. **Schemas** (done): the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
    recipe format uses them.
 4. **Pages and components:** layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
@@ -298,3 +298,33 @@ step.
   `shared/test/` (Vitest, in the root config, so `npm run build` runs them); the backend keeps the catalogue and site-build tests.
 - **Not checked: Vercel with `.ts` imports from `.js` functions** (4.10). `api/*.js` now import `../../shared/*.ts` through `lib/`.
   `node --test` is fine on Node 24, a Vercel preview is the open check before this branch is relied on.
+
+### Step 3 as built
+
+- **`shared/`** (zod `^4.6.7`, declared in `shared/package.json` and the root; `z.infer` types exported): `recipe.ts` (`ingredientObject` = the fields with the
+  agent-facing descriptions and refusal messages; `ingredientSchema` / `storedIngredientSchema` = those plus the whole-line rules; `ingredientProblems(ing, i)` =
+  the strings a write is refused with; `recipeFrontmatterSchema`; `COURSES`), `catalogue.ts` (`catalogueSchema`, `SECTIONS`, `SHOP_UNITS`), `shopping-list.ts`
+  (`shoppingListSchema`; `amounts` values may be `null`, as in the real file), `page-context.ts` (`pageContextSchema` = what the layout embeds, `chatPageSchema` =
+  the `page` the chat sends), `chat-events.ts` (`chatEventData` by event name, `chatEventSchema` for `emit({ type, ...data })`). `ingredient-line.ts` gained
+  `sectionIssues` (structured) and `UNITS` is now `as const`. Tests: `shared/test/schemas.test.ts` (every recipe, the catalogue and
+  `shopping-list.json` validate; the messages; the layout's page context; one sample per chat event). The backend's chat tests also check every event
+  they read against `chatEventData` (strict), which found two undocumented bits of the wire: `tray` carries an optional `label` and sometimes no `added`.
+- **The site:** `src/content.config.ts` is the recipes collection (glob `recipes/*.md`, `recipeFrontmatterSchema` + every ingredient `item` in the catalogue, the
+  catalogue itself checked against `catalogueSchema`). A bad recipe fails `astro build` naming the file and the field (`InvalidContentEntryDataError`:
+  `ingredients.0.item: rice: item "no-such-thing" isn't in data/ingredients.json`). Astro shows the first failing recipe only. `src/lib/site-data.ts`
+  gets recipes from `getCollection` (async now; pages `await` it) and keeps one body check (no `## Ingredients` heading); `checkIngredients` and the
+  frontmatter check are gone. `dist/` is byte-identical to the build of the commit before.
+- **The backend** is on zod 4 (`zod-to-json-schema` removed; `z.toJSONSchema(..., { target: "draft-7", io: "input" })` for the chat's function tools;
+  `@modelcontextprotocol/sdk` 1.31 already takes zod 4 shapes, no upgrade). Its tools' ingredient input is `ingredientObject`;
+  `ingredientSchemaErrors` in `lib/catalogue.js` is `ingredientProblems` (checked against the old function on 40,000 random ingredients: same messages, same
+  order); `KEY_ORDER` in `lib/recipe-format.js` is the schema's key order. `COURSES`, `SECTIONS`, `SHOP_UNITS` live in `shared/`.
+- **Differences, on purpose:** a tool call with a bad ingredient is now refused at the argument check with the specific message
+  ("ingredients.0.unit: unit \"oz\" isn't one of …") instead of zod's generic one; `optional: false` is refused in a tool call as before but accepted in a
+  file (as before); a non-string `item` is refused. The tool listings (`tools/list` and the chat's function definitions) are equivalent but not identical:
+  no `additionalProperties: false` (zod 4's input mode doesn't write it; unknown keys are still stripped), `maximum: 9007199254740991` on integers,
+  `propertyNames` on records, `oneOf` for `batch_changes`' discriminated union, repeated schemas inlined instead of `$ref`.
+- **Not checked: zod on Vercel.** `shared/*.ts` now import `zod`. Node resolves it from `shared/` upwards (locally the root `node_modules`), but the backend's
+  deploy installs only `mcp-server/`'s dependencies, so on Vercel `import "zod"` from `shared/` has nowhere to resolve. A preview deploy is needed
+  before this is relied on; the likely fixes are `installCommand` in `mcp-server/vercel.json` that also installs `../shared` (it has the dependency declared),
+  or an npm workspace at the repo root. Not changed here.
+- Still by hand: the prose of the `add-recipe` skill and the root `CLAUDE.md` schema (step 10; `kept-in-step.md` says so).

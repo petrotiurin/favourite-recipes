@@ -3,33 +3,36 @@
 // its own need() until it becomes an island (docs/typescript-migration.md step 7); shared/test/shopping-list.test.ts checks it against
 // neededAmount here.
 
+import { z } from "zod";
+
 // Every quantity on the list is written for BASE_SERVINGS of each recipe; the page and the backend rescale from it. The list's `servings`
 // plans each recipe (set by the agent), and a recipe without a plan gets DEFAULT_SERVINGS.
 export const BASE_SERVINGS = 2;
 export const DEFAULT_SERVINGS = 4;
 
-export interface ShoppingItem {
-  name: string;
-  quantity?: string;
-  note?: string;
+export const shoppingItemSchema = z.object({
+  name: z.string(),
+  quantity: z.string().optional(),
+  note: z.string().optional(),
   /** Slugs of the next-week recipes the item is for. */
-  recipes?: string[];
-  /** slug -> how much of `quantity` (2 servings) that recipe needs, for an item with several recipes. */
-  amounts?: Record<string, number> | null;
+  recipes: z.array(z.string()).optional(),
+  /** slug -> how much of `quantity` (2 servings) that recipe needs, for an item with several recipes; null for one that only seasons it ("to taste"). */
+  amounts: z.record(z.string(), z.number().nullable()).nullable().optional(),
   /** At home: true (enough) or how much (in the item's unit), from the stocktake. */
-  have?: boolean | number;
-}
-export interface ShoppingSection {
-  name: string;
-  items: ShoppingItem[];
-}
-export interface ShoppingList {
-  updated?: string;
-  recipes?: string[];
-  servings?: Record<string, number>;
-  stocktake?: string;
-  sections: ShoppingSection[];
-}
+  have: z.union([z.boolean(), z.number()]).optional(),
+});
+export const shoppingSectionSchema = z.object({ name: z.string(), items: z.array(shoppingItemSchema) });
+export const shoppingListSchema = z.object({
+  updated: z.string().optional(),
+  recipes: z.array(z.string()).optional(),
+  /** The plan: slug -> how many people each recipe is cooked for. */
+  servings: z.record(z.string(), z.number()).optional(),
+  stocktake: z.string().optional(),
+  sections: z.array(shoppingSectionSchema),
+});
+export type ShoppingItem = z.infer<typeof shoppingItemSchema>;
+export type ShoppingSection = z.infer<typeof shoppingSectionSchema>;
+export type ShoppingList = z.infer<typeof shoppingListSchema>;
 /** slug -> planned servings. */
 export type Plan = Record<string, number>;
 
@@ -71,7 +74,7 @@ export function neededAmount(item: Pick<ShoppingItem, "quantity" | "amounts" | "
   const q = parseQuantity(item.quantity);
   if (!q) return null;
   const servingsOf = (slug: string) => plan[slug] || DEFAULT_SERVINGS;
-  if (item.amounts) return Object.entries(item.amounts).reduce((n, [slug, a]) => n + (a * servingsOf(slug)) / BASE_SERVINGS, 0);
+  if (item.amounts) return Object.entries(item.amounts).reduce((n, [slug, a]) => n + ((a ?? 0) * servingsOf(slug)) / BASE_SERVINGS, 0);
   const slugs = item.recipes?.length ? item.recipes : Object.keys(plan);
   const mean = slugs.length ? slugs.reduce((n, slug) => n + servingsOf(slug), 0) / slugs.length : DEFAULT_SERVINGS;
   return (q.amount * mean) / BASE_SERVINGS;

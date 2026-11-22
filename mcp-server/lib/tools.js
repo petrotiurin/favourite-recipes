@@ -2,14 +2,14 @@
 // once, with the access level it needs, and every call goes through dispatch(), which checks the caller's role
 // before the handler runs. lib/server.js (MCP) and, later, api/chat.js both consume it.
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { COURSES, config } from "./config.js";
 import { createUploadToken } from "./auth.js";
 import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { readPage, formatPage } from "./page-reader.js";
-import { UNITS, scaledMarkdown, ingredientMarkdown, ingredientGroups } from "../../shared/ingredient-line.ts";
+import { scaledMarkdown, ingredientMarkdown, ingredientGroups } from "../../shared/ingredient-line.ts";
+import { ingredientObject } from "../../shared/recipe.ts";
 import { SECTIONS, SHOP_UNITS } from "./catalogue.js";
 import { ingredientsOf } from "./recipe-format.js";
 import { recipesFromHome } from "./at-home.js";
@@ -60,25 +60,8 @@ import {
 /** A recipe's ingredient lines as Markdown list rows, with a "Sauce:" line above each section's rows. */
 const grouped = (ingredients, line) => ingredientGroups(ingredients).flatMap((g) => [...(g.section ? [`${g.section}:`] : []), ...g.items.map((i) => `- ${line(i)}`)]);
 
-const ingredientSchema = z.object({
-  amount: z
-    .union([z.number().positive(), z.tuple([z.number().positive(), z.number().positive()])])
-    .optional()
-    .describe('A number (decimals: 0.75, not ¾) or a range [min, max], e.g. 200, 0.5, [2, 3]. Omit only for "to taste" / "to serve" (say so in the note).'),
-  unit: z
-    .enum(UNITS)
-    .optional()
-    .describe('One measure per ingredient, metric where the source gives it ("1 cup (200g)" -> 200 g). None = a count ("4 salmon fillets"). juice / zest: "juice of 1 lime" -> amount 1, unit juice, name lime.'),
-  name: z.string().min(1).describe('What the recipe calls it, plain text (no asterisks), e.g. "jasmine rice". Bolded on the page.'),
-  note: z.string().optional().describe('Prep or buying detail after the name, e.g. "finely diced", "about 140g each", "to taste". A split goes here ("1½ tbsp for the salmon, ½ for the pan").'),
-  optional: z.literal(true).optional().describe("Garnishes and extras (\"to serve, optional\", \"if using\"). Shown as \", optional\"."),
-  section: z
-    .string()
-    .max(40)
-    .optional()
-    .describe('Which part of the dish it is for, when the recipe has parts ("Curry sauce", "Pickle", "Marinade"). Shown as a small heading above its lines. Lines of one section sit together, lines without one go first; leave it out on every line when the recipe is one thing. One ingredient used in two parts is two lines, one per section (not a "split" note).'),
-  item: z.string().optional().describe("The catalogue item it's bought as (e.g. \"spring-onion\"). Leave it out: the server fills it from the name. Set it when a problem asks you to."),
-});
+// The ingredient's fields (types, descriptions, messages) are shared/recipe.ts's: the site's build checks the same rules.
+const ingredientSchema = ingredientObject;
 
 const catalogueChangeSchema = z
   .object({
@@ -1252,7 +1235,7 @@ export async function dispatch(name, args, caller, ctx = {}) {
  */
 export function toolDefinitions(role) {
   return TOOLS.filter((t) => roleMay(role, accessOf(t)) && (!t.editorOnly || role === "editor")).map((t) => {
-    const { $schema, ...parameters } = zodToJsonSchema(z.object(t.inputSchema), { target: "jsonSchema7", $refStrategy: "none" });
+    const { $schema, ...parameters } = z.toJSONSchema(z.object(t.inputSchema), { target: "draft-7", io: "input", unrepresentable: "any" });
     return { type: "function", function: { name: t.name, description: t.description, parameters } };
   });
 }
