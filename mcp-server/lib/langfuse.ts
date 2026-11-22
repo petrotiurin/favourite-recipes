@@ -22,7 +22,10 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { propagateAttributes, setLangfuseTracerProvider, startObservation } from "@langfuse/tracing";
 import { LangfuseClient } from "@langfuse/client";
+import type { SpanExporter } from "@opentelemetry/sdk-trace-base";
 import { config } from "./config.ts";
+import { errorMessage } from "./errors.ts";
+import type { GenerationEnd, GenerationStart, Observation, OpenRouterUsage, SpanEnd, SpanStart, Trace, TraceEvent, TraceOptions } from "./types/chat.ts";
 
 const MAX_TEXT = 40_000; // per string: as much as the model itself is given (the system prompt, the largest tool result), no more
 
@@ -31,7 +34,8 @@ export const langfuseEnabled = () => !!(config.langfusePublicKey && config.langf
 const DATA_URI = /^data:[\w/+.-]+;base64,/;
 
 /** Long strings are cut so one tool result can't bloat a trace. Photos (base64 data URIs) are kept whole: the SDK uploads them as media. */
-export function clip(value: any, max = MAX_TEXT): any {
+export function clip<T>(value: T, max?: number): T; // the same shape comes back: only the strings inside are shorter
+export function clip(value: unknown, max = MAX_TEXT): unknown {
   if (typeof value === "string" && DATA_URI.test(value)) return value;
   if (typeof value === "string") return value.length > max ? `${value.slice(0, max)}… [${value.length - max} more characters]` : value;
   if (Array.isArray(value)) return value.map((v) => clip(v, max));
@@ -47,12 +51,12 @@ const BEARER = /\bBearer\s+[\w.~+/-]{12,}=*/gi;
 const KEYS = /\b(?:sk-or-v1-[0-9a-f]{16,}|sk-lf-[\w-]{8,}|ghp_[A-Za-z0-9]{20,}|github_pat_\w{20,})/g;
 
 /** Redacts emails, bearer tokens, JWTs and API keys in a string. */
-export function maskText(text: any) {
+export function maskText(text: string): string {
   return text.replace(JWT, "[token]").replace(BEARER, "Bearer [token]").replace(KEYS, "[key]").replace(EMAIL, "[email]");
 }
 
 /** The span processor's mask: runs on every observation's input, output and metadata before export (data may be any JSON value). */
-export function mask({ data }: any) {
+export function mask({ data }: { data: unknown }): unknown {
   if (typeof data === "string") return maskText(data);
   if (data && typeof data === "object") {
     const json = JSON.stringify(data);
@@ -64,16 +68,16 @@ export function mask({ data }: any) {
 
 // --- SDK setup (lazy: config is read when tracing is first used, and again if the keys change) ----------------------------------
 
-let state: any = null; // { key, processor, client }
-let testExporter: any = null;
+let state: { key: string; processor: LangfuseSpanProcessor; client: LangfuseClient } | null = null;
+let testExporter: SpanExporter | null = null;
 let contextReady = false;
 let warned = false;
-const pending = new Set(); // flushes in flight, so tests (and shutdown) can wait for them
+const pending = new Set<Promise<unknown>>(); // flushes in flight, so tests (and shutdown) can wait for them
 
-const warnOnce = (what: any, err: any) => {
+const warnOnce = (what: string, err: unknown) => {
   if (warned) return;
   warned = true;
-  console.warn(`Langfuse ${what} failed (further failures are not logged): ${err?.message || err}`);
+  console.warn(`Langfuse ${what} failed (further failures are not logged): ${(err && typeof err === "object" && "message" in err && err.message) || err}`);
 };
 
 /** The deployment's environment and release, so preview and local traces stay out of production dashboards. */
@@ -83,7 +87,7 @@ function environment() {
 }
 const release = () => process.env.LANGFUSE_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) || undefined;
 
-function sdk() {
+function sdk(): NonNullable<typeof state> {
   const key = `${config.langfuseBaseUrl}|${config.langfusePublicKey}|${config.langfuseSecretKey}|${testExporter ? "test" : ""}`;
   if (state?.key === key) return state;
   // Child observations are created inside context.with(...) so they pick up the propagated trace attributes: that needs a real
@@ -104,19 +108,21 @@ function sdk() {
   const provider = new BasicTracerProvider({ resource: resourceFromAttributes({ "service.name": "favourite-recipes-mcp" }), spanProcessors: [processor] });
   setLangfuseTracerProvider(provider); // isolated: never the global provider
   const old = state;
-  state = { key, processor, client: new LangfuseClient(credentials) };
+  const fresh = { key, processor, client: new LangfuseClient(credentials) };
+  state = fresh;
   old?.processor.shutdown().catch(() => {});
-  return state;
+  return fresh;
 }
 
 /** Test hook: export spans to this exporter (e.g. an InMemorySpanExporter) instead of Langfuse. null goes back to the real one. */
-export function useTestExporter(exporter: any) {
+export function useTestExporter(exporter: SpanExporter | null) {
   testExporter = exporter;
   state = null;
 }
 
-let waitUntilFn: any; // @vercel/functions' waitUntil, if it can be loaded
-async function loadWaitUntil() {
+type WaitUntil = (promise: Promise<unknown>) => void;
+let waitUntilFn: WaitUntil | null | undefined; // @vercel/functions' waitUntil, if it can be loaded
+async function loadWaitUntil(): Promise<WaitUntil | null> {
   if (waitUntilFn !== undefined) return waitUntilFn;
   try {
     waitUntilFn = (await import("@vercel/functions")).waitUntil;
@@ -129,7 +135,7 @@ async function loadWaitUntil() {
 /** Exports everything finished so far; never throws. Kept alive with waitUntil on Vercel. */
 function flushSoon() {
   if (!state) return;
-  const flushing = state.processor.forceFlush().catch((err: any) => warnOnce("export", err));
+  const flushing = state.processor.forceFlush().catch((err: unknown) => warnOnce("export", err));
   pending.add(flushing);
   flushing.finally(() => pending.delete(flushing));
   loadWaitUntil().then((waitUntil) => waitUntil?.(flushing)).catch(() => {});
@@ -141,7 +147,7 @@ export const idle = () => Promise.allSettled([...pending]);
 // --- traces ------------------------------------------------------------------------------------------------------------------------
 
 const NOOP_OBS = { end() {} };
-const NOOP = {
+const NOOP: Trace = {
   enabled: false,
   traceId: undefined,
   generation: () => NOOP_OBS,
@@ -150,23 +156,31 @@ const NOOP = {
   finish() {},
 };
 
-const OPENAI_USAGE_DETAILS = { prompt_tokens_details: ["cached_tokens", "audio_tokens"], completion_tokens_details: ["reasoning_tokens", "audio_tokens"] };
+const OPENAI_USAGE_DETAILS = { prompt_tokens_details: ["cached_tokens", "audio_tokens"], completion_tokens_details: ["reasoning_tokens", "audio_tokens"] } as const;
 
 /**
  * OpenRouter's usage in Langfuse's OpenAI usage schema (only the OpenAI keys: an extra key such as `cost` would turn off the mapping
  * and the cached / reasoning subtraction), plus the real charged cost as costDetails.
  */
-export function usageFor(usage: any) {
+export function usageFor(usage: OpenRouterUsage | null | undefined) {
   if (!usage || typeof usage !== "object") return {};
-  const usageDetails: Record<string, any> = {};
-  for (const k of ["prompt_tokens", "completion_tokens", "total_tokens"]) if (Number.isFinite(usage[k])) usageDetails[k] = usage[k];
-  for (const [group, keys] of Object.entries(OPENAI_USAGE_DETAILS)) {
-    const picked = Object.fromEntries(keys.filter((k) => Number.isFinite(usage[group]?.[k]) && usage[group][k] > 0).map((k) => [k, usage[group][k]]));
+  const usageDetails: Record<string, number | Record<string, number>> = {};
+  for (const k of ["prompt_tokens", "completion_tokens", "total_tokens"] as const) {
+    const v = usage[k];
+    if (typeof v === "number" && Number.isFinite(v)) usageDetails[k] = v;
+  }
+  for (const group of ["prompt_tokens_details", "completion_tokens_details"] as const) {
+    const details: Record<string, number | undefined> | undefined = usage[group];
+    const picked: Record<string, number> = {};
+    for (const k of OPENAI_USAGE_DETAILS[group]) {
+      const v = details?.[k];
+      if (typeof v === "number" && Number.isFinite(v) && v > 0) picked[k] = v;
+    }
     if (Object.keys(picked).length) usageDetails[group] = picked;
   }
   return {
     usageDetails: Object.keys(usageDetails).length ? usageDetails : undefined,
-    costDetails: Number.isFinite(usage.cost) ? { total: usage.cost } : undefined,
+    costDetails: typeof usage.cost === "number" && Number.isFinite(usage.cost) ? { total: usage.cost } : undefined,
   };
 }
 
@@ -175,7 +189,7 @@ export function usageFor(usage: any) {
  * off, and nothing here ever throws. finish() ends the root observation and flushes in the background.
  * opts: { name, sessionId, userId, tags, version, metadata, input }
  */
-export function startTrace(opts: any = {}) {
+export function startTrace(opts: TraceOptions = {}): Trace {
   if (!langfuseEnabled()) return NOOP;
   try {
     sdk();
@@ -185,13 +199,12 @@ export function startTrace(opts: any = {}) {
       { traceName: name, userId: opts.userId, sessionId: opts.sessionId, tags: opts.tags, version: opts.version },
       () => context.active()
     );
-    const inTrace = (fn: any) => context.with(ctx, fn);
+    const inTrace = <T>(fn: () => T): T => context.with(ctx, fn);
     const root = inTrace(() => startObservation(name, { input: clip(opts.input), metadata: clip(opts.metadata) }, { asType: "agent" }));
-    const child = (childName: any, attributes: any, asType: any) => inTrace(() => root.startObservation(childName, attributes, { asType }));
-    const safe = (fn: any) => {
+    const safe = <T>(fn: () => T): T | typeof NOOP_OBS => {
       try {
         return fn();
-      } catch (err: any) {
+      } catch (err) {
         warnOnce("tracing", err);
         return NOOP_OBS;
       }
@@ -205,11 +218,11 @@ export function startTrace(opts: any = {}) {
        * A model call. input: the messages it was sent. end({ output, usage (OpenRouter's), finishReason, error, completionStartTime }).
        * output: an OpenAI-style assistant message ({ role, content, tool_calls, reasoning }) or plain text.
        */
-      generation({ name: genName, model, input, modelParameters, metadata }: any) {
+      generation({ name: genName, model, input, modelParameters, metadata }: GenerationStart): Observation<GenerationEnd> {
         return safe(() => {
-          const gen = child(genName, { model, input: clip(input), modelParameters, metadata: clip(metadata) }, "generation");
+          const gen = inTrace(() => root.startObservation(genName, { model, input: clip(input), modelParameters, metadata: clip(metadata) }, { asType: "generation" }));
           return {
-            end({ output, usage, finishReason, error, completionStartTime, metadata: extra }: any = {}) {
+            end({ output, usage, finishReason, error, completionStartTime, metadata: extra }: GenerationEnd = {}) {
               safe(() =>
                 gen
                   .update({
@@ -227,11 +240,12 @@ export function startTrace(opts: any = {}) {
         });
       },
       /** A tool call. type: "tool" (default) or "retriever" (a lookup). end({ output, error, refused }). */
-      span({ name: spanName, input, metadata, type = "tool" }: any) {
+      span({ name: spanName, input, metadata, type = "tool" }: SpanStart): Observation<SpanEnd> {
         return safe(() => {
-          const obs = child(spanName, { input: clip(input), metadata: clip(metadata) }, type);
+          const attributes = { input: clip(input), metadata: clip(metadata) };
+          const obs = inTrace(() => (type === "retriever" ? root.startObservation(spanName, attributes, { asType: "retriever" }) : root.startObservation(spanName, attributes, { asType: "tool" })));
           return {
-            end({ output, error, refused }: any = {}) {
+            end({ output, error, refused }: SpanEnd = {}) {
               safe(() =>
                 obs
                   .update({
@@ -247,18 +261,18 @@ export function startTrace(opts: any = {}) {
         });
       },
       /** A point-in-time event: rate-limit hits, out-of-credit, tray changes. */
-      event({ name: eventName, metadata, level = "DEFAULT" }: any) {
-        safe(() => child(eventName, { metadata: clip(metadata), level }, "event"));
+      event({ name: eventName, metadata, level = "DEFAULT" }: TraceEvent) {
+        safe(() => inTrace(() => root.startObservation(eventName, { metadata: clip(metadata), level: level === "WARNING" || level === "ERROR" ? level : "DEFAULT" }, { asType: "event" })));
       },
       /** Ends the trace. metadata: what else the user was shown (cards, chips, a question), next to the text output. */
-      finish(output: any, metadata?: any) {
+      finish(output?: unknown, metadata?: Record<string, unknown>) {
         if (finished) return;
         finished = true;
         safe(() => root.update({ output: clip(output), ...(metadata ? { metadata: clip(metadata) } : {}) }).end());
         flushSoon();
       },
     };
-  } catch (err: any) {
+  } catch (err) {
     warnOnce("tracing", err);
     return NOOP;
   }
@@ -274,7 +288,7 @@ function client() {
  * Records (or overwrites) the score `user-feedback` on a trace: 1 = up, 0 = down. The id is fixed per turn, so sending it again
  * replaces the earlier score. Resolves true when Langfuse accepted it; false when tracing is off or Langfuse failed (never throws).
  */
-export async function setScore({ id, traceId, value, comment }: any) {
+export async function setScore({ id, traceId, value, comment }: { id: string; traceId: string | null | undefined; value: number; comment?: string }): Promise<boolean> {
   const lf = client();
   if (!lf || !traceId) return false;
   try {
@@ -283,22 +297,22 @@ export async function setScore({ id, traceId, value, comment }: any) {
     ]);
     if (res && "rejected" in res && res.rejected > 0) throw new Error(JSON.stringify(res.errors).slice(0, 300));
     return true;
-  } catch (err: any) {
-    console.warn(`Langfuse score failed: ${err.message}`);
+  } catch (err) {
+    console.warn(`Langfuse score failed: ${errorMessage(err)}`);
     return false;
   }
 }
 
 /** Deletes a score set with setScore (the editor took their thumb back). Never throws. */
-export async function deleteScore(id: any) {
+export async function deleteScore(id: string): Promise<boolean> {
   const lf = client();
   if (!lf) return false;
   try {
     await lf.api.scores.delete(id);
     return true;
-  } catch (err: any) {
-    if (err?.statusCode === 404) return true;
-    console.warn(`Langfuse score delete failed: ${err.message}`);
+  } catch (err) {
+    if (err && typeof err === "object" && "statusCode" in err && err.statusCode === 404) return true;
+    console.warn(`Langfuse score delete failed: ${errorMessage(err)}`);
     return false;
   }
 }

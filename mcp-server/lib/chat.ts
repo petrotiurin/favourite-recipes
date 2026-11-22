@@ -11,7 +11,32 @@ import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION
 import { optionalCard } from "./optional-review.ts";
 import { thisWeeksDrafts, reviewCard } from "./draft-review.ts";
 import { trayAction, trayView, loadTray, finaliseState } from "./tray.ts";
-import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion } from "./chat-ui.ts";
+import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion, isRecord, optionalWire, errorName } from "./chat-ui.ts";
+import type { Book } from "./chat-ui.ts";
+import { errorMessage, errorStatus } from "./errors.ts";
+import type { Role } from "./types/common.ts";
+import type { MessageUi, ToolCall } from "./types/rows.ts";
+import type {
+  ChatEvent,
+  ChatEventDataMap,
+  ChatMessage,
+  ChatToolContext,
+  CompletionRequest,
+  CompletionResult,
+  ContentPart,
+  CutReason,
+  HistoryMessage,
+  ModelToolCall,
+  PageState,
+  RunChatOptions,
+  RunChatResult,
+  StreamChunk,
+  Suggestion,
+  ToolChoice,
+  ToolDefinition,
+  ToolOutput,
+  TurnMessage,
+} from "./types/chat.ts";
 
 export const MAX_TURNS = 20; // messages kept from the client's history
 export const MAX_USER_CHARS = 2000;
@@ -28,20 +53,20 @@ export const MAX_RESULT_CHARS_PER_TURN = 80_000; // total tool-result text added
 const TEMPERATURE = 0.4;
 
 // --- Langfuse (design 8.1): how a turn's steps show up in a trace ---------------------------------------------------------------
-const TOOL_BY_NAME = new Map<any, any>(TOOLS.map((t) => [t.name, t]));
+const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 // Read tools that only look something up are retrievers; everything else (stage tools, the tray, the UI tools, scaling) is a tool.
 const COMPUTED_READS = new Set(["scale_recipe"]);
-export function observationType(name: any) {
+export function observationType(name: string): "retriever" | "tool" {
   const tool = TOOL_BY_NAME.get(name);
   return tool && accessOf(tool) === "read" && !COMPUTED_READS.has(name) ? "retriever" : "tool";
 }
 
 /** A model call's answer as an OpenAI-style assistant message, so Langfuse renders the text, the tool calls (as cards) and the thinking. */
-export function assistantOutput(result: any) {
+export function assistantOutput(result: Pick<CompletionResult, "text" | "toolCalls" | "reasoning">) {
   return {
     role: "assistant",
     content: result.text || null,
-    ...(result.toolCalls?.length ? { tool_calls: result.toolCalls.map((c: any) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) } : {}),
+    ...(result.toolCalls?.length ? { tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) } : {}),
     ...(result.reasoning ? { reasoning: result.reasoning } : {}),
   };
 }
@@ -50,7 +75,7 @@ export function assistantOutput(result: any) {
 export class ChatError extends Error {
   declare status: number;
   declare kind: string;
-  constructor(message: any, { status = 500, kind = "error" }: any = {}) {
+  constructor(message: string, { status = 500, kind = "error" }: { status?: number; kind?: string } = {}) {
     super(message);
     this.status = status;
     this.kind = kind;
@@ -61,7 +86,7 @@ const RESTING = "The chat is resting, try again later.";
 const GENERIC = "Something went wrong with the chat. Try again in a moment.";
 
 /** Maps an OpenRouter failure to something friendly. 402 (out of credit) and a dead key both mean "resting". */
-export function friendlyOpenRouterError(status: any, bodyText = "") {
+export function friendlyOpenRouterError(status: number, bodyText = "") {
   if (status === 402 || status === 401 || status === 403 || /insufficient|credit/i.test(bodyText)) return new ChatError(RESTING, { status: 503, kind: "out-of-credit" });
   // a text-only model sent a photo
   if (/image|modalit|vision|multimodal|multi-modal|image_url/i.test(bodyText) && /support|accept|not (?:allowed|available|valid)|invalid|cannot|can't|unsupported|no endpoints/i.test(bodyText)) {
@@ -78,11 +103,12 @@ export function friendlyOpenRouterError(status: any, bodyText = "") {
  * tool_calls, unknown roles, non-string content) is dropped, so the client can't inject tool results or system messages.
  * The conversation must start with and end on a user message; returns [] if there is none.
  */
-export function sanitizeMessages(raw: any) {
+export function sanitizeMessages(raw: unknown): { role: "user" | "assistant"; content: string }[] {
   if (!Array.isArray(raw)) return [];
-  const clean: any[] = [];
-  for (const m of raw) {
-    if (!m || typeof m !== "object" || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") continue;
+  const clean: { role: "user" | "assistant"; content: string }[] = [];
+  const given: unknown[] = raw;
+  for (const m of given) {
+    if (!isRecord(m) || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") continue;
     const content = m.content.trim().slice(0, m.role === "user" ? MAX_USER_CHARS : MAX_ASSISTANT_CHARS);
     if (content) clean.push({ role: m.role, content });
   }
@@ -94,29 +120,31 @@ export function sanitizeMessages(raw: any) {
 // --- page context: re-resolved by the server, never trusted -------------------------------------------------------
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const oneLine = (s: any, max: any) => String(s ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim().slice(0, max);
-const weekWords = (d: any) => (isThisWeek(d) && isNextWeek(d) ? "in this week and next week" : isThisWeek(d) ? "in this week, not in next week" : isNextWeek(d) ? "in next week, not in this week" : "in neither week");
+const oneLine = (s: unknown, max: number): string => String(s ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim().slice(0, max);
+const weekWords = (d: { current?: unknown; next?: unknown }): string => (isThisWeek(d) && isNextWeek(d) ? "in this week and next week" : isThisWeek(d) ? "in this week, not in next week" : isNextWeek(d) ? "in next week, not in this week" : "in neither week");
 
 /**
  * A short note about the page the user is on, or "". For a recipe page the slug is looked up in the repo (title, servings and status
  * come from OUR data, not from the page); live UI state is reduced to validated values.
  */
-export async function pageNote(page: any) {
-  if (!page || typeof page !== "object" || page.dismissed === true) return "";
+export async function pageNote(page: unknown): Promise<string> {
+  if (!isRecord(page) || page.dismissed === true) return "";
   switch (page.page) {
     case "recipe": {
-      if (typeof page.slug !== "string" || !SLUG.test(page.slug)) return "";
+      const slug = page.slug;
+      if (typeof slug !== "string" || !SLUG.test(slug)) return "";
       let data;
       try {
-        ({ data } = await getRecipe(page.slug));
+        ({ data } = await getRecipe(slug));
       } catch {
         return "";
       }
-      const picked = Number.isInteger(page.servings) && page.servings >= 1 && page.servings <= 24 ? ` They have ${page.servings} servings selected on the page.` : "";
+      const servings = page.servings;
+      const picked = typeof servings === "number" && Number.isInteger(servings) && servings >= 1 && servings <= 24 ? ` They have ${servings} servings selected on the page.` : "";
       return `The user is viewing: ${data.title} (${data.slug}), serves ${data.serves}, ${data.calories} kcal each, ${isDraft(data) ? "a draft (not tried yet)" : "a regular recipe"}, ${weekWords(data)}.${picked} "This recipe" or "this" means ${data.title}.`;
     }
     case "index": {
-      const filter = COURSES.includes(page.filter) ? ` filtered to ${page.filter}` : "";
+      const filter = COURSES.some((c) => c === page.filter) ? ` filtered to ${page.filter}` : "";
       const search = oneLine(page.search, 60);
       return `The user is on the home page (the recipe list)${filter}${search ? `; they typed ${JSON.stringify(search)} in the search box` : ""}.`;
     }
@@ -131,8 +159,38 @@ export async function pageNote(page: any) {
 
 // --- OpenRouter streaming ----------------------------------------------------------------------------------------
 
+// What is read of a streamed chunk. A field of the wrong type is ignored (as if it were absent), never trusted.
+const opt = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined);
+const usageSchema = z.looseObject({
+  prompt_tokens: opt(z.number()),
+  completion_tokens: opt(z.number()),
+  total_tokens: opt(z.number()),
+  cost: opt(z.number()),
+  prompt_tokens_details: opt(z.looseObject({ cached_tokens: opt(z.number()), audio_tokens: opt(z.number()) })),
+  completion_tokens_details: opt(z.looseObject({ reasoning_tokens: opt(z.number()), audio_tokens: opt(z.number()) })),
+});
+const streamChunkSchema: z.ZodType<StreamChunk> = z.looseObject({
+  error: z.unknown().optional(),
+  usage: opt(usageSchema),
+  choices: opt(
+    z.array(
+      z.looseObject({
+        finish_reason: opt(z.string().nullable()),
+        delta: opt(
+          z.looseObject({
+            content: opt(z.string()),
+            reasoning: opt(z.string()),
+            reasoning_content: opt(z.string()),
+            tool_calls: opt(z.array(z.looseObject({ index: opt(z.number()), id: opt(z.string()), function: opt(z.looseObject({ name: opt(z.string()), arguments: opt(z.string()) })) }))),
+          })
+        ),
+      })
+    )
+  ),
+});
+
 /** Yields the parsed JSON of each `data:` event of an SSE response body. */
-async function* sseEvents(body: any) {
+async function* sseEvents(body: AsyncIterable<Uint8Array>): AsyncGenerator<StreamChunk> {
   const decoder = new TextDecoder();
   let buffer = "";
   for await (const chunk of body) {
@@ -144,7 +202,8 @@ async function* sseEvents(body: any) {
       const data = block.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
       if (!data || data === "[DONE]") continue;
       try {
-        yield JSON.parse(data);
+        const chunk = streamChunkSchema.safeParse(JSON.parse(data));
+        if (chunk.success) yield chunk.data;
       } catch {
         // a comment or partial line we don't need
       }
@@ -160,23 +219,23 @@ export function createThinkFilter() {
   const CLOSE = /<\/think(?:ing)?>/i;
   const MAXTAG = 12;
   return {
-    push(chunk: any) {
+    push(chunk: string): string {
       buf += chunk;
       let out = "";
       for (;;) {
         if (inside) {
-          const m = buf.match(CLOSE);
+          const m = CLOSE.exec(buf);
           if (!m) {
             buf = buf.slice(-MAXTAG); // keep a possible partial closing tag
             return out;
           }
-          buf = buf.slice(m.index! + m[0].length);
+          buf = buf.slice(m.index + m[0].length);
           inside = false;
         } else {
-          const m = buf.match(OPEN);
+          const m = OPEN.exec(buf);
           if (m) {
             out += buf.slice(0, m.index);
-            buf = buf.slice(m.index! + m[0].length);
+            buf = buf.slice(m.index + m[0].length);
             inside = true;
             continue;
           }
@@ -192,7 +251,7 @@ export function createThinkFilter() {
         }
       }
     },
-    flush() {
+    flush(): string {
       const rest = inside ? "" : buf;
       buf = "";
       return rest;
@@ -207,8 +266,30 @@ export function createThinkFilter() {
  * reason: the provider gave up or timed out mid-answer) or null (a normal end). A tool call the provider hadn't finished is often not
  * passed on at all, so a cut answer can look like an empty one: `cut` is what tells them apart.
  */
-async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }: any) {
+interface StreamArgs {
+  messages: ChatMessage[];
+  tools?: ToolDefinition[];
+  model: string;
+  apiKey: string | undefined;
+  signal?: AbortSignal;
+  onText: (delta: string) => void;
+  onToolProgress?: (call: ModelToolCall) => void;
+  maxTokens: number;
+  toolChoice?: ToolChoice;
+}
+
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }: StreamArgs): Promise<CompletionResult> {
   const started = Date.now();
+  const request: CompletionRequest = {
+    model,
+    messages,
+    ...(tools?.length ? { tools, tool_choice: toolChoice } : {}),
+    stream: true,
+    stream_options: { include_usage: true },
+    usage: { include: true },
+    temperature: TEMPERATURE,
+    max_tokens: maxTokens,
+  };
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -220,20 +301,11 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
         "HTTP-Referer": config.siteUrl,
         "X-Title": "Our Favourite Recipes",
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        ...(tools?.length ? { tools, tool_choice: toolChoice } : {}),
-        stream: true,
-        stream_options: { include_usage: true },
-        usage: { include: true },
-        temperature: TEMPERATURE,
-        max_tokens: maxTokens,
-      }),
+      body: JSON.stringify(request),
     });
-  } catch (err: any) {
-    if (err?.name === "AbortError") throw err;
-    console.error("OpenRouter request failed:", err.message);
+  } catch (err) {
+    if (errorName(err) === "AbortError") throw err;
+    console.error("OpenRouter request failed:", errorMessage(err));
     throw new ChatError(GENERIC, { status: 502, kind: "upstream" });
   }
   if (!res.ok) {
@@ -244,15 +316,16 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
 
   let text = "";
   let reasoning = ""; // the model's thinking: never shown to the user, kept for the trace
-  let firstTokenAt; // time to first token, for the trace
-  let usage;
-  let finishReason;
+  let firstTokenAt: Date | undefined; // time to first token, for the trace
+  let usage: StreamChunk["usage"];
+  let finishReason: string | undefined;
   const thinking = createThinkFilter();
-  const calls: any[] = []; // by index
+  const calls: ModelToolCall[] = []; // by index
+  if (!res.body) throw new TypeError("The model's answer has no body");
   for await (const event of sseEvents(res.body)) {
     if (event.error) {
       console.error("OpenRouter stream error:", JSON.stringify(event.error).slice(0, 300));
-      throw friendlyOpenRouterError(Number(event.error.code) || 500, JSON.stringify(event.error));
+      throw friendlyOpenRouterError(Number(isRecord(event.error) ? event.error.code : undefined) || 500, JSON.stringify(event.error));
     }
     if (event.usage) usage = event.usage;
     const choice = event.choices?.[0];
@@ -289,17 +362,17 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
 }
 
 /** One log line about a model call that was cut off or came back empty: enough to tell a timeout from the token cap. */
-function logRound(label: any, model: any, maxTokens: any, result: any) {
+function logRound(label: string, model: string, maxTokens: number, result: CompletionResult) {
   const u = result.usage;
   console.warn(
     `${label} (model ${model}): finish ${result.finishReason || "none"}${result.cut ? `, cut off (${result.cut})` : ""}, ${Math.round(result.ms / 1000)}s, ` +
       `tokens ${u ? `${u.prompt_tokens ?? "?"} in / ${u.completion_tokens ?? "?"} out${u.completion_tokens_details?.reasoning_tokens ? ` (${u.completion_tokens_details.reasoning_tokens} reasoning)` : ""}` : "unknown"} of max ${maxTokens}, ` +
-      `text ${result.text.length} chars, calls ${result.toolCalls.map((c: any) => c.name).join(",") || "none"}`
+      `text ${result.text.length} chars, calls ${result.toolCalls.map((c) => c.name).join(",") || "none"}`
   );
 }
 
 /** What the user is told when the model was cut off before it could answer. */
-export function cutOffLine(cut: any, { photo }: any = {}) {
+export function cutOffLine(cut: CutReason, { photo }: { photo?: boolean } = {}) {
   const why = cut === "length" ? "it ran out of room for its answer" : "the connection to it ended early (most likely it took too long)";
   return `Sorry, the model stopped before it finished: ${why}. Nothing was added. ${photo ? "Try again, or send a tighter crop of just the recipe, or paste the link if it's from a website." : "Try again in a moment, or ask for a bit less at once."}`;
 }
@@ -333,13 +406,14 @@ const STATUS: Record<string, string> = {
  * ("Adding Lemon Garlic Pasta to the tray…", "Reading Pancakes…", "Building the shopping list: 9 items so far…"). `args` is the parsed
  * arguments, `raw` the argument text streamed so far (it may be incomplete JSON); `titles` maps slug -> recipe title.
  */
-export function statusFor(name: any, { args, raw = "", titles }: any = {}) {
-  const title = args?.title || raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)+)"/)?.[1];
-  const slug = args?.slug || raw.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)?.[1];
-  const named = slug && titles?.get(slug);
+export function statusFor(name: string, { args, raw = "", titles }: { args?: unknown; raw?: string; titles?: Map<string, string> } = {}): string {
+  const a: Record<string, unknown> = isRecord(args) ? args : {};
+  const title = a.title || raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)+)"/)?.[1];
+  const slug = a.slug || raw.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)?.[1];
+  const named = typeof slug === "string" ? titles?.get(slug) : undefined;
   switch (name) {
     case "stage_create_recipe": {
-      const fromPhoto = args?.from_photo || raw.match(/"from_photo"\s*:\s*"([^"]+)"/)?.[1];
+      const fromPhoto = a.from_photo || raw.match(/"from_photo"\s*:\s*"([^"]+)"/)?.[1];
       return title ? `Adding ${title} to the tray…` : fromPhoto ? `Adding the recipe from ${String(fromPhoto).slice(0, 30)} to the tray…` : "Adding the recipe to the tray…";
     }
     case "get_recipe":
@@ -361,39 +435,41 @@ const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
  * Cleans what the model passed to suggest_replies (see chat-ui.ts cleanReplyList). `book` (slug -> recipe) is what an action
  * reply's slug is checked against; without it only plain-string replies survive.
  */
-export function cleanReplies(args: any, book: any, opts: any) {
+export function cleanReplies(args: unknown, book: Book | null | undefined, opts?: { editor?: boolean }): Suggestion[] {
   const parsed = repliesSchema.safeParse(args);
   return parsed.success ? cleanReplyList(parsed.data.replies, book, opts) : [];
 }
 
 /** Appends the site note to a user message whose content is text or text + image parts. */
-function withNote(content: any, note: any) {
+function withNote(content: string | ContentPart[], note: string): string | ContentPart[] {
   const add = `\n\n[Note from the site, not from the user: ${note}]`;
   if (!Array.isArray(content)) return `${content}${add}`;
   const parts = content.map((p) => ({ ...p }));
-  const first = parts.find((p) => p.type === "text");
+  const first = parts.find((p): p is Extract<ContentPart, { type: "text" }> => p.type === "text");
   if (first) first.text += add;
   else parts.unshift({ type: "text", text: add.trim() });
   return parts;
 }
 
 /** Safe chips from the page, for when a model gave none (the same ideas as the panel's starters; never anything that changes the site). */
-export function defaultChips(page: any, editor: any) {
+export function defaultChips(page: { page?: unknown } | null | undefined, editor: boolean): Suggestion[] {
   const by: Record<string, string[]> = {
     recipe: editor ? ["Swap an ingredient", "What goes with it?"] : ["Swap an ingredient", "What goes with it?", "Something similar"],
     index: ["Something quick tonight", "Light and healthy"],
     "next-week": ["What's planned?", "What's on this week?"],
     shopping: ["What's left to buy?", "What can I make from what's at home?"],
   };
-  return by[page?.page] || ["Something quick tonight", "What's on this week?"];
+  const key = page?.page;
+  return (typeof key === "string" ? by[key] : undefined) || ["Something quick tonight", "What's on this week?"];
 }
 
 /**
  * Chips for a turn whose model gave none and whose nudge gave none: tied to what the turn did where possible (cards were shown, something was staged),
  * else the page's safe starters.
  */
-export async function turnChips({ page, editor, ui, fixReplies, staged }: any) {
-  if (ui.cards?.length) return [{ label: "Open the first one", url: ui.cards[0].url }, "Under 20 minutes", "Something lighter"];
+export async function turnChips({ page, editor, ui, fixReplies, staged }: { page: PageState; editor: boolean; ui: MessageUi; fixReplies: (replies: Suggestion[]) => Promise<Suggestion[]>; staged: boolean }): Promise<Suggestion[]> {
+  const firstCard = ui.cards?.[0];
+  if (firstCard) return [{ label: "Open the first one", url: firstCard.url }, "Under 20 minutes", "Something lighter"];
   if (editor && staged) {
     const chips = await fixReplies(["Finalise list", "Save to site"]); // become real buttons only when the tray allows them
     return [...chips, "Add another"].slice(0, 3);
@@ -401,36 +477,37 @@ export async function turnChips({ page, editor, ui, fixReplies, staged }: any) {
   return defaultChips(page, editor);
 }
 
-const normText = (t: any) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const normText = (t: unknown): string => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /**
  * A chip that pairs a photo with a recipe ("Use photo 5 for Caesar Salad", "Make photo 2 the soup's photo"): the model never sees the photos, so
  * that pairing is a guess, and a misleading chip is worse than none. Dropped; the user can still say it in their own words.
  */
-export const photoPairingChip = (text: any) =>
+export const photoPairingChip = (text: string): boolean =>
   /\b(use|set|make|put|keep|take)\b[^]*\b(photo|picture|pic|image)s?\b/i.test(text) || /\b(photo|picture|pic|image)[-\s]?\d+\b[^]*\b(for|as|on)\b/i.test(text);
 
-const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user", "review_drafts", "review_optional"]);
+const UI_TOOLS = new Set<string>(["suggest_replies", "show_recipes", "offer_navigation", "ask_user", "review_drafts", "review_optional"]);
 
-const resultText = (result: any, max = MAX_TOOL_RESULT_CHARS) => {
-  const text = (result?.content || []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+const resultText = (result: ToolOutput | null | undefined, max = MAX_TOOL_RESULT_CHARS): string => {
+  const text = (result?.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
   return text.length > max ? `${text.slice(0, max)}\n… (cut: ${text.length - max} more characters)` : text;
 };
 
-const READ_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name));
+const READ_TOOLS = new Set<string>(TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name));
 
-const STAGE_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "stage").map((t) => t.name));
+const STAGE_TOOLS = new Set<string>(TOOLS.filter((t) => accessOf(t) === "stage").map((t) => t.name));
 
 /**
  * The tool definitions offered to a role: the registry's read tools (minus the workflow guides) plus the UI tools; an editor also gets the
  * stage tools (they change the plan tray, never the repo) and ask_user. The write tools stay out of chat for good: saving is its own
  * request (POST /chat/plan/apply), a button a person taps.
  */
-export function offeredTools(role: any) {
-  const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
+export function offeredTools(role: Role): ToolDefinition[] {
+  const definitions = (): ToolDefinition[] => toolDefinitions(role).map((t) => ({ type: "function", function: t.function }));
+  const base = definitions().filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
   const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
   if (role !== "editor") return [...base, ...ui];
-  return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL];
+  return [...base, ...definitions().filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
@@ -446,10 +523,10 @@ export function offeredTools(role: any) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, followUp = false, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }: any) {
-  const stagedLabels: any[] = []; // what this turn put in the tray, in words
+export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, followUp = false, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }: RunChatOptions): Promise<RunChatResult> {
+  const stagedLabels: string[] = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
-  const emit = (event: any) => {
+  const emit = (event: ChatEvent) => {
     if (["cards", "question", "review", "optional", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
     if (event.type === "tray" && event.label && !stagedLabels.includes(event.label)) stagedLabels.push(event.label);
     rawEmit(event);
@@ -458,51 +535,58 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   const offered = new Set(tools.map((t) => t.function.name));
   const toolsVersion = createHash("sha256").update(JSON.stringify(tools)).digest("hex").slice(0, 10); // changes when a tool's definition does (Langfuse)
 
-  let rows;
+  let rows: string;
   try {
     rows = catalogueText(await catalogue());
-  } catch (err: any) {
-    console.error("Couldn't load the catalogue:", err.message);
+  } catch (err) {
+    console.error("Couldn't load the catalogue:", errorMessage(err));
     rows = "";
   }
-  const lastMsg = messages[messages.length - 1];
-  const userText = userTextOverride !== undefined ? userTextOverride : Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : String(lastMsg?.content ?? "");
+  const lastMsg: HistoryMessage | undefined = messages[messages.length - 1];
+  const lastContent = lastMsg?.content;
+  const userText = userTextOverride !== undefined ? userTextOverride : Array.isArray(lastContent) ? lastContent.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("\n") : String(lastContent ?? "");
   const note = [await pageNote(page), extraNote].filter(Boolean).join("\n");
   const book = await loadBook();
 
   // Stable prefix first (system prompt + catalogue, then the conversation); the volatile page note rides on the latest user message,
   // as plain text, so it works on every model (not all accept a system message mid-conversation) and doesn't break the cached prefix.
-  const convo = messages.map((m: any) => ({ ...m }));
+  const convo = messages.map((m) => ({ ...m }));
   if (note) {
     const last = convo[convo.length - 1];
-    last.content = withNote(last.content, note);
+    if (last.role === "user") last.content = withNote(last.content, note);
   }
-  const thread = [{ role: "system", content: systemPrompt(rows, { editor: caller.role === "editor" }) }, ...convo];
-  const base = thread.length; // everything pushed after this is new this turn (an editor's turn is stored)
-  const ui: Record<string, any> = {}; // what the panel shows again on reload: { cards, nav, replies }
+  const thread: ChatMessage[] = [{ role: "system", content: systemPrompt(rows, { editor: caller.role === "editor" }) }, ...convo];
+  const turn: TurnMessage[] = []; // everything added after this is new this turn (an editor's turn is stored)
+  const add = (message: TurnMessage) => {
+    thread.push(message);
+    turn.push(message);
+  };
+  const ui: MessageUi = {}; // what the panel shows again on reload: { cards, nav, replies }
 
   let suggestions = false;
   let askedUser = false;
   let navigationOffered = false;
-  const seenCalls = new Map(); // "name\nargs" -> the result already given this turn
+  const seenCalls = new Map<string, string>(); // "name\nargs" -> the result already given this turn
   let turnCalls = 0;
   let resultChars = 0;
   let reply = "";
   // Chips of this turn only: answers of an EARLIER ask_user are not suggestions now, and "Save to site" / "Finalise list" typed as plain text
   // become the real buttons (when the tray allows them) or go.
   const oldOptions = new Set(
-    messages.flatMap((m: any) => (m.role === "assistant" ? (m.tool_calls || []) : [])).filter((c: any) => c.function?.name === "ask_user").flatMap((c: any) => {
+    messages.flatMap((m): ToolCall[] => (m.role === "assistant" ? (m.tool_calls || []) : [])).filter((c) => c.function?.name === "ask_user").flatMap((c): unknown[] => {
       try {
-        return JSON.parse(c.function.arguments).options || [];
+        const args: unknown = JSON.parse(c.function.arguments);
+        const options = isRecord(args) ? args.options : undefined;
+        return Array.isArray(options) ? options : [];
       } catch {
         return [];
       }
-    }).map((o: any) => normText(o))
+    }).map((o) => normText(o))
   );
-  let trayChoice: any; // "apply_plan" | "finalise_plan" | null, looked up once when a plain chip asks for it
+  let trayChoice: "apply_plan" | "finalise_plan" | null | undefined; // looked up once when a plain chip asks for it
   const PLAN_WORDS = /^(save to site|save|save it|finalise list|finalize list|finalise|finalize|finalise the list)(\s*\(\d+\))?$/i;
-  const fixReplies = async (replies: any) => {
-    const out: any[] = [];
+  const fixReplies = async (replies: Suggestion[]): Promise<Suggestion[]> => {
+    const out: Suggestion[] = [];
     for (const r of replies) {
       if (typeof r !== "string") {
         out.push(r);
@@ -516,7 +600,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
             trayChoice = null;
           }
         }
-        if (trayChoice && !out.some((x) => x.action === trayChoice)) out.push({ label: trayChoice === "apply_plan" ? "Save to site" : "Finalise list", action: trayChoice });
+        const choice = trayChoice;
+        if (choice && !out.some((x) => typeof x === "object" && "action" in x && x.action === choice)) out.push({ label: choice === "apply_plan" ? "Save to site" : "Finalise list", action: choice });
         continue;
       }
       if (oldOptions.has(normText(r))) continue; // a leftover answer of an earlier question
@@ -530,16 +615,16 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   };
   let finalRound = false;
   let lastStatus = "";
-  const titles = new Map<any, any>([...book].map(([slug, r]) => [slug, r.title]));
+  const titles = new Map<string, string>([...book].map(([slug, r]): [string, string] => [slug, r.title]));
   let roundNote = ""; // told to the model on its next call, not stored
   const startedAt = Date.now();
   let stoppedLong = false;
-  let lastCut: any = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
+  let lastCut: CutReason | null = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
   // The hard stop: the budget above is only checked between model calls, and one call (a thinking model writing the whole shopping list) can
   // run for minutes, past Vercel's maxDuration. Every model call of the turn is aborted at the deadline instead; `signal` is still the client's.
   const deadline = AbortSignal.timeout(Math.max(1, config.chatTurnDeadlineMs));
   const callSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  const pastDeadline = (err: any) => deadline.aborted && !signal?.aborted && (err?.name === "TimeoutError" || err?.name === "AbortError");
+  const pastDeadline = (err: unknown) => deadline.aborted && !signal?.aborted && (errorName(err) === "TimeoutError" || errorName(err) === "AbortError");
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // A turn that has been going too long (a slow model looping through tools) stops with a clear line instead of running on in silence.
     if (round > 0 && Date.now() - startedAt > config.chatTurnBudgetMs) {
@@ -554,14 +639,14 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       modelParameters: { temperature: TEMPERATURE, max_tokens: maxTokens, tool_choice: finalRound ? "none" : "auto" },
       metadata: { round: round + 1, promptVersion: PROMPT_VERSION, toolsVersion, tools: finalRound ? [] : [...offered] },
     });
-    let result;
+    let result: CompletionResult;
     let separate = reply.trim() !== ""; // text from an earlier round: start this one in a new paragraph
     // A follow-up round must not say again what the user already has (some models restate their greeting or summary after every tool call):
     // its first words are held back and compared with this turn's text so far; a repeat is swallowed.
     let held = "";
     let guard = reply.trim() ? "check" : "pass"; // check | drop | pass
     let kept = "";
-    const emitText = (delta: any) => {
+    const emitText = (delta: string) => {
       if (separate) {
         separate = false;
         delta = `\n\n${delta.replace(/^\s+/, "")}`;
@@ -571,7 +656,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       emit({ type: "text", delta });
     };
     const before = reply;
-    const repeats = (t: any) => {
+    const repeats = (t: string) => {
       const n = normText(t);
       return n.length >= 12 && normText(before).includes(n.slice(0, Math.min(n.length, 40)));
     };
@@ -583,7 +668,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         apiKey,
         signal: callSignal,
         maxTokens,
-        onToolProgress: (call: any) => {
+        onToolProgress: (call) => {
           // the model is still writing a tool call (a recipe, the shopping list can take a while): say what it is, as it grows
           const text = statusFor(call.name, { raw: call.arguments, titles });
           if (text !== lastStatus) {
@@ -591,7 +676,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
             emit({ type: "status", text });
           }
         },
-        onText: (delta: any) => {
+        onText: (delta) => {
           if (guard === "pass") return emitText(delta);
           if (guard === "drop") return;
           held += delta;
@@ -604,12 +689,12 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
           }
         },
       });
-    } catch (err: any) {
-      generation.end({ error: err.message });
+    } catch (err) {
+      generation.end({ error: errorMessage(err) });
       if (!pastDeadline(err)) throw err;
       // Out of time mid-call: whatever it was writing is dropped (a half-written tool call is never run); the turn ends with the clear line.
       if (guard === "check" && held && !repeats(held)) emitText(held);
-      if (kept) thread.push({ role: "assistant", content: kept });
+      if (kept) add({ role: "assistant", content: kept });
       lastCut = "dropped";
       stoppedLong = true;
       break;
@@ -621,14 +706,14 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     if (result.cut || (!result.text.trim() && !result.toolCalls.length)) logRound(`Chat round ${round + 1} ${result.cut ? "was cut off" : "came back empty"}`, model, maxTokens, result);
 
     if (!result.toolCalls.length || finalRound) {
-      thread.push({ role: "assistant", content: kept || "" });
+      add({ role: "assistant", content: kept || "" });
       break;
     }
 
-    thread.push({
+    add({
       role: "assistant",
       content: kept || null,
-      tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })),
+      tool_calls: result.toolCalls.map((c): ToolCall => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })),
     });
     let roundCalls = 0;
     const work = result.toolCalls.filter((c) => !UI_TOOLS.has(c.name));
@@ -636,31 +721,31 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     const roundLimit = fromPhotoRound ? MAX_FROM_PHOTO_CALLS_PER_ROUND + (result.toolCalls.length - work.length) : MAX_CALLS_PER_ROUND;
     for (const call of result.toolCalls) {
       if (++roundCalls > roundLimit) {
-        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls at once (at most ${roundLimit} per step). Ask for fewer.` });
+        add({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls at once (at most ${roundLimit} per step). Ask for fewer.` });
         continue;
       }
       const key = `${call.name}\n${call.arguments || "{}"}`;
       if (seenCalls.has(key)) {
         // the same call again: reuse its answer (it still counts toward the turn's size budget)
-        let again = seenCalls.get(key);
+        let again = seenCalls.get(key) ?? "";
         if (resultChars + again.length > MAX_RESULT_CHARS_PER_TURN) again = "Error: this turn has already read as much as it can. Answer with what you have.";
         resultChars += again.length;
-        thread.push({ role: "tool", tool_call_id: call.id, content: again });
+        add({ role: "tool", tool_call_id: call.id, content: again });
         continue;
       }
       if (!UI_TOOLS.has(call.name) && ++turnCalls > MAX_TOOL_CALLS_PER_TURN) {
-        thread.push({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls in one turn (at most ${MAX_TOOL_CALLS_PER_TURN}). Answer with what you have.` });
+        add({ role: "tool", tool_call_id: call.id, content: `Error: too many tool calls in one turn (at most ${MAX_TOOL_CALLS_PER_TURN}). Answer with what you have.` });
         continue;
       }
-      let args;
+      let args: unknown;
       try {
         args = call.arguments ? JSON.parse(call.arguments) : {};
       } catch {
-        thread.push({ role: "tool", tool_call_id: call.id, content: "Error: the arguments were not valid JSON." });
+        add({ role: "tool", tool_call_id: call.id, content: "Error: the arguments were not valid JSON." });
         continue;
       }
       const span = trace.span({ name: call.name, type: observationType(call.name), input: args, metadata: { tool_call_id: call.id, access: UI_TOOLS.has(call.name) ? "ui" : accessOf(TOOL_BY_NAME.get(call.name)) } });
-      let content;
+      let content: string;
       if (call.name === "suggest_replies") {
         let replies = askedUser ? [] : cleanReplies(args, book, { editor: caller.role === "editor" });
         if (replies.length) replies = await fixReplies(replies);
@@ -683,12 +768,12 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         span.end({ output: content });
       } else if (call.name === "review_drafts") {
         // the drafts review card, built from the book and the tray (never from the model); Done is answered by the server (lib/draft-review.ts)
-        let card: any = null;
+        let card: ChatEventDataMap["review"] | null = null;
         if (caller.role === "editor" && offered.has("review_drafts") && !askedUser) {
           try {
             card = reviewCard(await thisWeeksDrafts(), (await loadTray())?.items || []);
-          } catch (err: any) {
-            console.error("Building the drafts review card failed:", err.message);
+          } catch (err) {
+            console.error("Building the drafts review card failed:", errorMessage(err));
           }
         }
         if (card) {
@@ -702,13 +787,16 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         span.end({ output: content });
       } else if (call.name === "review_optional") {
         // the optional items card, built from the tray's list (never from the model); Done is answered by the server (lib/optional-review.ts)
-        let card: any = null;
+        let card: ChatEventDataMap["optional"] | null = null;
         if (caller.role === "editor" && offered.has("review_optional") && !askedUser) {
           try {
             const st = await finaliseState(caller);
-            if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
-          } catch (err: any) {
-            console.error("Building the optional items card failed:", err.message);
+            if (st?.built) {
+              const built = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
+              card = built && optionalWire(built);
+            }
+          } catch (err) {
+            console.error("Building the optional items card failed:", errorMessage(err));
           }
         }
         if (card) {
@@ -721,7 +809,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         content = JSON.stringify(card ? { shown: true, items: card.items.length, note: "End your turn now: the site stages the answers when the user taps Done." } : { shown: false, error: askedUser ? "One question per turn." : "The tray's list has no optional items." });
         span.end({ output: content });
       } else if (call.name === "show_recipes") {
-        const { cards, dropped } = buildCards(book, args?.slugs);
+        const { cards, dropped } = buildCards(book, isRecord(args) ? args.slugs : undefined);
         if (cards.length) {
           ui.cards = [...(ui.cards || []), ...cards].slice(0, 8);
           emit({ type: "cards", cards });
@@ -729,7 +817,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         content = JSON.stringify(cards.length ? { shown: true, count: cards.length, ...(dropped.length ? { ignored_unknown_slugs: dropped } : {}) } : { shown: false, error: "None of those slugs are in our book." });
         span.end({ output: content });
       } else if (call.name === "offer_navigation") {
-        const nav = navigationOffered ? null : buildNavigation(book, args);
+        const nav = navigationOffered ? null : buildNavigation(book, isRecord(args) ? args : {});
         if (nav) {
           navigationOffered = true;
           ui.nav = { label: nav.label, url: nav.url };
@@ -744,7 +832,8 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         span.end({ output: content, refused: true });
       } else {
         emit({ type: "status", text: statusFor(call.name, { args, titles }) });
-        const out = await dispatch(call.name, args, caller, { origin, chat: { emit, trace, conversationTitle: conversation?.title, conversationId: conversation?.id, attachments, photos, userText, followUp } });
+        const chat: ChatToolContext = { emit, trace, conversationTitle: conversation?.title, conversationId: conversation?.id, attachments, photos, userText, followUp };
+        const out: ToolOutput = await dispatch(call.name, args, caller, { origin, chat });
         content = resultText(out, RESULT_CAPS[call.name] || MAX_TOOL_RESULT_CHARS);
         span.end({ output: content, error: out.isError && !/^Not allowed/.test(content), refused: out.isError && /^Not allowed/.test(content) });
         if (out.isError) content = `Error: ${content}`;
@@ -752,7 +841,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       if (resultChars + content.length > MAX_RESULT_CHARS_PER_TURN) content = "Error: this turn has already read as much as it can. Answer with what you have.";
       resultChars += content.length;
       seenCalls.set(key, content);
-      thread.push({ role: "tool", tool_call_id: call.id, content });
+      add({ role: "tool", tool_call_id: call.id, content });
     }
     // The model already spoke and only asked for things to SHOW (chips, cards, a button, a question): nothing is left to say, and asking it
     // again is what makes some models repeat themselves. Finish the turn.
@@ -767,26 +856,26 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     const line = `${reply.trim() ? "\n\n" : ""}That is taking longer than expected, so I've stopped here. Anything already in the tray is still there: tell me to carry on if you want.`;
     reply += line;
     emit({ type: "text", delta: line });
-    thread.push({ role: "assistant", content: line.trim() });
+    add({ role: "assistant", content: line.trim() });
   }
   // A turn that staged something but said nothing gets a fixed one-line confirmation built from what was staged (some models stop after the tool).
   if (!reply.trim() && stagedLabels.length) {
     reply = `Added to the tray: ${stagedLabels.join("; ")}.`;
     emit({ type: "text", delta: reply });
-    thread.push({ role: "assistant", content: reply });
+    add({ role: "assistant", content: reply });
   }
   // Chips on (almost) every answer (design 6.1): a model that forgot them gets ONE cheap nudge that offers nothing but suggest_replies; if even
   // that fails, safe chips from the page. No retries, and never after an error (errors leave runChat before this point).
   if (!suggestions && !askedUser && reply.trim() && !stoppedLong) {
-    let nudged: any[] = [];
+    let nudged: Suggestion[] = [];
     // Try 1 forces the tool. Some providers/models refuse a forced tool_choice (Qwen's thinking mode, for one): then try 2 offers the same single
     // tool without forcing it and asks in words. Whatever goes wrong is logged with the provider's reason, so it shows in the logs.
-    const attempts = [
+    const attempts: { toolChoice: ToolChoice; ask: string }[] = [
       { toolChoice: { type: "function", function: { name: "suggest_replies" } }, ask: "your answer is done. Call suggest_replies now with 2-4 short replies the user might want to say next, based on what you just said. Do not write any text." },
       { toolChoice: "auto", ask: "Call suggest_replies now with 2-4 short follow-ups to your last answer. Only call the tool; write no other text." },
     ];
     for (const [n, attempt] of attempts.entries()) {
-      const nudgeMessages = [...thread, { role: "user", content: `[Note from the site, not from the user: ${attempt.ask}]` }];
+      const nudgeMessages: ChatMessage[] = [...thread, { role: "user", content: `[Note from the site, not from the user: ${attempt.ask}]` }];
       const gen = trace.generation({
         name: "suggest-replies",
         model,
@@ -817,11 +906,11 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         if (nudged.length) nudged = await fixReplies(nudged);
         if (nudged.length) break;
         console.warn(`Chips nudge ${n + 1} (model ${model}) gave no usable chips: finish ${out.finishReason || "?"}, calls ${out.toolCalls.map((c) => c.name).join(",") || "none"}, text ${JSON.stringify(String(out.text).slice(0, 300))}${call ? `, arguments ${String(call.arguments).slice(0, 300)}` : ""}`);
-      } catch (err: any) {
-        gen.end({ error: err.message });
+      } catch (err) {
+        gen.end({ error: errorMessage(err) });
         if (pastDeadline(err)) break; // out of time: page chips below
-        if (err?.name === "AbortError") throw err;
-        console.warn(`Chips nudge ${n + 1} (model ${model}) failed: ${err.status || ""} ${err.kind || ""} ${String(err.message).slice(0, 300)}`);
+        if (errorName(err) === "AbortError") throw err;
+        console.warn(`Chips nudge ${n + 1} (model ${model}) failed: ${errorStatus(err) || ""} ${err instanceof ChatError ? err.kind : ""} ${errorMessage(err).slice(0, 300)}`);
         if (!(err instanceof ChatError) || err.kind !== "upstream") break; // out of credit, busy, no vision...: a second try would only cost more
       }
     }
@@ -835,29 +924,30 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   if (!reply.trim() && !shownUi) {
     // never end a turn in silence
     // A cut-off answer says so (a photo turn writing a whole recipe is the usual one); only a model that really said nothing gets the generic line.
-    const photo = attachments.length > 0 || (Array.isArray(lastMsg?.content) && lastMsg.content.some((p: any) => p.type === "image_url"));
+    const photo = attachments.length > 0 || (Array.isArray(lastContent) && lastContent.some((p) => p.type === "image_url"));
     console.warn(`Chat turn ended with no text and nothing shown${lastCut ? ` (cut off: ${lastCut})` : ""}: sending the fallback line`);
     reply = lastCut ? cutOffLine(lastCut, { photo }) : "Sorry, I didn't manage to answer that. Could you try again?";
     emit({ type: "text", delta: reply });
-    thread.push({ role: "assistant", content: reply });
+    add({ role: "assistant", content: reply });
   }
   emit({ type: "done", suggestions });
   // This turn's new model messages (assistant tool calls, tool results, the final answer), the panel extras on the last
   // assistant one, ready to be stored for an editor.
-  const produced = thread.slice(base);
+  const produced = [...turn];
   const lastAssistant = produced.findLastIndex((m) => m.role === "assistant");
-  if (lastAssistant !== -1 && Object.keys(ui).length) produced[lastAssistant] = { ...produced[lastAssistant], ui };
+  const target = produced[lastAssistant];
+  if (target?.role === "assistant" && Object.keys(ui).length) produced[lastAssistant] = { ...target, ui };
   return { reply, suggestions, produced, shown: shownFor(ui) };
 }
 
 /** What the panel showed besides the text, for the trace: card slugs, chip labels, the question, the button. */
-export function shownFor(ui: any) {
-  const shown: Record<string, any> = {};
-  if (ui.cards?.length) shown.cards = ui.cards.map((c: any) => c.slug);
-  if (ui.replies?.length) shown.replies = ui.replies.map((r: any) => (typeof r === "string" ? r : r.label));
+export function shownFor(ui: MessageUi): Record<string, unknown> | undefined {
+  const shown: Record<string, unknown> = {};
+  if (ui.cards?.length) shown.cards = ui.cards.map((c) => c.slug);
+  if (ui.replies?.length) shown.replies = ui.replies.map((r) => (typeof r === "string" ? r : r.label));
   if (ui.question) shown.question = { text: ui.question.question, options: ui.question.options };
-  if (ui.review) shown.review = ui.review.drafts.map((d: any) => d.slug);
-  if (ui.optional) shown.optional = ui.optional.items.map((i: any) => i.item);
+  if (ui.review) shown.review = ui.review.drafts.map((d) => d.slug);
+  if (ui.optional) shown.optional = ui.optional.items.map((i) => i.item);
   if (ui.nav) shown.navigation = ui.nav.label;
   return Object.keys(shown).length ? shown : undefined;
 }

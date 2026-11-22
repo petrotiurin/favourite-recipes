@@ -348,7 +348,7 @@ test("chips: a plain 'Save to site' becomes the real button when the tray allows
       return saved(url, init);
     };
     try {
-      await runChat({ caller: editor(), messages: [...history, { role: "user", content: "ok" }], page: {}, emit: (e: any) => emitted.push(e), trace: { generation: () => ({ end() {} }), span: () => ({ end() {} }), event() {}, finish() {} }, apiKey: "k", model: "m" });
+      await runChat({ caller: editor(), messages: [...history, { role: "user", content: "ok" }], page: {}, emit: (e: any) => emitted.push(e), trace: { enabled: false, traceId: undefined, generation: () => ({ end() {} }), span: () => ({ end() {} }), event() {}, finish() {} }, apiKey: "k", model: "m" });
     } finally {
       globalThis.fetch = saved;
     }
