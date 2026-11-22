@@ -1,21 +1,12 @@
 ---
-// The house icon language (design.md): one outline set, 24px grid, round caps. `class` is on the <svg> (default "icon").
-type Name = "search" | "arrow" | "back" | "cart" | "chevron" | "house-some";
+// The house icon language (design.md): one outline set, 24px grid, round caps; the paths are in src/lib/icons.ts (the islands draw the same ones). `class` is on the <svg> (default "icon").
+import { ICONS, type IconName } from "../lib/icons.ts";
+
 interface Props {
-  name: Name;
+  name: IconName;
   class?: string;
 }
 const { name, class: cls = "icon" } = Astro.props;
-
-const HOUSE = '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>';
-const icons: Record<Name, { stroke: number; paths: string }> = {
-  search: { stroke: 1.8, paths: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>' },
-  arrow: { stroke: 2, paths: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>' },
-  back: { stroke: 1.8, paths: '<path d="M15 5l-7 7 7 7"/>' },
-  cart: { stroke: 1.8, paths: '<path d="M3 4h2l2.4 11h10.2L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="17" cy="19.5" r="1.3"/>' },
-  chevron: { stroke: 2, paths: '<path d="M6 9l6 6 6-6"/>' },
-  "house-some": { stroke: 2, paths: `${HOUSE}<rect x="5" y="14" width="14" height="6" fill="currentColor"/>` },
-};
-const { stroke, paths } = icons[name];
+const { stroke, paths } = ICONS[name];
 ---
 <svg class={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={stroke} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={paths}></svg>

@@ -25,7 +25,7 @@ describe("recipePlainText", () => {
     expect(recipePlainText({ ...recipe, ingredients: [] })).toContain("Ingredients\n\nNot recorded yet.");
   });
 
-  it("is what the cook script reads, with the servings selector's state", () => {
+  it("is what the Cook with Claude island gets, with the servings selector's state", () => {
     expect(cookRecipe(recipe, true)).toMatchObject({ title: "Rice", slug: "rice", serves: 2, scalable: true });
   });
 });

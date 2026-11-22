@@ -4,12 +4,12 @@ import Layout from "../../components/Layout.astro";
 import Photo from "../../components/Photo.astro";
 import Icon from "../../components/Icon.astro";
 import IngredientList from "../../components/IngredientList.astro";
-import ServingsPicker from "../../components/ServingsPicker.astro";
+import CookActions from "../../islands/CookActions.tsx";
+import Servings from "../../islands/Servings.tsx";
 import { hasAmounts } from "../../../shared/ingredient-line.ts";
 import { getRecipes } from "../../lib/site-data.ts";
 import { isThisWeek, isNextWeek } from "../../lib/status.ts";
 import { cookRecipe } from "../../lib/recipe-text.ts";
-import { scriptJson } from "../../lib/json.ts";
 
 export async function getStaticPaths() {
   return (await getRecipes()).map((recipe) => ({ params: { slug: recipe.slug }, props: { recipe } }));
@@ -27,6 +27,8 @@ const kicker: { text: string; cls?: string }[] = [
 // `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list already gives amounts per number of people).
 // Otherwise every amount is a `.qty` the servings selector rescales, written straight from the data.
 const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
+// The recipe as the "Cook with Claude" island needs it, and this page's own address for its prompt.
+const cook = { ...cookRecipe(recipe, scalable), pageUrl: new URL(Astro.url.pathname, Astro.site).href };
 ---
 <Layout title={`${recipe.title} — Our Favourite Recipes`} bodyClass="recipe-page" rootPrefix="../" pageContext={{ page: "recipe", slug: recipe.slug, title: recipe.title }}>
   <main>
@@ -39,12 +41,13 @@ const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
     <Photo class="recipe-hero" image={recipe.image} slug={recipe.slug} kind="hero" alt={recipe.title} loading="eager" />
     <div class="recipe-meta">
       <span><b>{recipe.total_mins}</b> min</span>
-      <span class="serves-chip">Serves <b>{recipe.serves}</b></span>
+      {/* With the servings picker on the page, it says how many the recipe serves. */}
+      {!scalable && <span class="serves-chip">Serves <b>{recipe.serves}</b></span>}
       <span><b>{recipe.calories}</b> kcal each</span>
     </div>
-    <div class="cook-bar" hidden>
-      {scalable && <ServingsPicker serves={recipe.serves} />}
-      <div class="cook-actions"></div>
+    <div class="cook-bar">
+      {scalable && <Servings client:visible serves={recipe.serves} />}
+      <div class="cook-actions"><CookActions client:visible {...cook} /></div>
     </div>
     {/* The ingredients (rendered from the data) beside the rest of the body, so wide screens can show them side by side: the ingredients as
         a sticky pane with its own scroll, the instructions in the page's scroll (see `.recipe-body` in style.css). Narrow screens stack them. */}
@@ -58,8 +61,4 @@ const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
       </div>
     </div>
   </main>
-  {scalable && <script is:inline src="../servings.js" defer></script>}
-  <script is:inline src="../wakelock.js" defer></script>
-  <script is:inline type="application/json" id="cook-recipe" set:html={scriptJson(cookRecipe(recipe, scalable))}></script>
-  <script is:inline src="../cook-claude.js" defer></script>
 </Layout>

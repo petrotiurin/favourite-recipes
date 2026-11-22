@@ -1,6 +1,5 @@
 ---
 paths:
-  - "templates/servings.js"
   - "templates/shopping.js"
   - ".claude/skills/add-recipe/SKILL.md"
 ---
@@ -14,7 +13,6 @@ left, until the migration reaches it:
 
 | One side | Other side | Checked by |
 | --- | --- | --- |
-| `templates/servings.js` `format()` (browser script, can't import `.ts` yet) | `formatQuantity` in `shared/quantity.ts` | `shared/test/quantity.test.ts`; goes when servings becomes an island (step 6) |
 | `need()` in `templates/shopping.js` (browser script) | `neededAmount` in `shared/shopping-list.ts` | `shared/test/shopping-list.test.ts`; goes when the shopping list becomes an island (step 7) |
 
 `shopping.js`'s `formatNumber` / `withUnit` (how a quantity is written on the shopping page) is also its own, and the static page's

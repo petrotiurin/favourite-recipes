@@ -58,9 +58,28 @@ describe("Layout", () => {
     const block = doc.getElementById("page-context")!;
     expect(block.getAttribute("type")).toBe("application/json");
     expect(pageContextSchema.parse(JSON.parse(block.textContent))).toEqual(pageContext);
-    expect(html.match(/<script/g)?.length).toBe(1);
+    expect(html.match(/<script/g)?.length).toBe(2); // the page context and the reload guard
     expect(html).not.toMatch(/id="page-context">[^]*?[<>&][^]*?<\/script>/);
-    expect(html).toContain('href="../style.css"');
+  });
+
+  it("writes the reload guard first in the head, as a script that works on its own", async () => {
+    const html = await page({ pageContext: { page: "index" } });
+    const head = dom(html).head;
+    const first = head.querySelector("script")!;
+    expect(head.querySelector("title")!.compareDocumentPosition(first) & 2).toBeTruthy(); // before the title
+    expect(first.getAttribute("type")).toBeNull();
+    const listeners: Record<string, () => void> = {};
+    const reload = vi.fn();
+    const win = {
+      document: { querySelector: () => null },
+      location: { pathname: "/x.html", reload },
+      sessionStorage: { getItem: () => null, setItem: () => {} },
+      addEventListener: (name: string, f: () => void) => (listeners[name] = f),
+    };
+    new Function("window", first.textContent!)(win);
+    expect(Object.keys(listeners).sort()).toEqual(["astro:hydration-error", "vite:preloadError"]);
+    listeners["astro:hydration-error"]();
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it("refuses a page with no page context", async () => {

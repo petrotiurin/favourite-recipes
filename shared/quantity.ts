@@ -1,6 +1,5 @@
-// The rounding of a scaled amount: the recipe page's 1/2/4 picker (templates/servings.js, which is still its own copy until it becomes
-// an island, docs/typescript-migration.md steps 6-7) and the backend's scale_recipe (scaledMarkdown in ingredient-line.ts) both show
-// numbers this way. shared/test/quantity.test.ts checks templates/servings.js against this.
+// The rounding of a scaled amount: the recipe page's 1/2/4 picker (src/islands/Servings.tsx, through src/lib/rescale.ts) and the backend's
+// scale_recipe (scaledMarkdown in ingredient-line.ts) both show numbers this way.
 
 const STEPS: readonly (readonly [number, string])[] = [[0, ""], [0.25, "¼"], [1 / 3, "⅓"], [0.5, "½"], [2 / 3, "⅔"], [0.75, "¾"], [1, ""]];
 

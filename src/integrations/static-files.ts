@@ -1,4 +1,4 @@
-// Serves the site's browser scripts (templates/*.js, until they become islands), the stylesheet and the original recipe photos (still published at /images/recipes/ for the chat's cards and outside links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no bundling, no hashing):
+// Serves the site's browser scripts that are not islands yet (templates/*, until steps 7 and 8 of docs/typescript-migration.md) and the original recipe photos (still published at /images/recipes/ for the chat's cards and outside links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no bundling, no hashing):
 // the dev server answers them and the build copies them into dist/ next to the pages. Which scripts go in depends on the same
 // env vars as before: auth.js only with SUPABASE_URL + SUPABASE_ANON_KEY, chat.js only with CHAT_API_URL.
 import fs from "node:fs";
@@ -9,7 +9,6 @@ const ROOT = process.cwd();
 
 const mime: Record<string, string> = {
   ".js": "text/javascript",
-  ".css": "text/css",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
@@ -22,8 +21,7 @@ const mime: Record<string, string> = {
 function staticFiles(): Map<string, string> {
   const files = new Map<string, string>();
   const add = (publishedPath: string, source: string) => files.set(publishedPath, path.join(ROOT, source));
-  add("style.css", "styles/style.css");
-  for (const name of ["search", "servings", "wakelock", "cook-claude", "shopping"]) add(`${name}.js`, `templates/${name}.js`);
+  add("shopping.js", "templates/shopping.js");
   if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) add("auth.js", "templates/auth.cjs");
   if (process.env.CHAT_API_URL) add("chat.js", "templates/chat.cjs");
   const images = path.join(ROOT, "images");
@@ -60,7 +58,7 @@ export default function staticFilesIntegration(): AstroIntegration {
                     res.setHeader("Content-Type", mime[path.extname(rel).toLowerCase()] ?? "application/octet-stream");
                     fs.createReadStream(source).pipe(res);
                   });
-                  // Ahead of Vite's own handling of .js and .css, so the scripts and the stylesheet are served as they are.
+                  // Ahead of Vite's own handling of .js, so the scripts are served as they are.
                   const stack = (server.middlewares as unknown as { stack: unknown[] }).stack;
                   stack.unshift(stack.pop());
                 },

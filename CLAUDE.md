@@ -6,7 +6,7 @@ The family's cooking app: the recipe book, this week's and next week's plans, an
    (`astro build`: `src/pages`, `src/components`) and deployed as static files to GitHub Pages. **The one hard requirement is that it builds in the
    Pages workflow (GitHub Actions) and is served as static files from GitHub Pages**: no server-side rendering or hosting
    of the site anywhere else.
-2. **Client-side JS** (`templates/*.js`): today hand-written vanilla JS, copied verbatim into `dist/`. Every page is still written to HTML
+2. **Client-side JS**: Preact islands in `src/islands/` (search, servings, wake-lock, cook with Claude; shopping, sign-in and chat still hand-written vanilla JS in `templates/*`, copied verbatim into `dist/` until steps 7-8 of `docs/typescript-migration.md`). Every page is still written to HTML
    by the build; JS may add features that only exist with JS. Dynamic JS is allowed
    (frameworks, a bundler or npm packages too, as long as the build runs in the Pages workflow and the output is static files).
    Network calls from the browser go only to **our own backend** (part 3), Supabase Auth and the site's own static files, never
@@ -48,9 +48,10 @@ shopping-list.json  the shopping list for next week's recipes, written via the M
 astro.config.ts     Astro: static output, base `/favourite-recipes`, `build.format: "file"`
 src/pages/          one page per URL: index, next-week, shopping-list, recipes/[slug] -> dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
 src/components/     the page pieces as `.astro` (layout, site bar, tile, ingredient list, week heading, shopping rows)
+src/islands/        the interactive parts as Preact `.tsx` islands (.claude/rules/site.md)
 src/lib/            site-only helpers (week rules, status, shopping page numbers, build env); `src/content.config.ts` is the recipes collection (frontmatter validated by the zod schema in shared/recipe.ts, every ingredient `item` checked against data/ingredients.json)
-templates/          the browser scripts, copied verbatim into dist/ (.claude/rules/site.md)
-styles/style.css    the one stylesheet, copied verbatim into dist/
+templates/          the browser scripts not yet islands (shopping, sign-in, chat), copied verbatim into dist/ (.claude/rules/site.md)
+styles/style.css    the one stylesheet, imported by the layout (Astro bundles it with a hashed name)
 design.md           UI principles: palette tokens, type, the house icon language, shared components
 dist/               build output — gitignored, never hand-edit, regenerated every build
 shared/             logic used by both the site and the backend (ingredient line, scaling rounding, shopping-list reading and amounts); .ts, own package.json, imported by both (docs/typescript-migration.md 4.3)
@@ -65,7 +66,7 @@ docs/               design docs (chatbot-design.md, structured-ingredients.md, p
 ```
 npm install
 npm run build        # writes dist/
-npx serve dist        # or just open dist/index.html directly in a browser
+npx astro preview     # serves dist/ under /favourite-recipes/ (the pages link their files from there, so opening dist/index.html directly or `npx serve dist` shows no styles)
 ```
 
 Run `npm run build` after adding or editing any recipe and sanity-check the new page before committing.

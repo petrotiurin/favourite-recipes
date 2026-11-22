@@ -519,7 +519,7 @@ main:has(.tile-grid.is-searching) .week-label {
 }
 
 /* Cooking controls under the facts: servings on the left, "Keep screen on" on the
-   right. Hidden until servings.js or wakelock.js fills it, so a page they don't run on skips it. */
+   right (the islands in src/islands/: Servings, CookActions). */
 .cook-bar {
   display: flex;
   flex-wrap: wrap;
@@ -550,7 +550,7 @@ main:has(.tile-grid.is-searching) .week-label {
   display: none;
 }
 
-/* Opens a new Claude chat with the recipe (templates/cook-claude.js): the same pill as
+/* Opens a new Claude chat with the recipe (src/islands/CookClaude.tsx): the same pill as
    "Keep screen on", in accent ink with the "opens elsewhere" arrow. */
 .pill.cook-claude {
   min-height: 2.75rem;

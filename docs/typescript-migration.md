@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components) and 5 (photos) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos) and 6 (small islands) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -198,7 +198,8 @@ was built with. Astro's default; nothing to build.
   parts failed to load) and reload the page, so it comes back with today's files. To avoid a loop when the file is really missing,
   it reloads at most once per page per minute (a timestamp in `sessionStorage`) and otherwise leaves the page as it is. It skips the
   reload while the chat has an unsent message in its box. Step 6 adds it with the first island; a test checks it reloads once and
-  not again.
+  not again. (Built in step 6 on two events, not one: Astro imports an island's script directly, not through Vite's preload helper, so a
+  gone island script raises Astro's `astro:hydration-error`, not `vite:preloadError`; see "Step 6 as built".)
 
 ### 4.12 It ships as one PR
 
@@ -252,7 +253,7 @@ step.
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
    rules (4.5).
 5. **Photos** (done) sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
-6. **Small islands:** search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
+6. **Small islands** (done): search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
 7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
 8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
 9. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
@@ -372,3 +373,44 @@ step.
 - **Measured** (4-core machine): cold image cache `astro build` 9.5 s (2.2 s before this step), warm cache 2.2 s. An iPhone-size screen (390x844 at 3x, Chromium, scrolled to the bottom): images downloaded for the home page
   63 images / 16.9 MB before, 3.1 MB after; next week 2.8 MB to 0.65 MB; a recipe page 221 KB to 182 KB; the shopping page 2.8 MB to 54 KB. Page text: 74 of 75 pages are the same apart from the `<img>` tags and whitespace around them;
   the shopping page's `#shopping-data` has the thumbnail paths. No console errors, no broken images on the home page, next week, a recipe page and the shopping page.
+
+### Step 6 as built
+
+- **Islands** (`src/islands/*.tsx`, strict, Preact; the page is written to HTML with each island's markup in it and Astro hydrates it): `Search` (`client:load`, home page), `Servings` (`client:visible`, scalable recipe pages),
+  `CookActions` (`client:visible`, every recipe page) = `WakeLock` ("Keep screen on") + `CookClaude`. Same ids, classes and `data-*` as the scripts had (`#recipe-search`, `.servings-picker [aria-pressed]`, `.cook-bar`, which the chat reads).
+  Helpers in `src/lib/`, each with tests: `rescale.ts` (writes the amounts into the page's `.qty` / `.qty-unit` from `formatQuantity`), `tile-filter.ts`, `cook-prompt.ts` (the prompt, ported string for string), `icons.ts` (the icon paths, shared
+  by `Icon.astro` and the islands' `Icon.tsx`), `servings.ts` (the store), `reload-guard.ts`. Tests: `src/islands/islands.test.tsx` (happy-dom: rescale at 1/2/4 incl. the `formatQuantity` edge cases, unit words, search, wake-lock
+  with a mocked `navigator.wakeLock` and without one, the link at each servings), `src/lib/reload-guard.test.ts`, and the Layout test (the guard is in the head and works as written into the page).
+- **One island for the two pills.** `client:visible` watches an island's elements, and a wake-lock island that renders nothing (the build can't know the browser) would never wake, so the wake-lock button is written at build time (and removed again on a
+  browser without the API: no button there, as before) and shares the `CookActions` island with the Cook with Claude link. The 4.6 table already put them on one row.
+- **The store.** `src/lib/servings.ts` is a `@preact/signals` signal (a new direct dependency; it was already installed through `@astrojs/preact`): `Servings` sets it, `CookClaude` reads it. This replaces reading `aria-pressed` off the DOM
+  after the picker's click.
+- **What the page says before the islands load** (the old scripts un-hid things when they ran): the cook bar is no longer `hidden` (a hidden element is never "visible", so its islands would never wake). The picker is written with the recipe's own number
+  pressed, because the amounts on the page are for it, and moves to 4 (`DEFAULT_SERVINGS`, as the scripts did) when it loads. The static "Serves n" chip is written only when there is no picker (the old script hid it). "Cook with Claude" is a real link
+  from the start, at the recipe's own number, with the recipe page's canonical address in the prompt, and takes the browser's address and the picker's number when it loads. `#cook-recipe` is gone; nothing read it (checked: `templates/chat.cjs`, `shopping.js`, `mcp-server/`).
+  An island below the fold wakes when scrolled into view and its link's `href` is then current (the picker's number is in the store before that).
+- **`shared/servings.ts`** (new, no imports) holds `BASE_SERVINGS` and `DEFAULT_SERVINGS`; `shared/shopping-list.ts` re-exports them. Importing them from `shopping-list.ts` pulled zod into the servings island (90 KB instead of 1.4 KB): **a browser module must not import
+  a `shared/` file that imports zod** (4.4). Step 7 has to keep that in mind for the shopping list's `neededAmount`.
+- **Gone:** `templates/search.js`, `servings.js`, `wakelock.js`, `cook-claude.js`, `components/ServingsPicker.astro`, the guard test in `shared/test/quantity.test.ts` and its row in `.claude/rules/kept-in-step.md`, and the copy of `format()`. `static-files.ts` copies `shopping.js`,
+  `auth.js`, `chat.js` and the original photos only; the dev middleware no longer serves `style.css`.
+- **The stylesheet is bundled** by importing it in `Layout.astro`: `_astro/<name>.<hash>.css` (named `site-data...` after the chunk it landed in), minified by Vite (67 KB to 47.6 KB, 13.7 to 9.4 KB gzipped), linked absolutely under the base (`/favourite-recipes/_astro/...`), after the Google
+  Fonts link as before. Nothing depends on the old `style.css` URL (grepped `templates/`, `mcp-server/`, the workflows, docs: only a Layout test and comments). The root `CLAUDE.md` build section now says `npx astro preview`, since pages link their files under the base
+  (this was already true of the photos since step 5; `npx serve dist` and `file://` show no styles).
+  Checked in Chromium, 390 and 1100 px wide, light and dark, on the home page, next week, three recipes and the shopping page (5,344 elements, every computed property but custom properties, which Vite rewrites as written, e.g. `#fff` for `#ffffff`): the same, except `background-position: 0% 0%` is
+  `0px 0px` (same place) and sub-pixel text widths from the machine's fonts, plus the "Serves n" chip that is meant to be gone.
+- **The reload guard** (`src/lib/reload-guard.ts`, written into every page's head, first in it, by `reloadOnStaleScript.toString()`, so it is tested as TypeScript and runs as an inline script: 567 bytes): on `vite:preloadError` **and `astro:hydration-error`**, reload unless (a) it reloaded this page in the last
+  minute (`sessionStorage`, key per path), (b) `sessionStorage` can't be used (it couldn't remember, so it might loop), or (c) the chat's `textarea.chat-input` holds non-blank text (this doesn't use up the one reload). **Deviation from 4.11:** Astro 7 loads an island's script with a plain `import()`
+  (retrying once after a second with a cache-busting query), not through Vite's preload helper, so a gone island script never raises `vite:preloadError`; it raises `astro:hydration-error` (a bubbling event on the `astro-island`). The guard listens to both. Any hydration import failure counts, not only a 404.
+- **Stale-chunk check** (Chromium, the built site with `CookActions.*.js` deleted from a copy of `dist/`): the page loads, the import fails twice (Astro's retry), the page reloads once, fails again and stays as it is: 2 loads after 10 s, none more; a manual reload inside the minute doesn't reload again. With the file back after
+  the first failure (a deploy finishing): reloads once, the island wakes, the link and the toggle work. With text in the chat box: no reload, text kept, and a `vite:preloadError` after emptying it reloads.
+- **Checked against the HEAD build** (both in Chromium with iPhone emulation, 390x844 at 3x, no console errors on any page): all 72 recipe pages: after each click on 1, 2, 4, 2, 1, 4 the amounts, unit words, ingredient lines and the Cook with Claude `href` (with the port normalised) are equal, and equal on load (468 checks, 0 differences); 6 recipes
+  have no picker and the same link. Search ("tuna", "TUNA  melt", "chicken salad", no match, empty, spaces): the same tiles and `is-searching`. Wake lock (mocked API): request, release and the toggle's text and `aria-pressed` the same; without the API: no button, the link stays.
+  The pages' DOM (tags, attributes, text, JSON blocks) differs only by: the stylesheet link (hashed, absolute), the guard `<script>` in every head, Astro's island loader scripts and `astro-island` elements, the removed `<script src>` tags and `#cook-recipe`, the cook bar without `hidden`
+  (and the wake-lock button and link inside it from the start), the picker without `hidden` and with the recipe's own number pressed, and the recipe pages with a picker without the "Serves n" chip. The home page's search box is the same markup.
+- **JS shipped** (iPhone emulation, bytes as served, gzipped in brackets; "inline" is in the HTML): home page 0.7 KB (0.4) before, 19.1 KB (8.8) + 5.6 KB inline (2.4) after: Preact, the Astro renderer and the island. Next week and shopping: nothing new but the 0.6 KB guard inline (shopping still has `shopping.js`, 33.7 KB).
+  Scalable recipe page 8.4 KB (3.6) before, 30.6 KB (13.7) + 5.9 KB inline (2.5) after; a recipe with no picker 5.9 KB (2.7) before, 29.2 KB (12.9) + 5.9 KB inline after. The step buys the shared Preact/Astro runtime (about 26 KB raw, 12 KB gzipped, cached across pages), which the shopping list and chat will also use.
+  The `astro-island` loader is inlined (about 5 KB, the first island in the page brings it).
+- **`client:visible` and the phone:** the cook bar's pills sit under the servings picker on a phone and may be below the fold; their island wakes when they scroll in, and the link then has the picker's number. A tap on the pills in the few milliseconds before they wake is the same as a tap on the old page before its script ran.
+- **Search** now also applies what the box holds when it loads (text typed before the island woke, or put back by the browser on Back), which the script never did.
+- **Not checked:** Safari/iOS itself (Chromium emulation only), the real Screen Wake Lock (headless Chromium has the API; the lock itself was mocked), `vite:preloadError` from a real chunk (nothing in the pages' output uses Vite's preload helper yet; the event is covered by a test and by dispatching it).
+

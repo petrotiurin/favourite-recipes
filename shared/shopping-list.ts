@@ -4,11 +4,10 @@
 // neededAmount here.
 
 import { z } from "zod";
+import { BASE_SERVINGS, DEFAULT_SERVINGS } from "./servings.ts";
 
-// Every quantity on the list is written for BASE_SERVINGS of each recipe; the page and the backend rescale from it. The list's `servings`
-// plans each recipe (set by the agent), and a recipe without a plan gets DEFAULT_SERVINGS.
-export const BASE_SERVINGS = 2;
-export const DEFAULT_SERVINGS = 4;
+// Every quantity on the list is for BASE_SERVINGS of each recipe, and a recipe without a plan gets DEFAULT_SERVINGS (shared/servings.ts, which has no zod in it).
+export { BASE_SERVINGS, DEFAULT_SERVINGS };
 
 export const shoppingItemSchema = z.object({
   name: z.string(),

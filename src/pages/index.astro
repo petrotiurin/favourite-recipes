@@ -1,9 +1,9 @@
 ---
 import Layout from "../components/Layout.astro";
 import SiteBar from "../components/SiteBar.astro";
-import Icon from "../components/Icon.astro";
 import Tile from "../components/Tile.astro";
 import WeekHead from "../components/WeekHead.astro";
+import Search from "../islands/Search.tsx";
 import { getRecipes } from "../lib/site-data.ts";
 import { isThisWeek, isNextWeek } from "../lib/status.ts";
 import { FILTER_COURSES, courseClasses, courseLabel, indexOrder } from "../lib/week.ts";
@@ -15,7 +15,7 @@ const { shown, restStart } = indexOrder(recipes);
   <SiteBar />
   <main>
     <h1 class="sr-only">Our Favourite Recipes</h1>
-    <label class="search"><Icon name="search" /><span class="sr-only">Search recipes</span><input type="search" id="recipe-search" class="search-input" placeholder="Search recipes" autocomplete="off"></label>
+    <Search client:load />
     <div class="filter-bar">
       {/* Each input must sit directly before its label: the CSS highlights the active filter with `.filter-input:checked + .filter-label`. */}
       {["All", ...FILTER_COURSES].map((c) => (
@@ -37,5 +37,4 @@ const { shown, restStart } = indexOrder(recipes);
       ))}
     </div>
   </main>
-  <script is:inline src="search.js" defer></script>
 </Layout>

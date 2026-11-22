@@ -5,7 +5,7 @@ f=$(jq -r '.tool_response.filePath // .tool_input.file_path // empty')
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 case "${f#"$root"/}" in
   mcp-server/lib/*|mcp-server/api/*|mcp-server/test/*|mcp-server/scripts/*|mcp-server/workflows/*|mcp-server/package.json) ;;
-  shared/*|templates/servings.js|templates/chat.js|templates/shopping.js|templates/auth.js|data/ingredients.json) ;; # checked against the server by its tests
+  shared/*|templates/chat.js|templates/shopping.js|templates/auth.js|data/ingredients.json) ;; # checked against the server by its tests
   *) exit 0 ;;
 esac
 cd "$root/mcp-server" || exit 0

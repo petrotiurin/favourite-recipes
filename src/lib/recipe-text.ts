@@ -1,4 +1,4 @@
-// What the recipe page hands to the "Cook with Claude" script (templates/cook-claude.js): the recipe as plain text, in the `#cook-recipe` JSON.
+// What the recipe page hands to the "Cook with Claude" island (src/islands/CookClaude.tsx, prompt in cook-prompt.ts) as props: the recipe as plain text.
 import { ingredientGroups, ingredientText, type Ingredient } from "../../shared/ingredient-line.ts";
 import type { RecipeFrontmatter } from "../../shared/recipe.ts";
 
@@ -26,7 +26,7 @@ export function recipePlainText(recipe: Cookable): string {
   return `${facts}\n\n${list}\n\n${body}`;
 }
 
-/** The `#cook-recipe` data: the page's title and slug, how many it serves, whether the servings selector is on, and the text. */
+/** The island's props: the page's title and slug, how many it serves, whether the servings selector is on, and the text. */
 export function cookRecipe(recipe: Cookable, scalable: boolean) {
   return { title: recipe.title, slug: recipe.slug, serves: Number(recipe.serves), scalable, text: recipePlainText(recipe) };
 }
