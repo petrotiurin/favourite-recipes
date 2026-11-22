@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos), 6 (small islands), 7 (shopping and sign-in), 8 (chat) and 9 (the backend to `.ts`) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **done, pending merge**: steps 1 to 10 are built on the branch (groundwork, `shared/`, schemas, pages and components, photos, small islands, shopping and sign-in, chat, the backend to `.ts`, docs and skills), to be merged to `main` once (4.12); rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -40,24 +40,35 @@ what it costs us now is:
 
 ## 3. Proposed shape
 
+Written before the work; **as built** it is this (deviations after the block):
+
 ```
-astro.config.ts       output "static", site + base, build.format "file", the Preact integration
-src/content.config.ts the recipes collection: recipes/*.md, validated by the recipe schema from shared/
+astro.config.ts       output "static", site + base, build.format "file", the Preact integration, Sätteri Markdown (smart punctuation off)
+src/content.config.ts the recipes collection: recipes/*.md, validated by the recipe schema from shared/ + every ingredient `item` in the catalogue
 src/pages/            index.astro, next-week.astro, shopping-list.astro, recipes/[slug].astro: one file per page (URL), plain HTML out
-src/components/       the static pieces, .astro: layout, site bar, tile, ingredient list, week headings. No JS in the browser
-src/islands/          the interactive pieces, Preact .tsx: servings, search, wake-lock, cook with Claude, shopping list, sign-in, chat
-src/lib/              site-only helpers (week rules and sorting, today templates/status.js)
-shared/               logic, zod schemas and types used by the site and the backend; own package.json, "type": "module"
+src/components/       the static pieces, .astro: Layout, SiteBar, Tile, WeekHead, IngredientList, Photo, Icon. No JS in the browser
+src/islands/          the interactive pieces, Preact .tsx: Search, Servings, CookActions (WakeLock, CookClaude), Shopping, SignIn, chat/ (the chat)
+src/lib/              site-only helpers and stores (week rules, status, shopping numbers, the sign-in store, servings store, reload guard, photos, env) and
+                      src/lib/chat/, the chat's logic (no Preact), each with Vitest tests next to it
+src/integrations/     static-files.ts: copies the original photos (and nothing else now) into dist/
+shared/               zod schemas (recipe, catalogue, shopping list, page context, chat events) and logic used by the site and the backend; own package.json, "type": "module"
 styles/style.css      still the one stylesheet, imported by the layout (Astro bundles it with a hashed name)
 recipes/, images/, data/, shopping-list.json   unchanged: the backend's files
-mcp-server/           the backend, unchanged in role; converted to TypeScript (4.10), imports shared/
+mcp-server/           the backend, unchanged in role; TypeScript run by Node 24 (4.10), imports shared/
 ```
 
-`build.js` and `templates/` are gone at the end: Astro's pages, components and islands replace them.
+`build.js` and `templates/` are gone: Astro's pages, components and islands replace them.
 
-**The Pages workflow** runs `npm ci` then `npm run build`, which is `astro check` (types, including `.astro` files) + `vitest run` +
-`astro build`, and uploads `dist/` as today. **Locally:** `npm run dev` is `astro dev` (live reload on a change to a recipe, a page
-or an island); `npm run build` + `npx astro preview` to see the real output.
+Deviations from the proposal, briefly: Markdown is rendered by Astro 7's default Sätteri processor, not remark (step 4); the chat's logic is
+`src/lib/chat/` next to the island, not inside it (step 8); the sign-in sheet is mounted by a module script (`src/lib/auth-boot.ts`), not an island
+(step 7); the originals of the photos are still published beside the sized copies (step 5); the backend's `.ts` files are shipped by `includeFiles`
+and `shared/`'s packages come from a `postinstall` script (step 9); the reload guard listens to `astro:hydration-error` as well as `vite:preloadError`
+(step 6). Each is under its "Step N as built".
+
+**The Pages workflow** runs `npm ci` then `npm run build`, which is `tsc -p shared` + `astro check` (types, including `.astro` files) + `vitest run` +
+`astro build`, and uploads `dist/` as today (with Astro's image cache restored between runs). **Locally:** Node 24 (`.nvmrc`); `npm run dev` is `astro dev`
+(live reload on a change to a recipe, a page or an island); `npm run build` + `npx astro preview` to see the real output. `npx serve dist` and `file://` don't
+work: pages link their files under `/favourite-recipes/`.
 
 ## 4. Decided
 
@@ -257,11 +268,11 @@ step.
 7. **Shopping and sign-in islands** (done): one render for the shopping list; the sign-in store (with a `window.RecipeAuth` shim for the chat until step 8).
 8. **Chat** (done): split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
 9. **The backend to `.ts`** (done): first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
-10. **Docs and skills:** the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
+10. **Docs and skills** (done): the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
     `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files. Also the recipe format's prose
     (the note `.claude/rules/kept-in-step.md` carried until step 7): `.claude/skills/add-recipe/SKILL.md` and the schema in the root `CLAUDE.md`
     describe what the zod schemas in `shared/recipe.ts` enforce, by hand; rewrite the skill around the schema (or generate the schema text from it)
-    so there is one source, and until then change them together.
+    so there is one source, and until then change them together. (Done: see "Step 10 as built".)
 
 ### Step 1 as built
 
@@ -536,3 +547,9 @@ step.
 - **The parallel-build flake is fixed** (it was already worked around for the image cache in step 5, but not for the build folder): Astro 7 puts its `.prerender` folder inside the output folder when that is under the working directory, and in the project's shared `.astro/` when it isn't. The three test files that build the site wrote their output to a temp dir outside the project, so `chat-switch` and `phase6` shared `.astro/.prerender` with each other. `chat-switch.test.ts` now builds into `node_modules/.astro-test/` (inside the project); `ingredients.test.ts` already built inside its own project copy; `phase6.test.js` (untouched) is now the only build left using the shared `.astro/`. Keep an output folder under the working directory when a test builds in parallel. For the same reason the dev harness's `DEV_DIST` must sit under the repo root but not under `mcp-server/` (the build resolves its packages from where its output sits: `Named export 'parseCookie' not found` otherwise).
 - **Dev harness:** `scripts/dev.ts` runs the Astro build (`node node_modules/astro/bin/astro.mjs build`, was `node build.js`) and serves the site under its base path (`http://localhost:4000/favourite-recipes/`; `/` redirects there), with `PUBLIC_SITE_URL` including the base so the chat's links resolve. `scripts/fakes.ts` no longer reads `build.js` into the fake repo (it reads `astro.config.ts`, so the "never touched" guard in the e2e test stays meaningful).
 - **Not checked:** the full chat and tray flows against real services (the fakes cover them); `/mcp` with the real bearer on a preview (deployment protection stops the fetch tool); Node's "type stripping" experimental warning on Vercel (the runtime logs showed nothing); cold-start time against the `.js` backend (not measured).
+
+### Step 10 as built
+
+- **Docs only, no code.** Root `CLAUDE.md`: parts 1 and 2 (Astro, TypeScript, Node 24, islands), the directory layout (`astro.config.ts`, `src/`, `shared/`, `.nvmrc`, `tsconfig.json`, `vitest.config.ts`; `templates/` and `build.js` are not in it), the build section (`npm run dev`, `npm run build`, `npx astro preview`; `npx serve dist` and opening `dist/index.html` don't work under the base path) and the schema note. `.claude/rules/site.md` (title, the old script names), `chat.md` (`data-public` is the island's `publicOff` prop; `lib/scaling.js` is `shared/`), `shopping-list.md` (backend paths), `mcp-server/CLAUDE.md` and `README.md` (`build.js` and `templates` no longer named), `.claude/skills/debug` (`api/*.ts`), `docs/chatbot-design.md`, `docs/structured-ingredients.md` and `docs/parallel-photo-reading.md` (file references that a reader would follow now point at the new modules; the history around them is left as written; `docs/structured-ingredients.md` "Code changes" has a note that the files it names moved). Every backend `lib/x.js` / `api/x.js` named in the docs is `.ts` now. `.claude/settings.json` and `.claude/hooks/run-mcp-tests.sh` needed nothing (the hook already watches `shared/` and the site files the backend's tests read).
+- **One source for the recipe format.** The root `CLAUDE.md` schema block and `.claude/skills/add-recipe/SKILL.md` now say that `shared/recipe.ts` and `shared/catalogue.ts` are the source of truth and the prose follows them (the root block stays a summary, not generated: generating it would need a build step for a file that agents read raw). Checked against the schema, the skill's differences were: `total_mins`, `serves` and `calories` are positive whole numbers (the skill said "a number"); `amount` is positive and a range's first number is below the second; a `unit` needs an `amount` except `pinch` and `handful`; a note saying "to taste" / "to serve" is needed when there's no amount (the skill said "the note must say so"); `name` has no asterisks and isn't empty, `note` has no bold; a `section` name is at most 40 characters and lines without one go before the sections; `item` is kebab-case; catalogue `skip: true` and lower-case `aliases` weren't mentioned; `course` may be empty in the schema (the skill keeps asking for one, for the filters); a `## Ingredients` heading left in the body fails the build (`src/lib/site-data.ts`). Its build step now says `npm run build` type-checks and tests too, and how to look at the page (`npm run dev` / `npx astro preview`, not `dist/` files).
+- **Left as history on purpose:** the "Step N as built" sections and sections 1, 2 and 4 of this file (which describe `templates/`, `build.js`, `marked`, `window.RecipeAuth`, `kept-in-step.md` as they were), and the first-build text of the other design docs.

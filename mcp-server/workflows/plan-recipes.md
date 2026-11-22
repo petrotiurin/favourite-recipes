@@ -1,7 +1,7 @@
 <!--
 The plan-recipes workflow, served by the recipes MCP server as the `plan-recipes` prompt and by
 the get_workflow_guide tool. This file is the single source of truth: skills only point here, so
-a server deploy updates the workflow everywhere. Keep it in step with the tools in lib/server.js.
+a server deploy updates the workflow everywhere. Keep it in step with the tools in lib/server.ts.
 -->
 
 # Plan recipes: plan next week, then build the shopping list

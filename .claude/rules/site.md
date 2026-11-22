@@ -6,7 +6,7 @@ paths:
   - "design.md"
 ---
 
-# The site's pages and browser scripts
+# The site's pages and islands
 
 `design.md` holds the UI principles: colour tokens (the orange accent for this week, purple only for drafts, teal only for next
 week, no other hues such as green), the house icon language and the shared components. Read it before changing any page's look or
@@ -38,8 +38,7 @@ that only exist with JS. The build-time parts are `.astro` and `.ts` files in `s
     (`CookClaude.tsx`): a plain link to a new claude.ai chat whose prompt carries the whole recipe at the servings picked (`recipePlainText` in
     `src/lib/recipe-text.ts`, passed as props; `cook-prompt.ts`); a link the user taps, not a network call. It follows the picker through the
     store `src/lib/servings.ts` (`@preact/signals`).
-  - `Shopping.tsx` (`client:load`, shopping page): the whole list, drawn once at build time and taken over in the browser (the old static markup and
-    `shopping.js` are gone); data comes in as props (`shoppingProps` in `src/lib/shopping.ts`, no `#shopping-data`). Servings card, ticks, recipe photos,
+  - `Shopping.tsx` (`client:load`, shopping page): the whole list, drawn once at build time and taken over in the browser (no separate static markup or script); data comes in as props (`shoppingProps` in `src/lib/shopping.ts`, no `#shopping-data`). Servings card, ticks, recipe photos,
     the editor's "At home" tab and the stocktake `fetch` to `/stocktake` (`.claude/rules/shopping-list.md`). What this browser kept (`localStorage` keys
     unchanged, `shopping-state.ts`) and who is signed in are read in a layout effect after the first render (`useHydrated` in `src/lib/hydrated.ts`), so
     hydration starts from what the build wrote. Its quantity maths is `shared/shopping-quantity.ts` and `formatAmount` in `shared/quantity.ts`, which

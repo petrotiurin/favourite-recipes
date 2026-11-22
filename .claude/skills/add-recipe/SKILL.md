@@ -5,20 +5,22 @@ description: Add a new recipe to the favourite-recipes static site — collects 
 
 # Add a recipe
 
+**The recipe format's source of truth is the zod schema in `shared/recipe.ts`** (frontmatter and ingredients; the catalogue's is `shared/catalogue.ts`). The build (`npm run build`) validates every recipe with it and fails naming the file and field, and the MCP server writes with it. This skill is the workflow and a plain-words summary of those rules; if the two ever disagree, the schema wins (fix this file).
+
 > Handing over recipes to plan for next week, or want a shopping list too? Use the `plan-recipes` skill instead (it works through the recipes MCP server and builds the shopping list). This skill is for editing the repo's files directly.
 
-The site is built into static files (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/` (with its ingredients as frontmatter data, adding any new ingredient to `data/ingredients.json`), save one image in `images/recipes/`, then rebuild. Never write directly into `dist/` — it's regenerated output.
+The site is built into static files (see root `CLAUDE.md`). Adding a recipe means: create one Markdown file in `recipes/` (with its ingredients as frontmatter data, adding any new ingredient to `data/ingredients.json`), save one image in `images/recipes/`, then build (`npm run build`). Never write directly into `dist/` — it's regenerated output.
 
 ## 1. Collect the recipe
 
 From whatever the user gives you (pasted text, a photo of a recipe card, a link, or a description), extract:
 
 - **Title**
-- **Course** — one or more of: `Breakfast`, `Lunch`, `Dinner`, `Snack`, `Drink`
+- **Course** — one or more of: `Breakfast`, `Lunch`, `Dinner`, `Snack`, `Drink` (the schema allows none, but the site's filters need one)
 - **Tags** — optional, free text (e.g. `High Protein`, `Low Carb`)
-- **Total minutes** — a single number. If the source gives prep+cook separately, sum them.
-- **Serves** — a single number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
-- **Calories** — kcal per serving, a single whole number. Always required. Use the source's figure if it gives one (Emily English recipes usually state "xxx kcal per portion"); otherwise estimate from the ingredient quantities divided by `serves`, and tell the user it's an estimate.
+- **Total minutes** — a single positive whole number. If the source gives prep+cook separately, sum them.
+- **Serves** — a single positive whole number of people the recipe serves. Always required — if the source doesn't state it, estimate from the ingredient quantities and ask the user to confirm rather than guessing silently.
+- **Calories** — kcal per serving, a single positive whole number. Always required. Use the source's figure if it gives one (Emily English recipes usually state "xxx kcal per portion"); otherwise estimate from the ingredient quantities divided by `serves`, and tell the user it's an estimate.
 - **Ingredients** — a full list, each with an amount (only "to taste" / "to serve" items have none)
 - **Instructions** — numbered steps
 - **One hero image**
@@ -36,9 +38,9 @@ slug: <slug>
 image: /images/recipes/<slug>.<ext>
 course: [<Course>, ...]
 tags: [<Tag>, ...]     # omit the key entirely if there are no tags
-total_mins: <number>
-serves: <number>
-calories: <number>   # kcal per serving
+total_mins: <whole number>
+serves: <whole number>
+calories: <whole number>   # kcal per serving
 current: true        # optional: in this week (what's being cooked now); drafts too, nothing is in a week by default
 next: true           # optional: in next week (being planned; the shopping list is built from these)
 draft: true          # new recipes start as drafts; omit only if the user says it's already a tried-and-tested favourite
@@ -54,7 +56,7 @@ ingredients:         # always last; one flow mapping per line, in the order they
 
 **Drafts.** Add new recipes as drafts (`draft: true`) by default — their recipe page says it's a draft until the family has tried them. When the user says a draft is a keeper, promote it by deleting the `draft: true` line (nothing else changes, its weeks included). Skip the draft only when the user says the recipe is already a proven favourite (e.g. migrating an old family recipe). Being a draft says nothing about the week: only add `current: true` (this week) or `next: true` (next week) if the user says which week it's for. Key order in the frontmatter: `scalable`, `current`, `next`, `draft`, then `ingredients` last.
 
-Body (the ingredient list is NOT in the body: the page renders it from the frontmatter):
+Body (the ingredient list is NOT in the body: the page renders it from the frontmatter, and the build fails on a `## Ingredients` heading left in it):
 
 ```markdown
 ## Instructions
@@ -65,11 +67,11 @@ Body (the ingredient list is NOT in the body: the page renders it from the front
 Rules that matter:
 
 - **Ingredients are data** (`docs/structured-ingredients.md`). Keys in this order, omitting absent ones: `amount`, `unit`, `name`, `note`, `optional`, `section`, `item`. Quote a string (double quotes) when YAML needs it (it contains `: `, `,`, `#`, brackets, or looks like a number). The page bolds the name, writes `200g`, `2 tbsp`, `2 cloves`, `¾ can`, `Juice of 1`, `Pinch of`, and the servings selector rescales every amount.
-  - `amount`: a number (decimals: `0.5`, `0.75`; thirds as `0.33` / `0.67`) or a range `[2, 3]`. Leave it out only for "to taste" / "to serve" items, and then the `note` must say so.
+  - `amount`: a positive number (decimals: `0.5`, `0.75`; thirds as `0.33` / `0.67`) or a range `[2, 3]` (both positive, the first below the second). Leave it out only for "to taste" / "to serve" items, and then the `note` must say "to taste" or "to serve". A `unit` needs an amount (except `pinch` and `handful`).
   - `unit`: one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice, bunch, sprig, piece, sheet, stick, head, pinch, handful, juice, zest`; none for a count. **One measure per ingredient**, metric where the source gives it ("1 cup (200g)" → `200`, `g`); convert oz/lb to g. A useful second measure can go in the note.
-  - `name`: what the recipe calls it, plain text. `note`: prep or buying detail ("finely diced", "about 140g each"); a split goes here ("1½ tbsp for the salmon, ½ for the pan") unless the recipe has sections. `optional: true` for garnishes and "if using" (never "optional" in the note).
-  - `section`: only when the recipe is made of parts ("For the sauce", "Pickle"): the part's short name on each of its lines (`section: Curry sauce`), shown as a small heading over them. A section's lines sit together, lines without one go first, a one-part recipe has none. An ingredient used in two parts is two lines, one per section (not a split note). The build fails on a split-up section.
-  - `item`: the id in `data/ingredients.json` (the ingredient catalogue) it's bought as. Look it up by the entry's `name` / `aliases`. If there's none, add an entry (id kebab-case; `name` as on a shopping list; `section` one of `Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen`; `unit` `g`, `ml`, `count` or a named unit; `per` conversions from the recipe's units when there's no fixed rule, e.g. `{ "tbsp": 10 }` grams per tbsp; `staple: true` for salt, pepper, oil). Keep the file sorted by id. The build fails on an unknown `item` or unit.
+  - `name`: what the recipe calls it, plain text (no asterisks; never empty). `note`: no bold; prep or buying detail ("finely diced", "about 140g each"); a split goes here ("1½ tbsp for the salmon, ½ for the pan") unless the recipe has sections. `optional: true` for garnishes and "if using" (never "optional" in the note).
+  - `section`: only when the recipe is made of parts ("For the sauce", "Pickle"): the part's short name on each of its lines (`section: Curry sauce`), a plain name of at most 40 characters, shown as a small heading over them. A section's lines sit together, lines without one go first, a one-part recipe has none. An ingredient used in two parts is two lines, one per section (not a split note). The build fails on a split-up section or on lines without a section after a section.
+  - `item`: the id (kebab-case: lowercase letters, digits, hyphens) in `data/ingredients.json` (the ingredient catalogue) it's bought as. Look it up by the entry's `name` / `aliases`. If there's none, add an entry (id kebab-case; `name` as on a shopping list; `section` one of `Fresh produce, Meat & fish, Dairy & eggs, Bakery, Tins & jars, Pantry, Frozen`; `unit` `g`, `ml`, `count` or a named unit; `per` conversions from the recipe's units when there's no fixed rule, e.g. `{ "tbsp": 10 }` grams per tbsp; `staple: true` for salt, pepper, oil; `skip: true` for things never bought, like water; `aliases` are lower case). Keep the file sorted by id. The build fails on an unknown `item` or unit.
 - **In the Instructions section, bold every mention of an ingredient** from the list above wherever it's referenced (e.g. "stir together the **oats**, **yogurt** and **honey**"). Only bold the ingredient noun itself, not surrounding words, and don't bold references to the dish being made (e.g. "the lamb burgers", "the batter").
 - **Never repeat an amount in the Instructions.** The servings selector only rescales the ingredient list, so a number in the method is wrong as soon as someone cooks for a different number of people. Refer to the ingredient instead:
 
@@ -91,7 +93,7 @@ Rules that matter:
 
 - One hero image per recipe, saved to `images/recipes/<slug>.<ext>` (`.jpg`/`.jpeg`/`.png`/`.webp`) — filename must match the recipe's slug.
 - Resize so the long edge is ≤ 1600px before saving, to keep the repo and page weight small. If you're given a much larger source image, downscale it rather than committing it as-is — use whatever's available on the machine: `sips` (macOS), `ffmpeg`/`magick` (CLI), or Python's Pillow (`python3 -c "from PIL import Image; im = Image.open('src'); im.thumbnail((1600, 1600)); im.save('dest')"`) when the others aren't installed.
-- Reference it in frontmatter as `image: /images/recipes/<slug>.<ext>` (leading slash, matches the schema in root `CLAUDE.md`).
+- Reference it in frontmatter as `image: /images/recipes/<slug>.<ext>` (leading slash, matches the schema in root `CLAUDE.md` and `shared/recipe.ts`).
 - If no image is available, ask the user for one — don't invent a placeholder and don't skip the `image` field; every tile on the index page needs a real photo.
 
 ## 4. Build and check
@@ -102,7 +104,7 @@ After writing the `.md` file and saving the image:
 npm run build
 ```
 
-Confirm it completes without error, then open `dist/index.html` (or the new `dist/recipes/<slug>.html`) and check: the new tile appears with its image, time and calories, the ingredient list renders from the frontmatter with bold names and the right amounts, the instructions bold each ingredient mention, and the instructions are numbered correctly.
+`npm run build` type-checks, runs the tests and builds `dist/`; confirm it completes without error (a recipe that breaks the schema fails it, naming the file and field). Then look at the new page: `npm run dev` and open `http://localhost:4321/favourite-recipes/recipes/<slug>.html` (or `npx astro preview` after the build; opening `dist/` files directly doesn't work, the pages link under `/favourite-recipes/`) and check: the new tile appears with its image, time and calories, the ingredient list renders from the frontmatter with bold names and the right amounts, the instructions bold each ingredient mention, and the instructions are numbered correctly.
 
 ## 5. Done
 

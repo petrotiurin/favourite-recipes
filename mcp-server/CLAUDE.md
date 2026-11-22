@@ -9,7 +9,7 @@ Settings, routes and deploys are in `README.md`; the chat's design is in `../doc
 - Every write is a commit to `main` and every commit is a site deploy, so writes are batched (`batch_changes`, one Save per tray).
 - It holds the validation rules. A recipe's fields and ingredient rules are the zod schemas in `../shared/recipe.ts` (the site's build
   validates every recipe with the same ones): the tools take their ingredient fields from there and `lib/catalogue.ts` reports its problems
-  with their messages. `lib/recipe-format.ts` is how the file is written. The `add-recipe` skill's prose is the part kept in step by hand.
+  with their messages. `lib/recipe-format.ts` is how the file is written. The `add-recipe` skill points at that schema as the source of truth; change the schema first and the skill's prose to match.
 - **One tool registry, one dispatcher**: every tool is defined once in `lib/tools.ts` (name, description, zod schema,
   `access: "read" | "stage" | "write"`, handler) and every call, MCP or chat, goes through `dispatch(name, args, caller)`, which
   checks `caller.role` (`public` may only run `read`; `editor` and `agent` run all; a tool with no `access` counts as `write`).

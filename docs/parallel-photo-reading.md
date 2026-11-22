@@ -10,15 +10,15 @@ go. In the editor chat today that is slow and fragile:
 
 | What happens | Where | Effect with 6 photos |
 | --- | --- | --- |
-| At most 4 photos per message | `MAX_PHOTOS = 4` in `templates/chat.js`, `MAX_IMAGES = 4` in `mcp-server/lib/chat-uploads.js` | Has to be split over two messages. |
-| At most 4 photos re-sent to the model | `REPLAY_MAX_IMAGES = 4` in `lib/chat-store.js` (newest first) | After a 4 + 2 split, the next turn sees the 2 new photos and only 2 of the first 4. Unstaged recipes from the first message are lost or written from memory. |
+| At most 4 photos per message | `MAX_PHOTOS = 4` in `src/lib/chat/photo-files.ts` (then `templates/chat.js`), `MAX_IMAGES = 4` in `mcp-server/lib/chat-uploads.ts` | Has to be split over two messages. |
+| At most 4 photos re-sent to the model | `REPLAY_MAX_IMAGES = 4` in `lib/chat-store.ts` (newest first) | After a 4 + 2 split, the next turn sees the 2 new photos and only 2 of the first 4. Unstaged recipes from the first message are lost or written from memory. |
 | The model types each recipe out as tool arguments | `stage_create_recipe` takes the whole recipe | 1–2k output tokens per recipe (plus thinking), so about 10k+ tokens written **one after another** by one model. That is the slow part. |
-| Turn limits | `MAX_CALLS_PER_ROUND = 4`, `MAX_TOOL_CALLS_PER_TURN = 10`, `MAX_TOOL_ROUNDS = 6` in `lib/chat.js`; `CHAT_TURN_BUDGET_MS` 200s; `CHAT_EDITOR_MAX_TOKENS` 16k | Six recipes plus reading the catalogue sits right at the edges: "taking longer than expected", or a reply cut off at `max_tokens`. |
+| Turn limits | `MAX_CALLS_PER_ROUND = 4`, `MAX_TOOL_CALLS_PER_TURN = 10`, `MAX_TOOL_ROUNDS = 6` in `lib/chat.ts`; `CHAT_TURN_BUDGET_MS` 200s; `CHAT_EDITOR_MAX_TOKENS` 16k | Six recipes plus reading the catalogue sits right at the edges: "taking longer than expected", or a reply cut off at `max_tokens`. |
 | Tool calls run one at a time | the `for (const call of result.toolCalls)` loop in `runChat` | Small cost: staging is a dry run of a few hundred ms. |
-| Request size | `MAX_EDITOR_BODY_BYTES = 4_300_000` in `api/chat.js` (Vercel allows 4.5 MB) | 6 photos as base64 in one request only fit when each is small (about 500 KB). |
+| Request size | `MAX_EDITOR_BODY_BYTES = 4_300_000` in `api/chat.ts` (Vercel allows 4.5 MB) | 6 photos as base64 in one request only fit when each is small (about 500 KB). |
 | The main model needs vision | the editor model gets the photos as image parts | Rules out cheaper or better text-only models for the conversation. |
 
-What is already fine: the recipe's own photo is made in the background after staging (`startPhotoJob` in `lib/tray.js`), so
+What is already fine: the recipe's own photo is made in the background after staging (`startPhotoJob` in `lib/tray.ts`), so
 photo generation never blocks the turn.
 
 ### Why "let the model make parallel tool calls" doesn't help much
@@ -34,7 +34,7 @@ Real parallelism means **several model calls at once**, one per photo, run by th
 
 ### 2.1 A separate vision model reads the photos; the main conversation has no vision (P1)
 
-The photos never go to the main chat model. A separate **photo reader** (`lib/photo-reader.js`) on its own model reads
+The photos never go to the main chat model. A separate **photo reader** (`lib/photo-reader.ts`) on its own model reads
 them, in parallel, and the main model only ever sees text: a short summary per recipe and ids it can stage from.
 
 - The main model can then be any model that is good at the conversation and tool calling, with or without vision.
@@ -86,7 +86,7 @@ stays the gate).
 
 ### 2.3 The reader's prompt: limited to its job (P3)
 
-The reader gets its **own** system prompt in its own file (`lib/photo-reader-prompt.js`, with its own
+The reader gets its **own** system prompt in its own file (`lib/photo-reader-prompt.ts`, with its own
 `PHOTO_READER_PROMPT_VERSION` for Langfuse). It does one thing: turn the photo(s) into the response schema.
 
 What it contains:
@@ -103,7 +103,7 @@ What it contains:
   appears twice).
 
 What it never contains: the catalogue, the page context, the conversation or the user's message, the tray, tool names,
-the plan-recipes flow, the editor's details, or any other part of the chat prompt (`lib/chat-prompt.js` is not imported).
+the plan-recipes flow, the editor's details, or any other part of the chat prompt (`lib/chat-prompt.ts` is not imported).
 
 How the call is made:
 
@@ -171,7 +171,7 @@ the panel show the same numbers, so "7 and 8 are one recipe" is never ambiguous.
 **How it runs**
 
 1. **Enqueue.** The tool inserts one `photo_reads` row per photo, then starts a **drainer** with `background()`
-   (`lib/background.js`, Vercel `waitUntil`, as staged photos are made today).
+   (`lib/background.ts`, Vercel `waitUntil`, as staged photos are made today).
 2. **Drain.** A drainer repeatedly claims the next queued photos, lowest `n` first, with one Postgres function:
    `claim_photo_reads(conversation, max)` (`update … set status = 'reading', lease_until = now() + lease, attempts =
    attempts + 1 … where id in (select id … where status = 'queued' … for update skip locked limit …) returning *`). It never
@@ -208,7 +208,7 @@ the panel show the same numbers, so "7 and 8 are one recipe" is never ambiguous.
   the report comes roughly one read (about 30s) after the last photo.
 - A message that is **only photos** (no text) while photos are still being read doesn't need the model: the server queues
   them itself, without a model call, and answers with a fixed line, "Added 3 photos (9 being read). I'll come back when
-  they're all read.", the same way `lib/shortcuts.js` answers "Not yet" today. A message with photos **and** text goes to
+  they're all read.", the same way `lib/shortcuts.ts` answers "Not yet" today. A message with photos **and** text goes to
   the model, which calls `read_recipe_photos` again: `{ "queued": 3, "reading": 9 }`.
 - A new photo that carries on an already-reported (and staged) recipe is re-read together with it; the report says
   "photo-7 carries on photo-6 ("Dal makhani"): re-read together", and staging `from_photo: "photo-6+7"` replaces the card
@@ -300,7 +300,7 @@ conversation keeps its own queue rows, photo numbers and reports, exactly as abo
   the follow-up doesn't add a second card: it says "Sam already added *Lemon chicken orzo*", and stages only if the user
   then says "add mine anyway". If the user asks for their dish photo to be that recipe's photo, it's a `stage_update_recipe`
   on the other editor's card, with the usual `photo_from_attachment` rule.
-- **Each sees what the other has in flight.** The tray view (`trayView` in `lib/tray.js`) adds "Reading 3 photos · Sam" (the other editor's name)
+- **Each sees what the other has in flight.** The tray view (`trayView` in `lib/tray.ts`) adds "Reading 3 photos · Sam" (the other editor's name)
   entries from the household's queued and reading `photo_reads` rows. They are not tray items: nothing to save, never in the
   shopping list's out-of-date hash. While any are there, the Save button carries a line "Sam has 3 photos still being
   read" (Save still works). The tray already polls while something is pending; reading photos count as pending.
@@ -396,22 +396,22 @@ The reader is configured on its own, separately from the conversation:
 
 | File | Change |
 | --- | --- |
-| `mcp-server/lib/photo-reader.js` (new) | the reader: parallel reads with a concurrency limit and timeout, the two passes, grouping, summary |
-| `mcp-server/lib/photo-queue.js` (new) | enqueue, drainers (claim, read, lease, retry, household cap), reporting when idle (quiet period, report lease), starting the follow-up, progress |
+| `mcp-server/lib/photo-reader.ts` (new) | the reader: parallel reads with a concurrency limit and timeout, the two passes, grouping, summary |
+| `mcp-server/lib/photo-queue.ts` (new) | enqueue, drainers (claim, read, lease, retry, household cap), reporting when idle (quiet period, report lease), starting the follow-up, progress |
 | `supabase/migrations/…_photo_reads.sql` (new) | `photo_reads` table, `claim_photo_reads()` function; `event` role and `handled_at` on `messages`; `turn_lock_until` on `conversations` |
-| `mcp-server/lib/shortcuts.js` | the only-photos message while photos are being read: queued without a model call |
-| `mcp-server/lib/tray.js` | "Reading n photos · name" entries in `trayView`; the household duplicate check; `from_photo` restaging replaces by `tray_item_id` |
-| `mcp-server/api/chat.js` | `POST /chat/internal/continue` (secret, follow-up turn); turn lock on every turn; `?after=` on `GET /chat/conversations/:id`; unread flag on `/chat/me` |
-| `mcp-server/lib/photo-reader-prompt.js` (new) | the reader's own prompts (single / consecutive), version, schema |
-| `mcp-server/lib/tools.js` | `read_recipe_photos` (read, editor only, `join` / `split` / `skip`); `from_photo` and `keep_both` on `stage_create_recipe` |
-| `mcp-server/lib/chat.js` | per-round limit allowing up to 8 `from_photo` stage calls; `event` messages become site notes; the "still running" line; the follow-up turn |
-| `mcp-server/lib/chat-prompt.js` | no image instructions for the main model, "call `read_recipe_photos`" |
-| `mcp-server/lib/chat-store.js` | `event` messages; replay read photos as text notes |
-| `mcp-server/lib/chat-uploads.js`, `api/chat.js` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` (in picked order) on the message |
-| `mcp-server/lib/config.js` | the `CHAT_VISION_*` settings |
-| `templates/chat.js` | `MAX_PHOTOS` 8; upload on pick (keeping the picked order) with progress on the chip; number badges carrying on through the chat; reading status line; attach stays usable while reading; polling while photos are being read or a follow-up is pending; the tray's "Reading n photos · name" entries and the Save note; unread dot on the bubble; "Sending when I'm done…" |
+| `mcp-server/lib/shortcuts.ts` | the only-photos message while photos are being read: queued without a model call |
+| `mcp-server/lib/tray.ts` | "Reading n photos · name" entries in `trayView`; the household duplicate check; `from_photo` restaging replaces by `tray_item_id` |
+| `mcp-server/api/chat.ts` | `POST /chat/internal/continue` (secret, follow-up turn); turn lock on every turn; `?after=` on `GET /chat/conversations/:id`; unread flag on `/chat/me` |
+| `mcp-server/lib/photo-reader-prompt.ts` (new) | the reader's own prompts (single / consecutive), version, schema |
+| `mcp-server/lib/tools.ts` | `read_recipe_photos` (read, editor only, `join` / `split` / `skip`); `from_photo` and `keep_both` on `stage_create_recipe` |
+| `mcp-server/lib/chat.ts` | per-round limit allowing up to 8 `from_photo` stage calls; `event` messages become site notes; the "still running" line; the follow-up turn |
+| `mcp-server/lib/chat-prompt.ts` | no image instructions for the main model, "call `read_recipe_photos`" |
+| `mcp-server/lib/chat-store.ts` | `event` messages; replay read photos as text notes |
+| `mcp-server/lib/chat-uploads.ts`, `api/chat.ts` | `MAX_IMAGES` 8; `POST /chat/uploads`; `image_paths` (in picked order) on the message |
+| `mcp-server/lib/config.ts` | the `CHAT_VISION_*` settings |
+| `templates/chat.js` (now `src/lib/chat/photos.ts` and `src/islands/chat/`) | `MAX_PHOTOS` 8; upload on pick (keeping the picked order) with progress on the chip; number badges carrying on through the chat; reading status line; attach stays usable while reading; polling while photos are being read or a follow-up is pending; the tray's "Reading n photos · name" entries and the Save note; unread dot on the bubble; "Sending when I'm done…" |
 | `mcp-server/workflows/plan-recipes.md` ("In chat") | with photos: call `read_recipe_photos` once, tell the user it's reading and end the turn; when the note arrives, stage every clear recipe with `from_photo`, skip likely duplicates and say who added them, ask about the "unsure" pairs and unreadable photos; the recipe-writing rules shared with the reader prompt |
-| `mcp-server/scripts/fakes.js` | fake reader responses (with delays) for `npm run dev` |
+| `mcp-server/scripts/fakes.ts` | fake reader responses (with delays) for `npm run dev` |
 | `docs/chatbot-design.md`, `CLAUDE.md`, `mcp-server/README.md` (settings), `design.md` (badges, upload progress) | updated in the same change |
 | tests | reads run in parallel, one failure doesn't sink the rest, grouping rules (picked order, neighbours only, overlap or two signs, one sign is unsure, across messages), join/split, the reader's request is limited (2.3), `from_photo` overrides, cross-conversation ids refused, the tool returns at once, the queue (no photo read twice with several drainers, the household cap, leases and retries, a photo queued as a drainer exits is still read, photos added while reading go into the same report, the quiet period, exactly one report per idle point and a dead report is retried, a photo carrying on a reported one is joined and replaces its card, 30 unreported per conversation, skip), the only-photos shortcut makes no model call, exactly-once hand-over (follow-up vs. the user's next turn), two editors (grouping never crosses conversations, duplicates across the tray refused unless `keep_both`, reading entries in the tray, two follow-ups staging at once), the turn lock, the follow-up caller drops to note-only when the owner left `EDITORS`, the internal route refuses without the secret, no image parts ever reach the main model, a missing `CHAT_VISION_MODEL` is a clear error |
 
@@ -447,15 +447,15 @@ Decided:
 
 ## 8. As built
 
-Where the code lives: `lib/photo-reader.js` (the reader call, normalising its answer, grouping, duplicates), `lib/photo-reader-prompt.js` (prompt,
-schema, `PHOTO_READER_PROMPT_VERSION`), `lib/photo-queue.js` (enqueue, drainers, report, corrections, kick), `lib/follow-up.js` (the follow-up turn,
-`afterTurn`), `read_recipe_photos` and `from_photo` / `keep_both` in `lib/tools.js`, the routes in `api/chat.js`, migration
+Where the code lives: `lib/photo-reader.ts` (the reader call, normalising its answer, grouping, duplicates), `lib/photo-reader-prompt.ts` (prompt,
+schema, `PHOTO_READER_PROMPT_VERSION`), `lib/photo-queue.ts` (enqueue, drainers, report, corrections, kick), `lib/follow-up.ts` (the follow-up turn,
+`afterTurn`), `read_recipe_photos` and `from_photo` / `keep_both` in `lib/tools.ts`, the routes in `api/chat.ts`, migration
 `supabase/migrations/20261112000000_photo_reads.sql`, tests in `test/photo-reading.test.js`.
 
 Details decided while building:
 
 - **Photo numbers come from the stored messages**, not from enqueueing: every photo attached in the conversation is numbered in order (messages in
-  order, picked order within a message), `photoList()` in `lib/chat-store.js`. The panel gets `photo_numbers` with each user message and an SSE
+  order, picked order within a message), `photoList()` in `lib/chat-store.ts`. The panel gets `photo_numbers` with each user message and an SSE
   `photos` event for a message being sent; `photo_reads.n` uses the same numbers. `photo_from_attachment` takes these numbers too.
 - **What `read_recipe_photos` queues:** the photos of the user's latest message; when that message has none, any photo of the chat never queued.
   Each turn's note also lists attached photos that were never handed to the reader, so a model that forgot gets reminded.

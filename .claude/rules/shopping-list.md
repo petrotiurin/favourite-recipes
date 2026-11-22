@@ -8,15 +8,15 @@ paths:
   - "shared/shopping-quantity.ts"
   - "src/pages/shopping-list.astro"
   - "src/lib/shopping.ts"
-  - "mcp-server/lib/shopping-list.js"
-  - "mcp-server/lib/catalogue.js"
-  - "mcp-server/api/stocktake.js"
+  - "mcp-server/lib/shopping-list.ts"
+  - "mcp-server/lib/catalogue.ts"
+  - "mcp-server/api/stocktake.ts"
   - "mcp-server/workflows/**"
 ---
 
 # The shopping list
 
-`shopping-list.html` is a separate page (a "🛒 Shopping list" button in the index header links to it; the list itself is not on the main page). It covers **next week's recipes** (`next: true`) only, and is **not computed by the site** but by the MCP server: `update_shopping_list` with `build: true` (`buildShoppingList` in `mcp-server/lib/shopping-list.js`) adds up next week's recipes from their structured ingredients and the catalogue (each amount converted to the item's shopping unit, scaled to 2 servings, totalled per item with each recipe's share) and commits `shopping-list.json`. The agent only reviews it, with patches on the same call (`edits`: `round_up`, `merge`, `note`, `move`, `rename`, `drop`, `scale`, by catalogue item id), after the server flags what needs judgement; items only optional ingredients need are marked `note: "optional"` and the user is asked once which to leave off. (`sections`, a list the agent combined itself, is also accepted.)
+`shopping-list.html` is a separate page (a "🛒 Shopping list" button in the index header links to it; the list itself is not on the main page). It covers **next week's recipes** (`next: true`) only, and is **not computed by the site** but by the MCP server: `update_shopping_list` with `build: true` (`buildShoppingList` in `mcp-server/lib/shopping-list.ts`) adds up next week's recipes from their structured ingredients and the catalogue (each amount converted to the item's shopping unit, scaled to 2 servings, totalled per item with each recipe's share) and commits `shopping-list.json`. The agent only reviews it, with patches on the same call (`edits`: `round_up`, `merge`, `note`, `move`, `rename`, `drop`, `scale`, by catalogue item id), after the server flags what needs judgement; items only optional ingredients need are marked `note: "optional"` and the user is asked once which to leave off. (`sections`, a list the agent combined itself, is also accepted.)
 
 ```json
 { "updated": "2026-10-03", "recipes": ["slug-a", "slug-b"], "servings": { "slug-a": 4, "slug-b": 1 },
@@ -29,7 +29,7 @@ The list is always written for **2 servings of every recipe** (each scaled by 2 
 
 The shopping island (`src/islands/Shopping.tsx`) lets the signed-in editor save a stocktake. It signs in through the store in `src/lib/auth.ts` (Supabase Auth: email + password, or an email code as the fallback; the same email also carries a magic link; plain `fetch` to its REST API, no client library). The page is drawn once, at build time, from the saved list (the island's props), and the island takes that markup over in the browser; it never *loads* the list at runtime.
 
-The editor taps **Sign in** (top right) or **Update** on the "Home checked" card. A sheet slides up: they enter their email and password. Without a password (or having forgotten it) they tap "No password? Email me a code", get a 6-digit code and type it in (the code works on any device; the same email's magic link still works on the device that opens it). After a code or link sign-in the sheet offers **Set a password** (also in the avatar menu), so later sign-ins send no email: Supabase's built-in mailer only allows a few emails an hour. Once signed in, the page shows two tabs: the list (cart icon, count left to buy) and **At home** (house icon, count at home). On the At home tab every row is a fill bar: sliding across it sets how much is at home, the house button toggles "have it all". Edits stay in the browser (`localStorage`, per list) until **Save**, which POSTs them in one go to the MCP server's `/stocktake` endpoint (`mcp-server/api/stocktake.js`); undo drops the unsaved edits. The endpoint checks the Supabase token and that the email is in `EDITORS` (or its old name `SHOPPING_EDITORS`), then commits `shopping-list.json` (one commit, one deploy) with:
+The editor taps **Sign in** (top right) or **Update** on the "Home checked" card. A sheet slides up: they enter their email and password. Without a password (or having forgotten it) they tap "No password? Email me a code", get a 6-digit code and type it in (the code works on any device; the same email's magic link still works on the device that opens it). After a code or link sign-in the sheet offers **Set a password** (also in the avatar menu), so later sign-ins send no email: Supabase's built-in mailer only allows a few emails an hour. Once signed in, the page shows two tabs: the list (cart icon, count left to buy) and **At home** (house icon, count at home). On the At home tab every row is a fill bar: sliding across it sets how much is at home, the house button toggles "have it all". Edits stay in the browser (`localStorage`, per list) until **Save**, which POSTs them in one go to the MCP server's `/stocktake` endpoint (`mcp-server/api/stocktake.ts`); undo drops the unsaved edits. The endpoint checks the Supabase token and that the email is in `EDITORS` (or its old name `SHOPPING_EDITORS`), then commits `shopping-list.json` (one commit, one deploy) with:
 
 ```json
 { "stocktake": "2026-10-18T10:00:00.000Z",

@@ -41,9 +41,9 @@ describe what the project is now. Proposed shape:
 >
 > 1. **The site** (GitHub Pages): static HTML/CSS built from `recipes/*.md` and
 >    `shopping-list.json`. Every page is still written to HTML by the build; JS may add features that only exist with JS.
-> 2. **Enhancements** (`templates/*.js`): hand-written vanilla JS, copied verbatim into `dist/`. No
+> 2. **Enhancements** (then `templates/*.js`, now Preact islands in `src/islands/`; see `docs/typescript-migration.md`): hand-written vanilla JS, copied verbatim into `dist/`. No
 >    frameworks, no bundler, no npm packages in `dist/` (small pinned CDN libraries only if truly
->    needed). They may call **our own backend** and Supabase Auth, never third-party APIs directly.
+>    needed; this rule was dropped in the migration). They may call **our own backend** and Supabase Auth, never third-party APIs directly.
 >    Pages render from data baked in at build time; runtime calls are only for actions (saving a
 >    stocktake, chatting, signing in), never to load what the page shows.
 > 3. **The backend** (`mcp-server/` on Vercel): the only place with secrets and the only writer to
@@ -54,8 +54,7 @@ describe what the project is now. Proposed shape:
 The current "Hard constraint" section, its list of allowed scripts and the stocktake exception
 fold into points 2 and 3. Sections that stay as they are: recipe schema, shopping list format,
 stocktake details, deployment. New sections: "Chat" (a short summary pointing to this doc, later
-to the code) and the env vars it needs. The directory layout gains `templates/chat.js`,
-`templates/auth.js`, `mcp-server/api/chat.js` and `mcp-server/lib/tools.js`.
+to the code) and the env vars it needs. The directory layout gains the chat's script and sign-in script (now `src/islands/chat/`, `src/lib/chat/` and `src/lib/auth.ts`), `mcp-server/api/chat.ts` and `mcp-server/lib/tools.ts`.
 
 What the chat must still respect under the new rules:
 
@@ -68,7 +67,7 @@ What the chat must still respect under the new rules:
 ```
 GitHub Pages (static)                     Vercel (mcp-server/)                    External
 ┌──────────────────────┐   POST /chat    ┌───────────────────────────────┐
-│ every page           │ ─────────────▶  │ api/chat.js                   │ ───▶ OpenRouter (stream;
+│ every page           │ ─────────────▶  │ api/chat.ts                   │ ───▶ OpenRouter (stream;
 │                      │                 │                               │      public or editor key)
 │  src/islands/chat/   │ ◀── SSE stream ─│  - verify Supabase token       │
 │  + page context JSON │                 │  - load/save conversation      │ ───▶ Supabase Postgres
@@ -80,7 +79,7 @@ GitHub Pages (static)                     Vercel (mcp-server/)                  
 ### D1. Where the agent loop runs → **new `/chat` endpoint in `mcp-server/`** (recommended)
 
 It already holds the GitHub token, the Supabase verification (`verifyEditor`), the CORS pattern
-(`api/stocktake.js`) and all the validated write logic (`lib/recipes.js`, `lib/shopping-list.js`).
+(`api/stocktake.ts`) and all the validated write logic (`lib/recipes.ts`, `lib/shopping-list.ts`).
 
 Alternatives considered:
 - *Letting a hosted model call our own `/mcp` directly*: least code, but tools are then all-or-
@@ -90,15 +89,15 @@ Alternatives considered:
 
 ### D2. One tool registry for MCP and chat (refactor first)
 
-Today the tools are defined inline in `lib/server.js` (`registerTool` with zod schemas). Pull them
-into a registry (`lib/tools.js`: name, description, zod schema, handler, `access: "read" | "stage" | "write"`, see 4.1)
-that both `server.js` (MCP) and `api/chat.js` (Claude tool definitions via zod → JSON Schema)
+Today the tools are defined inline in `lib/server.ts` (`registerTool` with zod schemas). Pull them
+into a registry (`lib/tools.ts`: name, description, zod schema, handler, `access: "read" | "stage" | "write"`, see 4.1)
+that both `server.js` (MCP) and `api/chat.ts` (Claude tool definitions via zod → JSON Schema)
 consume. Without this, the two tool sets will drift, the same way CLAUDE.md already warns about
 for `recipe-format.js` and the add-recipe skill.
 
 ### D3. Models and spend → **OpenRouter, two keys, two models** (decided)
 
-The server already uses OpenRouter for photos (`lib/image-generation.js`), so the chat goes through
+The server already uses OpenRouter for photos (`lib/image-generation.ts`), so the chat goes through
 it as well, via its OpenAI-compatible chat completions API with tool calling and streaming.
 
 | | Public (not signed in) | Editors (signed in) |
@@ -149,7 +148,7 @@ Anonymous visitors can chat (decided, Q1): read-only, rate-limited, on the publi
 
 **Auth reuses the shopping page's Supabase sign-in** (email + password, code fallback; see 4.2). Extract
 the sign-in sheet and session handling from `templates/shopping.js` into a shared
-`templates/auth.js`; both pages keep the session under the same `localStorage` key, so signing in
+sign-in script (`templates/auth.js` then, the store `src/lib/auth.ts` now); both pages keep the session under the same `localStorage` key, so signing in
 on one signs you in on the other (same origin). Generalise `SHOPPING_EDITORS` to `EDITORS` (keep
 the old name as a fallback).
 
@@ -185,7 +184,7 @@ wrong, a write still can't run.
   unknown name is an error), check `access` against `caller.role`, *then* call the handler. A
   public caller calling a `stage`/`write` tool gets an error result and the attempt is logged.
 - **Defence in depth inside the handlers:** the functions that commit (`ChangeSet` commit in
-  `lib/github.js`, `saveStocktake`, tray writes) take the `caller` as a required argument and
+  `lib/github.ts`, `saveStocktake`, tray writes) take the `caller` as a required argument and
   assert `role ∈ {editor, agent}` themselves. A handler that forgets the check, or a future
   code path that skips the dispatcher, still can't commit.
 - **Default deny:** a tool with no `access` declared is treated as `write`. A new tool can't be
@@ -211,7 +210,7 @@ again before Save, not a silent failure.
   `/chat` allows only the site's origin (as `/stocktake` does).
 - The session lives in `localStorage` (as on the shopping page), so XSS would leak it: the safe
   renderer (§8) and building cards from server data, not model HTML, are part of the auth story.
-- Tokens are short-lived (Supabase default 1 hour) with refresh in `auth.js`; sign-out clears
+- Tokens are short-lived (Supabase default 1 hour) with refresh in the sign-in store (`src/lib/auth.ts`); sign-out clears
   the session and the panel's cached history.
 
 **7. Tested, not assumed.** A test walks the whole tool registry and calls every `stage`/`write`
@@ -229,7 +228,7 @@ The chat uses the sign-in the shopping page has today: **email + password**, wit
 email code (and its magic link) as the fallback. No new providers. What the chat does need:
 
 - The sign-in sheet and session code move from `templates/shopping.js` into the shared
-  `templates/auth.js` (no behaviour change), so every page can sign in.
+  the shared sign-in store (`src/lib/auth.ts` now; no behaviour change), so every page can sign in.
 - The chat lets you sign in from any page, and the magic link returns to the page it was sent
   from, so Supabase's Auth → Redirect URLs must allow the whole site
   (`https://petrotiurin.github.io/favourite-recipes/**`), not just the shopping page.
@@ -396,13 +395,13 @@ button with no model in it. Finalise list is a short **review** of the built lis
 
 - **Collecting:** the tray strip's button is **Finalise list**. There's no Save button yet.
 - **The List card** appears as soon as the tray changes next week ("86 items for 5 recipes", tap to preview by aisle):
-  the server builds it (`buildShoppingList` in `lib/shopping-list.js`) inside every tray write and keeps it current; it
+  the server builds it (`buildShoppingList` in `lib/shopping-list.ts`) inside every tray write and keeps it current; it
   is never out of date. Review patches (`stage_shopping_list_edits`) and the optional-item answers are stored on the card
   and re-applied by item id on every rebuild; one whose item is gone shows as a note ("1 edit no longer applies").
 - **Finalise list** runs: the promote question (below) only if next week on the site has recipes; then the model, ONLY if
   the server flags something (a fraction of something bought whole at the planned servings, close names on items bought in
   the same unit, a very large total, a recipe with no ingredients), with one `stage_shopping_list_edits` call; then the
-  **optional items card** (`lib/optional-review.js`, no model). With nothing flagged and nothing optional there is no model
+  **optional items card** (`lib/optional-review.ts`, no model). With nothing flagged and nothing optional there is no model
   call and Save is offered at once. "Reviewing the list…" (`finalising`) lasts only while the model runs.
 - **Ready:** the button becomes **Save to site (n)**. A later change keeps Save unless it brings a flag or an optional
   item the user hasn't seen; then Finalise list comes back for just that.
@@ -554,7 +553,7 @@ it went wrong, and so the model trial (Q9) has real numbers.
 **How it's wired.**
 
 - The Langfuse JS SDK v6 (`@langfuse/tracing` + `@langfuse/otel`, OpenTelemetry) in the Vercel
-  functions, on its own TracerProvider (never the global one). `lib/langfuse.js` wraps it in a small
+  functions, on its own TracerProvider (never the global one). `lib/langfuse.ts` wraps it in a small
   `startTrace()` API (`generation`, `span`, `event`, `finish`) that the agent loop, Save and photo
   generation use. Trace attributes (user, session, tags, trace name, prompt version) are propagated
   to every observation; observation names are stable (no round numbers or models in them).
@@ -693,7 +692,7 @@ Ranked roughly by value for effort:
 8. **Diff view** for staged edits (before/after of the changed lines) on the tray card. *Later.*
 9. **Revert last save** (a server tool that reverts the chat's last commit). *Later.*
 
-Built in phase 6 (1, 3, 4 and 6 above): `scale_recipe` (the recipe page's scaling rules, `lib/scaling.js`, kept in step with `templates/quantities.js` by a test), `recipes_from_home` (`lib/at-home.js`, ranks the book by the stocktake; starter chip on the shopping page), `stage_stocktake` (an "At home" tray card, same validation as `/stocktake`, refused with a 409 if the list changed since it was staged, Save now eligible) and the tray's week balance line (`weekBalance` in `lib/tray.js`, from recipe data, no model). Item 5 (switching weeks by chat) is the Finalise flow of phase 4.
+Built in phase 6 (1, 3, 4 and 6 above): `scale_recipe` (the recipe page's scaling rules, now `scaledMarkdown` / `formatQuantity` in `shared/`, one copy for the site and the backend), `recipes_from_home` (`lib/at-home.ts`, ranks the book by the stocktake; starter chip on the shopping page), `stage_stocktake` (an "At home" tray card, same validation as `/stocktake`, refused with a 409 if the list changed since it was staged, Save now eligible) and the tray's week balance line (`weekBalance` in `lib/tray.ts`, from recipe data, no model). Item 5 (switching weeks by chat) is the Finalise flow of phase 4.
 
 ## 12. Phases
 
@@ -704,7 +703,7 @@ Each phase ships and is useful on its own.
 | 0 | Groundwork | CLAUDE.md rewrite (§2), tool registry refactor (D2) with the dispatcher, `access` levels and the registry-wide auth test (4.1), `search_recipes`, page-context JSON in the build | – |
 | 1 | Read-only chat | Bubble + panel, `/chat` streaming through OpenRouter (public key + model), catalogue prompt, anonymous mode, local history, rate limits, safe renderer, suggested replies (6.1), Langfuse tracing (8.1) | 0 |
 | 2 | Cards + navigation | `show_recipes`, `offer_navigation` and action chips, panel restore across page loads, starter chips | 1 |
-| 3 | Sign-in + per-user chats | Shared `auth.js` (4.2), editor key + model, Supabase tables, chats list, server-owned history, editors' thumbs up / down (8.1) | 1 |
+| 3 | Sign-in + per-user chats | Shared sign-in store (4.2, `src/lib/auth.ts`), editor key + model, Supabase tables, chats list, server-owned history, editors' thumbs up / down (8.1) | 1 |
 | 4 | Editor writes via the tray | Staging with dry-run validation, `ask_user` chips (Finalise needs them), "Save now" for quick fixes, household tray UI ("added by", 7-day expiry), photos generated on staging (Supabase Storage), Finalise list → Save → one `batch_changes`, clash handling, publishing state | 2, 3 |
 | 5 | Full plan-recipes in chat | Image attachments, `fetch_url`, `ask_user` chips, photo handling, chat section in the workflow guide | 4 |
 | 6 | Extras | §11, picked by value | 4 |

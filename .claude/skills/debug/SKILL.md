@@ -6,7 +6,7 @@ description: Debug the recipe site's backend and chat in production. Use for "wh
 # Debugging the recipe backend
 
 The backend is `mcp-server/` on Vercel; it keeps chats and the tray in Supabase and traces chat turns to Langfuse
-(design: `docs/chatbot-design.md`, tracing: `mcp-server/lib/langfuse.js`, design 8.1). Three sources, one story, in this order:
+(design: `docs/chatbot-design.md`, tracing: `mcp-server/lib/langfuse.ts`, design 8.1). Three sources, one story, in this order:
 **Langfuse first**: every turn is a trace (session id = conversation id) with the model's input and output, every tool call and its
 result, tokens, seconds, finish reasons and `tray-*` events, so it usually answers both what happened and why on its own.
 **Supabase is the backup**: go there only when Langfuse can't answer (no trace for the turn, Langfuse off or unreachable, a payload
@@ -18,7 +18,7 @@ the trace truncated) or for the state *now* (what's in the tray, a conversation'
 | Thing | Value |
 | --- | --- |
 | Vercel project | `favourite-recipes-mcp-server` (`prj_Eg7iseeYZuDJstVm8eJji8Z8uAuL`), team slug `petrotiurins-projects` (`team_cJOCw55fNK7z4m2MvkiZvol3`) |
-| Vercel prod domain | `favourite-recipes-mcp-server-five.vercel.app` (routes `/chat`, `/mcp`, `/stocktake`, `/upload` -> `api/*.js`, `maxDuration` 300s) |
+| Vercel prod domain | `favourite-recipes-mcp-server-five.vercel.app` (routes `/chat`, `/mcp`, `/stocktake`, `/upload` -> `api/*.ts`, `maxDuration` 300s) |
 | Supabase project | `edxeltzlukzfeyjibodg` (eu-west-3) |
 | Supabase tables | `conversations` (id, user_id, title, updated_at), `messages` (conversation_id, seq, role, content jsonb = the full OpenAI-style message, turn_id, trace_id, feedback), `trays` (one row: status collecting/finalising/ready, items jsonb, version, expires_at, updated_by), `rate_limits` |
 | Supabase buckets | `tray-photos` (staged photos), `chat-uploads` (`<conversation id>/<uuid>.jpg`) |
@@ -31,7 +31,7 @@ the trace truncated) or for the state *now* (what's in the tray, a conversation'
   `traceId`, `sessionId` via `filter`, `userId`, `name`, `type`, `level`, `environment`, `isRootObservation`) and `getObservation`
   (full input/output of one observation; its window can be up to 90 days). Start with compact fields; fetch input/output only for
   the observations that matter. Fallback without the MCP: `npx langfuse-cli api ...` (see the `langfuse` skill).
-  How the traces look (`mcp-server/lib/langfuse.js`):
+  How the traces look (`mcp-server/lib/langfuse.ts`):
   - Root observations (`isRootObservation: true`), one per trace: `chat` (a turn; `sessionId` = conversation id, `metadata.turnId`,
     `metadata.model`, `metadata.mode` public/editor, `output` = the final answer as the user saw it), `chat follow-up` (the turn
     after photos are read), `photo read photo-N`, `photo report`, `tray-save` (output `saved N` / `refused: ...`), `tray`
@@ -65,7 +65,7 @@ the trace truncated) or for the state *now* (what's in the tray, a conversation'
 
 ## Vercel MCP, for this project
 
-The backend is one Vercel project of plain serverless functions (`api/chat.js`, `api/mcp.js`, `api/stocktake.js`, `api/upload.js`,
+The backend is one Vercel project of plain serverless functions (`api/chat.ts`, `api/mcp.ts`, `api/stocktake.ts`, `api/upload.ts`,
 `maxDuration` 300s). `vercel.json` rewrites the public paths, so filter on `/chat`, `/mcp`, `/stocktake`, `/upload` (and expect
 `/chat/plan/apply`, `/chat/conversations/...` etc. under `/chat`); if a route filter returns nothing, retry without it and use `query`.
 Nothing here is a Next.js app, there are no edge functions and no web analytics: skip those tools.
@@ -84,7 +84,7 @@ window you need (`since: "30m"`), and when the event you're after is older, don'
 | Where a request spent its time | `get_project_trace` with `requestId` | 1h retention too; use it for slow Supabase/OpenRouter/GitHub calls. For the model's own timing and tokens use Langfuse instead, which keeps days |
 | Did a deploy cause it | `list_deployments` (`projectId`, `target: "production"`, `limit: 5`) then `get_deployment` | compare the deploy's `createdAt` with the first error; `state` READY / ERROR / CANCELED. CANCELED "Ignored Build Step" is normal for commits outside `mcp-server/` (`ignoreCommand` in `vercel.json`). Note the deployed commit's SHA and check it contains the fix you're reasoning about |
 | Why a build failed | `list_deployment_events` with `builds: 1` (use `direction: "backward"`, `limit: 100` for the tail) | the usual causes are an import/dependency problem or a missing `workflows/**` file (`includeFiles` in `vercel.json`) |
-| Is an env var set | `filter_project_envs` (`idOrName`) | read the **names and targets** only (Production / Preview / Development); never pass `decrypt`. Variables are per target, so "works on preview, not production" is often a missing var. Expected names: `OPENROUTER_API_KEY`, `OPENROUTER_CHAT_PUBLIC_KEY`, `OPENROUTER_CHAT_EDITOR_KEY`, `CHAT_PUBLIC_MODEL`, `CHAT_EDITOR_MODEL`, `CHAT_ENABLED`, `CHAT_PUBLIC_ENABLED`, `EDITORS`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LANGFUSE_*` (see `mcp-server/README.md` and `lib/config.js`). Env changes only apply to the next deployment, so also check the running deployment is newer than the change |
+| Is an env var set | `filter_project_envs` (`idOrName`) | read the **names and targets** only (Production / Preview / Development); never pass `decrypt`. Variables are per target, so "works on preview, not production" is often a missing var. Expected names: `OPENROUTER_API_KEY`, `OPENROUTER_CHAT_PUBLIC_KEY`, `OPENROUTER_CHAT_EDITOR_KEY`, `CHAT_PUBLIC_MODEL`, `CHAT_EDITOR_MODEL`, `CHAT_ENABLED`, `CHAT_PUBLIC_ENABLED`, `EDITORS`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LANGFUSE_*` (see `mcp-server/README.md` and `lib/config.ts`). Env changes only apply to the next deployment, so also check the running deployment is newer than the change |
 
 Habits that save time when the question is "the agent did something wrong":
 1. **Start from the Langfuse trace, not from Vercel.** Find the turn's `chat` root observation (start time, `sessionId`,
@@ -99,7 +99,7 @@ Habits that save time when the question is "the agent did something wrong":
 4. **Compare production with preview** when only one misbehaves: pass `environment: "production" | "preview"` to
    `get_runtime_logs` and compare env var targets.
 5. **A turn that "just stopped"** is usually the function limit or the turn budget, not a crash: look for `Chat turn stopped after`
-   (200s budget / 250s deadline, `lib/chat.js`) before suspecting an exception, and check that the stored row/marker exists
+   (200s budget / 250s deadline, `lib/chat.ts`) before suspecting an exception, and check that the stored row/marker exists
    (editor turns finish server-side even if the phone dropped the stream).
 6. **Report observed vs suspected.** Quote the log line and its time; label anything inferred (for example "no error line because
    Vercel only keeps an hour") as a suspicion.

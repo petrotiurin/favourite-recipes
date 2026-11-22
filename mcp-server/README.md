@@ -39,7 +39,7 @@ Internally every write goes through a `ChangeSet` (`lib/github.ts`): reads see w
 ## What's enforced
 
 - **Deletion is limited to drafts.** `remove_draft` is the only way a recipe leaves the site, and it refuses anything without `draft: true` (promoted recipes are protected) and any draft with `next: true` (planned for next week). `assertAllowedPath` still applies to the deleted recipe and photo paths.
-- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.ts`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, `build.js`, templates or workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
+- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.ts`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, the site's code (`src/`, `astro.config.ts`, `shared/`) or the workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
   - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
@@ -66,7 +66,7 @@ The site has a shopping page (`shopping-list.html`, linked by a button in the in
 
 - Each item's `recipes` is the slugs of the next-week recipes it is for; the page shows their photos on the row and names them on a tap. The server refuses a slug that isn't in next week and a next-week recipe that no item is for.
 - The server fills in the list's top-level `recipes` (the next-week slugs) itself and the page links to them. It refuses when next week is empty and when an ingredient is listed twice.
-- **The page shows the saved list until it is rewritten.** Changing the weeks, the switch included, never alters or deletes it: after the switch it simply still shows the list made for what is now this week. `build.js` blanks the page only when there is no `shopping-list.json`.
+- **The page shows the saved list until it is rewritten.** Changing the weeks, the switch included, never alters or deletes it: after the switch it simply still shows the list made for what is now this week. The page is blank only when there is no `shopping-list.json`.
 - `get_shopping_list` reports `current` (covers exactly next week's recipes), `outdated` (next week changed since, so the agent should rewrite it), `not planned` (next week is empty, e.g. right after the switch) or `none`.
 - Changing this week, promoting a draft or removing one (never in next week) doesn't make the list outdated. Editing a next-week recipe's ingredients with `update_recipe` doesn't touch the list, so refresh it after doing that.
 
