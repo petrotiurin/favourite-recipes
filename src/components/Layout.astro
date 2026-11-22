@@ -1,9 +1,10 @@
 ---
-// Every page's shell: head, the page-context JSON for the chat (docs/chatbot-design.md 7.2), the footer and the chat widget's script.
-// Pages are written to HTML by the build; the scripts only add to them. Links stay relative to the page (`rootPrefix` is the way back to the root).
+// Every page's shell: head, the page-context JSON for the chat (docs/chatbot-design.md 7.2), the footer and the chat island.
+// Pages are written to HTML by the build; the islands only add to them.
 import { pageContextSchema, type PageContext } from "../../shared/page-context.ts";
 import { authConfig, chatConfig } from "../lib/env.ts";
 import { scriptJson } from "../lib/json.ts";
+import Chat from "../islands/chat/Chat.tsx";
 import { reloadOnStaleScript } from "../lib/reload-guard.ts";
 // The one stylesheet: Astro bundles it with a hashed name, and each page links the file it was built with (docs/typescript-migration.md 4.11).
 import "../../styles/style.css";
@@ -11,17 +12,17 @@ import "../../styles/style.css";
 interface Props {
   title: string;
   bodyClass?: string;
-  rootPrefix?: string;
   /** Which page this is (and which recipe), so the chat can resolve "this recipe". Data only, baked in at build time. */
   pageContext: PageContext;
 }
-const { title, bodyClass, rootPrefix = "", pageContext } = Astro.props;
+const { title, bodyClass, pageContext } = Astro.props;
 
 const context = scriptJson(pageContextSchema.parse(pageContext));
-// Sign-in (src/lib/auth.ts): the build's public Supabase values in `#auth-config`, and the boot script (src/lib/auth-boot.ts), in the head so it runs
-// before the chat's script (which still finds sign-in through window.RecipeAuth until step 8).
+// Sign-in (src/lib/auth.ts): the build's public Supabase values in `#auth-config` (JSON), read by the boot script (src/lib/auth-boot.ts), which starts the
+// store in the head, before any island (the chat among them) wakes up.
 const auth = authConfig();
-// The chat widget (docs/chatbot-design.md): no bubble and no script without CHAT_API_URL.
+const authJson = auth && scriptJson({ supabaseUrl: auth.supabaseUrl, supabaseKey: auth.supabaseKey });
+// The chat (src/islands/chat/Chat.tsx, docs/chatbot-design.md): no bubble and no script without CHAT_API_URL. It wakes once the page has settled.
 const chat = chatConfig();
 // Reloads once when an island's script is gone after a deploy (src/lib/reload-guard.ts), written into the page as it is.
 const reloadGuard = `(${reloadOnStaleScript.toString()})(window)`;
@@ -38,13 +39,13 @@ const reloadGuard = `(${reloadOnStaleScript.toString()})(window)`;
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Public+Sans:wght@400;500;600&display=swap">
-  {auth && <script is:inline type="application/json" id="auth-config" data-supabase-url={auth.supabaseUrl} data-supabase-key={auth.supabaseKey}></script>}
+  {auth && <script is:inline type="application/json" id="auth-config" set:html={authJson}></script>}
   {auth && <script>import "../lib/auth-boot.ts";</script>}
 </head>
 <body class={bodyClass || undefined}>
   <slot />
   <script is:inline type="application/json" id="page-context" set:html={context}></script>
   <footer class="site-footer">Our Favourite Recipes</footer>
-  {chat && <script is:inline src={`${rootPrefix}chat.js`} data-api={chat.api} data-public={chat.publicOff ? "false" : undefined} defer></script>}
+  {chat && <Chat client:idle api={chat.api} publicOff={chat.publicOff} supabaseUrl={auth ? auth.supabaseUrl : ""} />}
 </body>
 </html>

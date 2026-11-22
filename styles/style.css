@@ -1872,7 +1872,7 @@ body.sheet-open {
   font-size: 0.8rem !important;
 }
 
-/* Recipe chat (templates/chat.js): a bubble bottom right, a bottom sheet on phones, a floating panel from 720px. See design.md. */
+/* Recipe chat (src/islands/chat/): a bubble bottom right, a bottom sheet on phones, a floating panel from 720px. See design.md. */
 .chat-bubble[hidden] {
   display: none;
 }
@@ -2652,7 +2652,7 @@ button.chat-attachment-state {
   }
 }
 
-/* Recipe chat, signed-in editors (templates/chat.js + src/islands/SignIn.tsx): account button, chats list, thumbs up / down. See design.md. */
+/* Recipe chat, signed-in editors (src/islands/chat/ + src/islands/SignIn.tsx): account button, chats list, thumbs up / down. See design.md. */
 .chat-title {
   min-width: 0;
   overflow: hidden;
@@ -2951,7 +2951,7 @@ button.chat-attachment-state {
   cursor: pointer;
 }
 
-/* Recipe chat, phase 4 (templates/chat.js): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
+/* Recipe chat, phase 4 (src/islands/chat/): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
 .chat-question {
   display: flex;
   flex-direction: column;

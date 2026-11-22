@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos), 6 (small islands), 7 (shopping and sign-in) and 9 (the backend to `.ts`) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos), 6 (small islands), 7 (shopping and sign-in), 8 (chat) and 9 (the backend to `.ts`) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -141,7 +141,7 @@ the islands ship a script that takes them over in the browser. Everything else i
 | Servings selector | recipe (when scalable) | `client:visible` |
 | Keep screen on, Cook with Claude | recipe | `client:visible` |
 | Shopping list and stocktake | shopping | `client:load` |
-| Sign-in | the account button on the shopping page (an island); the sheet on every page of a build with sign-in (mounted by a module script, see "Step 7 as built"); the chat until step 8 through a `window.RecipeAuth` shim | `client:load` / with the page |
+| Sign-in | the account button on the shopping page (an island) and in the chat's header; the sheet on every page of a build with sign-in (mounted by a module script, see "Step 7 as built") | `client:load` / with the page |
 | Chat | every page, when `CHAT_API_URL` is set | `client:idle`: once the page has loaded and settled |
 
 - An island's data is passed as props; Astro writes them into the page next to the island. That replaces the `#shopping-data` and
@@ -255,7 +255,7 @@ step.
 5. **Photos** (done) sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
 6. **Small islands** (done): search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
 7. **Shopping and sign-in islands** (done): one render for the shopping list; the sign-in store (with a `window.RecipeAuth` shim for the chat until step 8).
-8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
+8. **Chat** (done): split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
 9. **The backend to `.ts`** (done): first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
 10. **Docs and skills:** the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
     `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files. Also the recipe format's prose
@@ -453,6 +453,79 @@ step.
 - **Not checked:** Safari/iOS itself; real Supabase Auth and a real `/stocktake` (mocked); the real email link; a page open across a deploy with the new island files (the guard of step 6 covers it).
 - **Pre-existing, not from this step:** `cd mcp-server && npm test` fails one test, `chat-switch.test.js`'s "the build adds data-public...", when the whole suite runs (three test files run `astro build` in the same repo at once and Astro 7 writes `.astro/.prerender` in the project root, which they clobber: `Cannot find module .astro/.prerender/chunks/...`). It passes on its own and fails the same way on the HEAD checkout; 262 of 263 pass.
 
+
+### Step 8 as built
+
+- **Two commits.** First the parts of `templates/chat.cjs` that aren't the widget became typed modules with their tests (nothing used them yet); then the
+  widget became the island and `chat.cjs` went. `templates/` is now empty and gone (the static-files integration copies the original photos only).
+- **The logic** (`src/lib/chat/`, strict, no Preact but a signal; plain functions over one `ChatApp`, split along the script's seams): `app.ts` (the state; the
+  conversation log as an ordered list of entries: messages, the one status line, questions, the review cards, chips, errors, "Opening your chat…"; what is kept
+  between pages; the bubble, header, context chip; open / close / New chat; `lock`), `turn.ts` (a message and its streamed answer, the 409 retry, a dropped editor
+  turn waited for on the server, a turn left on the last page, the page state sent), `session.ts` (requests with the token through `src/lib/auth.ts`, `/chat/me`,
+  editor and visitor modes, loading a conversation, the chats list, thumbs, sign-in from the chat), `tray.ts` (loading, folding, Finalise, Save, Save now, clashes,
+  "Publishing…"), `photos.ts` (pick, downscale, upload on pick, send by path, the reading poll and line, the enlarged photo), `start.ts` (start-up as the last page
+  left it, Escape, the keyboard, the panel's height, the bubble's lift, page hide). Pure: `render.ts` (the safe renderer's parser, `safeHref`), `clean.ts` (what is kept
+  of anything received, and the types), `tray-data.ts`, `labels.ts`, `stream.ts` (the SSE reader, typed by `shared/chat-events.ts` with `import type`), `storage.ts`
+  (every key, unchanged: `recipes-chat`, `-editor`, `-signin`, `-seen` in localStorage; `-visit`, `-ui`, `-off`, `-tray-fold` in sessionStorage), `photo-files.ts`.
+- **The components** (`src/islands/chat/`): `Chat.tsx` (the island: makes the app in the browser, renders nothing at build time), `Panel.tsx` (panel, bubble, the log's
+  entries, the locked panel), `Message.tsx` (messages, cards, the nav button), `Chips.tsx` (replies, ask_user), `Review.tsx` (drafts review, optional items),
+  `Feedback.tsx`, `Tray.tsx`, `ChatsList.tsx`, `Composer.tsx` (context chip, photos to send, the form), `RichText.tsx`, `icons.tsx` (the chat's own icon set as JSX).
+- **How it draws.** The old script built DOM nodes at precise moments (a chip row appended, a card's class set, the tray rebuilt). To keep the page the same, the app
+  keeps what each of those moments decided (the log's entries in order, the tray's "view" worked out by `renderTray`, the photos shelf by `paintShelf`) and the components
+  draw only that; one signal (`rev`) redraws the island, and `after()` runs scrolling and focus once the DOM is in. The message box is uncontrolled (the app reads and
+  sets it), so typing never redraws. Every class, id, `role`, `aria-*`, `data-*` and text is the script's. No `dangerouslySetInnerHTML` (or `innerHTML`, `outerHTML`,
+  `insertAdjacentHTML`, `document.write`) anywhere in the chat: a test scans the source.
+- **The island**: `<Chat client:idle api publicOff supabaseUrl />`, the last thing in the body of every page of a build with `CHAT_API_URL` (`Layout.astro`); the props
+  replace `data-api` / `data-public` and the `script[data-supabase-url]` lookup. It renders nothing at build time (whether there is a bubble depends on who is signed in
+  and on a chat switched off earlier in the tab), so `client:idle` (not `client:visible`, which needs something visible) is right. It starts after the sign-in boot
+  script, which is a module in the head, so the store is always ready (`auth.enabled`). **Gone:** `templates/chat.cjs`, `src/lib/recipe-auth.ts` (the shim), its
+  call in `auth-boot.ts`, the `Window.RecipeAuth` type and its tests, the `data-supabase-*` attributes (`#auth-config` is JSON now, read by the boot script), the
+  layout's `rootPrefix` (only the chat's script tag used it). The header's Sign in is still caught in the capture phase (`onClickCapture`, `stopPropagation`) to
+  give the sheet the chat's words; the reload guard's `textarea.chat-input` is the composer's.
+- **Photos on cards:** unchanged; the backend's card and review photos are `/images/recipes/<slug>.jpg` on the site's origin, which `static-files.ts` still publishes.
+  Moving them to sized copies needs the backend to know Astro's hashed names, so it stays as decided in step 5.
+- **Tests** (Vitest, happy-dom; 83 in the chat's files): `src/lib/chat/clean.test.ts` (every case of `mcp-server/test/chat-render.test.js` and the chat lines of
+  `phase6.test.js`: history, cards, nav, action chips, starters, server messages, photos, labels, questions, reviews, optional items, the tray, the balance line),
+  `stream.test.ts` (every event of `chatEventSchema`, chunks of 1/2/3/7/50 bytes incl. multi-byte characters, `\r\n`, bad JSON, the server's error, a cut stream,
+  the browser's TypeError, a throwing handler), `storage.test.ts` (the keys, the new-visit rule incl. a sign-in from the chat, blocked storage),
+  `src/islands/chat/render.test.tsx` (the renderer's cases against the component, plus the source scan), `chat.test.tsx` (the island against a mocked `/chat` and
+  Supabase: panel and bubble, Escape vs the sheet, context chip and page state, a streamed answer with status / cards / chips / nav, every error path, the ring and
+  the dot, restore across pages and New chat, the new-visit rule, links held while streaming, switched off / editors only / account can't edit / CHAT_PUBLIC=false,
+  the header's Sign in wording, an editor's stored chat with thumbs and the feedback box, a new visit with and without an unseen reply, the chats list with delete,
+  a dropped stream resumed, a turn left on the last page, the 409 retry, an expired token, ask_user multi, the tray's cards / detail / drop / fold with its dot,
+  Finalise through both review cards to Save and "Publishing…", a clash, Save now, a failed Save, other people's photos being read, photos picked / uploaded /
+  numbered / enlarged / failed / retried / too many / not photos, the reading line and the note). Backend: `chat-render.test.js` is gone (its one cross-check, the
+  optional card's words against `lib/optional-review.ts`, is `test/chat-words.test.ts`, importing `src/lib/chat/clean.ts`); `phase6.test.js` is `.ts` now without the
+  chat's lines; `chat-switch.test.ts` reads the island's props from the built page; `ingredients.test.ts` no longer copies `templates/`.
+- **Checked against the build before this step** (Chromium, iPhone 390x844 at 3x and a 1280x860 desktop). The scenario was played once on the old build against the
+  dev harness (`mcp-server/scripts/dev.ts`: the real `/chat` handlers, fake GitHub / OpenRouter / Supabase) with every `/chat` and Supabase response recorded via
+  `page.route`, then replayed, response for response, to the old and the new build: a visitor (open, "chicken" with cards and chips, a chip, "rice" with its Open
+  button, a 500, an error mid-stream, reload with a draft, a card tapped to its recipe page, "this recipe", context dismissed, New chat, close), a new visit in a new
+  tab, the header's Sign in sheet, the editor (two staged recipes with photos, the tray's detail, folding by hand, thumbs down with reasons and a note, thumbs up,
+  the chats list, two photos picked / uploaded / sent / read with the note, enlarged and closed with Escape, Finalise: the promote question, the drafts review,
+  the optional items, Save, the publishing poll), reload as an editor, a new visit on the shopping page, the account menu, sign-out; plus three server and build
+  switches (`CHAT_ENABLED=false`; `CHAT_PUBLIC_ENABLED=false` with its Sign in; `CHAT_PUBLIC=false` builds with a non-editor and an editor signing in on the shopping
+  page). The chat's DOM (every element, attribute, text, `value`, `disabled`), `body`'s classes, the focused element, localStorage and sessionStorage (times and the
+  visitor's random chat id normalised) and the requests made (method, URL, body, token) were compared after each of 105 steps: **the requests (79, 87, 1, 4, 9) and
+  storage are the same everywhere; no console errors** (the browser logs the switched-off server's 503 / 403 for both). Differences:
+  (1) after a tap on the tray's head, focus stays on it (the script redrew the head and focus fell to `<body>`); kept, it is better for a keyboard.
+  (2) The hidden panel gets `--chat-h` / `--chat-top` from the start (the script set them on the page's first viewport resize when it caught one, which it did on some
+  loads; the values are the same and both set them on opening). (3) Once on desktop, a new tray card still had its 4-second `is-new` highlight when the snapshot was
+  taken (timing; a second run had none). Also on purpose: the "On:" chip's label is empty until the panel first opens, as before (a first version wrote "On: ").
+- **Other differences:** the bubble appears when the page is idle, not as soon as it is parsed; the chat's elements sit in an `<astro-island>` (`display: contents`)
+  before `#auth-sheet-root` instead of after it (the sheet is above the panel by z-index either way); a tray item whose kind is an `Object` prototype name was accepted
+  by the script's `TRAY_KINDS[...]` lookup and isn't now; event data that isn't a JSON object reads as an empty one (the script threw on it, which looked like a
+  dropped connection).
+- **A bug found and kept as it was:** opening a conversation straight from a page load while its photos are still being read (`GET /chat/conversations/:id` with
+  `photos.active`) shows no "Reading photos…" line and doesn't poll: `schedulePhotoPoll` compares with `photoChangedAt`, which is still 0, so it treats the reading as
+  quiet for 10 minutes and drops it (after a message of one's own it works). The one-line fix is to set `photoChangedAt = Date.now()` in `loadConversation` before it
+  calls `schedulePhotoPoll`; not made here, to keep the comparison clean.
+- **JS shipped** (iPhone emulation, all four variables, scripts as served, gzipped in brackets, inline as "+"): home page 179.6 KB (54.4) + 5.5 inline before, 112.9 KB
+  (39.4) + 5.8 after; next week 175.7 (52.4) + 0.6 → 112.0 (38.9) + 5.7; a recipe page 183.3 (56.4) + 5.7 → 116.6 (41.4) + 6.0; the shopping page 194.1 (60.0) + 5.5
+  → 127.4 (44.9) + 5.8. The island is 75 KB minified (the script was 150 KB as written) and shares Preact, the signals and the store with the other islands; the
+  inline part grows by Astro's island loader on pages that had no island before.
+- **Not checked:** Safari / iOS itself; the Vercel preview backend (the harness ran the real handlers); a page open across a deploy with the new island file (the
+  guard of step 6 covers it).
 
 ### Step 9 as built
 

@@ -97,7 +97,7 @@ test("CHAT_PUBLIC_ENABLED=false: visitors and non-editor accounts get 403 { sign
   assert.equal((await req("POST", "", { body: visitor })).status, 200, "visitors are back");
 });
 
-test("the build adds data-public=\"false\" to the chat script only with CHAT_PUBLIC=false, and no chat script without CHAT_API_URL", async () => {
+test("the build tells the chat island CHAT_PUBLIC=false (publicOff), and there is no chat without CHAT_API_URL", async () => {
   const { mkdirSync, mkdtempSync, readFileSync, rmSync } = await import("node:fs");
   const { spawnSync } = await import("node:child_process");
   const root = new URL("../../", import.meta.url).pathname;
@@ -119,9 +119,16 @@ test("the build adds data-public=\"false\" to the chat script only with CHAT_PUB
       rmSync(out, { recursive: true, force: true });
     }
   };
-  assert.match(html({ CHAT_API_URL: "http://x/chat" }), /<script src="chat\.js" data-api="http:\/\/x\/chat" defer>/);
-  assert.match(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "false" }), /data-api="http:\/\/x\/chat" data-public="false" defer/);
-  assert.doesNotMatch(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "true" }), /data-public/);
-  assert.doesNotMatch(html({ CHAT_PUBLIC: "false" }), /chat\.js/);
+  // The chat is an island (src/islands/chat/Chat.tsx); the build's values are its props, as Astro writes them: {"api":[0,"..."],"publicOff":[0,true],...}.
+  const chatProps = (page: string) => {
+    const tag = page.match(/<astro-island[^>]*component-url="[^"]*\/Chat\.[^"]*"[^>]*>/);
+    if (!tag) return null;
+    const props = JSON.parse(tag[0].match(/ props="([^"]*)"/)![1].replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+    return Object.fromEntries(Object.entries(props).map(([k, v]: [string, any]) => [k, v[1]]));
+  };
+  assert.deepEqual(chatProps(html({ CHAT_API_URL: "http://x/chat" })), { api: "http://x/chat", publicOff: false, supabaseUrl: process.env.SUPABASE_URL }); // this file sets SUPABASE_URL (and the anon key)
+  assert.equal(chatProps(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "false" }))!.publicOff, true);
+  assert.equal(chatProps(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "true" }))!.publicOff, false);
+  assert.equal(chatProps(html({ CHAT_PUBLIC: "false" })), null, "no CHAT_API_URL: no chat at all");
   rmSync(cacheDir, { recursive: true, force: true });
 });

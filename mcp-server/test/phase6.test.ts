@@ -1,7 +1,6 @@
 // Phase 6 extras: cooking help (scale_recipe), what can I make from what's at home, stocktake by chat, week balance.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import { clearCache } from "../lib/cache.ts";
 import { checkEvent } from "./chat-event-check.ts";
 
@@ -12,9 +11,9 @@ Object.assign(process.env, {
   CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000",
 });
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.ts");
-let github, openrouter, supabase, images;
+let github: any, openrouter: any, supabase: any, images: any;
 const realFetch = globalThis.fetch;
-let chat, tools, background, config, photos;
+let chat: any, tools: any, background: any, config: any, photos: any;
 before(async () => {
   globalThis.fetch = async (url, init) => {
     const s = String(url);
@@ -43,13 +42,13 @@ beforeEach(() => {
   photos.deps.lookup = async () => [{ address: "93.184.216.34" }];
 });
 let ip = 0;
-const post = (body, token) => chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
-async function events(res) {
+const post = (body: any, token?: any) => chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
+async function events(res: any) {
   const out = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
-const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+const textOf = (evs: any) => evs.filter((e: any) => e.name === "text").map((e: any) => e.data.delta).join("");
 const slugs = () => [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3)).sort();
 
 // --- 1. cooking help --------------------------------------------------------------------------------------------------------
@@ -60,17 +59,17 @@ test("scale_recipe is a read tool for everyone, scales to N, and refuses to mult
   const res = await tools.dispatch("scale_recipe", { slug, servings: 6 }, tools.makeCaller({ role: "public" }));
   assert.equal(res.isError, undefined);
   assert.match(res.content[0].text, new RegExp(`serves ${data.serves} as written, scaled to 6`));
-  assert.ok(res.content[0].text.split("\n").filter((l) => l.startsWith("- ")).length > 2);
+  assert.ok(res.content[0].text.split("\n").filter((l: any) => l.startsWith("- ")).length > 2);
   assert.equal((await tools.dispatch("scale_recipe", { slug, servings: 0 }, editor())).isError, true);
   assert.equal((await tools.dispatch("scale_recipe", { slug: "nope-nope", servings: 2 }, editor())).isError, true);
 });
 
 test("cooking help on a recipe page: swap, scale and 'what's step 2' read the recipe first", async () => {
   const slug = slugs()[0];
-  const ask = async (content) => {
+  const ask = async (content: any) => {
     openrouter.requests.length = 0;
     const res = await post({ messages: [{ role: "user", content }], page: { page: "recipe", slug, servings: 4 } });
-    return { evs: await events(res), calls: openrouter.requests.map((r) => r.messages.findLast((m) => m.role === "tool")?.content).filter(Boolean) };
+    return { evs: await events(res), calls: openrouter.requests.map((r: any) => r.messages.findLast((m: any) => m.role === "tool")?.content).filter(Boolean) };
   };
   let r = await ask("scale it for 6");
   assert.match(r.calls[0], /scaled to 6/);
@@ -87,8 +86,8 @@ test("cooking help on a recipe page: swap, scale and 'what's step 2' read the re
 
 // --- 2. what's at home ------------------------------------------------------------------------------------------------------
 
-const putStocktake = async (haveNames, extra = []) => {
-  const list = { updated: "2026-11-01", recipes: [], servings: {}, stocktake: "2026-11-02T10:00:00.000Z", sections: [{ name: "Everything", items: [...haveNames.map((name) => ({ name, quantity: "1", have: true, recipes: [] })), ...extra] }] };
+const putStocktake = async (haveNames: any, extra: any[] = []) => {
+  const list = { updated: "2026-11-01", recipes: [], servings: {}, stocktake: "2026-11-02T10:00:00.000Z", sections: [{ name: "Everything", items: [...haveNames.map((name: any) => ({ name, quantity: "1", have: true, recipes: [] })), ...extra] }] };
   github.files.set("shopping-list.json", Buffer.from(JSON.stringify(list)));
   clearCache();
 };
@@ -111,11 +110,11 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
   const { recipeIngredients } = await import("../lib/recipes.ts");
   const { STAPLES } = await import("../lib/recipes.ts");
   const book = await recipeIngredients();
-  const target = book.find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
-  const names = [...new Set(target.ingredients.filter((n) => !STAPLES.test(n)).map((n) => n.toLowerCase()))];
+  const target = book.find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3);
+  const names: string[] = [...new Set<string>(target.ingredients.filter((n: any) => !STAPLES.test(n)).map((n: any) => n.toLowerCase()))];
   await putStocktake(names);
   const out = await tools.dispatch("recipes_from_home", { limit: 5 }, tools.makeCaller({ role: "public" }));
-  const rows = out.content[0].text.split("\n").filter((l) => / \| \d+\/\d+ \| /.test(l));
+  const rows = out.content[0].text.split("\n").filter((l: any) => / \| \d+\/\d+ \| /.test(l));
   assert.ok(rows.length >= 1 && rows.length <= 5);
   assert.match(rows[0], new RegExp(`^${target.slug} \\| .* \\| ${names.length}/${names.length} \\| nothing$`) , "a recipe with everything at home comes first with nothing missing");
   // partly at home counts; an item marked 0 or not at home doesn't
@@ -130,19 +129,19 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
 
 test("the shopping page's starter and the chat flow: ask what can be made, get cards", async () => {
   const { recipeIngredients, STAPLES } = await import("../lib/recipes.ts");
-  const target = (await recipeIngredients()).find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
-  await putStocktake(target.ingredients.filter((n) => !STAPLES.test(n)));
+  const target = (await recipeIngredients()).find((r: any) => r.ingredients.filter((n: any) => !STAPLES.test(n)).length >= 3);
+  await putStocktake(target.ingredients.filter((n: any) => !STAPLES.test(n)));
   const res = await post({ messages: [{ role: "user", content: "What can I make from what's at home?" }], page: { page: "shopping" } });
   const evs = await events(res);
-  assert.ok(evs.some((e) => e.name === "cards" && e.data.cards.some((c) => c.slug === target.slug)));
-  assert.ok(openrouter.requests[0].tools.some((t) => t.function.name === "recipes_from_home"));
+  assert.ok(evs.some((e) => e.name === "cards" && e.data.cards.some((c: any) => c.slug === target.slug)));
+  assert.ok(openrouter.requests[0].tools.some((t: any) => t.function.name === "recipes_from_home"));
 });
 
 // --- 3. stocktake by chat -----------------------------------------------------------------------------------------------------
 
 const STOCK_LIST = { updated: "2026-11-01", recipes: [], servings: {}, sections: [{ name: "Pantry", items: [{ name: "Eggs", quantity: "12", recipes: [] }, { name: "Basmati rice", quantity: "500g", recipes: [] }, { name: "Parsley", recipes: [] }] }] };
-const putList = (list) => { github.files.set("shopping-list.json", Buffer.from(JSON.stringify(list))); clearCache(); };
-const say = async (message, conversation_id) => {
+const putList = (list: any) => { github.files.set("shopping-list.json", Buffer.from(JSON.stringify(list))); clearCache(); };
+const say = async (message: any, conversation_id?: any) => {
   const res = await post({ message, conversation_id, page: { page: "shopping" } }, "owner-token");
   assert.equal(res.status, 200);
   const evs = await events(res);
@@ -150,7 +149,7 @@ const say = async (message, conversation_id) => {
   return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id };
 };
 const planGet = async () => (await (await chat.GET(new Request("https://mcp.test/api/chat?route=plan", { headers: { authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.77" } }))).json()).tray;
-const apply = (body) => chat.POST(new Request("https://mcp.test/api/chat?route=plan/apply", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.78" }, body: JSON.stringify(body) }));
+const apply = (body: any) => chat.POST(new Request("https://mcp.test/api/chat?route=plan/apply", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer owner-token", "x-forwarded-for": "198.51.100.78" }, body: JSON.stringify(body) }));
 
 test("stocktake by chat: 'we've got 6 eggs and plenty of rice' becomes one At home card that Save now commits with the page's validation", async () => {
   putList(STOCK_LIST);
@@ -172,7 +171,7 @@ test("stocktake by chat: 'we've got 6 eggs and plenty of rice' becomes one At ho
   assert.deepEqual(github.commitLog[0].paths, ["shopping-list.json"]);
   const saved = JSON.parse(github.files.get("shopping-list.json").toString());
   assert.ok(saved.stocktake);
-  const by = Object.fromEntries(saved.sections[0].items.map((i) => [i.name, i.have]));
+  const by = Object.fromEntries(saved.sections[0].items.map((i: any) => [i.name, i.have]));
   assert.deepEqual(by, { Eggs: 6, "Basmati rice": true, Parsley: undefined });
   assert.equal((await planGet())?.count ?? 0, 0, "the card is gone after Save");
 });
@@ -216,7 +215,7 @@ test("stage_stocktake is a stage tool: refused for the public and for the agent 
     assert.equal(res.isError, true);
     assert.match(res.content[0].text, /Not allowed/);
   } finally { console.warn = warn; }
-  assert.equal(tools.accessOf(tools.TOOLS.find((t) => t.name === "stage_stocktake")), "stage");
+  assert.equal(tools.accessOf(tools.TOOLS.find((t: any) => t.name === "stage_stocktake")), "stage");
 });
 
 // --- 4. week balance ------------------------------------------------------------------------------------------------------------
@@ -236,10 +235,7 @@ test("the tray reports next week as it will be after Save (staged recipes includ
   assert.equal(t.balance.recipes, 2);
   assert.ok(t.balance.avg_kcal > 0 && t.balance.total_mins >= 20);
   assert.ok(t.balance.dinners >= 1, "the staged pasta is a dinner");
-  const chatJs = createRequire(import.meta.url)("../../templates/chat.cjs");
-  assert.match(chatJs.balanceLine({ recipes: 5, dinners: 3, avg_kcal: 420, total_mins: 135 }), /^Next week after Save: 5 recipes · 3 dinners · ~420 kcal each · 2 h 15 min in all$/);
-  assert.equal(chatJs.balanceLine(null), "");
-  assert.equal(chatJs.cleanTray({ items: [], balance: { recipes: "5", dinners: -1, avg_kcal: 1e9, total_mins: 12 } }, "https://x", "").balance.recipes, 0, "non-numbers are dropped");
+  // the panel's line from these numbers is tested with the panel (src/lib/chat/clean.test.ts, "the week balance line")
 });
 
 // --- chat result sizes -----------------------------------------------------------------------------------------------------------
@@ -247,7 +243,7 @@ test("the tray reports next week as it will be after Save (staged recipes includ
 test("get_shopping_list in chat is a compact table that fits the result cap for the real list; /mcp output is unchanged", async () => {
   const { readFileSync } = await import("node:fs");
   const real = JSON.parse(readFileSync(new URL("../../shopping-list.json", import.meta.url), "utf8"));
-  const names = real.sections.flatMap((s) => s.items.map((i) => i.name));
+  const names = real.sections.flatMap((s: any) => s.items.map((i: any) => i.name));
   assert.ok(names.length > 50, "the repo's list is a real one");
   putList(real);
   const inChat = (await tools.dispatch("get_shopping_list", {}, editor(), { chat: { emit() {} } })).content[0].text;
@@ -269,7 +265,7 @@ test("stocktake by chat finds Pantry items on the real list", async () => {
   const { readFileSync } = await import("node:fs");
   const real = JSON.parse(readFileSync(new URL("../../shopping-list.json", import.meta.url), "utf8"));
   putList(real);
-  const pantry = real.sections.find((s) => /pantry/i.test(s.name))?.items.find((i) => !i.quantity || true);
+  const pantry = real.sections.find((s: any) => /pantry/i.test(s.name))?.items.find((i: any) => !i.quantity || true);
   assert.ok(pantry, "the real list has a Pantry section");
   const r = await tools.dispatch("stage_stocktake", { items: [{ name: pantry.name, have: true }] }, editor(), { chat: { emit() {} } });
   assert.equal(r.isError, undefined, r.content[0].text);
@@ -277,7 +273,7 @@ test("stocktake by chat finds Pantry items on the real list", async () => {
 
 test("history replay keeps ask_user calls, their results and the tapped answers; a cap never starts inside a tool exchange", async () => {
   const store = await import("../lib/chat-store.ts");
-  const row = (role, content) => ({ role, content });
+  const row = (role: any, content: any) => ({ role, content });
   const ask = { role: "assistant", content: "", tool_calls: [{ id: "q1", type: "function", function: { name: "ask_user", arguments: '{"question":"Did you like Soup?","options":["Liked","Not for us"]}' } }], ui: { question: { question: "Did you like Soup?" } } };
   const rows = [
     row("user", { role: "user", content: "Finalise list" }),
@@ -301,7 +297,7 @@ test("history replay keeps ask_user calls, their results and the tapped answers;
 });
 
 test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), leaving ../dist alone", async () => {
-  const { mkdtempSync, existsSync, statSync, rmSync } = await import("node:fs");
+  const { mkdtempSync, existsSync, statSync, rmSync, readdirSync } = await import("node:fs");
   const { spawnSync } = await import("node:child_process");
   const { tmpdir } = await import("node:os");
   const root = new URL("../../", import.meta.url).pathname;
@@ -311,7 +307,7 @@ test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), 
     const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, ASTRO_CACHE_DIR: `${out}-cache`, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(`${out}/index.html`));
-    assert.ok(existsSync(`${out}/chat.js`));
+    assert.ok(readdirSync(`${out}/_astro`).some((f) => /^Chat\.[\w-]+\.js$/.test(f)), "the chat island's script is there");
     assert.equal(existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null, before, "../dist wasn't touched");
   } finally {
     rmSync(out, { recursive: true, force: true });
@@ -323,23 +319,23 @@ test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), 
 
 test("the Save summary speaks in titles and plain words, not slugs and tool jargon", async () => {
   const { chatLine } = await import("../lib/plan-apply.ts");
-  const title = (s) => ({ "almond-croissant-oats": "Almond Croissant Oats", soup: "Soup", "avocado-toast": "Avocado Toast" }[s] || s);
+  const title = (s: any) => (({ "almond-croissant-oats": "Almond Croissant Oats", soup: "Soup", "avocado-toast": "Avocado Toast" }) as Record<string, string>)[s] || s;
   assert.equal(chatLine({ kind: "switch", op: { carry_over: ["soup"] } }, {}, title), "Started the new week: next week's recipes are now this week; kept in this week: Soup");
   assert.equal(chatLine({ kind: "promote", op: { slug: "almond-croissant-oats" } }, {}, title), "Almond Croissant Oats is now a regular recipe");
   assert.equal(chatLine({ kind: "new", op: { title: "Lemon Garlic Pasta", week: "next" } }, {}, title), "New: Lemon Garlic Pasta (draft), planned for next week");
   assert.equal(chatLine({ kind: "next", op: { slugs: ["soup"], add: true } }, {}, title), "Soup added to next week");
   assert.equal(chatLine({ kind: "list" }, { list: { sections: [{ items: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({ name: `x${n}` })) }] }, next: [1, 2] }, title), "Shopping list: 9 items for 2 recipes");
   assert.equal(chatLine({ kind: "edit", op: { slug: "avocado-toast", total_mins: 35 } }, {}, title), "Updated Avocado Toast (time)");
-  for (const line of [chatLine({ kind: "promote", op: { slug: "soup" } }, {}, title), chatLine({ kind: "list" }, { list: { sections: [] }, next: [] }, title)]) assert.doesNotMatch(line, /draft ->|weeks unchanged|covering| x\d/);
+  for (const line of [chatLine({ kind: "promote", op: { slug: "soup" } }, {}, title), chatLine({ kind: "list" }, { list: { sections: [] }, next: [] }, title)]) assert.doesNotMatch(String(line), /draft ->|weeks unchanged|covering| x\d/);
 });
 
 test("chips: a plain 'Save to site' becomes the real button when the tray allows it and is dropped otherwise; an earlier question's answers aren't suggestions", async () => {
   const slug = slugs()[0];
   await tools.dispatch("stage_update_recipe", { slug, total_mins: 41 }, editor(), { chat: { emit() {} } });
-  const ask = async (replies, history = []) => {
+  const ask = async (replies: any, history: any[] = []) => {
     // a scripted editor turn: the mock model isn't used, so run the loop through a tiny fake
     const { runChat } = await import("../lib/chat.ts");
-    const emitted = [];
+    const emitted: any = [];
     let round = 0;
     const saved = globalThis.fetch;
     globalThis.fetch = async (url, init) => {
@@ -352,11 +348,11 @@ test("chips: a plain 'Save to site' becomes the real button when the tray allows
       return saved(url, init);
     };
     try {
-      await runChat({ caller: editor(), messages: [...history, { role: "user", content: "ok" }], page: {}, emit: (e) => emitted.push(e), trace: { generation: () => ({ end() {} }), span: () => ({ end() {} }), event() {}, finish() {} }, apiKey: "k", model: "m" });
+      await runChat({ caller: editor(), messages: [...history, { role: "user", content: "ok" }], page: {}, emit: (e: any) => emitted.push(e), trace: { generation: () => ({ end() {} }), span: () => ({ end() {} }), event() {}, finish() {} }, apiKey: "k", model: "m" });
     } finally {
       globalThis.fetch = saved;
     }
-    return emitted.find((e) => e.type === "suggestions")?.replies || [];
+    return emitted.find((e: any) => e.type === "suggestions")?.replies || [];
   };
   // a quick fix is ready to save at once
   assert.deepEqual(await ask(["Save to site", "Under 20 minutes"]), [{ label: "Save to site", action: "apply_plan" }, "Under 20 minutes"]);

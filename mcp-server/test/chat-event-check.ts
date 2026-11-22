@@ -1,4 +1,4 @@
-// Every /chat event the tests read must match the wire shape described in shared/chat-events.ts (the browser's chat.cjs reads the same events).
+// Every /chat event the tests read must match the wire shape described in shared/chat-events.ts (the chat island reads the same events: src/lib/chat/stream.ts).
 import assert from "node:assert/strict";
 import { chatEventData } from "../../shared/chat-events.ts";
 

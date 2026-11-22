@@ -59,9 +59,9 @@ to the code) and the env vars it needs. The directory layout gains `templates/ch
 
 What the chat must still respect under the new rules:
 
-- `templates/chat.js` is vanilla JS and talks only to `/chat` (and Supabase Auth via the shared
-  `auth.js`). The page is written without the chat, so if the script doesn't load there's no bubble and nothing else changes; if `/chat` is down, the
-  bubble shows an error and the page is unaffected.
+- The chat (since step 8 of `docs/typescript-migration.md` a Preact island, `src/islands/chat/`, with its logic in `src/lib/chat/`; before that
+  `templates/chat.js`) talks only to `/chat` (and Supabase Auth via the shared sign-in store, `src/lib/auth.ts`). The page is written without the chat, so
+  if its script doesn't load there's no bubble and nothing else changes; if `/chat` is down, the bubble shows an error and the page is unaffected.
 
 ## 3. Architecture
 
@@ -70,9 +70,9 @@ GitHub Pages (static)                     Vercel (mcp-server/)                  
 ┌──────────────────────┐   POST /chat    ┌───────────────────────────────┐
 │ every page           │ ─────────────▶  │ api/chat.js                   │ ───▶ OpenRouter (stream;
 │                      │                 │                               │      public or editor key)
-│  templates/chat.js   │ ◀── SSE stream ─│  - verify Supabase token       │
+│  src/islands/chat/   │ ◀── SSE stream ─│  - verify Supabase token       │
 │  + page context JSON │                 │  - load/save conversation      │ ───▶ Supabase Postgres
-│  + shared auth.js    │                 │  - agent loop over tool registry│     (chats, plan tray)
+│  + src/lib/auth.ts   │                 │  - agent loop over tool registry│     (chats, plan tray)
 └──────────────────────┘                 │  - same lib/ as the MCP tools  │ ───▶ GitHub (commits)
                                          └───────────────────────────────┘
 ```
@@ -462,7 +462,7 @@ The server decides what qualifies, from the change itself:
 
 Every page embeds a small JSON literal at build time (allowed by the static rules):
 `{ "page": "recipe", "slug": "steamed-rice", "title": "Steamed rice" }`, `{ "page": "index" }`,
-`{ "page": "shopping" }`. `chat.js` adds live UI state that matters (recipe page: selected servings;
+`{ "page": "shopping" }`. The chat (`pageState` in `src/lib/chat/turn.ts`) adds live UI state that matters (recipe page: selected servings;
 index: active filter and search text) and sends it with every message.
 
 - The server **re-resolves** the slug itself (`get_recipe`) instead of trusting page text, and
@@ -478,7 +478,7 @@ index: active filter and search text) and sends it with every message.
 ### 7.3 Navigation
 
 - The bot only offers (`offer_navigation`); the user taps.
-- It's a static site, so navigating is a full page load. `chat.js` has to restore the panel: open
+- It's a static site, so navigating is a full page load. The chat has to restore the panel: open
   state and the active conversation id in `sessionStorage`, history re-fetched (editor) or read
   from `localStorage` (anonymous). The new page's context is picked up on the next message.
 - That restore is within one visit (one tab: a `sessionStorage` marker, `recipes-chat-visit`). A new
@@ -515,7 +515,8 @@ review when something is flagged, then one card asking which optional items to k
   no attachments and no `fetch_url`.
 - **Prompt injection** from fetched recipe pages and screenshots: content is data; writes only
   stage; only a human tap on Save commits; regular recipes still can't be deleted (server rule).
-- **Rendering model output:** `chat.js` never puts model text into `innerHTML`. A tiny renderer
+- **Rendering model output:** the chat never turns model text into markup (no `innerHTML`, no `dangerouslySetInnerHTML`: `src/lib/chat/render.ts` +
+  `src/islands/chat/RichText.tsx`, and a test scans the chat's source for them). A tiny renderer
   supports paragraphs, bold, lists and links, and allows only links to the site's own origin
   (anything else is shown as plain text). Cards are built from server data, not model text.
 - **Secrets:** nothing secret in the prompt; the Supabase service key and both OpenRouter keys live

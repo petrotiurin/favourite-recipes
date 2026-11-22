@@ -1,9 +1,8 @@
-// The sign-in parts in a fake DOM (happy-dom): the account button, the sheet, and the window.RecipeAuth shim the chat still uses until step 8.
+// The sign-in parts in a fake DOM (happy-dom): the account button and the sheet. (The chat's use of them is tested in src/islands/chat/chat.test.tsx.)
 import { act } from "preact/test-utils";
-import { render, h } from "preact";
+import { render } from "preact";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_KEY, createAuth, type Session } from "../lib/auth.ts";
-import { installRecipeAuth } from "../lib/recipe-auth.ts";
 import AccountButton, { SignInSheet } from "./SignIn.tsx";
 
 const jwt = (email: string) => `h.${btoa(JSON.stringify({ email }))}.s`;
@@ -26,7 +25,6 @@ afterEach(() => {
   act(() => render(null, root));
   store.dispose();
   vi.unstubAllGlobals();
-  delete window.RecipeAuth;
   document.body.className = "";
 });
 const click = (el: Element | null) => act(() => (el as HTMLElement).click());
@@ -167,63 +165,5 @@ describe("SignInSheet", () => {
     act(() => store.openSignIn());
     click(root.querySelector('[data-auth="sheet-close"]'));
     expect(store.sheet.value).toBeNull();
-  });
-});
-
-describe("window.RecipeAuth, for the chat until step 8", () => {
-  it("has the methods the chat calls, and nothing else", () => {
-    const api = installRecipeAuth(store);
-    expect(window.RecipeAuth).toBe(api);
-    expect(Object.keys(api).sort()).toEqual(["getAccessToken", "getSession", "onChange", "openSetPassword", "openSignIn", "refresh", "renderAccount", "sessionExpired", "setCopy", "signOut"]);
-  });
-
-  it("is the store: the session, the token, listeners, the sheet", async () => {
-    const api = installRecipeAuth(store);
-    expect(api.getSession()).toBeNull();
-    expect(await api.getAccessToken()).toBeNull();
-    const heard: string[] = [];
-    const off = api.onChange((_s, info) => heard.push(info.type));
-    fetchMock.mockResolvedValueOnce(json({ access_token: jwt("ed@example.com"), refresh_token: "r", expires_in: 3600 }));
-    store.email.value = "ed@example.com";
-    store.password.value = "x";
-    await store.signInWithPassword();
-    expect(api.getSession()?.email).toBe("ed@example.com");
-    expect(await api.getAccessToken()).toBe(jwt("ed@example.com"));
-    off();
-    api.sessionExpired("Your sign-in has expired.");
-    expect(heard).toEqual(["sign-in"]); // unsubscribed before the expiry
-    expect(store.sheet.value).toBe("email");
-    expect(store.message.value?.text).toBe("Your sign-in has expired.");
-    api.openSetPassword();
-    expect(store.sheet.value).toBe("password");
-    api.setCopy({ title: "T" });
-    api.openSignIn({ lede: "L" });
-    expect(store.override.value).toEqual({ title: "T", lede: "L" });
-  });
-
-  it("draws the account button into the chat's own element, compact, and follows sign-in", () => {
-    const api = installRecipeAuth(store);
-    const host = document.createElement("div");
-    document.body.appendChild(host);
-    api.renderAccount(host, { compact: true });
-    expect(host.querySelector("button.pill.is-compact")).not.toBeNull();
-    // The chat catches the click first (capture) to give the sheet its own wording, and keeps the button's own handler from also opening it.
-    const open = vi.fn();
-    host.addEventListener("click", (e) => { if ((e.target as Element).closest('[data-auth="signin"]')) { e.stopPropagation(); open(); api.openSignIn({ title: "Sign in to the chat" }); } }, true);
-    click(host.querySelector('[data-auth="signin"]'));
-    expect(open).toHaveBeenCalledOnce();
-    expect(store.override.value?.title).toBe("Sign in to the chat");
-    act(() => { store.sheet.value = null; store.override.value = null; });
-    host.remove();
-  });
-
-  it("renderAccount again on the same element replaces, it doesn't stack", () => {
-    const api = installRecipeAuth(store);
-    const host = document.createElement("div");
-    api.renderAccount(host);
-    api.renderAccount(host, { compact: true });
-    expect(host.querySelectorAll("button").length).toBe(1);
-    expect(host.querySelector("button")!.className).toBe("pill is-compact");
-    act(() => void render(h("i", {}), host));
   });
 });

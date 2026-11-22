@@ -1,6 +1,6 @@
 // Sign-in for the whole site (docs/chatbot-design.md 4.2): the Supabase Auth session and what the sign-in sheet shows, as a store with
-// @preact/signals. The shopping page's stocktake (src/islands/Shopping.tsx) and the chat (templates/chat.cjs, through the window.RecipeAuth shim in
-// src/lib/recipe-auth.ts, until step 8) use the same one. Plain fetch to Supabase's REST API, no client library. It exists only on builds that were
+// @preact/signals. The shopping page's stocktake (src/islands/Shopping.tsx) and the chat (src/islands/chat/, src/lib/chat/session.ts) use the same
+// one. Plain fetch to Supabase's REST API, no client library. It exists only on builds that were
 // given SUPABASE_URL and SUPABASE_ANON_KEY (public values; the layout writes them into `#auth-config`, src/lib/auth-boot.ts reads them): without
 // them nothing here runs and pages stay read-only.
 //

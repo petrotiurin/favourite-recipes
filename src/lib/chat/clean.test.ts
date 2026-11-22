@@ -1,4 +1,4 @@
-// What the chat keeps of what it is sent (moved from mcp-server/test/chat-render.test.js and phase6.test.js, where they tested templates/chat.cjs):
+// What the chat keeps of what it is sent (moved from mcp-server/test/chat-render.test.js and phase6.test.js, where they tested the old templates/chat.cjs):
 // only plain values, links and photos only on this site's origin, staged photos only from Supabase's signed-URL path.
 import { describe, expect, it } from "vitest";
 import {

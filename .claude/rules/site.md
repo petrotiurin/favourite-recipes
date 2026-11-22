@@ -1,7 +1,6 @@
 ---
 paths:
   - "src/**"
-  - "templates/**"
   - "astro.config.ts"
   - "styles/**"
   - "design.md"
@@ -29,7 +28,7 @@ that only exist with JS. The build-time parts are `.astro` and `.ts` files in `s
   `tile-filter.ts`, `cook-prompt.ts`, `reload-guard.ts`, `shopping-state.ts` (the shopping list's numbers and what the browser keeps for it), `auth.ts`
   (the sign-in store), `hydrated.ts`), each with a Vitest test.
 - `src/islands/`: Preact (`.tsx`, strict). The page is written to HTML with the island's markup in it at build time and the island takes it over in the
-  browser (`<astro-island>`; data comes in as props). Each has a test in `islands.test.tsx`, `shopping.test.tsx` or `signin.test.tsx` (happy-dom). An island that only fills in the page's own
+  browser (`<astro-island>`; data comes in as props). Each has a test in `islands.test.tsx`, `shopping.test.tsx`, `signin.test.tsx` or `chat/*.test.tsx` (happy-dom). An island that only fills in the page's own
   markup (servings rescales the `.qty` amounts, search hides tiles) does it with the same ids and classes as before, which the chat reads too.
   - `Search.tsx` (`client:load`): title filtering over the home page's tiles.
   - `Servings.tsx` (`client:visible`): the 1/2/4-servings selector on recipe pages. Written with the recipe's own number pressed; opens at 4 once
@@ -45,24 +44,24 @@ that only exist with JS. The build-time parts are `.astro` and `.ts` files in `s
     unchanged, `shopping-state.ts`) and who is signed in are read in a layout effect after the first render (`useHydrated` in `src/lib/hydrated.ts`), so
     hydration starts from what the build wrote. Its quantity maths is `shared/shopping-quantity.ts` and `formatAmount` in `shared/quantity.ts`, which
     the build-time page uses too (one render); they have no zod, which a browser module must not import.
-  - `SignIn.tsx`: `AccountButton` (the default export; an island on the shopping page) and `SignInSheet` (one per page, mounted by `src/lib/auth-boot.ts`, not
-    an island: `templates/chat.cjs` needs `window.RecipeAuth` as it loads, and an island wakes later). The store is `src/lib/auth.ts` (`@preact/signals`, plain
-    `fetch` to Supabase Auth, the same `localStorage` keys as always, so people stay signed in). Sign-in exists only on builds with `SUPABASE_URL` +
-    `SUPABASE_ANON_KEY` (`#auth-config`, the boot script); the shopping page's account button and stocktake need `STOCKTAKE_API_URL` too.
+  - `SignIn.tsx`: `AccountButton` (the default export; an island on the shopping page, and drawn in the chat's header) and `SignInSheet` (one per page,
+    mounted by `src/lib/auth-boot.ts`, a module script in the head that also starts the store before any island wakes). The store is `src/lib/auth.ts`
+    (`@preact/signals`, plain `fetch` to Supabase Auth, the same `localStorage` keys as always, so people stay signed in). Sign-in exists only on builds with
+    `SUPABASE_URL` + `SUPABASE_ANON_KEY` (`#auth-config`, JSON, read by the boot script); the shopping page's account button and stocktake need `STOCKTAKE_API_URL` too.
+  - `chat/` (`Chat.tsx`, `client:idle`, the last thing in every page's body, only on builds with `CHAT_API_URL`; `.claude/rules/chat.md`): the chat's bubble and
+    panel. The build writes nothing for it (the bubble depends on who is signed in); it draws once awake. Its state and logic are `src/lib/chat/`.
   - Shared state between islands goes in a small store in `src/lib/` with `@preact/signals` (as `servings.ts` and `auth.ts`), not in globals or the DOM.
 - **Hashed files and the reload guard.** Astro names the stylesheet (imported by `Layout.astro`) and every island's script after their contents, and each
   page links the files it was built with. A page left open across a deploy asks for an island script that is gone; `src/lib/reload-guard.ts`
   (written into every page's head by the Layout) reloads once on Vite's `vite:preloadError` or Astro's `astro:hydration-error`, at most once a minute
   per page, and not while the chat's message box (`.chat-input`) has unsent text.
 
-`templates/` still holds the one browser script that isn't an island yet, `chat.cjs`, copied verbatim into `dist/` as `chat.js` only when the build has
-`CHAT_API_URL` (it becomes components in step 8 of `docs/typescript-migration.md`; `.claude/rules/chat.md`). The HTML it hooks into (ids, classes, `data-*`,
-`#page-context`, the picker's `.servings-picker [aria-pressed]`, `#recipe-search`, `.cook-bar`, `.save-bar`, `script[data-supabase-url]`) is written by the
-components and islands, and it reaches sign-in through `window.RecipeAuth` (a shim over the store, `src/lib/recipe-auth.ts`, removed in step 8), so change both together.
+The chat reads parts of the page the other components and islands write (`#page-context`, the picker's `.servings-picker [aria-pressed]` and `data-serves`,
+`#recipe-search`, `.filter-input:checked` and its label, `.cook-bar`, `.save-bar`, `body.sheet-open`), so change both together.
 
 Every page embeds a page-context literal, `<script type="application/json" id="page-context">` (`{ "page": "recipe", "slug",
 "title" }`, `{ "page": "index" }`, `{ "page": "next-week" }`, `{ "page": "shopping" }`), written by `src/components/Layout.astro` (every page
-gets it; `<` is escaped). `templates/chat.js` reads it to tell `/chat` which page the user is on.
+gets it; `<` is escaped). The chat (`src/lib/chat/app.ts`) reads it to tell `/chat` which page the user is on.
 
 `styles/style.css` is the one stylesheet, imported by `Layout.astro` so Astro bundles it (minified, hashed name, in the same order). Nothing may link
 it by name. The build (`astro build`) runs in GitHub Actions before deploy; whatever it adds must still produce static files for Pages.

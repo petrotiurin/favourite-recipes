@@ -7,7 +7,7 @@
 // cover them; Astro has already tried the file a second time by then). It reloads
 //   - at most once per page per minute (a timestamp in sessionStorage, per path), or a file that is really missing would loop;
 //   - not when sessionStorage can't be used (private mode and the like): it couldn't remember it had reloaded;
-//   - not while the chat's message box holds text that hasn't been sent (`.chat-input`, templates/chat.cjs), which a reload would lose.
+//   - not while the chat's message box holds text that hasn't been sent (`textarea.chat-input`, src/islands/chat/Composer.tsx), which a reload would lose.
 //
 // The Layout writes this function into every page as an inline script (`reloadOnStaleScript.toString()`), so it must not use anything
 // but its argument and globals: no imports, no helpers outside it.

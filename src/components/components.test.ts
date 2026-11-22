@@ -1,6 +1,8 @@
 // @vitest-environment node
 // The static components through Astro's Container API: the HTML the build writes, which the browser scripts hook into. In the node environment: under happy-dom the .astro files compile for the browser and the container can't render them.
 import { experimental_AstroContainer as AstroContainer } from "astro/container";
+import { getContainerRenderer } from "@astrojs/preact/container-renderer";
+import { loadRenderers } from "astro:container";
 import { Window } from "happy-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import IngredientList from "./IngredientList.astro";
@@ -52,7 +54,7 @@ describe("Layout", () => {
 
   it("embeds the page context as JSON that can't close the script element, and reads back as written", async () => {
     const pageContext = { page: "recipe", slug: "a-b", title: `</script><script>alert(1)</script> & "q" <!--` };
-    const html = await page({ pageContext, rootPrefix: "../" });
+    const html = await page({ pageContext });
     const doc = dom(html);
     const block = doc.getElementById("page-context")!;
     expect(block.getAttribute("type")).toBe("application/json");
@@ -87,21 +89,34 @@ describe("Layout", () => {
 
   it("adds the sign-in and the chat only on builds that have their variables", async () => {
     const plain = await page({ pageContext: { page: "index" } });
-    expect(plain).not.toMatch(/auth-config|chat\.js/);
+    expect(plain).not.toMatch(/auth-config|astro-island|Chat\.tsx/);
     vi.stubEnv("SUPABASE_URL", "https://x.supabase.co/");
     vi.stubEnv("SUPABASE_ANON_KEY", "key");
     vi.stubEnv("CHAT_API_URL", 'https://api.test/chat?a=1&b="2"');
     vi.stubEnv("CHAT_PUBLIC", "false");
-    const doc = dom(await page({ pageContext: { page: "index" } }));
-    // The public values the sign-in boot script reads (and that the chat, until step 8, finds by `script[data-supabase-url]`).
+    const renderers = await loadRenderers([getContainerRenderer()]);
+    const html = await (await AstroContainer.create({ renderers })).renderToString(Layout, { props: { title: "T", pageContext: { page: "index" } }, slots: { default: "<main>hi</main>" } });
+    const doc = dom(html);
+    // The public values the sign-in boot script reads, as JSON.
     const auth = doc.querySelector("script#auth-config")!;
     expect(auth.getAttribute("type")).toBe("application/json");
-    expect(auth.getAttribute("data-supabase-url")).toBe("https://x.supabase.co");
-    expect(auth.getAttribute("data-supabase-key")).toBe("key");
-    expect(doc.querySelector("script[data-supabase-url]")).toBe(auth);
-    const chat = doc.querySelector('script[src="chat.js"]')!;
-    expect(chat.getAttribute("data-api")).toBe('https://api.test/chat?a=1&b="2"');
-    expect(chat.getAttribute("data-public")).toBe("false");
+    expect(JSON.parse(auth.textContent)).toEqual({ supabaseUrl: "https://x.supabase.co", supabaseKey: "key" });
+    expect(doc.querySelector("[data-supabase-url]")).toBeNull();
+    // The chat is one island that wakes when the page has settled, with the build's values as its props (and nothing drawn by the build).
+    const islands = [...doc.querySelectorAll("astro-island")].filter((i) => /Chat/.test(i.getAttribute("component-url") ?? ""));
+    expect(islands.length).toBe(1);
+    const island = islands[0];
+    expect(island.getAttribute("client")).toBe("idle");
+    const props = JSON.parse(island.getAttribute("props")!) as Record<string, [number, unknown]>;
+    expect(Object.fromEntries(Object.entries(props).map(([k, v]) => [k, v[1]]))).toEqual({ api: 'https://api.test/chat?a=1&b="2"', publicOff: true, supabaseUrl: "https://x.supabase.co" });
+    expect(island.textContent!.trim()).toBe("");
+    expect(doc.querySelector('script[src$="chat.js"]')).toBeNull();
+    // The island is the last thing on the page, after the footer.
+    expect(doc.querySelector("footer")!.compareDocumentPosition(island) & 4).toBeTruthy();
+    vi.stubEnv("CHAT_PUBLIC", "true");
+    const pub = dom(await (await AstroContainer.create({ renderers })).renderToString(Layout, { props: { title: "T", pageContext: { page: "index" } }, slots: { default: "" } }));
+    const pubProps = JSON.parse([...pub.querySelectorAll("astro-island")].find((i) => /Chat/.test(i.getAttribute("component-url") ?? ""))!.getAttribute("props")!);
+    expect(pubProps.publicOff[1]).toBe(false);
   });
 });
 

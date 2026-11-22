@@ -1,8 +1,8 @@
 ---
 paths:
-  - "templates/chat.js"
+  - "src/islands/chat/**"
+  - "src/lib/chat/**"
   - "src/lib/auth.ts"
-  - "src/lib/recipe-auth.ts"
   - "src/islands/SignIn.tsx"
   - "mcp-server/**"
   - "supabase/**"
@@ -16,8 +16,9 @@ A recipe chat assistant: a bubble on every page, read-only for visitors, the ful
 editors. `docs/chatbot-design.md` is its design and the source of truth: read it before working on any of it, and update it in the
 same change when the design moves (this file too, when a rule or a file's job below changes).
 
-**The rules it must keep:** `templates/chat.js` is a script on top of pages the build already wrote in full (if it fails to load or `/chat` is down, the page is unaffected); it talks only to `/chat` (and Supabase Auth through the shared
-sign-in, `window.RecipeAuth`); auth is enforced on the server by the dispatcher (`mcp-server/lib/tools.js`), never by the prompt; a role is never read
+**The rules it must keep:** the chat is an island on top of pages the build already wrote in full (if it fails to load or `/chat` is down, the page is unaffected); it talks only to `/chat` (and Supabase Auth through the shared
+sign-in store, `src/lib/auth.ts`); model and user text become DOM nodes, never markup (`RichText.tsx`; no `dangerouslySetInnerHTML`, `innerHTML` or the like
+anywhere in the chat, a test scans for it); auth is enforced on the server by the dispatcher (`mcp-server/lib/tools.js`), never by the prompt; a role is never read
 from the request body; in chat an editor's writes never commit until Save.
 
 ## Anonymous chat (read-only)
@@ -30,18 +31,31 @@ sends it from the `#page-context` JSON every page has), and per-IP rate limits (
 `supabase/migrations/`, needs `SUPABASE_SERVICE_ROLE_KEY`) and optional Langfuse tracing apply (`lib/langfuse.js`, Langfuse JS SDK v6
 over OpenTelemetry: one `agent` trace per turn with a generation per model call and a `retriever` / `tool` observation per tool
 call; see design 8.1; change tracing with the `langfuse` skill, `.claude/skills/langfuse/`, installed from github.com/langfuse/skills;
-`npx skills update` refreshes it). The widget is `templates/chat.js` (safe renderer, history in `localStorage`; a new visit, i.e. a tab
-without the `recipes-chat-visit` sessionStorage marker, starts a new chat for everyone, the tray stays; design 7.3); it only exists on
-builds that set the build env var `CHAT_API_URL` (a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
+`npx skills update` refreshes it). The widget is one Preact island, `src/islands/chat/Chat.tsx` (`client:idle`, written by `Layout.astro` with the build's
+`CHAT_API_URL`, `CHAT_PUBLIC` and `SUPABASE_URL` as props), with its state and logic in `src/lib/chat/` (below). History is in `localStorage`; a new visit, i.e. a tab
+without the `recipes-chat-visit` sessionStorage marker, starts a new chat for everyone, the tray stays (design 7.3); every key the chat keeps is listed in
+`src/lib/chat/storage.ts` and must not be renamed (chats in progress would be lost on deploy). It only exists on builds that set the build env var `CHAT_API_URL`
+(a repo Actions variable, like `STOCKTAKE_API_URL`), otherwise no bubble and no script.
+
+**The code** (`src/lib/chat/` is the logic, plain functions over one `ChatApp`; `src/islands/chat/` draws it; Vitest tests next to them):
+- `app.ts`: the state, the conversation log as an ordered list of entries (messages, status line, questions, cards, chips, errors), what is kept between
+  pages, the bubble, header and panel. Components draw only what it holds; `redraw()` / `after()` are how a change reaches the DOM.
+- `turn.ts`: a message and its streamed answer, a dropped editor turn picked up from the server (`resumeTurn`), the page sent with it; `stream.ts` reads
+  the event stream, typed by `shared/chat-events.ts` (`import type` only: a browser module must not import zod).
+- `session.ts`: requests with the token, `/chat/me`, the editor's chats and the chats list, thumbs up / down, sign-in from the chat (the sheet's wording).
+- `tray.ts` (and `tray-data.ts`, the tray's values and words): the plan tray, Finalise list, Save, Save now, clashes, "Publishing…".
+- `photos.ts` (and `photo-files.ts`): photos picked, uploaded and sent, the reading of sent photos, a photo enlarged.
+- `start.ts`: start-up, the phone's keyboard, the bubble lifted above sticky bars. `clean.ts`: what is kept of anything received; `render.ts`: the safe
+  renderer's parser; `labels.ts`: small words. Components: `Panel.tsx` (panel, bubble, the log), `Message.tsx`, `Chips.tsx`, `Review.tsx`, `Feedback.tsx`,
+  `Tray.tsx`, `ChatsList.tsx`, `Composer.tsx`, `RichText.tsx`, `icons.tsx`.
 
 ## Sign-in and per-user chats
 
 The sign-in is one store, `src/lib/auth.ts` (`@preact/signals`: the session in `localStorage` under the key the site has always used,
 token refresh, what the sheet shows), with the sheet and the account button in `src/islands/SignIn.tsx`, for the shopping page and the chat. It is
 started on every page (a module script in the head, `src/lib/auth-boot.ts`, plus the public values in `#auth-config`) only when the build has
-`SUPABASE_URL` + `SUPABASE_ANON_KEY`, and the magic link returns to the page it was sent from. Until the chat is rebuilt (step 8 of
-`docs/typescript-migration.md`) `templates/chat.cjs` reaches it through `window.RecipeAuth`, a shim over the store (`src/lib/recipe-auth.ts`, the
-same methods as the old script's), and finds the Supabase URL in `script[data-supabase-url]` (`#auth-config`). `/chat` decides the caller from a verified token: none = `public`; valid and in `EDITORS`
+`SUPABASE_URL` + `SUPABASE_ANON_KEY`, and the magic link returns to the page it was sent from. The chat imports the store and `AccountButton` directly
+(`src/lib/chat/session.ts`, `Panel.tsx`) and gets the Supabase URL (for photo links) as a prop. `/chat` decides the caller from a verified token: none = `public`; valid and in `EDITORS`
 = `editor` (editor key `OPENROUTER_CHAT_EDITOR_KEY`, model `CHAT_EDITOR_MODEL`, 200/hour per user id); valid but not an editor =
 `public` (the panel says the account can't edit); bad or expired = 401. Editors' chats are server-owned (`conversations` /
 `messages` tables, service-role key only, RLS with no policies; `lib/chat-store.js`): the client sends
@@ -70,10 +84,10 @@ the model only when the server flags something (`reviewFlags`), answering with O
 List card and re-applied by item id; `remember: true` on a merge / move / rename stages an `update_catalogue` change on one Catalogue
 card); then the **optional items card** (`lib/optional-review.js`, `POST /chat { action: "review_optional", answers: { item: "keep" | "drop" } }`,
 once only, no model call; the model's UI tool `review_optional` shows it again; drops are this week's patches only; the panel draws it
-in `templates/chat.js`, `optionalEl`, `.chat-optional`); then Save. A later change keeps Save unless it brings a new
+in `src/islands/chat/Review.tsx`, `OptionalView`, `.chat-optional`); then Save. A later change keeps Save unless it brings a new
 flag or optional item. "Not yet" to the promote question is answered by the server without a model call (`lib/shortcuts.js`), and so
 is "Promote it": it stages the switch and shows the **drafts review card** (`lib/draft-review.js`, `.chat-review` in
-`templates/chat.js`), every draft of this week in one card with a thumbs up (promote) / down (remove), no thumb = kept for the coming
+`src/islands/chat/Review.tsx`), every draft of this week in one card with a thumbs up (promote) / down (remove), no thumb = kept for the coming
 week (carried over); its Done (`POST /chat { action: "review_drafts", answers }`, once only, while the card is the open question)
 stages every answer in one tray write (`stageMany` in `lib/tray.js`), then the site carries on with the list's review (or Save is
 offered). The model's own `review_drafts` UI tool shows the same card; drafts are never asked about one by one.
@@ -100,7 +114,7 @@ by item name). Voice input, diff view and revert are deferred.
 
 ## Photos
 
-Editors attach up to 8 photos per message, each uploaded on pick (`POST /chat/uploads`; `templates/chat.js` downscales to 1600px
+Editors attach up to 8 photos per message, each uploaded on pick (`POST /chat/uploads`; `src/lib/chat/photo-files.ts` downscales to 1600px
 JPEG; `lib/chat-uploads.js` validates and re-encodes with sharp and stores them in the private `chat-uploads` bucket; public requests
 with `images` get a 403) and numbered on through the chat (badges in the panel; `photoList()` in `lib/chat-store.js`). The main chat
 model never sees photos (`docs/parallel-photo-reading.md`). It calls the editor-only read tool `read_recipe_photos`, which queues them

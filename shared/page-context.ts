@@ -1,5 +1,5 @@
 // The JSON every page embeds for the chat (`<script type="application/json" id="page-context">`, written by the layout, read by
-// templates/chat.cjs) and what the chat sends the server as `page` (that JSON plus the live state of the page). The server never
+// the chat, src/lib/chat/app.ts) and what the chat sends the server as `page` (that JSON plus the live state of the page). The server never
 // trusts it: `pageNote` in mcp-server/lib/chat.js re-resolves a recipe's slug against the book.
 import { z } from "zod";
 import { COURSES } from "./recipe.ts";

@@ -1,5 +1,6 @@
-// Serves the site's browser script that is not an island yet (templates/chat.cjs, until step 8 of docs/typescript-migration.md) and the original recipe photos (still published at /images/recipes/ for the chat's cards and outside links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no bundling, no hashing):
-// the dev server answers them and the build copies them into dist/ next to the pages. chat.js goes in only with CHAT_API_URL, as before.
+// Serves the original recipe photos (still published at /images/recipes/ for the chat's recipe cards, whose photo links the backend gives, and for outside
+// links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no hashing): the dev server answers them and the build copies
+// them into dist/ next to the pages.
 import fs from "node:fs";
 import path from "node:path";
 import type { AstroIntegration } from "astro";
@@ -7,7 +8,6 @@ import type { AstroIntegration } from "astro";
 const ROOT = process.cwd();
 
 const mime: Record<string, string> = {
-  ".js": "text/javascript",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".png": "image/png",
@@ -19,8 +19,6 @@ const mime: Record<string, string> = {
 /** Published path (relative to the site root) -> source file. */
 function staticFiles(): Map<string, string> {
   const files = new Map<string, string>();
-  const add = (publishedPath: string, source: string) => files.set(publishedPath, path.join(ROOT, source));
-  if (process.env.CHAT_API_URL) add("chat.js", "templates/chat.cjs");
   const images = path.join(ROOT, "images");
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -55,7 +53,7 @@ export default function staticFilesIntegration(): AstroIntegration {
                     res.setHeader("Content-Type", mime[path.extname(rel).toLowerCase()] ?? "application/octet-stream");
                     fs.createReadStream(source).pipe(res);
                   });
-                  // Ahead of Vite's own handling of .js, so the scripts are served as they are.
+                  // Ahead of Vite's own handling, so the files are served as they are.
                   const stack = (server.middlewares as unknown as { stack: unknown[] }).stack;
                   stack.unshift(stack.pop());
                 },

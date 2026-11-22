@@ -79,7 +79,7 @@ test("catalogue changes are checked: ids, names that belong to another item, sec
 
 test("the site build refuses a recipe whose ingredient points at no catalogue item, or that still has an Ingredients section", () => {
   const dir = mkdtempSync(join(tmpdir(), "build-"));
-  for (const p of ["astro.config.ts", "tsconfig.json", "package.json", "src", "templates", "shared", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
+  for (const p of ["astro.config.ts", "tsconfig.json", "package.json", "src", "shared", "styles"]) cpSync(new URL(p, ROOT), join(dir, p), { recursive: true });
   symlinkSync(new URL("node_modules", ROOT).pathname, join(dir, "node_modules"));
   mkdirSync(join(dir, "recipes"));
   mkdirSync(join(dir, "data"));

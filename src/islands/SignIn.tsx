@@ -1,6 +1,6 @@
 // Sign-in's two parts, drawn from the store in src/lib/auth.ts (docs/typescript-migration.md 4.6):
 // - `AccountButton` (the default export, an island on the shopping page): the "Sign in" pill, or the avatar with its menu (email, Set a password,
-//   Sign out). The chat draws it into its own header through the window.RecipeAuth shim (src/lib/recipe-auth.ts, `compact`: the icon alone).
+//   Sign out). The chat draws it in its own header (src/islands/chat/Panel.tsx, `compact`: the icon alone).
 // - `SignInSheet`: the sheet that slides up (email + password, the emailed code, Set a password). One per page, mounted by src/lib/auth-boot.ts.
 // Same classes and `data-auth` hooks as the script they replace (the chat finds its Sign in button by `data-auth="signin"`).
 import { Fragment } from "preact";

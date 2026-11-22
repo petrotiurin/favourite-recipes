@@ -30,7 +30,7 @@ const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
 // The recipe as the "Cook with Claude" island needs it, and this page's own address for its prompt.
 const cook = { ...cookRecipe(recipe, scalable), pageUrl: new URL(Astro.url.pathname, Astro.site).href };
 ---
-<Layout title={`${recipe.title} — Our Favourite Recipes`} bodyClass="recipe-page" rootPrefix="../" pageContext={{ page: "recipe", slug: recipe.slug, title: recipe.title }}>
+<Layout title={`${recipe.title} — Our Favourite Recipes`} bodyClass="recipe-page" pageContext={{ page: "recipe", slug: recipe.slug, title: recipe.title }}>
   <main>
     <a class="back-link" href="../index.html"><Icon name="back" />All recipes</a>
     <header class="recipe-head">
