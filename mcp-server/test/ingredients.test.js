@@ -83,9 +83,12 @@ test("the site build refuses a recipe whose ingredient points at no catalogue it
   symlinkSync(new URL("node_modules", ROOT).pathname, join(dir, "node_modules"));
   mkdirSync(join(dir, "recipes"));
   mkdirSync(join(dir, "data"));
+  // The recipe's photo (a missing one fails the build): a copy of a real one.
+  mkdirSync(join(dir, "images/recipes"), { recursive: true });
+  cpSync(new URL("images/recipes/avocado-toast.jpg", ROOT), join(dir, "images/recipes/rice.jpg"));
   writeFileSync(join(dir, "data/ingredients.json"), JSON.stringify({ rice: { name: "Rice", section: "Pantry", unit: "g" } }));
   const fm = "title: Rice\nslug: rice\nimage: /images/recipes/rice.jpg\ncourse: [Dinner]\ntotal_mins: 20\nserves: 2\ncalories: 300";
-  const build = () => execFileSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: dir, env: { ...process.env, BUILD_OUT_DIR: join(dir, "dist") }, stdio: "pipe" }).toString();
+  const build = () => execFileSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: dir, env: { ...process.env, BUILD_OUT_DIR: join(dir, "dist"), ASTRO_CACHE_DIR: join(dir, ".cache") }, stdio: "pipe" }).toString();
   writeFileSync(join(dir, "recipes/rice.md"), `---\n${fm}\ningredients:\n  - { amount: 200, unit: g, name: rice, item: rice }\n---\n\n## Instructions\n\n1. Cook the **rice**.\n`);
   assert.match(build(), /4 page\(s\) built/);
   const html = readFileSync(join(dir, "dist/recipes/rice.html"), "utf8");

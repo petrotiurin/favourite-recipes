@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas) and 4 (pages and components) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components) and 5 (photos) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -225,9 +225,9 @@ page's hero and the chat's recipe cards all use them.
 - `images/recipes/` and the frontmatter's `image:` don't change: the backend keeps writing the same files. The pages find each
   photo from its `image:` path (an `import.meta.glob` over `images/recipes/`), and a recipe whose photo is missing fails the build
   as it should.
-- The originals aren't published any more, only the sized copies. Anything outside the site that links straight to
-  `/images/recipes/<slug>.jpg` (the chat's cards, the backend's tool results) is checked in step 5 and either moved to the sized
-  copies or keeps a copied original.
+- The pages use the sized copies. Anything outside the pages that links straight to `/images/recipes/<slug>.jpg` (the chat's cards, the
+  backend's tool results) is checked in step 5 and either moved to the sized copies or keeps a copied original (decided in "Step 5 as built":
+  the originals are still published).
 - **Build time:** every photo is resized on every build unless the sized copies are cached. The Pages workflow caches Astro's
   image cache (`node_modules/.astro`) with `actions/cache`, so a build only resizes new photos.
 
@@ -251,7 +251,7 @@ step.
 4. **Pages and components** (done): layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
    rules (4.5).
-5. **Photos** sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
+5. **Photos** (done) sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
 6. **Small islands:** search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
 7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
 8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
@@ -345,3 +345,30 @@ step.
   `@astrojs/markdown-satteri` is a direct dependency for that). With it off all 72 recipe bodies came out as before.
 - **Tests:** Vitest for each `src/lib` file; `src/components/components.test.ts` renders `IngredientList`, `Layout`, `Tile`, `WeekHead` and `ShopItem` through the Container API. It needs
   `// @vitest-environment node`: under happy-dom the `.astro` files compile for the browser and the container can't render them. The layout's page-context test moved from `shared/test/schemas.test.ts` there.
+
+### Step 5 as built
+
+- **Code:** `src/lib/photos.ts` finds a photo from the frontmatter `image:` (`import.meta.glob("/images/recipes/*.{jpg,jpeg,png,webp}")`) and throws, naming the recipe, when the
+  file isn't there (that fails the build; a Container test covers it). It also holds how big each kind of photo is shown (`PHOTO_SIZES`). `src/components/Photo.astro` wraps `<Image>`: WebP, quality 80, `widths` + `sizes`
+  (so `srcset`), `width`/`height` set, `loading` as before (tiles lazy, the hero eager). Kinds: **tile** 240/360/540 wide, cropped to a square at build time (the CSS `aspect-ratio: 1/1; object-fit: cover` did that in the
+  browser; sizes `(min-width: 720px) 260px, 50vw`); **hero** 480/800/1200, uncropped (CSS crops: 4:5 on a phone, 3:2 from 720px; sizes `(min-width: 1100px) 1100px, 100vw`); **thumb** 72/108, square, for the
+  round photos on the shopping page (36px / 24px shown). `Tile`, the recipe page's hero and the shopping page (header bubbles, recipe list, each row's bubbles, and the `image` in `#shopping-data` that `shopping.js` draws
+  from, through the new optional `imageUrl` argument of `shoppingData`) use it. A size bigger than the file is never asked for.
+- **CSS:** the `height` attribute (set so the page doesn't jump while the photo loads) beats `aspect-ratio`, so `.tile-image` and `.recipe-hero` got `height: auto`. Nothing else changed; sizes shown are the same as before
+  (168x168 tile and 390x488 hero on an iPhone-size screen).
+- **WebP only, no AVIF.** Measured with sharp on 12 photos (average per image, WebP q80 / AVIF q60): tile 540px 52.5 / 38.9 KB, hero 800px 97 / 72 KB, so AVIF is about 26% smaller than WebP, but takes 30-50x longer to encode (1.5-2.7 s per
+  image against 50-80 ms), which would make a cold build minutes long for about 14 KB saved per tile. WebP is 15-20% smaller than the JPEG at the same size and the sizes are where the saving is.
+- **Image cache:** Astro 7 keeps the resized files in `<cacheDir>/assets` (default `node_modules/.astro/assets`, 446 files / 27 MB for 72 photos). `npm ci` empties `node_modules`, so the workflow restores it *after* `npm ci` with
+  `actions/cache` on `node_modules/.astro/assets`, key `astro-images-<hash of images/recipes/**>`, restore key `astro-images-`: a new photo changes the key, the last cache is restored, and only the new photo is resized.
+  (Photos that are replaced or removed stay in the cache until the key prefix is evicted; harmless, it is a few MB.) `astro.config.ts` takes `ASTRO_CACHE_DIR` to put the cache elsewhere.
+- **Tests that build the site** (`mcp-server/test/ingredients.test.js`, `chat-switch.test.js`, `phase6.test.js`) each use their own cache dir (`ASTRO_CACHE_DIR`), which also removes the flakiness of parallel builds sharing
+  `node_modules/.astro`; the ingredients test copies a photo for its fake recipe, since a missing photo fails the build.
+- **Who links to the originals (`/images/recipes/<slug>.jpg`):** the backend gives the chat absolute URLs `${siteUrl}/images/recipes/...` for recipe cards (`mcp-server/lib/chat-ui.js`, `lib/tray.js` card.recipe, drafts-review and
+  optional-items cards through them), which `templates/chat.cjs` checks against the site's origin and draws as `.tile-image` / review / optional-photo images (the cards are at most a phone-width tile). Nothing else outside
+  `src/` uses the path: the skills, `mcp-server/workflows/` and the MCP tools' results only talk about the file written to `images/recipes/`, there are no `og:image` tags, and `pageUrl` is the recipe page. **Decision: the originals
+  are still copied into `dist/images/recipes/` (as `static-files.ts` always did), the chat and any outside link keep working unchanged, and the pages use the sized copies.** The cost is dist size: 46 MB instead of 19 MB (19 MB
+  originals + 27 MB sized copies); Pages' limit is 1 GB and users only download what a page uses. Moving the chat's cards to sized copies needs the backend to know Astro's hashed file names, so it waits for step 8 (the chat
+  rewrite), when it can be reconsidered (a fixed-name thumbnail set would be the way); if the cards moved and nothing else linked out, the originals could stop being published then.
+- **Measured** (4-core machine): cold image cache `astro build` 9.5 s (2.2 s before this step), warm cache 2.2 s. An iPhone-size screen (390x844 at 3x, Chromium, scrolled to the bottom): images downloaded for the home page
+  63 images / 16.9 MB before, 3.1 MB after; next week 2.8 MB to 0.65 MB; a recipe page 221 KB to 182 KB; the shopping page 2.8 MB to 54 KB. Page text: 74 of 75 pages are the same apart from the `<img>` tags and whitespace around them;
+  the shopping page's `#shopping-data` has the thumbnail paths. No console errors, no broken images on the home page, next week, a recipe page and the shopping page.

@@ -1,6 +1,7 @@
 ---
 import { render } from "astro:content";
 import Layout from "../../components/Layout.astro";
+import Photo from "../../components/Photo.astro";
 import Icon from "../../components/Icon.astro";
 import IngredientList from "../../components/IngredientList.astro";
 import ServingsPicker from "../../components/ServingsPicker.astro";
@@ -35,7 +36,7 @@ const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
       <h1 class="recipe-title">{recipe.title}</h1>
       {recipe.draft === true && <p class="recipe-lede">A draft: we haven't tried it enough yet to call it a favourite.</p>}
     </header>
-    <img class="recipe-hero" src={`../${recipe.image.replace(/^\//, "")}`} alt={recipe.title}>
+    <Photo class="recipe-hero" image={recipe.image} slug={recipe.slug} kind="hero" alt={recipe.title} loading="eager" />
     <div class="recipe-meta">
       <span><b>{recipe.total_mins}</b> min</span>
       <span class="serves-chip">Serves <b>{recipe.serves}</b></span>

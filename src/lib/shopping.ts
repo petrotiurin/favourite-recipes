@@ -65,8 +65,8 @@ export function splitList(list: ShoppingList, plan: Plan) {
 /** A row shows at most this many recipe photos, then "+n". */
 export const ROW_PHOTOS = 3;
 
-/** The data for shopping.js: the list (with parsed amounts), the planned servings per recipe, the recipes its items are for (title, photo, page) and, when configured, how the editor signs in and saves. */
-export function shoppingData(list: ShoppingList, recipes: readonly ListedRecipe[], auth: { supabaseUrl: string; supabaseKey: string; api: string } | null, plan: Plan) {
+/** The data for shopping.js: the list (with parsed amounts), the planned servings per recipe, the recipes its items are for (title, photo, page; `imageUrl` says where the photo is, by default the published original) and, when configured, how the editor signs in and saves. */
+export function shoppingData(list: ShoppingList, recipes: readonly ListedRecipe[], auth: { supabaseUrl: string; supabaseKey: string; api: string } | null, plan: Plan, imageUrl: (recipe: ListedRecipe) => string = (r) => r.image.replace(/^\//, "")) {
   const sections = list.sections.map((s) => ({
     name: s.name,
     items: s.items.map((item) => {
@@ -81,6 +81,6 @@ export function shoppingData(list: ShoppingList, recipes: readonly ListedRecipe[
     .digest("hex")
     .slice(0, 12);
   const byslug: Record<string, { title: string; image: string; href: string }> = {};
-  for (const r of recipes) byslug[r.slug] = { title: r.title, image: r.image.replace(/^\//, ""), href: `recipes/${r.slug}.html` };
+  for (const r of recipes) byslug[r.slug] = { title: r.title, image: imageUrl(r), href: `recipes/${r.slug}.html` };
   return { base: BASE_SERVINGS, fallback: DEFAULT_SERVINGS, plan, version, stocktake: list.stocktake || null, sections, recipes: byslug, auth };
 }

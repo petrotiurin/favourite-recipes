@@ -29,6 +29,13 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      # The resized copies of the recipe photos (Astro's image cache). Restored after `npm ci`, which empties node_modules. The key changes with the
+      # photos; the restore key brings back the last cache, so a build only resizes the photos that are new since.
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.astro/assets
+          key: astro-images-${{ hashFiles('images/recipes/**') }}
+          restore-keys: astro-images-
       - run: npm run build
         env:
           # Public values for the shopping page's stocktake sign-in (Settings -> Secrets and variables -> Actions -> Variables).

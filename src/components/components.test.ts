@@ -86,13 +86,26 @@ describe("Layout", () => {
 });
 
 describe("Tile, WeekHead and ShopItem", () => {
+  it("a recipe whose photo isn't in images/recipes/ fails the build", async () => {
+    const recipe = { slug: "no-photo", title: "X", image: "/images/recipes/no-photo.jpg", total_mins: 1, calories: 1 };
+    await expect(render(Tile, { props: { recipe, kicker: { label: "Dinner" } } })).rejects.toThrow(/no-photo: its photo \/images\/recipes\/no-photo\.jpg isn't in images\/recipes/);
+  });
+
   it("a tile links to its recipe page with the photo, the kicker and the meta", async () => {
-    const recipe = { slug: "a-b", title: "Tom & Jerry's", image: "/images/recipes/a-b.jpg", total_mins: 15, calories: 200 };
+    const recipe = { slug: "avocado-toast", title: "Tom & Jerry's", image: "/images/recipes/avocado-toast.jpg", total_mins: 15, calories: 200 };
     const doc = dom(await render(Tile, { props: { recipe, kicker: { label: "Dinner", cls: "kicker-current" }, cls: "course-dinner is-current" } }));
     const a = doc.querySelector("a")!;
     expect(a.getAttribute("class")).toBe("tile course-dinner is-current");
-    expect(a.getAttribute("href")).toBe("recipes/a-b.html");
-    expect(a.querySelector("img")!.getAttribute("src")).toBe("images/recipes/a-b.jpg");
+    expect(a.getAttribute("href")).toBe("recipes/avocado-toast.html");
+    // The photo is a sized WebP copy with a srcset, width and height set (so the page doesn't jump) and lazy loading, as the original was.
+    const img = a.querySelector("img")!;
+    expect(img.getAttribute("class")).toBe("tile-image");
+    expect(img.getAttribute("src")).toMatch(/avocado-toast/); // a built site has /_astro/<name>.<hash>.webp; the test renderer serves /_image?...
+    expect(img.getAttribute("src")).toMatch(/webp/);
+    expect(img.getAttribute("srcset")!.split(",")).toHaveLength(3);
+    expect(img.getAttribute("sizes")).toBeTruthy();
+    expect(img.getAttribute("width")).toBe(img.getAttribute("height"));
+    expect(img.getAttribute("loading")).toBe("lazy");
     expect(a.querySelector("p")!.getAttribute("class")).toBe("kicker kicker-current");
     expect(a.querySelector("h2")!.textContent).toBe("Tom & Jerry's");
     expect(a.querySelector(".tile-meta")!.textContent).toBe("15 min · 200 kcal");
@@ -112,7 +125,8 @@ describe("Tile, WeekHead and ShopItem", () => {
   });
 
   it("a shopping row for a partly-at-home item names what's at home and the recipes it's for", async () => {
-    const bySlug = new Map(["a", "b", "c", "d"].map((s) => [s, { title: s.toUpperCase(), image: `/images/recipes/${s}.jpg` }]));
+    const photos = ["avocado-toast", "tuna-melt", "avocado-toast", "almond-croissant-oats"]; // real files in images/recipes/ (a missing one fails)
+    const bySlug = new Map(["a", "b", "c", "d"].map((s, i) => [s, { title: s.toUpperCase(), image: `/images/recipes/${photos[i]}.jpg` }]));
     const item = { name: "Spinach", note: "baby", quantity: "200g", recipes: ["a", "b", "c", "d"], have: 100 };
     const doc = dom(await render(ShopItem, { props: { item, status: "partial", left: "100g", plan: { a: 2, b: 2, c: 2, d: 2 }, bySlug } }));
     expect(doc.querySelector(".shop-name")!.textContent).toBe("Spinachbaby");

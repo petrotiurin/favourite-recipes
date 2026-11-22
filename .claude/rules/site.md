@@ -47,3 +47,7 @@ gets it; `<` is escaped). `templates/chat.js` reads it to tell `/chat` which pag
 
 `styles/style.css` is the one stylesheet, copied verbatim into `dist/`. The build (`astro build`) runs in GitHub Actions before deploy;
 whatever it adds must still produce static files for Pages.
+
+**Photos.** Pages never point at `images/recipes/` directly: `Photo.astro` (`src/lib/photos.ts` finds the file from `image:`) makes sized WebP copies with `srcset`
+(docs/typescript-migration.md 4.13); a missing photo fails the build. The originals are still published for the chat's cards and outside links.
+The CI image cache is `node_modules/.astro/assets` (`ASTRO_CACHE_DIR` moves it; tests that build the site set it).

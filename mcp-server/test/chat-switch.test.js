@@ -102,12 +102,14 @@ test("the build adds data-public=\"false\" to the chat script only with CHAT_PUB
   const { spawnSync } = await import("node:child_process");
   const { tmpdir } = await import("node:os");
   const root = new URL("../../", import.meta.url).pathname;
+  // Its own image cache (not the repo's node_modules/.astro, which other test builds in parallel would write at the same time); the first build fills it, the rest reuse it.
+  const cacheDir = mkdtempSync(`${tmpdir()}/recipes-cache-`);
   const html = (env) => {
     const out = mkdtempSync(`${tmpdir()}/recipes-dist-`);
     try {
       const clean = { ...process.env };
       for (const k of ["CHAT_API_URL", "CHAT_PUBLIC"]) delete clean[k];
-      const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...clean, BUILD_OUT_DIR: out, ...env }, encoding: "utf8" });
+      const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...clean, BUILD_OUT_DIR: out, ASTRO_CACHE_DIR: cacheDir, ...env }, encoding: "utf8" });
       assert.equal(r.status, 0, r.stderr);
       return readFileSync(`${out}/index.html`, "utf8");
     } finally {
@@ -118,4 +120,5 @@ test("the build adds data-public=\"false\" to the chat script only with CHAT_PUB
   assert.match(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "false" }), /data-api="http:\/\/x\/chat" data-public="false" defer/);
   assert.doesNotMatch(html({ CHAT_API_URL: "http://x/chat", CHAT_PUBLIC: "true" }), /data-public/);
   assert.doesNotMatch(html({ CHAT_PUBLIC: "false" }), /chat\.js/);
+  rmSync(cacheDir, { recursive: true, force: true });
 });

@@ -308,13 +308,14 @@ test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), 
   const out = mkdtempSync(`${tmpdir()}/recipes-dist-`);
   const before = existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null;
   try {
-    const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
+    const r = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: root, env: { ...process.env, BUILD_OUT_DIR: out, ASTRO_CACHE_DIR: `${out}-cache`, CHAT_API_URL: "http://localhost:8788/chat" }, encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
     assert.ok(existsSync(`${out}/index.html`));
     assert.ok(existsSync(`${out}/chat.js`));
     assert.equal(existsSync(`${root}dist`) ? statSync(`${root}dist`).mtimeMs : null, before, "../dist wasn't touched");
   } finally {
     rmSync(out, { recursive: true, force: true });
+    rmSync(`${out}-cache`, { recursive: true, force: true });
   }
 });
 

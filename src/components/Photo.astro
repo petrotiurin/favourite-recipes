@@ -1,0 +1,25 @@
+---
+// A recipe photo as an <img> with srcset: WebP copies at a few widths, made at build time by Astro (src/lib/photos.ts has how big each kind is shown).
+// Square kinds are cropped to the middle at build time, as the CSS (object-fit: cover) did. width/height are set, so the page doesn't jump while it loads.
+import { Image } from "astro:assets";
+import { photoFor, PHOTO_SIZES, type PhotoKind } from "../lib/photos.ts";
+
+interface Props {
+  image: string; // the recipe's frontmatter `image:`
+  slug: string;
+  kind: PhotoKind;
+  alt?: string;
+  class?: string;
+  loading?: "lazy" | "eager";
+}
+const { image, slug, kind, alt = "", class: cls, loading } = Astro.props;
+const photo = await photoFor(image, slug);
+const { widths, sizes, square } = PHOTO_SIZES[kind];
+const top = widths[widths.length - 1];
+// Never ask for a size bigger than the file.
+const usable = widths.filter((w) => w <= (square ? Math.min(photo.width, photo.height) : photo.width));
+const use = usable.length ? usable : [Math.min(square ? Math.min(photo.width, photo.height) : photo.width, top)];
+const w = use[use.length - 1];
+const h = square ? w : Math.round((photo.height / photo.width) * w);
+---
+<Image src={photo} widths={use} sizes={sizes} width={w} height={h} fit="cover" format="webp" quality={80} alt={alt} class={cls} loading={loading} decoding="async" />

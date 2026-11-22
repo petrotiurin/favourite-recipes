@@ -1,5 +1,6 @@
 ---
 // One recipe tile (the home page and the Next week page). `kicker` is the small-caps line: its text and an optional class; `cls` adds classes to the tile.
+import Photo from "./Photo.astro";
 import type { RecipeFrontmatter } from "../../shared/recipe.ts";
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
 const { recipe, kicker, cls } = Astro.props;
 ---
 <a class:list={["tile", cls]} href={`recipes/${recipe.slug}.html`}>
-  <img class="tile-image" src={recipe.image.replace(/^\//, "")} alt="" loading="lazy">
+  <Photo class="tile-image" image={recipe.image} slug={recipe.slug} kind="tile" loading="lazy" />
   <p class:list={["kicker", kicker.cls]}>{kicker.label}</p>
   <h2 class="tile-title">{recipe.title}</h2>
   <p class="tile-meta">{recipe.total_mins} min &middot; {recipe.calories} kcal</p>

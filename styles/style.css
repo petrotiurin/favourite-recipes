@@ -357,6 +357,7 @@ main:has(.tile-grid.is-searching) .week-label {
 
 .tile-image {
   width: 100%;
+  height: auto; /* the img's height attribute (set so the page doesn't jump) must not win over aspect-ratio */
   aspect-ratio: 1 / 1;
   object-fit: cover;
   display: block;
@@ -470,6 +471,7 @@ main:has(.tile-grid.is-searching) .week-label {
 
 .recipe-hero {
   display: block;
+  height: auto; /* as .tile-image: aspect-ratio and max-height decide, not the height attribute */
   width: calc(100% + 2.5rem);
   max-width: none;
   margin: 0 -1.25rem;

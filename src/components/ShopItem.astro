@@ -5,6 +5,7 @@ import type { RecipeFrontmatter } from "../../shared/recipe.ts";
 import { parseQuantity, type Plan, type ShoppingItem } from "../../shared/shopping-list.ts";
 import { ROW_PHOTOS, fmtAmount, needText } from "../lib/shopping.ts";
 import Icon from "./Icon.astro";
+import Photo from "./Photo.astro";
 
 interface Props {
   item: ShoppingItem;
@@ -14,7 +15,7 @@ interface Props {
   bySlug: Map<string, Pick<RecipeFrontmatter, "title" | "image">>;
 }
 const { item, status, left, plan, bySlug } = Astro.props;
-const rs = (item.recipes ?? []).map((slug) => bySlug.get(slug)).filter((r) => r !== undefined);
+const rs = (item.recipes ?? []).flatMap((slug) => { const r = bySlug.get(slug); return r ? [{ slug, ...r }] : []; });
 const have = status === "partial" ? fmtAmount(item.have as number, parseQuantity(item.quantity)?.unit ?? "") : "";
 ---
-<li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">{item.name}{item.note && <span class="shop-note">{item.note}</span>}</span>{status === "partial" && <Fragment><Icon name="house-some" class="icon icon-some" /><span class="sr-only">(have {have} of {needText(item, plan)} at home)</span></Fragment>}{rs.length > 0 && <Fragment><span class="row-bubbles" aria-hidden="true">{rs.slice(0, ROW_PHOTOS).map((r) => <img src={r.image.replace(/^\//, "")} alt="" loading="lazy">)}{rs.length > ROW_PHOTOS && <span class="row-more">+{rs.length - ROW_PHOTOS}</span>}</span><span class="sr-only">(for {rs.map((r) => r.title).join(", ")})</span></Fragment>}<span class="shop-qty">{left}</span></label></li>
+<li><label class="shop-item"><input type="checkbox" class="tick"><span class="shop-name">{item.name}{item.note && <span class="shop-note">{item.note}</span>}</span>{status === "partial" && <Fragment><Icon name="house-some" class="icon icon-some" /><span class="sr-only">(have {have} of {needText(item, plan)} at home)</span></Fragment>}{rs.length > 0 && <Fragment><span class="row-bubbles" aria-hidden="true">{rs.slice(0, ROW_PHOTOS).map((r) => <Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" />)}{rs.length > ROW_PHOTOS && <span class="row-more">+{rs.length - ROW_PHOTOS}</span>}</span><span class="sr-only">(for {rs.map((r) => r.title).join(", ")})</span></Fragment>}<span class="shop-qty">{left}</span></label></li>

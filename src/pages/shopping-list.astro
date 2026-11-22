@@ -3,6 +3,9 @@
 // left to buy at the planned servings, then what's already at home. templates/shopping.js re-renders #shopping-app from the JSON in
 // #shopping-data (servings, ticks while shopping, and for the signed-in editor the "At home" tab and sign-in).
 import Layout from "../components/Layout.astro";
+import Photo from "../components/Photo.astro";
+import { getImage } from "astro:assets";
+import { photoFor, PHOTO_SIZES } from "../lib/photos.ts";
 import Icon from "../components/Icon.astro";
 import ShopItem from "../components/ShopItem.astro";
 import { DEFAULT_SERVINGS } from "../../shared/shopping-list.ts";
@@ -15,6 +18,12 @@ const shopping = getShoppingList(await getRecipes());
 const list = shopping?.list ?? null;
 const recipes = shopping?.recipes ?? [];
 const bySlug = new Map(recipes.map((r) => [r.slug, r]));
+// The photos here are small round thumbnails: the browser-drawn parts (templates/shopping.js) get the same small copy through the data.
+const thumbUrls = new Map<string, string>();
+for (const r of recipes) {
+  const w = PHOTO_SIZES.thumb.widths[PHOTO_SIZES.thumb.widths.length - 1];
+  thumbUrls.set(r.slug, (await getImage({ src: await photoFor(r.image, r.slug), width: w, height: w, fit: "cover", format: "webp", quality: 80 })).src);
+}
 const plan = list ? planOf(list) : {};
 const { sections, home, partly } = list ? splitList(list, plan) : { sections: [], home: [], partly: 0 };
 const updated = list ? formatDate(list.updated) : "";
@@ -30,9 +39,9 @@ const stocktake = list?.stocktake ? formatDate(list.stocktake) : "";
     {list ? (
       <Fragment>
         <details class="shop-for">
-          <summary>{recipes.length > 0 && <span class="bubbles">{recipes.map((r) => <img src={r.image.replace(/^\//, "")} alt="" loading="lazy">)}</span>}<span>For {recipes.length} recipe{recipes.length === 1 ? "" : "s"}{updated && <Fragment> &middot; list made {updated}</Fragment>}</span></summary>
+          <summary>{recipes.length > 0 && <span class="bubbles">{recipes.map((r) => <Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" />)}</span>}<span>For {recipes.length} recipe{recipes.length === 1 ? "" : "s"}{updated && <Fragment> &middot; list made {updated}</Fragment>}</span></summary>
           <div class="shopping-recipes">
-            {recipes.map((r) => <a href={`recipes/${r.slug}.html`}><img src={r.image.replace(/^\//, "")} alt="" loading="lazy"><span>{r.title}</span><small class="planned">for {plan[r.slug] || DEFAULT_SERVINGS}</small></a>)}
+            {recipes.map((r) => <a href={`recipes/${r.slug}.html`}><Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" /><span>{r.title}</span><small class="planned">for {plan[r.slug] || DEFAULT_SERVINGS}</small></a>)}
           </div>
         </details>
         <div id="shopping-app">
@@ -55,7 +64,7 @@ const stocktake = list?.stocktake ? formatDate(list.stocktake) : "";
             </details>
           )}
         </div>
-        <script is:inline type="application/json" id="shopping-data" set:html={scriptJson(shoppingData(list, recipes, stocktakeAuth(), plan))}></script>
+        <script is:inline type="application/json" id="shopping-data" set:html={scriptJson(shoppingData(list, recipes, stocktakeAuth(), plan, (r) => thumbUrls.get(r.slug) ?? r.image))}></script>
       </Fragment>
     ) : (
       <p class="shopping-empty">Nothing to buy right now. The list appears here once next week's recipes are planned and a shopping list has been made for them.</p>
