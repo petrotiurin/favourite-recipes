@@ -1,6 +1,5 @@
-// Serves the site's browser scripts that are not islands yet (templates/*, until steps 7 and 8 of docs/typescript-migration.md) and the original recipe photos (still published at /images/recipes/ for the chat's cards and outside links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no bundling, no hashing):
-// the dev server answers them and the build copies them into dist/ next to the pages. Which scripts go in depends on the same
-// env vars as before: auth.js only with SUPABASE_URL + SUPABASE_ANON_KEY, chat.js only with CHAT_API_URL.
+// Serves the site's browser script that is not an island yet (templates/chat.cjs, until step 8 of docs/typescript-migration.md) and the original recipe photos (still published at /images/recipes/ for the chat's cards and outside links; the pages use Astro's sized copies, src/components/Photo.astro) exactly as they are (no bundling, no hashing):
+// the dev server answers them and the build copies them into dist/ next to the pages. chat.js goes in only with CHAT_API_URL, as before.
 import fs from "node:fs";
 import path from "node:path";
 import type { AstroIntegration } from "astro";
@@ -21,8 +20,6 @@ const mime: Record<string, string> = {
 function staticFiles(): Map<string, string> {
   const files = new Map<string, string>();
   const add = (publishedPath: string, source: string) => files.set(publishedPath, path.join(ROOT, source));
-  add("shopping.js", "templates/shopping.js");
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) add("auth.js", "templates/auth.cjs");
   if (process.env.CHAT_API_URL) add("chat.js", "templates/chat.cjs");
   const images = path.join(ROOT, "images");
   const walk = (dir: string) => {

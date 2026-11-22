@@ -1,13 +1,9 @@
 // What the site and the backend both need to know about shopping-list.json (written by the backend, .claude/rules/shopping-list.md; shown
-// by the site): reading the file, the quantity text and how much the planned servings need. The browser's templates/shopping.js still has
-// its own need() until it becomes an island (docs/typescript-migration.md step 7); shared/test/shopping-list.test.ts checks it against
-// neededAmount here.
+// by the site): the schemas and reading the file. The quantity text and how much the planned servings need (parseQuantity, neededAmount) are in
+// shopping-quantity.ts, which has no zod in it, so the shopping island in the browser can use them; they are re-exported from here.
 
 import { z } from "zod";
-import { BASE_SERVINGS, DEFAULT_SERVINGS } from "./servings.ts";
-
-// Every quantity on the list is for BASE_SERVINGS of each recipe, and a recipe without a plan gets DEFAULT_SERVINGS (shared/servings.ts, which has no zod in it).
-export { BASE_SERVINGS, DEFAULT_SERVINGS };
+export { BASE_SERVINGS, DEFAULT_SERVINGS, neededAmount, parseQuantity, type Plan } from "./shopping-quantity.ts";
 
 export const shoppingItemSchema = z.object({
   name: z.string(),
@@ -32,8 +28,6 @@ export const shoppingListSchema = z.object({
 export type ShoppingItem = z.infer<typeof shoppingItemSchema>;
 export type ShoppingSection = z.infer<typeof shoppingSectionSchema>;
 export type ShoppingList = z.infer<typeof shoppingListSchema>;
-/** slug -> planned servings. */
-export type Plan = Record<string, number>;
 
 /**
  * The saved list from the text of shopping-list.json: the sections that have a name and items, or null when the text isn't JSON, isn't a
@@ -56,25 +50,4 @@ export function loadShoppingList(text: string | null | undefined, warn?: (messag
   const sections = (Array.isArray(raw) ? raw : []).filter((s): s is ShoppingSection => !!s && !!s.name && Array.isArray(s.items) && s.items.length > 0);
   if (!sections.length) return null;
   return { ...(list as object), sections } as ShoppingList;
-}
-
-/** "400g" -> { amount: 400, unit: "g" }, "3" -> { amount: 3, unit: "" }, "2 heads" -> { amount: 2, unit: "heads" }; else null. */
-export function parseQuantity(quantity: unknown): { amount: number; unit: string } | null {
-  const m = String(quantity ?? "").trim().match(/^(\d+(?:\.\d+)?)\s*([^\d\s].*)?$/);
-  return m ? { amount: parseFloat(m[1]), unit: (m[2] || "").trim() } : null;
-}
-
-/**
- * How much of an item the plan needs, in the item's unit and not rounded: each recipe's share of the 2-serving quantity (`amounts`, or the
- * whole quantity for a one-recipe item) times its servings / BASE_SERVINGS. Items without `amounts` (older lists) scale by the average of
- * their recipes' servings. null without an amount.
- */
-export function neededAmount(item: Pick<ShoppingItem, "quantity" | "amounts" | "recipes">, plan: Plan): number | null {
-  const q = parseQuantity(item.quantity);
-  if (!q) return null;
-  const servingsOf = (slug: string) => plan[slug] || DEFAULT_SERVINGS;
-  if (item.amounts) return Object.entries(item.amounts).reduce((n, [slug, a]) => n + ((a ?? 0) * servingsOf(slug)) / BASE_SERVINGS, 0);
-  const slugs = item.recipes?.length ? item.recipes : Object.keys(plan);
-  const mean = slugs.length ? slugs.reduce((n, slug) => n + servingsOf(slug), 0) / slugs.length : DEFAULT_SERVINGS;
-  return (q.amount * mean) / BASE_SERVINGS;
 }

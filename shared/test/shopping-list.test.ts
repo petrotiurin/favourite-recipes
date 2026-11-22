@@ -1,7 +1,5 @@
 import { test, expect } from "vitest";
-import fs from "node:fs";
-import path from "node:path";
-import { BASE_SERVINGS, DEFAULT_SERVINGS, loadShoppingList, neededAmount, parseQuantity, type Plan, type ShoppingItem } from "../shopping-list.ts";
+import { BASE_SERVINGS, DEFAULT_SERVINGS, loadShoppingList, neededAmount, parseQuantity, type Plan } from "../shopping-list.ts";
 
 test("parseQuantity: an amount and the rest as its unit", () => {
   expect(parseQuantity("400g")).toEqual({ amount: 400, unit: "g" });
@@ -26,35 +24,6 @@ test("neededAmount: each recipe's share scaled by its servings, else the average
   expect(neededAmount({ quantity: "100g", recipes: ["a"] }, { a: 3 })).toBeCloseTo(150, 10);
   expect(neededAmount({ quantity: "100g", recipes: ["a"] }, { a: 5 })).toBe(250);
   expect(neededAmount({ quantity: "1", recipes: ["a"], amounts: { a: 1 } }, { a: 1 / 3 })).toBeCloseTo(1 / 6, 10);
-});
-
-// templates/shopping.js is still the browser's own copy until it becomes an island (docs/typescript-migration.md step 7): its need() must
-// give what neededAmount does. Delete this test with that copy.
-test("the shopping page's need() agrees with neededAmount", () => {
-  const src = fs.readFileSync(path.resolve("templates/shopping.js"), "utf8");
-  const servingsOf = src.match(/function servingsOf\(slug\) \{[\s\S]*?\n  \}/)![0];
-  const need = src.match(/function need\(item\) \{[\s\S]*?\n  \}/)![0];
-  const browserNeed = (item: ShoppingItem, plan: Plan, slugs: string[]) => {
-    const q = parseQuantity(item.quantity);
-    const fn = new Function("state", "data", "slugs", `${servingsOf}\n${need}\nreturn need;`)({ servings: plan }, { base: BASE_SERVINGS, fallback: DEFAULT_SERVINGS }, slugs) as (i: object) => number | null;
-    return fn(q ? { ...item, amount: q.amount, unit: q.unit } : { ...item });
-  };
-  const plan: Plan = { a: 4, b: 2, c: 6 };
-  const items: ShoppingItem[] = [
-    { name: "x", quantity: "400g", recipes: ["a"] },
-    { name: "x", quantity: "400g", recipes: ["a", "b"], amounts: { a: 100, b: 300 } },
-    { name: "x", quantity: "400g", recipes: ["a", "b"] },
-    { name: "x", quantity: "400g" },
-    { name: "x", quantity: "2", recipes: ["zzz"] },
-    { name: "x", quantity: "some", recipes: ["a"] },
-    { name: "x", quantity: "3", recipes: ["a", "c"], amounts: { a: 1, c: 2 } },
-  ];
-  for (const item of items) {
-    const a = neededAmount(item, plan);
-    const b = browserNeed(item, plan, Object.keys(plan));
-    if (a === null) expect(b, JSON.stringify(item)).toBeNull();
-    else expect(b, JSON.stringify(item)).toBeCloseTo(a, 9);
-  }
 });
 
 test("loadShoppingList: the sections with a name and items, or null", () => {

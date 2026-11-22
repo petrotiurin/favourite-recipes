@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import IngredientList from "./IngredientList.astro";
 import Layout from "./Layout.astro";
 import { pageContextSchema } from "../../shared/page-context.ts";
-import ShopItem from "./ShopItem.astro";
 import Tile from "./Tile.astro";
 import WeekHead from "./WeekHead.astro";
 
@@ -88,23 +87,25 @@ describe("Layout", () => {
 
   it("adds the sign-in and the chat only on builds that have their variables", async () => {
     const plain = await page({ pageContext: { page: "index" } });
-    expect(plain).not.toMatch(/auth\.js|chat\.js/);
+    expect(plain).not.toMatch(/auth-config|chat\.js/);
     vi.stubEnv("SUPABASE_URL", "https://x.supabase.co/");
     vi.stubEnv("SUPABASE_ANON_KEY", "key");
     vi.stubEnv("CHAT_API_URL", 'https://api.test/chat?a=1&b="2"');
     vi.stubEnv("CHAT_PUBLIC", "false");
     const doc = dom(await page({ pageContext: { page: "index" } }));
-    const auth = doc.querySelector('script[src="auth.js"]')!;
+    // The public values the sign-in boot script reads (and that the chat, until step 8, finds by `script[data-supabase-url]`).
+    const auth = doc.querySelector("script#auth-config")!;
+    expect(auth.getAttribute("type")).toBe("application/json");
     expect(auth.getAttribute("data-supabase-url")).toBe("https://x.supabase.co");
     expect(auth.getAttribute("data-supabase-key")).toBe("key");
-    expect(auth.hasAttribute("defer")).toBe(true);
+    expect(doc.querySelector("script[data-supabase-url]")).toBe(auth);
     const chat = doc.querySelector('script[src="chat.js"]')!;
     expect(chat.getAttribute("data-api")).toBe('https://api.test/chat?a=1&b="2"');
     expect(chat.getAttribute("data-public")).toBe("false");
   });
 });
 
-describe("Tile, WeekHead and ShopItem", () => {
+describe("Tile and WeekHead", () => {
   it("a recipe whose photo isn't in images/recipes/ fails the build", async () => {
     const recipe = { slug: "no-photo", title: "X", image: "/images/recipes/no-photo.jpg", total_mins: 1, calories: 1 };
     await expect(render(Tile, { props: { recipe, kicker: { label: "Dinner" } } })).rejects.toThrow(/no-photo: its photo \/images\/recipes\/no-photo\.jpg isn't in images\/recipes/);
@@ -141,18 +142,5 @@ describe("Tile, WeekHead and ShopItem", () => {
     const onlyNext = await heads(0, 1);
     expect(onlyNext.querySelector(".week-label")).toBeNull();
     expect((await heads(0, 0)).querySelector(".week-head")).toBeNull();
-  });
-
-  it("a shopping row for a partly-at-home item names what's at home and the recipes it's for", async () => {
-    const photos = ["avocado-toast", "tuna-melt", "avocado-toast", "almond-croissant-oats"]; // real files in images/recipes/ (a missing one fails)
-    const bySlug = new Map(["a", "b", "c", "d"].map((s, i) => [s, { title: s.toUpperCase(), image: `/images/recipes/${photos[i]}.jpg` }]));
-    const item = { name: "Spinach", note: "baby", quantity: "200g", recipes: ["a", "b", "c", "d"], have: 100 };
-    const doc = dom(await render(ShopItem, { props: { item, status: "partial", left: "100g", plan: { a: 2, b: 2, c: 2, d: 2 }, bySlug } }));
-    expect(doc.querySelector(".shop-name")!.textContent).toBe("Spinachbaby");
-    expect(doc.querySelectorAll(".row-bubbles img").length).toBe(3);
-    expect(doc.querySelector(".row-more")!.textContent).toBe("+1");
-    expect(doc.querySelector(".shop-qty")!.textContent).toBe("100g");
-    expect(doc.body.textContent).toContain("(have 100g of 200g at home)");
-    expect(doc.body.textContent).toContain("(for A, B, C, D)");
   });
 });

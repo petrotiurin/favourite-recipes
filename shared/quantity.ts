@@ -14,3 +14,19 @@ export function formatQuantity(value: number): string {
   if (whole === 0 && best[0] === 0) return "⅛";
   return (whole ? String(whole) : "") + best[1];
 }
+
+const METRIC = /^(g|kg|ml|l)$/i;
+
+/** A number for the shopping list: metric units to one decimal under 10 and whole from 10 up, anything else the way a recipe writes it (formatQuantity: ½, ¼, ...). */
+export function formatNumber(value: number, unit: string): string {
+  if (METRIC.test(unit)) return String(value >= 10 ? Math.round(value) : Math.round(value * 10) / 10);
+  return formatQuantity(value);
+}
+
+/** The number and its unit as the shopping list writes them: metric units attach to the number ("500g"), others follow a space ("2 heads"), a count has none ("3"). */
+export function withUnit(text: string, unit: string): string {
+  return text + (!unit ? "" : METRIC.test(unit) ? unit : ` ${unit}`);
+}
+
+/** `formatNumber` then `withUnit`: "2.5kg", "1½ heads", "⅛". */
+export const formatAmount = (value: number, unit: string): string => withUnit(formatNumber(value, unit), unit);

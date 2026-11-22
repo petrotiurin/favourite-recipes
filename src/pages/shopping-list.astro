@@ -1,39 +1,37 @@
 ---
-// The shopping list for next week's recipes (built by the MCP server, .claude/rules/shopping-list.md). The page is written complete: what's
-// left to buy at the planned servings, then what's already at home. templates/shopping.js re-renders #shopping-app from the JSON in
-// #shopping-data (servings, ticks while shopping, and for the signed-in editor the "At home" tab and sign-in).
+// The shopping list for next week's recipes (built by the MCP server, .claude/rules/shopping-list.md). The list itself is the Shopping island
+// (src/islands/Shopping.tsx): written here at build time, at the planned servings with what's already at home taken off, and taken over in the
+// browser (servings, ticks while shopping, and for the signed-in editor the "At home" tab and sign-in). Its data is its props.
 import Layout from "../components/Layout.astro";
 import Photo from "../components/Photo.astro";
 import { getImage } from "astro:assets";
 import { photoFor, PHOTO_SIZES } from "../lib/photos.ts";
 import Icon from "../components/Icon.astro";
-import ShopItem from "../components/ShopItem.astro";
-import { DEFAULT_SERVINGS } from "../../shared/shopping-list.ts";
+import Shopping from "../islands/Shopping.tsx";
+import AccountButton from "../islands/SignIn.tsx";
+import { DEFAULT_SERVINGS } from "../../shared/servings.ts";
 import { stocktakeAuth } from "../lib/env.ts";
-import { scriptJson } from "../lib/json.ts";
-import { formatDate, needText, planOf, shoppingData, splitList } from "../lib/shopping.ts";
+import { formatDate, planOf, shoppingProps } from "../lib/shopping.ts";
 import { getRecipes, getShoppingList } from "../lib/site-data.ts";
 
 const shopping = getShoppingList(await getRecipes());
 const list = shopping?.list ?? null;
 const recipes = shopping?.recipes ?? [];
-const bySlug = new Map(recipes.map((r) => [r.slug, r]));
-// The photos here are small round thumbnails: the browser-drawn parts (templates/shopping.js) get the same small copy through the data.
+// The photos in the island are small round thumbnails: it gets the same small copy through its props.
 const thumbUrls = new Map<string, string>();
 for (const r of recipes) {
   const w = PHOTO_SIZES.thumb.widths[PHOTO_SIZES.thumb.widths.length - 1];
   thumbUrls.set(r.slug, (await getImage({ src: await photoFor(r.image, r.slug), width: w, height: w, fit: "cover", format: "webp", quality: 80 })).src);
 }
 const plan = list ? planOf(list) : {};
-const { sections, home, partly } = list ? splitList(list, plan) : { sections: [], home: [], partly: 0 };
 const updated = list ? formatDate(list.updated) : "";
-const stocktake = list?.stocktake ? formatDate(list.stocktake) : "";
+const stocktakeApi = stocktakeAuth()?.api ?? null;
 ---
 <Layout title="Shopping list — Our Favourite Recipes" bodyClass="shopping-page" pageContext={{ page: "shopping" }}>
   <main>
     <div class="shop-top">
       <a class="back-link" href="index.html"><Icon name="back" />All recipes</a>
-      <div class="shop-account" id="shopping-account"></div>
+      <div class="shop-account" id="shopping-account">{list && stocktakeApi && <AccountButton client:load />}</div>
     </div>
     <h1 class="shopping-title">Shopping list</h1>
     {list ? (
@@ -44,31 +42,10 @@ const stocktake = list?.stocktake ? formatDate(list.stocktake) : "";
             {recipes.map((r) => <a href={`recipes/${r.slug}.html`}><Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" /><span>{r.title}</span><small class="planned">for {plan[r.slug] || DEFAULT_SERVINGS}</small></a>)}
           </div>
         </details>
-        <div id="shopping-app">
-          {list.stocktake && <div class="home-card"><Icon name="house-some" /><span class="home-card-text"><strong>Home checked {stocktake}</strong><span>{home.length} at home, {partly} partly. Already taken off.</span></span></div>}
-          {sections.map((s) => (
-            <details class="shop-section" data-section={s.name} open>
-              <summary><h2>{s.name}</h2><span class="section-count">{s.items.length}</span><Icon name="chevron" class="icon chevron" /></summary>
-              <ul class="shop-list">
-                {s.items.map(({ item, status, left }) => <ShopItem item={item} status={status} left={left} plan={plan} bySlug={bySlug} />)}
-              </ul>
-            </details>
-          ))}
-          {sections.length === 0 && <p class="shopping-empty">Everything on the list is already at home.</p>}
-          {home.length > 0 && (
-            <details class="shop-home">
-              <summary>Already at home ({home.length})</summary>
-              <ul>
-                {home.map((item) => <li><span>{item.name}</span><span>{needText(item, plan)}</span></li>)}
-              </ul>
-            </details>
-          )}
-        </div>
-        <script is:inline type="application/json" id="shopping-data" set:html={scriptJson(shoppingData(list, recipes, stocktakeAuth(), plan, (r) => thumbUrls.get(r.slug) ?? r.image))}></script>
+        <Shopping client:load {...shoppingProps(list, recipes, stocktakeApi, plan, (r) => thumbUrls.get(r.slug) ?? r.image)} />
       </Fragment>
     ) : (
       <p class="shopping-empty">Nothing to buy right now. The list appears here once next week's recipes are planned and a shopping list has been made for them.</p>
     )}
   </main>
-  {list && <script is:inline src="shopping.js" defer></script>}
 </Layout>

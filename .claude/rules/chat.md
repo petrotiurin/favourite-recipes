@@ -1,7 +1,9 @@
 ---
 paths:
   - "templates/chat.js"
-  - "templates/auth.js"
+  - "src/lib/auth.ts"
+  - "src/lib/recipe-auth.ts"
+  - "src/islands/SignIn.tsx"
   - "mcp-server/**"
   - "supabase/**"
   - "docs/chatbot-design.md"
@@ -15,7 +17,7 @@ editors. `docs/chatbot-design.md` is its design and the source of truth: read it
 same change when the design moves (this file too, when a rule or a file's job below changes).
 
 **The rules it must keep:** `templates/chat.js` is a script on top of pages the build already wrote in full (if it fails to load or `/chat` is down, the page is unaffected); it talks only to `/chat` (and Supabase Auth through the shared
-`auth.js`); auth is enforced on the server by the dispatcher (`mcp-server/lib/tools.js`), never by the prompt; a role is never read
+sign-in, `window.RecipeAuth`); auth is enforced on the server by the dispatcher (`mcp-server/lib/tools.js`), never by the prompt; a role is never read
 from the request body; in chat an editor's writes never commit until Save.
 
 ## Anonymous chat (read-only)
@@ -34,9 +36,12 @@ builds that set the build env var `CHAT_API_URL` (a repo Actions variable, like 
 
 ## Sign-in and per-user chats
 
-`templates/auth.js` is the one sign-in (sheet, session in `localStorage`, token refresh, `window.RecipeAuth`) for the shopping page
-and the chat; it is added to every page (head, deferred) only when the build has `SUPABASE_URL` + `SUPABASE_ANON_KEY`, and the magic
-link returns to the page it was sent from. `/chat` decides the caller from a verified token: none = `public`; valid and in `EDITORS`
+The sign-in is one store, `src/lib/auth.ts` (`@preact/signals`: the session in `localStorage` under the key the site has always used,
+token refresh, what the sheet shows), with the sheet and the account button in `src/islands/SignIn.tsx`, for the shopping page and the chat. It is
+started on every page (a module script in the head, `src/lib/auth-boot.ts`, plus the public values in `#auth-config`) only when the build has
+`SUPABASE_URL` + `SUPABASE_ANON_KEY`, and the magic link returns to the page it was sent from. Until the chat is rebuilt (step 8 of
+`docs/typescript-migration.md`) `templates/chat.cjs` reaches it through `window.RecipeAuth`, a shim over the store (`src/lib/recipe-auth.ts`, the
+same methods as the old script's), and finds the Supabase URL in `script[data-supabase-url]` (`#auth-config`). `/chat` decides the caller from a verified token: none = `public`; valid and in `EDITORS`
 = `editor` (editor key `OPENROUTER_CHAT_EDITOR_KEY`, model `CHAT_EDITOR_MODEL`, 200/hour per user id); valid but not an editor =
 `public` (the panel says the account can't edit); bad or expired = 401. Editors' chats are server-owned (`conversations` /
 `messages` tables, service-role key only, RLS with no policies; `lib/chat-store.js`): the client sends

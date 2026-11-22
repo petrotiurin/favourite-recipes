@@ -548,7 +548,7 @@ export function reviewFlags(rows, empty = [], plan = {}) {
   return flags;
 }
 
-/** The rows as the stored list's sections (the format shopping.js reads): aisles in order, items by name, 2-serving quantities and shares. */
+/** The rows as the stored list's sections (the format the site's shopping island, src/islands/Shopping.tsx, reads): aisles in order, items by name, 2-serving quantities and shares. */
 export function rowsToSections(rows) {
   const bySection = new Map(SECTIONS.map((s) => [s, []]));
   for (const row of [...rows.values()].sort((a, b) => a.name.localeCompare(b.name))) {

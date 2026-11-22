@@ -7,6 +7,6 @@ interface Props {
   class?: string;
 }
 const { name, class: cls = "icon" } = Astro.props;
-const { stroke, paths } = ICONS[name];
+const { stroke, paths, filled } = ICONS[name];
 ---
-<svg class={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width={stroke} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={paths}></svg>
+<svg class={cls} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" stroke-width={stroke} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={paths}></svg>

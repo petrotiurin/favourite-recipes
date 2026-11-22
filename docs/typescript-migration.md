@@ -1,6 +1,6 @@
 # TypeScript, modules and Astro for the site: design
 
-Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos) and 6 (small islands) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
+Status: **decided, steps 1 (groundwork), 2 (`shared/`), 3 (schemas), 4 (pages and components), 5 (photos), 6 (small islands) and 7 (shopping and sign-in) done**; rewritten around Astro (2026-11-22). The decisions are in section 4, new questions in
 section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
 sections 3 and 6.
 
@@ -101,7 +101,7 @@ With `shared/package.json` saying `{ "type": "module" }` it returned 200, so Ver
   never redeploys the backend.
 - `deploy.yml` needs nothing: it only ignores `mcp-server/**`, so a `shared/` change rebuilds the site.
 - One shared change deploys both sides, so it must keep both working in the same commit.
-- `.claude/rules/kept-in-step.md` is deleted once its pieces are single-sourced: step 2 left it with the two browser scripts and the recipe-format prose (see "Step 2 as built").
+- `.claude/rules/kept-in-step.md` is deleted once its pieces are single-sourced: step 2 left it with the two browser scripts and the recipe-format prose (see "Step 2 as built"); it went in step 7, and its recipe-format note moved to the step 10 list.
 
 ### 4.4 Data shapes are zod schemas in `shared/`
 
@@ -141,7 +141,7 @@ the islands ship a script that takes them over in the browser. Everything else i
 | Servings selector | recipe (when scalable) | `client:visible` |
 | Keep screen on, Cook with Claude | recipe | `client:visible` |
 | Shopping list and stocktake | shopping | `client:load` |
-| Sign-in | where the shopping list or chat needs it | with them |
+| Sign-in | the account button on the shopping page (an island); the sheet on every page of a build with sign-in (mounted by a module script, see "Step 7 as built"); the chat until step 8 through a `window.RecipeAuth` shim | `client:load` / with the page |
 | Chat | every page, when `CHAT_API_URL` is set | `client:idle`: once the page has loaded and settled |
 
 - An island's data is passed as props; Astro writes them into the page next to the island. That replaces the `#shopping-data` and
@@ -246,7 +246,7 @@ step.
    thin: each `.astro` page calls the existing renderer and outputs its HTML (`<Fragment set:html={…} />`), and the existing
    scripts are served as they are. The same site, built by Astro. The checks marked "to check in step 1" (4.1, 4.4).
 2. **`shared/`** (done): the kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
-   gets `../shared`; `.claude/rules/kept-in-step.md` shrunk (deleted at steps 6, 7 and 10).
+   gets `../shared`; `.claude/rules/kept-in-step.md` shrunk (deleted in step 7).
 3. **Schemas** (done): the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
    recipe format uses them.
 4. **Pages and components** (done): layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
@@ -254,11 +254,14 @@ step.
    rules (4.5).
 5. **Photos** (done) sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
 6. **Small islands** (done): search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
-7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
+7. **Shopping and sign-in islands** (done): one render for the shopping list; the sign-in store (with a `window.RecipeAuth` shim for the chat until step 8).
 8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
 9. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
 10. **Docs and skills:** the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
-    `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files.
+    `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files. Also the recipe format's prose
+    (the note `.claude/rules/kept-in-step.md` carried until step 7): `.claude/skills/add-recipe/SKILL.md` and the schema in the root `CLAUDE.md`
+    describe what the zod schemas in `shared/recipe.ts` enforce, by hand; rewrite the skill around the schema (or generate the schema text from it)
+    so there is one source, and until then change them together.
 
 ### Step 1 as built
 
@@ -413,4 +416,40 @@ step.
 - **`client:visible` and the phone:** the cook bar's pills sit under the servings picker on a phone and may be below the fold; their island wakes when they scroll in, and the link then has the picker's number. A tap on the pills in the few milliseconds before they wake is the same as a tap on the old page before its script ran.
 - **Search** now also applies what the box holds when it loads (text typed before the island woke, or put back by the browser on Back), which the script never did.
 - **Not checked:** Safari/iOS itself (Chromium emulation only), the real Screen Wake Lock (headless Chromium has the API; the lock itself was mocked), `vite:preloadError` from a real chunk (nothing in the pages' output uses Vite's preload helper yet; the event is covered by a test and by dispatching it).
+
+### Step 7 as built
+
+- **The shopping list is one render.** `src/islands/Shopping.tsx` (`client:load`) is drawn at build time from the saved list (the island's props: the plan, the list's version hash, the stocktake date, the sections, the recipes' title/thumbnail/page,
+  and the `/stocktake` address when the build has it) and taken over in the browser. The static `.astro` markup (`ShopItem.astro`, the list part of `shopping-list.astro`), `templates/shopping.js` and `#shopping-data` are gone (nothing else read it: checked `templates/chat.cjs`, `mcp-server/`,
+  the skills). The static header ("For n recipes", the recipe links) is still `.astro`. The page's numbers are `src/lib/shopping-state.ts` (need, remaining, fill rows, what the browser keeps; tested in `shopping-state.test.ts`); `src/lib/shopping.ts` keeps what only the build needs (dates, the
+  plan, `shoppingProps`). Markup is the script's, element for element: the same ids, classes and `data-*`, except `data-focus` (Preact keeps focus by itself) and that the two tab views are keyed so one's elements are never reused for the other.
+- **Single-sourced:** `shared/shopping-quantity.ts` (new, no zod) has `parseQuantity` and `neededAmount` (re-exported from `shared/shopping-list.ts`, so the backend's imports are unchanged) and the island imports it, so a browser module still pulls in no zod (the bundle is 15 KB, not 90 KB).
+  `formatAmount` / `formatNumber` / `withUnit` are in `shared/quantity.ts` next to `formatQuantity` (the script's `formatNumber` = metric to one decimal under 10 and whole from 10, anything else `formatQuantity`; `withUnit` attaches metric units). They replace the script's `formatNumber` / `withUnit`
+  and the static page's `fmtAmount` (2 decimals), so the page is written the way it is read: **a build-time difference from the HEAD static markup** is that a fractional need is "1½ heads" / "¾" where the static page wrote "1.5 heads" / "0.75" (the script already rewrote it that way as soon as it ran). The backend's own `fmtAmount` in `mcp-server/lib/shopping-list.js`
+  (the text of `get_shopping_list` for agents, 2 decimals) is a different job and was left. The `need()` guard test, the copy in the script and the kept-in-step row are gone; `.claude/rules/kept-in-step.md` was only prose after that and is deleted, its recipe-format note moved to the step 10 list.
+  Icons: the paths the script drew itself (`house`, `house-all` filled, `house-clear`, `slide`, `check`, `undo`, `person`, `close`, `minus`, `plus`) are in `src/lib/icons.ts` with the rest (a `filled` flag, `Icon.astro` / `Icon.tsx`). The script's cart was a slightly different drawing from the house set's (stroke 2, a 0.5 px offset); the tabs now use the house one.
+- **What the browser keeps is read after the first render** (`useLayoutEffect`, then a state update before paint; `useHydrated` in `src/lib/hydrated.ts`): the first browser render equals the page the build wrote (nothing ticked, the plan, signed out), then ticks, servings, unsaved edits, a stocktake saved from here and folded aisles are loaded, so hydration never sees
+  different markup. **`localStorage` keys are unchanged** (`shopping-ticks:<version>`, `shopping-plan:<version>`, `shopping-draft:<version>`, `shopping-stocktake:<version>`, `shopping-collapsed`, and the session below), as are the clean-up rules (other lists' keys, `shopping-servings`), so ticked items and sign-ins survive the deploy. The `<details>` folds are `onToggle` handlers that skip a toggle that
+  already matches the state.
+- **Sign-in is a store**, `src/lib/auth.ts` (`createAuth()`; the site's one is `auth`): `@preact/signals` for the session, the sheet (`sheet`: email | code | password | null, the fields, `message`, `busy`, the copy) and the account menu; methods for everything the script did (`init`, `getSession`, `getAccessToken`, `refresh`, `onChange`, `openSignIn`, `openSetPassword`,
+  `closeSheet`, `signOut`, `sessionExpired`, `sendCode`, `verifyCode`, `signInWithPassword`, `setPassword`, `setCopy`, ...). **Same calls and storage:** the Supabase endpoints (`token?grant_type=password|refresh_token`, `otp?redirect_to=`, `verify`, `user` GET and PUT, `logout`) with the same bodies and headers (compared old vs new in the browser: the request logs are equal),
+  the session in `shopping-editor-session` (same shape: `access_token`, `refresh_token`, `expires_at`, `email`), `shopping-editor-email`, `shopping-editor-has-password`, `recipes-auth-link-pending` with its one-hour and session-fixation rules, the magic-link fragment handling, the refresh a minute before expiry (one in flight at a time), the `storage` event for other tabs and Escape
+  (capture, `stopImmediatePropagation`, so the chat panel doesn't also close). It is safe to import at build time (nothing touches the browser until `init`). The components are in `src/islands/SignIn.tsx`: `AccountButton` (default export, the pill or the avatar and menu; an island on the shopping page; `compact` for the chat) and `SignInSheet`.
+- **Not an island: the sheet is mounted by a module script.** `templates/chat.cjs` (unchanged) asks for `window.RecipeAuth` and the session as it loads, and an island hydrates later than a deferred script runs. So when the build has `SUPABASE_URL` + `SUPABASE_ANON_KEY`, `Layout.astro` writes `<script type="application/json" id="auth-config" data-supabase-url data-supabase-key>`
+  (the chat finds the Supabase address for photos by `script[data-supabase-url]`, which is why the attributes are kept) and a processed `<script>` that Astro bundles (`src/lib/auth-boot.ts`); a module script runs in document order with the chat's `defer` script, before it. The boot script calls `auth.init`, installs the shim and mounts `SignInSheet` into `#auth-sheet-root` on `<body>`.
+  Without the variables the layout writes neither (no script on the page).
+- **The shim, for step 8:** `src/lib/recipe-auth.ts` (`installRecipeAuth(store)`) defines `window.RecipeAuth` with exactly the old script's ten methods (`getSession`, `getAccessToken`, `refresh`, `onChange`, `openSignIn`, `openSetPassword`, `signOut`, `sessionExpired`, `renderAccount(el, { compact })`, `setCopy`), each a thin call into the store; `renderAccount` renders `AccountButton` into `el` with Preact's `render`.
+  `chat.cjs` still catches the Sign in click on its own header (`[data-auth="signin"]`, capture, `stopPropagation`) to give the sheet its own wording, which still works because the button's handler is on the button. **Step 8 removes the shim** (and `installRecipeAuth`'s call in the boot script and the `Window.RecipeAuth` type): the chat's components import `auth` and `AccountButton` directly, and the chat's `script[data-supabase-url]` lookup becomes the build's value passed as a prop.
+- **Shopping page and sign-in, as before:** the account button (top right of the shopping page) and the stocktake exist only when the build also has `STOCKTAKE_API_URL` (and a list); `setCopy` gives the sheet the shopping page's words; a sign-in (this tab, another tab, a magic link) opens the At home tab, a sign-out goes back to the list; the stocktake POST (`{ items: [{ name, quantity?, have? }] }`, `Authorization: Bearer`, 401 signs out with the server's text and keeps the edits, any other refusal shows the server's text, a failed fetch says it
+  couldn't reach the server) is unchanged.
+- **Tests:** `src/lib/auth.test.ts` (the store: password / code / magic-link sign-in, session restore from the stored key, refresh, sign-out, expiry, the fixation guard, other tabs, Escape), `src/islands/signin.test.tsx` (the sheet and the button, and the shim: its ten methods, delegation, the chat's capture handler), `src/lib/shopping-state.test.ts`, `src/islands/shopping.test.tsx` (as the build writes it and hydrated; ticks, folding,
+  recipe photos, servings, signed out / editor, fill rows by tap, slide and keyboard, Save with the exact request and every outcome), `src/lib/shopping.test.ts`, `shared/test/quantity.test.ts` (the new formatters). The backend had no test that loaded `auth.cjs`; `mcp-server/` tests only `require` `templates/chat.cjs`.
+- **Checked against the HEAD build** (Chromium, iPhone emulation, 390x844 at 3x; Supabase Auth and `/stocktake` mocked with `page.route`, the same steps run on both builds and compared after every step: the app's DOM, the account button, the sheet, `localStorage` and the requests made): the shopping list's DOM after load is identical, signed out and signed in, with and without the variables and with the current list, an all-at-home list, a list
+  with awkward characters and no list (6 builds; the only difference is the cart icon on the editor's tab). Signed-out scenario (servings 1/2/4/plan, per-recipe steps, ticks, reload, row photos, folds, clear): 29 steps, 0 differences. Editor scenario (tabs, house taps, tapping and sliding rows, keyboard slider, folds, discard, clear, reload, Save, save again with other servings, sign-out): 29 steps, 0 differences,
+  with the same stocktake request. Sign-in scenario (wrong password, password, set a password, sign-out, the code route with a wrong and a right code, reload keeps the session, backdrop): 15 steps, 0 differences (the three sheet forms are keyed, or Preact reuses the email input for the code and leaves `type=""` on it; the links and the note stay outside the `<form>`, as the script wrote them). A magic-link return (tokens in the address) and an expiring token refreshed on Save before a 401: the same requests and the same
+  page. The chat widget on a recipe page (signed out and with a session): the account button, the sheet with the chat's words, Escape closing the sheet and not the panel, and its requests to `/chat/me` with the token: the same. No console errors in any of them. `astro dev` serves the shopping page.
+- **JS shipped** (iPhone emulation, scripts as served, gzipped in brackets, inline in the page as "+"): shopping page without the variables 33.0 KB (10.1) + 0.6 KB inline (0.3) before, 48.0 KB (19.8) + 5.5 KB inline (2.3) after (Preact and the island runtime, shared with the other islands, plus the 15.1 KB island and the 6.7 KB sign-in store); with the variables (`chat.js` is 150 KB of both) 198.2 KB (55.0) before, 194.1 KB (60.0) + 5.5 KB inline after.
+  Next week, with the variables: 165.3 KB (44.9) before, 175.7 KB (52.4) after, because the sign-in boot script now brings Preact and the store (the old `auth.js` was 25 KB raw, no framework). Other pages: within 1 KB.
+- **Not checked:** Safari/iOS itself; real Supabase Auth and a real `/stocktake` (mocked); the real email link; a page open across a deploy with the new island files (the guard of step 6 covers it).
+- **Pre-existing, not from this step:** `cd mcp-server && npm test` fails one test, `chat-switch.test.js`'s "the build adds data-public...", when the whole suite runs (three test files run `astro build` in the same repo at once and Astro 7 writes `.astro/.prerender` in the project root, which they clobber: `Cannot find module .astro/.prerender/chunks/...`). It passes on its own and fails the same way on the HEAD checkout; 262 of 263 pass.
 

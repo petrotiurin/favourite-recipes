@@ -766,7 +766,7 @@ footer.site-footer {
 }
 
 /* Shopping list page (shopping-list.json, written by the MCP server's agent).
-   templates/shopping-list.js renders the static page, templates/shopping.js the interactive one.
+   src/islands/Shopping.tsx draws the list (at build time, then in the browser).
    Patterns and the icon language are described in design.md. */
 .shopping-page main {
   max-width: 560px;
@@ -1396,7 +1396,7 @@ footer.site-footer {
   text-decoration: line-through;
 }
 
-/* Once shopping.js has run a row is: the tick + name label, the recipe photos button, the quantity (a second label
+/* A row of the list (src/islands/Shopping.tsx) is: the tick + name label, the recipe photos button, the quantity (a second label
    for the same checkbox, so tapping it still ticks), then the recipe names once the photos are tapped. */
 .shop-row {
   display: flex;
@@ -2652,7 +2652,7 @@ button.chat-attachment-state {
   }
 }
 
-/* Recipe chat, signed-in editors (templates/chat.js + templates/auth.js): account button, chats list, thumbs up / down. See design.md. */
+/* Recipe chat, signed-in editors (templates/chat.js + src/islands/SignIn.tsx): account button, chats list, thumbs up / down. See design.md. */
 .chat-title {
   min-width: 0;
   overflow: hidden;

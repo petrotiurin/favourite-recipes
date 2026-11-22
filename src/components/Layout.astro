@@ -18,7 +18,8 @@ interface Props {
 const { title, bodyClass, rootPrefix = "", pageContext } = Astro.props;
 
 const context = scriptJson(pageContextSchema.parse(pageContext));
-// Sign-in (templates/auth.cjs): in the head, deferred, so it runs before the page scripts that use window.RecipeAuth.
+// Sign-in (src/lib/auth.ts): the build's public Supabase values in `#auth-config`, and the boot script (src/lib/auth-boot.ts), in the head so it runs
+// before the chat's script (which still finds sign-in through window.RecipeAuth until step 8).
 const auth = authConfig();
 // The chat widget (docs/chatbot-design.md): no bubble and no script without CHAT_API_URL.
 const chat = chatConfig();
@@ -37,7 +38,8 @@ const reloadGuard = `(${reloadOnStaleScript.toString()})(window)`;
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Public+Sans:wght@400;500;600&display=swap">
-  {auth && <script is:inline src={`${rootPrefix}auth.js`} data-supabase-url={auth.supabaseUrl} data-supabase-key={auth.supabaseKey} defer></script>}
+  {auth && <script is:inline type="application/json" id="auth-config" data-supabase-url={auth.supabaseUrl} data-supabase-key={auth.supabaseKey}></script>}
+  {auth && <script>import "../lib/auth-boot.ts";</script>}
 </head>
 <body class={bodyClass || undefined}>
   <slot />

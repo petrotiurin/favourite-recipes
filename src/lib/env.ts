@@ -8,7 +8,7 @@ export function chatConfig(env: NodeJS.ProcessEnv = process.env): { api: string;
   return { api: String(api), publicOff: /^(false|0|off|no)$/i.test(String(env.CHAT_PUBLIC ?? "true").trim()) };
 }
 
-/** Sign-in (templates/auth.cjs): on every page of a build that has the Supabase values, so the chat and the shopping page share one session. */
+/** Sign-in (src/lib/auth.ts): on every page of a build that has the Supabase values, so the chat and the shopping page share one session. */
 export function authConfig(env: NodeJS.ProcessEnv = process.env): { supabaseUrl: string; supabaseKey: string } | null {
   const { SUPABASE_URL, SUPABASE_ANON_KEY } = env;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
