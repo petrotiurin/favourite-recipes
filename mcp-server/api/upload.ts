@@ -129,7 +129,7 @@ ${claim.items.map((item, i) => itemForm(item, i, n > 1)).join("")}
         form.classList.add("done");
         status("✅ Uploaded", "ok");
         pickText.textContent = "Replace photo";
-      } catch (err: any) {
+      } catch (err) {
         form.classList.remove("done");
         status(err.message + " Pick the photo again to retry.", "err");
       }
