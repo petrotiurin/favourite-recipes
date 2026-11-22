@@ -1,7 +1,7 @@
 import { config, assertStocktakeConfigured } from "../lib/config.ts";
 import { verifyEditor } from "../lib/auth.ts";
-import { saveStocktake, StocktakeError } from "../lib/shopping-list.js";
-import { makeCaller } from "../lib/tools.js";
+import { saveStocktake, StocktakeError } from "../lib/shopping-list.ts";
+import { makeCaller } from "../lib/tools.ts";
 
 // The shopping page (on GitHub Pages) posts the stocktake here: which items are already at home,
 // fully or partly. The editor is signed in with Supabase Auth on the page; only EDITORS

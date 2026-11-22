@@ -2,8 +2,8 @@
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { clearCache } from "../lib/cache.js";
-import { checkEvent } from "./chat-event-check.js";
+import { clearCache } from "../lib/cache.ts";
+import { checkEvent } from "./chat-event-check.ts";
 
 Object.assign(process.env, {
   GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test",
@@ -11,7 +11,7 @@ Object.assign(process.env, {
   OPENROUTER_CHAT_EDITOR_KEY: "or-editor-test", OPENROUTER_API_KEY: "or-image-test", CHAT_PUBLIC_HOURLY_LIMIT: "100000", CHAT_EDITOR_HOURLY_LIMIT: "100000",
   CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000",
 });
-const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.js");
+const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.ts");
 let github, openrouter, supabase, images;
 const realFetch = globalThis.fetch;
 let chat, tools, background, config, photos;
@@ -24,10 +24,10 @@ before(async () => {
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
     return realFetch(url, init);
   };
-  chat = await import("../api/chat.js");
-  tools = await import("../lib/tools.js");
-  background = await import("../lib/background.js");
-  photos = await import("../lib/tray-photos.js");
+  chat = await import("../api/chat.ts");
+  tools = await import("../lib/tools.ts");
+  background = await import("../lib/background.ts");
+  photos = await import("../lib/tray-photos.ts");
   ({ config } = await import("../lib/config.ts"));
 });
 const OWNER = "00000000-0000-4000-8000-0000000000e1";
@@ -56,7 +56,7 @@ const slugs = () => [...github.files.keys()].filter((p) => p.startsWith("recipes
 
 test("scale_recipe is a read tool for everyone, scales to N, and refuses to multiply a non-scalable list", async () => {
   const slug = slugs()[0];
-  const { data } = await (await import("../lib/recipes.js")).getRecipe(slug);
+  const { data } = await (await import("../lib/recipes.ts")).getRecipe(slug);
   const res = await tools.dispatch("scale_recipe", { slug, servings: 6 }, tools.makeCaller({ role: "public" }));
   assert.equal(res.isError, undefined);
   assert.match(res.content[0].text, new RegExp(`serves ${data.serves} as written, scaled to 6`));
@@ -94,7 +94,7 @@ const putStocktake = async (haveNames, extra = []) => {
 };
 
 test("ingredient matching: same words or whole-word containment, plurals folded, nothing looser", async () => {
-  const { sameIngredient } = await import("../lib/at-home.js");
+  const { sameIngredient } = await import("../lib/at-home.ts");
   assert.ok(sameIngredient("Eggs", "egg"));
   assert.ok(sameIngredient("cherry tomatoes", "Tomatoes"));
   assert.ok(sameIngredient("Basmati rice", "rice"));
@@ -108,8 +108,8 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
   clearCache();
   const none = await tools.dispatch("recipes_from_home", {}, tools.makeCaller({ role: "public" }));
   assert.match(none.content[0].text, /No stocktake is saved/);
-  const { recipeIngredients } = await import("../lib/recipes.js");
-  const { STAPLES } = await import("../lib/recipes.js");
+  const { recipeIngredients } = await import("../lib/recipes.ts");
+  const { STAPLES } = await import("../lib/recipes.ts");
   const book = await recipeIngredients();
   const target = book.find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
   const names = [...new Set(target.ingredients.filter((n) => !STAPLES.test(n)).map((n) => n.toLowerCase()))];
@@ -129,7 +129,7 @@ test("recipes_from_home ranks the book by what the stocktake says is at home, an
 });
 
 test("the shopping page's starter and the chat flow: ask what can be made, get cards", async () => {
-  const { recipeIngredients, STAPLES } = await import("../lib/recipes.js");
+  const { recipeIngredients, STAPLES } = await import("../lib/recipes.ts");
   const target = (await recipeIngredients()).find((r) => r.ingredients.filter((n) => !STAPLES.test(n)).length >= 3);
   await putStocktake(target.ingredients.filter((n) => !STAPLES.test(n)));
   const res = await post({ messages: [{ role: "user", content: "What can I make from what's at home?" }], page: { page: "shopping" } });
@@ -222,7 +222,7 @@ test("stage_stocktake is a stage tool: refused for the public and for the agent 
 // --- 4. week balance ------------------------------------------------------------------------------------------------------------
 
 test("weekBalance: recipes, dinners, average kcal and total time, from recipe data", async () => {
-  const { weekBalance } = await import("../lib/tray.js");
+  const { weekBalance } = await import("../lib/tray.ts");
   assert.equal(weekBalance([]), null);
   assert.deepEqual(weekBalance([{ course: ["Dinner"], calories: 500, total_mins: 30 }, { course: ["Lunch", "Dinner"], calories: 301, total_mins: 45 }, { course: ["Snack"], calories: 100, total_mins: 5 }]), { recipes: 3, dinners: 2, avg_kcal: 300, total_mins: 80 });
   assert.deepEqual(weekBalance([{ course: [], total_mins: 10 }]), { recipes: 1, dinners: 0, avg_kcal: null, total_mins: 10 });
@@ -261,7 +261,7 @@ test("get_shopping_list in chat is a compact table that fits the result cap for 
   // whatever the cap cuts must not be the list: the cap for this tool holds all of it
   const { readFileSync: _r } = await import("node:fs");
   void _r;
-  const chatSrc = readFileSync(new URL("../lib/chat.js", import.meta.url), "utf8");
+  const chatSrc = readFileSync(new URL("../lib/chat.ts", import.meta.url), "utf8");
   assert.match(chatSrc, /get_shopping_list: 24000/);
 });
 
@@ -276,7 +276,7 @@ test("stocktake by chat finds Pantry items on the real list", async () => {
 });
 
 test("history replay keeps ask_user calls, their results and the tapped answers; a cap never starts inside a tool exchange", async () => {
-  const store = await import("../lib/chat-store.js");
+  const store = await import("../lib/chat-store.ts");
   const row = (role, content) => ({ role, content });
   const ask = { role: "assistant", content: "", tool_calls: [{ id: "q1", type: "function", function: { name: "ask_user", arguments: '{"question":"Did you like Soup?","options":["Liked","Not for us"]}' } }], ui: { question: { question: "Did you like Soup?" } } };
   const rows = [
@@ -322,7 +322,7 @@ test("the site build (astro build) can write to another folder (BUILD_OUT_DIR), 
 // --- chat summary wording, chips -----------------------------------------------------------------------------------------------
 
 test("the Save summary speaks in titles and plain words, not slugs and tool jargon", async () => {
-  const { chatLine } = await import("../lib/plan-apply.js");
+  const { chatLine } = await import("../lib/plan-apply.ts");
   const title = (s) => ({ "almond-croissant-oats": "Almond Croissant Oats", soup: "Soup", "avocado-toast": "Avocado Toast" }[s] || s);
   assert.equal(chatLine({ kind: "switch", op: { carry_over: ["soup"] } }, {}, title), "Started the new week: next week's recipes are now this week; kept in this week: Soup");
   assert.equal(chatLine({ kind: "promote", op: { slug: "almond-croissant-oats" } }, {}, title), "Almond Croissant Oats is now a regular recipe");
@@ -338,7 +338,7 @@ test("chips: a plain 'Save to site' becomes the real button when the tray allows
   await tools.dispatch("stage_update_recipe", { slug, total_mins: 41 }, editor(), { chat: { emit() {} } });
   const ask = async (replies, history = []) => {
     // a scripted editor turn: the mock model isn't used, so run the loop through a tiny fake
-    const { runChat } = await import("../lib/chat.js");
+    const { runChat } = await import("../lib/chat.ts");
     const emitted = [];
     let round = 0;
     const saved = globalThis.fetch;

@@ -293,7 +293,7 @@ test("the optional items card: rows from the server, photos on our origin only, 
   assert.equal(staged("https://sb.test/storage/v1/object/sign/tray-photos/t/fish-pie-en-croute.jpg?token=x"), "https://sb.test/storage/v1/object/sign/tray-photos/t/fish-pie-en-croute.jpg?token=x");
   assert.equal(staged("https://sb.test/rest/v1/trays"), "", "nothing else from Supabase");
   assert.equal(staged("https://evil.test/storage/v1/object/sign/x.jpg"), "");
-  const { optionalAnswersText } = await import("../lib/optional-review.js");
+  const { optionalAnswersText } = await import("../lib/optional-review.ts");
   for (const answers of [{}, { "chilli-oil": "drop" }, { "chilli-oil": "drop", "sesame-seeds": "drop", coriander: "keep" }]) {
     assert.equal(chat.optionalText(card, answers), optionalAnswersText(card.items, answers), JSON.stringify(answers));
   }
