@@ -1,7 +1,7 @@
 # TypeScript and modules for the site: design
 
-Status: **being decided**. Nothing is built yet. Decided questions are in section 4; open ones are in section 5, in the order we're
-going through them. When a question is decided, move it from section 5 to section 4 with its consequences, and update section 3.
+Status: **decided, not started** (2026-11-22). The decisions are in section 4 and the order of work in section 6. When a new
+question comes up, add it to section 5; once decided, move it to section 4 with its consequences and update sections 3 and 6.
 
 ## 1. Why
 
@@ -160,15 +160,31 @@ Each build names a script after its contents (`chat-3f9a.js`), and each page lin
 manifest). With fixed names a phone can run yesterday's cached `chat.js` against today's page; with hashed names a page always gets
 the script that matches it.
 
+### 4.13 It ships as one PR
+
+The steps in section 6 are commits on one long-lived branch, merged to `main` once at the end. That means one site deploy and
+one backend deploy, at the same time.
+
+- **Checking it before the merge:** Pages doesn't deploy branches, so the site is checked locally: `npm run build` on the branch,
+  compared with `dist/` built from `main` (the pages' text should only change where a step meant it to), and clicked through in a
+  browser (servings, search, the shopping list and stocktake, sign-in, the chat against the preview backend). The backend gets a
+  Vercel preview per push, as in 4.2.
+- **`main` keeps moving:** the MCP server commits recipes, photos, the catalogue and the shopping list to `main` every week. Those
+  files keep their formats, so merging `main` into the branch regularly is cheap. Changes to `templates/`, `build.js`,
+  `styles/` or `mcp-server/` on `main` while the branch is open conflict with the migration: hold them, or port them to the branch
+  in the same week.
+- **`/chat` and `/stocktake` keep their request and response shapes** through the migration, so the old site works with the new
+  backend and the reverse, whichever deploy finishes first.
+- **Rollback:** revert the merge commit; both sides redeploy as they were.
+
 ## 5. Open questions
 
-### 5.1 How it ships
+None at the moment. New ones go here as the work turns them up.
 
-Every merge to `main` deploys the site. Options: one PR per step in section 6, each deploying a working site; or one large PR.
+## 6. Order
 
-## 6. Order (draft)
-
-Each step leaves a working site and backend (see 5.1 for how they ship).
+Commits on the one branch (4.13), in this order. Each still leaves a working site and backend, so the branch can be checked
+at every step.
 
 1. **Groundwork:** Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`, `tsconfig.json`, `vite.config.ts`,
    Vitest, `tsc --noEmit` in the workflow. `build.js` becomes ESM and gets the scripts from `vite build` (still plain JS, now with
