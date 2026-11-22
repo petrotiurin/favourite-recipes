@@ -31,7 +31,7 @@ both.
   No server-side rendering, no other hosting.
 - The browser only calls our backend, Supabase Auth and the site's own files. No secrets in the browser.
 - The backend stays the only writer to the repo. Recipes, `shopping-list.json` and `data/ingredients.json` keep their formats.
-- Pages are still rendered to HTML at build time from `recipes/*.md` (unless question 5.3 decides otherwise).
+- Pages are still rendered to HTML at build time from `recipes/*.md` (section 4.5: build-time HTML, taken over in the browser).
 
 ## 3. Proposed shape (updated as questions are decided)
 
@@ -89,63 +89,87 @@ a build step for the backend is needed. Checked the same way as 4.2, before the 
   without emptying it (`emptyOutDir: false`: the HTML comes from our build). `auth` and `chat` are left out of the inputs when their
   env vars aren't set, as today.
 - Our build writes the HTML, not Vite: Vite's `index.html` entry model isn't used for the pages.
-- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`). That makes 5.6 nearly
+- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`). That makes 5.4 nearly
   free.
 - **Dev server (to design):** `vite` serves the pages our build writes, and in dev `layout` links `/src/client/<name>.ts` so Vite
   can hot-reload them; the build re-runs on a change to a recipe or a renderer. To work out in step 1.
 
+### 4.5 Pages are rendered at build time and taken over in the browser, from one code
+
+The JS-off rule goes. Every page is still written to HTML by the build (fast first view on a weak signal, a readable page if a script
+fails, link previews), and the interactive parts are the same components, taken over in the browser (hydration). Replaces the
+double rendering of the shopping page (`templates/shopping-list.js` at build time, `shopping.js` in the browser) and the
+equivalent pairs elsewhere.
+
+- Rewritten in the same change as the first component: `design.md` ("Every page must read fine with JS off"),
+  `docs/chatbot-design.md` §2, `.claude/rules/site.md` and `chat.md`, the root `CLAUDE.md` part 2, and the "works without JS" code
+  comments. New rule: a page's content is in its HTML; JS may add features that only exist with JS.
+
+### 4.6 Preact for the components
+
+Small (≈4 KB), JSX, renders to a string at build time (`preact-render-to-string`) and hydrates in the browser; first-class Vite
+support (`@preact/preset-vite`).
+
+- **The chat's safety rule stays:** model text becomes DOM nodes, never HTML (`chat-render.test.js` today). In Preact: never
+  `dangerouslySetInnerHTML` for anything from the model or a user; the test moves to the component.
+- **JSX isn't erasable syntax**, so Node 24 can't run `.tsx` directly. That changes 4.1's "the build runs with `node build.ts`":
+  see question 5.1.
+
+### 4.7 Strict TypeScript; `chat.js` is split before it's converted
+
+- `"strict": true` for every converted file, from the start. Files are renamed `.js` → `.ts`/`.tsx` one at a time; a file
+  isn't checked until it's converted.
+- `chat.js` is first split into plain-JS modules along its existing seams (rendering, the `/chat` stream, the tray, the panel and
+  its sheets), each deployable, then each is converted.
+
+### 4.8 Data shapes are zod schemas in `shared/`
+
+Recipe frontmatter and ingredients, `shopping-list.json`, the catalogue, the page-context JSON and the `/chat` events are defined
+once as zod schemas in `shared/`, with their TypeScript types inferred (`z.infer`).
+
+- The site's build validates every recipe with the same schema the server writes with, replacing `checkIngredients` and the
+  frontmatter check in `build.js`.
+- The browser imports only the types (`import type`), so zod isn't in any bundle.
+- One zod version for both sides: `zod` becomes a dependency of `shared/package.json`. The backend is on zod 3 with
+  `zod-to-json-schema` (for the MCP tools' JSON Schema); zod 4 has `z.toJSONSchema` built in. Moving to 4 is a step of its own.
+
 ## 5. Open questions
 
-### 5.1 How strict, and how fast?
+### 5.1 How does the build run the components?
 
-- Strict from the start for new and converted files, converting file by file (rename `.js` → `.ts` when its turn comes).
-- Or a first pass with `allowJs` + `checkJs` over the untouched JS, then tightening.
-The open part is `chat.js`: converting 3,200 lines in one go vs splitting it into modules first (render, stream, tray, panel).
+The build has to render `.tsx` components to HTML, which Node can't run on its own (4.6).
 
-### 5.2 Typed data contracts, and validated at runtime?
+- **A. Vite does both builds:** `vite build` for the browser bundles, then `vite build --ssr` for a render entry
+  (`src/build/render.tsx`) that Node runs to write the pages. The standard pattern for a static site with Vite; one tool, one config,
+  and the dev server reuses it.
+- **B. `htm` instead of JSX:** tagged templates (`` html`<p>${x}</p>` ``) are plain JS, so `node build.ts` still works with no
+  build step. Less familiar, weaker type checking of the markup.
+- **C. `tsx` (the runner) for the build:** `tsx build.ts` handles JSX. One more tool, and Vite still bundles the browser side.
 
-The shapes the build, the browser and the backend share: a recipe's frontmatter and ingredients, `shopping-list.json`, the
-catalogue, the page-context JSON, the `/chat` events. Options: TypeScript types only; or zod schemas in `shared/` (the backend
-already uses zod) with the types inferred from them, so the build also validates recipes with the same rules as the server.
-Zod stays out of the browser bundles either way.
+### 5.2 Which parts are taken over in the browser?
 
-### 5.3 What replaces the JS-off rule? Where are pages rendered?
+- **Islands:** only the interactive parts hydrate (the servings selector, search, the shopping list, the chat). The rest of a page
+  stays plain HTML and ships no JS. Each island's data is embedded next to it.
+- **Whole pages:** every page hydrates. Simpler to reason about, but each page ships its whole content twice (HTML and the data to
+  rebuild it), the recipe page included.
 
-- **A. At build time, as today**, with JS-only features allowed on top.
-- **B. In the browser**, from data the build embeds (or fetches).
-- **C. Both, from one code:** pages are components, rendered to HTML by the build and taken over in the browser by the same code
-  (pre-rendering + hydration). Needs a UI library (5.4).
+### 5.3 Tests for the site
 
-What B costs, for this site:
-- **First view on a weak signal.** An empty page until the script downloads and runs. Most use is on a phone, and the shopping
-  list is opened in the shop.
-- **One script error blanks the page.** Today a broken `shopping.js` still leaves a readable list.
-- **Shared links.** WhatsApp/iMessage previews and search engines read the HTML: `<head>` tags can still be written at build time,
-  the body can't.
+There are no tests at the root today: the backend's tests (`node --test`) check the site's scripts. With `.tsx` components,
+`node --test` can't load them on its own (4.6).
 
-What A costs: the pages that are interactive anyway are rendered twice, once at build time and once in the browser. The shopping
-page today: `templates/shopping-list.js` writes the no-JS list, `shopping.js` redraws it. C removes that without B's costs.
+- **Vitest** for the site and `shared/`: it uses the Vite config, so JSX and imports work as in the build, and it can render
+  components in a fake DOM. The backend keeps `node --test` (plain `.ts`, no JSX).
+- **`node --test` everywhere**, with the components tested only through the built output.
 
-Either way `design.md`, `docs/chatbot-design.md` §2, `.claude/rules/site.md` and `chat.md`, and the "works without JS" code
-comments get rewritten.
+Either way the site's tests run in the Pages workflow before the build, and the backend's tests of shared code move to `shared/`.
 
-### 5.4 A UI library for the browser code?
-
-`chat.js` and `shopping.js` build a lot of DOM by hand. Options: none (plain DOM, now typed); a small one (Preact, Lit). Needed if 5.3 picks C (Preact
-is the usual fit: small, and Vite pre-renders it).
-
-### 5.5 Tests for the site
-
-There are no tests at the root today: the backend's tests check the site's scripts. Proposed: `node --test` at the root over
-`.ts` tests (no runner to install), run in the Pages workflow before the build, and the backend's tests over shared code
-move with it.
-
-### 5.6 File names and caching
+### 5.4 File names and caching
 
 Today `dist/` has fixed names (`chat.js`), so a phone may run yesterday's script against today's HTML. Bundling makes it easy to
 emit hashed names (`chat-3f9a.js`) that `layout` writes into the page. Worth doing in this migration or not.
 
-### 5.7 How it ships
+### 5.5 How it ships
 
 Every merge to `main` deploys the site. Options: one PR per step in section 6, each deploying a working site; or one large PR.
 
@@ -158,4 +182,4 @@ Every merge to `main` deploys the site. Options: one PR per step in section 6, e
 5. `chat`.
 6. The build and its renderers.
 7. The backend (section 4.3), after a preview test of `.ts` imports on Vercel.
-8. Rewrite the rules and docs that say vanilla JS or JS-off (5.3).
+8. Rewrite the rules and docs that say vanilla JS or JS-off (4.5).
