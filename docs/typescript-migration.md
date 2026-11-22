@@ -1,7 +1,8 @@
-# TypeScript and modules for the site: design
+# TypeScript, modules and Astro for the site: design
 
-Status: **decided, not started** (2026-11-22). The decisions are in section 4 and the order of work in section 6. When a new
-question comes up, add it to section 5; once decided, move it to section 4 with its consequences and update sections 3 and 6.
+Status: **decided, not started**; rewritten around Astro (2026-11-22). The decisions are in section 4, the open questions in
+section 5 and the order of work in section 6. When a question is decided, move it to section 4 with its consequences and update
+sections 3 and 6.
 
 ## 1. Why
 
@@ -17,185 +18,224 @@ what it costs us now is:
 2. **Large untyped scripts.** `templates/chat.js` (≈3,200 lines), `shopping.js` (≈800) and `auth.js` (≈600) read JSON the build
    embeds in each page (`#page-context`, `#shopping-data`, `#cook-recipe`) and the `/chat` event stream. Nothing checks that
    the build, the browser and the backend agree on those shapes.
-3. **Scripts linked through globals and hacks.** `chat.js` and `shopping.js` find sign-in through `window.RecipeAuth`;
+3. **Pages drawn twice.** The shopping page is rendered at build time by `templates/shopping-list.js` and again in the browser by
+   `shopping.js`, two codes that must agree.
+4. **Scripts linked through globals and hacks.** `chat.js` and `shopping.js` find sign-in through `window.RecipeAuth`;
    `chat.js` and `auth.js` end with `if (typeof module !== "undefined") module.exports = …` so the backend's tests can load
    them; `mcp-server/test/phase6.test.js` reads `templates/servings.js` as text.
-4. **Two module systems.** `build.js` and the renderers in `templates/` use CommonJS, while `mcp-server/` is ESM.
-
-Note: TypeScript gives the types. The modules come from ES `import` plus a bundler, and work just as well in plain JS. This doc does
-both.
+5. **Two module systems.** `build.js` and the renderers in `templates/` use CommonJS, while `mcp-server/` is ESM.
 
 ## 2. What stays the same
 
-- The one hard requirement (`CLAUDE.md`): the site is built in the Pages workflow and served as static files from GitHub Pages.
-  No server-side rendering, no other hosting.
+- **The one hard requirement** (`CLAUDE.md`): the site is built in the Pages workflow and served as static files from GitHub Pages.
+  Astro runs only inside that build (4.1); nothing of it runs after the deploy.
+- **The site stays light:** pages are HTML; only the interactive parts ship JS (4.6).
 - The browser only calls our backend, Supabase Auth and the site's own files. No secrets in the browser.
-- The backend stays the only writer to the repo. Recipes, `shopping-list.json` and `data/ingredients.json` keep their formats.
-- Pages are still rendered to HTML at build time from `recipes/*.md` (section 4.5: build-time HTML, taken over in the browser).
+- The backend stays the only writer to the repo. `recipes/*.md`, `images/recipes/`, `shopping-list.json` and `data/ingredients.json`
+  keep their formats and places, so the backend's writes don't change.
+- **Every URL stays:** `index.html`, `next-week.html`, `shopping-list.html`, `recipes/<slug>.html` under
+  `https://petrotiurin.github.io/favourite-recipes/`. The backend links to recipe pages (`pageUrl` in `mcp-server/lib/recipes.js`),
+  and people have them in chats and bookmarks.
+- `/chat` and `/stocktake` keep their request and response shapes.
 
 ## 3. Proposed shape
 
 ```
-src/pages/          one component per page (index, next-week, recipe, shopping) and the layout, .tsx: rendered to HTML at build time
-src/islands/        the interactive parts (servings, search, wakelock, cook-claude, shopping list, chat, sign-in), .tsx: rendered
-                    into the page's HTML and hydrated in the browser, each a Vite browser entry
-src/build/          the build: reads recipes/*.md, shopping-list.json, the catalogue; validates them (shared schemas); renders the pages
-shared/             logic, zod schemas and types used by the build, the browser and the backend; own package.json, "type": "module"
-vite.config.ts      one config for the browser build, the render build, the dev server and Vitest
-tsconfig.json       strict; tsc --noEmit runs in the Pages workflow
+astro.config.ts       output "static", site + base, build.format "file", the Preact integration
+src/content.config.ts the recipes collection: recipes/*.md, validated by the recipe schema from shared/
+src/pages/            index.astro, next-week.astro, shopping-list.astro, recipes/[slug].astro: one file per page (URL), plain HTML out
+src/components/       the static pieces, .astro: layout, site bar, tile, ingredient list, week headings. No JS in the browser
+src/islands/          the interactive pieces, Preact .tsx: servings, search, wake-lock, cook with Claude, shopping list, sign-in, chat
+src/lib/              site-only helpers (week rules and sorting, today templates/status.js)
+shared/               logic, zod schemas and types used by the site and the backend; own package.json, "type": "module"
+styles/style.css      still the one stylesheet, imported by the layout (Astro bundles it with a hashed name)
+recipes/, images/, data/, shopping-list.json   unchanged: the backend's files
+mcp-server/           the backend, unchanged in role; converted to TypeScript (4.10), imports shared/
 ```
 
-**The build, in the Pages workflow:** `tsc --noEmit`, `vitest run`, then `vite build` (the islands → `dist/assets/<name>-<hash>.js`
-and the manifest), `vite build --ssr src/build/render.tsx`, and `node` runs that render output, which writes every page's HTML into
-`dist/` with the manifest's hashed script names. `npm run build` does all of it. Images and the stylesheet are copied as today
-(the stylesheet may go through Vite too, for a hashed name).
+`build.js` and `templates/` are gone at the end: Astro's pages, components and islands replace them.
 
-**The backend** stays a separate Vercel project, converted to `.ts` (4.3), importing `shared/`. `.claude/rules/kept-in-step.md` is
-deleted once its five pieces are in `shared/`.
+**The Pages workflow** runs `npm ci` then `npm run build`, which is `astro check` (types, including `.astro` files) + `vitest run` +
+`astro build`, and uploads `dist/` as today. **Locally:** `npm run dev` is `astro dev` (live reload on a change to a recipe, a page
+or an island); `npm run build` + `npx astro preview` to see the real output.
 
 ## 4. Decided
 
-### 4.1 Node 24 everywhere
+### 4.1 Astro builds the site, as a static site only
+
+Astro is a widely used framework for content sites built around islands (4.6). It does what we'd otherwise write ourselves: read
+the Markdown recipes against a schema, render pages to HTML, bundle each island's script with hashed names, a dev server, TypeScript.
+Vite is underneath.
+
+- **Static only:** `output: "static"` and no server adapter installed. Astro then runs once, in the GitHub Actions build, writes
+  plain files into `dist/`, and GitHub Pages serves them. A page that tried to render per visit fails the build. No load on any
+  server, and the backend is untouched.
+- **The URLs:** `site: "https://petrotiurin.github.io"`, `base: "/favourite-recipes"`, `build.format: "file"` (writes
+  `recipes/<slug>.html`, not `recipes/<slug>/index.html`). Links inside pages go through the base. **To check in step 1:** that
+  `astro dev` also answers the `.html` URLs.
+- **Recipe Markdown** is rendered by Astro's Markdown (remark, GitHub-flavoured) instead of `marked`. The two can differ in small
+  ways, so step 4 compares the pages' text before and after.
+- **The build time** grows by some seconds; visitors don't see it.
+
+### 4.2 Node 24 everywhere
 
 - `.github/workflows/deploy.yml`: `node-version: 24` (today 20).
 - `mcp-server/package.json`: `"engines": { "node": "24.x" }` (today 22.x). The Vercel project is already set to 24.x but
   `engines` overrides it: every build logs that warning, three times. That warning goes away.
-- Root `package.json`: add `"engines": { "node": ">=24" }` and `"type": "module"`.
-- **Native type stripping.** Node 24 runs `.ts` files directly, including `node --test` on `.ts` tests. The backend and `shared/`
-  rely on this; the site's build goes through Vite because of JSX (4.6, 4.9). It only strips type
-  annotations; it doesn't compile. That rules out TypeScript syntax that generates code (`enum`, `namespace`, constructor parameter
-  properties, `import x = require()`). The tsconfig sets `"erasableSyntaxOnly": true` so `tsc` flags them. Relative imports keep their
-  `.ts` extension (`import { x } from "./status.ts"`; tsconfig `allowImportingTsExtensions`).
-- Local development needs Node 24 too: add an `.nvmrc` with `24`.
+- Root `package.json`: add `"engines": { "node": ">=24" }` and `"type": "module"`. Local development: an `.nvmrc` with `24`.
+- **Native type stripping:** Node 24 runs `.ts` files directly (only types are removed, nothing is compiled). The backend and
+  `shared/` rely on this, so they can't use TypeScript syntax that generates code (`enum`, `namespace`, constructor parameter
+  properties): their tsconfig sets `"erasableSyntaxOnly": true`, and relative imports keep the `.ts` extension
+  (`allowImportingTsExtensions`). The site's own files go through Astro, which handles `.astro` and `.tsx`.
 
-### 4.2 Shared code lives in a top-level `shared/`
+### 4.3 Shared code lives in a top-level `shared/`
 
 Tested on a preview deploy of the backend (2026-11-22): a function in `mcp-server/api/` importing `../../shared/x.js` builds and
 runs, so the Vercel project ships files outside its root directory. The first try failed with "Named export not found… is a
 CommonJS module": Node reads a file's module type from the nearest `package.json`, and the root one has no `"type": "module"`.
 With `shared/package.json` saying `{ "type": "module" }` it returned 200, so Vercel also ships that `package.json`.
 
-- `shared/` has its own `package.json` (`"type": "module"`, no dependencies of its own unless needed by both sides).
+- `shared/` has its own `package.json` (`"type": "module"`).
 - `mcp-server/vercel.json`: `ignoreCommand` becomes `git diff --quiet HEAD^ HEAD -- . ../shared`, or a change only in `shared/`
   never redeploys the backend.
 - `deploy.yml` needs nothing: it only ignores `mcp-server/**`, so a `shared/` change rebuilds the site.
-- One shared change deploys both sides. It must therefore keep both working in the same commit.
+- One shared change deploys both sides, so it must keep both working in the same commit.
+- `.claude/rules/kept-in-step.md` is deleted once its five pieces are in `shared/`.
 
-### 4.3 The backend moves to TypeScript in this migration
-
-After the site, as its own steps (section 6). Vercel builds `.ts` functions in `api/`, and the tests run on `.ts` with Node 24.
-**To test on a preview first:** that Vercel's build accepts relative imports written with the `.ts` extension (the form Node's type
-stripping needs), from `api/` into `lib/` and into `../shared/`. If it doesn't, tsconfig's `rewriteRelativeImportExtensions` or
-a build step for the backend is needed. Checked the same way as 4.2, before the backend's first converted file.
-
-### 4.4 Vite bundles the browser code
-
-- `vite build` with one input per island (`src/islands/*.tsx`, `build.rollupOptions.input`), output into `dist/`
-  without emptying it (`emptyOutDir: false`: the HTML comes from our build). `auth` and `chat` are left out of the inputs when their
-  env vars aren't set, as today.
-- Our build writes the HTML, not Vite: Vite's `index.html` entry model isn't used for the pages.
-- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`, 4.12).
-- **Dev server (to design):** `vite` serves the pages our build writes, and in dev `layout` links `/src/islands/<name>.tsx` so Vite
-  can hot-reload them; the build re-runs on a change to a recipe or a renderer. To work out in step 1.
-
-### 4.5 Pages are rendered at build time and taken over in the browser, from one code
-
-The JS-off rule goes. Every page is still written to HTML by the build (fast first view on a weak signal, a readable page if a script
-fails, link previews), and the interactive parts are the same components, taken over in the browser (hydration). Replaces the
-double rendering of the shopping page (`templates/shopping-list.js` at build time, `shopping.js` in the browser) and the
-equivalent pairs elsewhere.
-
-- Rewritten in the same change as the first component: `design.md` ("Every page must read fine with JS off"),
-  `docs/chatbot-design.md` §2, `.claude/rules/site.md` and `chat.md`, the root `CLAUDE.md` part 2, and the "works without JS" code
-  comments. New rule: a page's content is in its HTML; JS may add features that only exist with JS.
-
-### 4.6 Preact for the components
-
-Small (≈4 KB), JSX, renders to a string at build time (`preact-render-to-string`) and hydrates in the browser; first-class Vite
-support (`@preact/preset-vite`).
-
-- **The chat's safety rule stays:** model text becomes DOM nodes, never HTML (`chat-render.test.js` today). In Preact: never
-  `dangerouslySetInnerHTML` for anything from the model or a user; the test moves to the component.
-- **JSX isn't erasable syntax**, so Node 24 can't run `.tsx` directly. So the site's build goes through Vite
-  (4.9).
-
-### 4.7 Strict TypeScript; `chat.js` is split before it's converted
-
-- `"strict": true` for every converted file, from the start. Files are renamed `.js` → `.ts`/`.tsx` one at a time; a file
-  isn't checked until it's converted.
-- `chat.js` is first split into plain-JS modules along its existing seams (rendering, the `/chat` stream, the tray, the panel and
-  its sheets), each deployable, then each is converted.
-
-### 4.8 Data shapes are zod schemas in `shared/`
+### 4.4 Data shapes are zod schemas in `shared/`
 
 Recipe frontmatter and ingredients, `shopping-list.json`, the catalogue, the page-context JSON and the `/chat` events are defined
 once as zod schemas in `shared/`, with their TypeScript types inferred (`z.infer`).
 
-- The site's build validates every recipe with the same schema the server writes with, replacing `checkIngredients` and the
-  frontmatter check in `build.js`.
-- The browser imports only the types (`import type`), so zod isn't in any bundle.
-- One zod version for both sides: `zod` becomes a dependency of `shared/package.json`. The backend is on zod 3 with
-  `zod-to-json-schema` (for the MCP tools' JSON Schema); zod 4 has `z.toJSONSchema` built in. Moving to 4 is a step of its own.
+- The recipes collection (`src/content.config.ts`) uses the recipe schema, so `astro build` fails on a bad recipe with the same
+  rules the backend writes with, plus a check that every ingredient's `item` is in `data/ingredients.json`. That replaces
+  `checkIngredients` and the frontmatter check in `build.js`.
+- The browser imports only types (`import type`), so zod isn't in any browser script.
+- **One zod for everything:** Astro brings its own zod (`astro/zod`), and `defineCollection` expects a schema from that zod's major
+  version. `shared/` depends on the same major version, and the backend moves to it too: today it's on zod 3 with
+  `zod-to-json-schema`, and zod 4 has `z.toJSONSchema` built in. **To check in step 1:** which zod the Astro we install uses, and
+  that a schema from `shared/` is accepted by `defineCollection`.
 
-### 4.9 Vite runs both builds
+### 4.5 The JS-off rule goes; pages are still HTML
 
-`vite build` bundles the islands for the browser; `vite build --ssr` builds the render entry, which Node runs to write the pages.
-One tool and one config for the browser code, the pages, the dev server and the tests (4.11).
+Every page is written to HTML by the build: fast first view on a weak signal (the shop), a readable page if a script fails, link
+previews in WhatsApp and iMessage. JS may now add features that only exist with JS.
 
-### 4.10 Islands: only the interactive parts are hydrated
+Rewritten in step 4: `design.md` ("Every page must read fine with JS off"), `docs/chatbot-design.md` §2, `.claude/rules/site.md`
+and `chat.md`, the root `CLAUDE.md` part 2, and the "works without JS" code comments.
 
-The servings selector, search, the wake-lock and "Cook with Claude" buttons, the shopping list, sign-in and the chat. Everything
-else (the book, a recipe's text and photo, next week) is plain HTML and ships no JS. Each island's data is embedded next to it as
-JSON (as `#shopping-data` and `#cook-recipe` are today) and validated by its `shared/` type. A page loads only its islands' scripts.
+### 4.6 Islands: only the interactive parts ship JS
 
-### 4.11 Vitest for the site and `shared/`
+An island is one interactive part of a page. Astro writes it into the page's HTML at build time like everything else, and only
+the islands ship a script that takes them over in the browser. Everything else is `.astro` components, which ship no JS.
 
-It reads `vite.config.ts`, so JSX and imports work as in the build, and it renders components in a fake DOM (`happy-dom`). The
-backend keeps `node --test` on plain `.ts`. The backend's tests of site code (`phase6.test.js` reading `servings.js`,
-`ingredients.test.js`, `chat-render.test.js`) move to `shared/` or to the island they test.
+| Island | Pages | Loads (Astro directive) |
+| --- | --- | --- |
+| Search | home | `client:load` |
+| Servings selector | recipe (when scalable) | `client:visible` |
+| Keep screen on, Cook with Claude | recipe | `client:visible` |
+| Shopping list and stocktake | shopping | `client:load` |
+| Sign-in | where the shopping list or chat needs it | with them |
+| Chat | every page, when `CHAT_API_URL` is set | question 5.2 |
 
-### 4.12 Hashed script names
+- An island's data is passed as props; Astro writes them into the page next to the island. That replaces the `#shopping-data` and
+  `#cook-recipe` blocks. `#page-context` stays, written by the layout, for the chat.
+- **Islands that need the same state** (the chat and the shopping list both need sign-in) share it through one module, a small
+  store with `@preact/signals`. That replaces `window.RecipeAuth`.
+- `auth` and the chat appear only when their env vars are set at build time (`SUPABASE_URL` + `SUPABASE_ANON_KEY`,
+  `CHAT_API_URL`), as today.
+- **Weight:** a page with no islands ships no JS. A page with islands gets Preact (≈4 KB, cached across pages), Astro's island
+  loader (≈1 KB, in the page) and its islands' code.
 
-Each build names a script after its contents (`chat-3f9a.js`), and each page links the exact file it was built with (from Vite's
-manifest). With fixed names a phone can run yesterday's cached `chat.js` against today's page; with hashed names a page always gets
-the script that matches it.
+### 4.7 Preact for the islands
 
-### 4.13 It ships as one PR
+Small (≈4 KB), JSX, Astro's `@astrojs/preact` integration. Only islands are Preact; pages and static parts are `.astro`.
 
-The steps in section 6 are commits on one long-lived branch, merged to `main` once at the end. That means one site deploy and
-one backend deploy, at the same time.
+- **The chat's safety rule stays:** model text becomes DOM nodes, never HTML (`chat-render.test.js` today). In Preact: never
+  `dangerouslySetInnerHTML` for anything from the model or a user; the test moves to the component.
+
+### 4.8 Strict TypeScript; `chat.js` is split before it's converted
+
+- The site's tsconfig extends `astro/tsconfigs/strict`; the backend and `shared/` are strict too (4.2). `astro check` and `tsc`
+  run in the build.
+- `chat.js` is first split into modules along its existing seams (rendering, the `/chat` stream, the tray, the panel and its
+  sheets), then each becomes components.
+
+### 4.9 Vitest for the site and `shared/`
+
+It reads Astro's Vite config (`getViteConfig` from `astro/config`), so JSX and imports work as in the build. Islands are tested in a
+fake DOM (`happy-dom`); `.astro` components through Astro's Container API (renders a component to HTML in a test). The backend keeps
+`node --test`. The backend's tests of site code (`phase6.test.js` reading `servings.js`, `ingredients.test.js`,
+`chat-render.test.js`) move to `shared/` or to the island they test.
+
+### 4.10 The backend moves to TypeScript in this migration
+
+After the site, as the last code step. Vercel builds `.ts` functions in `api/`, and the tests run on `.ts` with Node 24.
+**To test on a preview first:** that Vercel's build accepts relative imports written with the `.ts` extension, from `api/` into
+`lib/` and into `../shared/`. If it doesn't, tsconfig's `rewriteRelativeImportExtensions` or a build step for the backend is needed.
+Checked the same way as 4.3.
+
+### 4.11 Hashed script names
+
+Astro names every script and the stylesheet after their contents (`_astro/chat.3f9a.js`), and each page links the exact files it
+was built with. With fixed names a phone can run yesterday's cached `chat.js` against today's page; with hashed names a page always
+gets the files that match it. Astro's default; nothing to build.
+
+### 4.12 It ships as one PR
+
+The steps in section 6 are commits on one long-lived branch, merged to `main` once at the end: one site deploy and one backend
+deploy, at the same time.
 
 - **Checking it before the merge:** Pages doesn't deploy branches, so the site is checked locally: `npm run build` on the branch,
-  compared with `dist/` built from `main` (the pages' text should only change where a step meant it to), and clicked through in a
-  browser (servings, search, the shopping list and stocktake, sign-in, the chat against the preview backend). The backend gets a
-  Vercel preview per push, as in 4.2.
-- **`main` keeps moving:** the MCP server commits recipes, photos, the catalogue and the shopping list to `main` every week. Those
+  its pages' text compared with `dist/` built from `main` (it should only change where a step meant it to), and clicked through in
+  a browser (servings, search, the shopping list and stocktake, sign-in, the chat against the preview backend). The backend gets a
+  Vercel preview per push, as in 4.3.
+- **`main` keeps moving:** the backend commits recipes, photos, the catalogue and the shopping list to `main` every week. Those
   files keep their formats, so merging `main` into the branch regularly is cheap. Changes to `templates/`, `build.js`,
   `styles/` or `mcp-server/` on `main` while the branch is open conflict with the migration: hold them, or port them to the branch
   in the same week.
-- **`/chat` and `/stocktake` keep their request and response shapes** through the migration, so the old site works with the new
-  backend and the reverse, whichever deploy finishes first.
 - **Rollback:** revert the merge commit; both sides redeploy as they were.
 
 ## 5. Open questions
 
-None at the moment. New ones go here as the work turns them up.
+### 5.1 Recipe photos: as they are, or sized by Astro?
+
+Today every tile loads the full photo: the backend stores each one as a JPEG up to 1600px on the long edge, and a tile shows it
+about 180px wide on a phone. 72 recipes, 19 MB of photos.
+
+- **A. Sized by Astro:** its `<Image>` / `<Picture>` make a few smaller sizes of each photo in a modern format (WebP or AVIF) at build
+  time, and the phone picks the one it needs. The home page's photos shrink to a fraction of their size. `images/recipes/` and the
+  frontmatter's `image:` don't change. Costs build time (each photo resized every build, unless the Actions cache keeps them).
+- **B. As they are:** copied into `dist/` unchanged, as today.
+
+### 5.2 When does the chat's script load?
+
+Today `chat.js` loads in full on every page.
+
+- **A. When the browser is idle** after the page has loaded (`client:idle`). Built into Astro.
+- **B. When the bubble is tapped:** the bubble is plain HTML, the chat's code loads on the first tap. Lightest; needs a small custom
+  Astro directive, and the first tap waits for the download.
 
 ## 6. Order
 
-Commits on the one branch (4.13), in this order. Each still leaves a working site and backend, so the branch can be checked
-at every step.
+Commits on the one branch (4.12), in this order. Each leaves a site that builds and works, so the branch can be checked at every
+step.
 
-1. **Groundwork:** Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`, `tsconfig.json`, `vite.config.ts`,
-   Vitest, `tsc --noEmit` in the workflow. `build.js` becomes ESM and gets the scripts from `vite build` (still plain JS, now with
-   hashed names) instead of copying them. Dev server working.
+1. **Groundwork:** Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`. Astro with the Preact integration,
+   `astro.config.ts` (static, base, `build.format: "file"`), strict tsconfig, Vitest, `npm run build` / `dev`. The first pages are
+   thin: each `.astro` page calls the existing renderer and outputs its HTML (`<Fragment set:html={…} />`), and the existing
+   scripts are served as they are. The same site, built by Astro. The checks marked "to check in step 1" (4.1, 4.4).
 2. **`shared/`:** the five kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
    gets `../shared`; delete `.claude/rules/kept-in-step.md`.
-3. **Schemas:** the zod schemas in `shared/` (recipe, ingredients, shopping list, catalogue, page context); the build validates with
-   them; the backend's recipe format uses them.
-4. **Pages as components:** layout, tiles, index, next-week, recipe; the render build replaces `templates/*.js` renderers. Same HTML
-   out (compare `dist/` before and after). Rewrite the JS-off rules (4.5).
-5. **Small islands:** servings, search, wakelock, cook-claude.
-6. **Shopping and sign-in islands:** one render for the shopping list; `window.RecipeAuth` becomes an import.
-7. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
-8. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.3), then `lib/`, `api/` and the tests.
+3. **Schemas:** the zod schemas in `shared/`; the recipes collection validates with them, and the catalogue check; the backend's
+   recipe format uses them.
+4. **Pages and components:** layout, site bar, tile, ingredient list, index, next week, recipe and the static parts of the
+   shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
+   rules (4.5).
+5. **Photos**, as 5.1 decides.
+6. **Small islands:** search, servings, wake-lock, cook with Claude.
+7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
+8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
+9. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
+10. **Docs and skills:** the root `CLAUDE.md` (directory layout, build and preview commands), `.claude/rules/site.md` and
+    `shopping-list.md`, the `add-recipe` skill (its build step), `mcp-server/CLAUDE.md` where it names site files.
