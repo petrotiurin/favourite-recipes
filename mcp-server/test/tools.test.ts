@@ -181,7 +181,7 @@ test("search: ingredients match the bolded names, case-insensitively", async () 
   assert.deepEqual(await slugs({ include_ingredients: ["chicken", "lemon"] }), ["lemon-chicken"]);
   assert.deepEqual(await slugs({ include_ingredients: ["chicken"], exclude_ingredients: ["Peanuts"] }), ["lemon-chicken"]);
   assert.deepEqual(await slugs({ exclude_ingredients: ["salt"] }), ["porridge", "chicken-nut-salad"]);
-  // only the bolded ingredient names count, not the surrounding text
+  // only the ingredient names count, not the surrounding text
   assert.deepEqual(await slugs({ include_ingredients: ["golden"] }), []);
 });
 

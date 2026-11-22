@@ -144,7 +144,7 @@ const norm = (x: unknown): string => String(x).trim().toLowerCase();
 
 /**
  * Filters the book. All filters are optional and combine with AND:
- * text (every word in the title or body), include_ingredients / exclude_ingredients (substring of a bolded ingredient name),
+ * text (every word in the title or body), include_ingredients / exclude_ingredients (substring of an ingredient name from the frontmatter),
  * course, tags (all of them), max_calories, max_minutes, draft, week ("this" | "next" | "none").
  * Returns compact rows in the list_recipes order (this week, next week, the rest).
  */

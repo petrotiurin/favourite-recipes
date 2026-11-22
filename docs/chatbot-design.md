@@ -275,7 +275,7 @@ than dropping them.
 
 | Tool | Notes |
 | --- | --- |
-| `search_recipes` | **New.** Filters: text, ingredients (include/exclude, matched on the bolded ingredient names), course, tags, max calories, max minutes, status (draft) and week (this week / next week / neither). Returns compact rows. "Chicken under 300 kcal" needs ingredient matching, which `list_recipes` doesn't have. |
+| `search_recipes` | **New.** Filters: text, ingredients (include/exclude, matched on the ingredient names; bolded in the method when this was written, the frontmatter now), course, tags, max calories, max minutes, status (draft) and week (this week / next week / neither). Returns compact rows. "Chicken under 300 kcal" needs ingredient matching, which `list_recipes` doesn't have. |
 | `get_recipe` | Existing. |
 | `get_shopping_list` | Existing ("do we need eggs?"). |
 
