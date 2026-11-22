@@ -282,8 +282,8 @@ test("traces keep photos whole (Langfuse uploads data URIs as media) but still c
   const { clip } = await import("../lib/langfuse.ts");
   const photoUrl = `data:image/jpeg;base64,${"A".repeat(60_000)}`;
   const out = clip([{ role: "user", content: [{ type: "text", text: "x".repeat(60_000) }, { type: "image_url", image_url: { url: photoUrl } }] }]);
-  assert.equal(out[0].content[1].image_url.url, photoUrl);
-  assert.ok(out[0].content[0].text.length < 41_000);
+  assert.equal(out[0].content[1].image_url?.url, photoUrl);
+  assert.ok((out[0].content[0].text ?? "").length < 41_000);
 });
 
 test("photos of chats that no longer exist are swept", async () => {

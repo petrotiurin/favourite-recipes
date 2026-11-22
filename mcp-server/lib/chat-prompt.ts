@@ -3,8 +3,9 @@
 import { createHash } from "node:crypto";
 import { config } from "./config.ts";
 import { chatGuide } from "./workflows.ts";
+import type { ToolDefinition } from "./types/chat.ts";
 
-export const SUGGEST_REPLIES_TOOL = {
+export const SUGGEST_REPLIES_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "suggest_replies",
@@ -40,7 +41,7 @@ export const SUGGEST_REPLIES_TOOL = {
   },
 };
 
-export const SHOW_RECIPES_TOOL = {
+export const SHOW_RECIPES_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "show_recipes",
@@ -59,7 +60,7 @@ export const SHOW_RECIPES_TOOL = {
   },
 };
 
-export const ASK_USER_TOOL = {
+export const ASK_USER_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "ask_user",
@@ -80,7 +81,7 @@ export const ASK_USER_TOOL = {
   },
 };
 
-export const REVIEW_DRAFTS_TOOL = {
+export const REVIEW_DRAFTS_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "review_drafts",
@@ -93,7 +94,7 @@ export const REVIEW_DRAFTS_TOOL = {
   },
 };
 
-export const REVIEW_OPTIONAL_TOOL = {
+export const REVIEW_OPTIONAL_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "review_optional",
@@ -104,7 +105,7 @@ export const REVIEW_OPTIONAL_TOOL = {
   },
 };
 
-export const OFFER_NAVIGATION_TOOL = {
+export const OFFER_NAVIGATION_TOOL: ToolDefinition = {
   type: "function",
   function: {
     name: "offer_navigation",
@@ -193,7 +194,7 @@ Safety`
 const EDITOR_GUIDE = `The plan-recipes workflow (the same guide agents follow through the MCP server). Where it mentions batch_changes, AskUserQuestion, upload links or committing, the "In chat" section at the end replaces that: you stage into the tray, ask with ask_user, and a person saves.\n\n${chatGuide()}`;
 
 /** The stable part of the system prompt: instructions, then the whole-book catalogue. Editors get the tray instructions and the plan-recipes guide. */
-export function systemPrompt(catalogueLines: any, { editor = false }: any = {}) {
+export function systemPrompt(catalogueLines: string, { editor = false }: { editor?: boolean } = {}) {
   return `${editor ? `${EDITOR_INSTRUCTIONS}\n\n${EDITOR_GUIDE}` : INSTRUCTIONS}\n\nCatalogue of our recipe book (${catalogueLines ? catalogueLines.split("\n").length : 0} recipes):\n${catalogueLines || "(unavailable right now: use search_recipes)"}`;
 }
 
