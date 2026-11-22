@@ -26,7 +26,7 @@ that only exist with JS. The build-time parts are `.astro` and `.ts` files in `s
   shopping page's numbers and data, `recipe-text.ts` for the "Cook with Claude" text, `env.ts` for the build's public variables,
   `json.ts`, `site-data.ts` for the recipes and the shopping list, and what the islands use: `icons.ts`, `servings.ts` (the store), `rescale.ts`,
   `tile-filter.ts`, `cook-prompt.ts`, `reload-guard.ts`, `shopping-state.ts` (the shopping list's numbers and what the browser keeps for it), `auth.ts`
-  (the sign-in store), `hydrated.ts`), each with a Vitest test.
+  (the sign-in store), `hydrated.ts`), most with a Vitest test next to them (`*.test.ts`).
 - `src/islands/`: Preact (`.tsx`, strict). The page is written to HTML with the island's markup in it at build time and the island takes it over in the
   browser (`<astro-island>`; data comes in as props). Each has a test in `islands.test.tsx`, `shopping.test.tsx`, `signin.test.tsx` or `chat/*.test.tsx` (happy-dom). An island that only fills in the page's own
   markup (servings rescales the `.qty` amounts, search hides tiles) does it with the same ids and classes as before, which the chat reads too.

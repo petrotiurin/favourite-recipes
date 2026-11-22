@@ -73,7 +73,9 @@ npx astro preview    # serves the built dist/ under /favourite-recipes/
 ```
 
 Pages link their files under `/favourite-recipes/`, so `npx serve dist` and opening `dist/index.html` directly don't work (no styles, broken links): use `dev` or `preview`.
-`npm test` runs only Vitest; the backend has its own (`cd mcp-server && npm test`). The chat, sign-in and stocktake exist only on a build with the
+`npm test` runs only Vitest (the site's and `shared/`'s tests, next to the code); the backend has its own (`cd mcp-server && npm test`: `tsc -p .` first, then `node --test`).
+After an edit (`.claude/settings.json`, PostToolUse hooks), `.claude/hooks/run-site-tests.sh` runs the Vitest tests that cover the edited `src/`, `shared/` or `styles/` file (`vitest related`; all of them for `astro.config.ts`, `vitest.config.ts` or the catalogue) and `.claude/hooks/run-mcp-tests.sh` runs the backend's tests after an edit to `mcp-server/` or to what it uses (`shared/`, `src/lib/chat/clean.ts`, the catalogue); both are silent unless something fails.
+The chat, sign-in and stocktake exist only on a build with the
 public variables set (`CHAT_API_URL`, `SUPABASE_URL` + `SUPABASE_ANON_KEY`, `STOCKTAKE_API_URL`); `cd mcp-server && npm run dev` builds the site with them against fake services.
 
 Run `npm run build` after adding or editing any recipe and sanity-check the new page before committing (`npm run build` fails on a recipe that breaks the schema, naming the file and field).

@@ -10,7 +10,7 @@ go. In the editor chat today that is slow and fragile:
 
 | What happens | Where | Effect with 6 photos |
 | --- | --- | --- |
-| At most 4 photos per message | `MAX_PHOTOS = 4` in `src/lib/chat/photo-files.ts` (then `templates/chat.js`), `MAX_IMAGES = 4` in `mcp-server/lib/chat-uploads.ts` | Has to be split over two messages. |
+| At most 4 photos per message | `MAX_PHOTOS = 4` in `src/lib/chat/photo-files.ts` (then `templates/chat.js`), `MAX_IMAGES = 4` in `mcp-server/lib/chat-uploads.ts` (both 8 now, section 2.7) | Has to be split over two messages. |
 | At most 4 photos re-sent to the model | `REPLAY_MAX_IMAGES = 4` in `lib/chat-store.ts` (newest first) | After a 4 + 2 split, the next turn sees the 2 new photos and only 2 of the first 4. Unstaged recipes from the first message are lost or written from memory. |
 | The model types each recipe out as tool arguments | `stage_create_recipe` takes the whole recipe | 1–2k output tokens per recipe (plus thinking), so about 10k+ tokens written **one after another** by one model. That is the slow part. |
 | Turn limits | `MAX_CALLS_PER_ROUND = 4`, `MAX_TOOL_CALLS_PER_TURN = 10`, `MAX_TOOL_ROUNDS = 6` in `lib/chat.ts`; `CHAT_TURN_BUDGET_MS` 200s; `CHAT_EDITOR_MAX_TOKENS` 16k | Six recipes plus reading the catalogue sits right at the edges: "taking longer than expected", or a reply cut off at `max_tokens`. |
@@ -112,7 +112,7 @@ How the call is made:
 - Images and the system prompt only; no other messages. Low temperature.
 - Its own `max_tokens` and timeout (section 3).
 
-A test (`test/photo-reader.test.js`) checks the request the reader sends: no `tools` other than the forced schema, no
+A test (`mcp-server/test/photo-reading.test.ts`) checks the request the reader sends: no `tools` other than the forced schema, no
 catalogue or chat-prompt text, no user message text, only image parts plus the fixed instruction.
 
 ### 2.4 Stage from what was read (P4)
@@ -379,7 +379,7 @@ The reader is configured on its own, separately from the conversation:
 - Its prompt holds nothing private: no catalogue, no conversation, no editor details. A photo can't get the reader to
   reveal anything because the reader has nothing to reveal.
 - `read_recipe_photos` is `access: "read"` with `editorOnly: true`, enforced in `offeredTools`, `dispatch` and the handler,
-  like `fetch_url`. Not registered on `/mcp`. The registry test (`test/tools.test.js`) covers it automatically.
+  like `fetch_url`. Not registered on `/mcp`. The registry test (`mcp-server/test/tools.test.ts`) covers it automatically.
 - The queue only ever holds photos the editor uploaded to their own conversation (`chat-uploads` paths checked by
   `isUploadPath` and the conversation id); the only-photos shortcut runs after the same sign-in and `EDITORS` checks as any
   editor message.
@@ -450,7 +450,7 @@ Decided:
 Where the code lives: `lib/photo-reader.ts` (the reader call, normalising its answer, grouping, duplicates), `lib/photo-reader-prompt.ts` (prompt,
 schema, `PHOTO_READER_PROMPT_VERSION`), `lib/photo-queue.ts` (enqueue, drainers, report, corrections, kick), `lib/follow-up.ts` (the follow-up turn,
 `afterTurn`), `read_recipe_photos` and `from_photo` / `keep_both` in `lib/tools.ts`, the routes in `api/chat.ts`, migration
-`supabase/migrations/20261112000000_photo_reads.sql`, tests in `test/photo-reading.test.js`.
+`supabase/migrations/20261112000000_photo_reads.sql`, tests in `mcp-server/test/photo-reading.test.ts`.
 
 Details decided while building:
 

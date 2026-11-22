@@ -83,7 +83,7 @@ window you need (`since: "30m"`), and when the event you're after is older, don'
 | Everything for one request | `get_runtime_logs` with `requestId` (from any log line) | an editor's turn runs under `waitUntil` after the stream closes, so its late lines (`Saving the answer failed`, `Background job failed`) belong to the same request but come after the response: read to the end |
 | Where a request spent its time | `get_project_trace` with `requestId` | 1h retention too; use it for slow Supabase/OpenRouter/GitHub calls. For the model's own timing and tokens use Langfuse instead, which keeps days |
 | Did a deploy cause it | `list_deployments` (`projectId`, `target: "production"`, `limit: 5`) then `get_deployment` | compare the deploy's `createdAt` with the first error; `state` READY / ERROR / CANCELED. CANCELED "Ignored Build Step" is normal for commits outside `mcp-server/` (`ignoreCommand` in `vercel.json`). Note the deployed commit's SHA and check it contains the fix you're reasoning about |
-| Why a build failed | `list_deployment_events` with `builds: 1` (use `direction: "backward"`, `limit: 100` for the tail) | the usual causes are an import/dependency problem or a missing `workflows/**` file (`includeFiles` in `vercel.json`) |
+| Why a build failed | `list_deployment_events` with `builds: 1` (use `direction: "backward"`, `limit: 100` for the tail) | the usual causes are an import/dependency problem or a `.ts` file or folder missing from `includeFiles` in `vercel.json` (`lib/**`, `../shared/**`, `workflows/**`); Vercel's build log also prints TypeScript errors without failing the build |
 | Is an env var set | `filter_project_envs` (`idOrName`) | read the **names and targets** only (Production / Preview / Development); never pass `decrypt`. Variables are per target, so "works on preview, not production" is often a missing var. Expected names: `OPENROUTER_API_KEY`, `OPENROUTER_CHAT_PUBLIC_KEY`, `OPENROUTER_CHAT_EDITOR_KEY`, `CHAT_PUBLIC_MODEL`, `CHAT_EDITOR_MODEL`, `CHAT_ENABLED`, `CHAT_PUBLIC_ENABLED`, `EDITORS`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LANGFUSE_*` (see `mcp-server/README.md` and `lib/config.ts`). Env changes only apply to the next deployment, so also check the running deployment is newer than the change |
 
 Habits that save time when the question is "the agent did something wrong":
@@ -99,7 +99,7 @@ Habits that save time when the question is "the agent did something wrong":
 4. **Compare production with preview** when only one misbehaves: pass `environment: "production" | "preview"` to
    `get_runtime_logs` and compare env var targets.
 5. **A turn that "just stopped"** is usually the function limit or the turn budget, not a crash: look for `Chat turn stopped after`
-   (200s budget / 250s deadline, `lib/chat.ts`) before suspecting an exception, and check that the stored row/marker exists
+   (200s budget / 250s deadline, `lib/config.ts`, used in `lib/chat.ts`) before suspecting an exception, and check that the stored row/marker exists
    (editor turns finish server-side even if the phone dropped the stream).
 6. **Report observed vs suspected.** Quote the log line and its time; label anything inferred (for example "no error line because
    Vercel only keeps an hour") as a suspicion.

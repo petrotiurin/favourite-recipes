@@ -25,10 +25,12 @@ Settings, routes and deploys are in `README.md`; the chat's design is in `../doc
   products in the shop's own guide). A server deploy updates them for every client.
 - **TypeScript, run as written.** `api/`, `lib/`, `scripts/` and `test/` are `.ts` (strict, `erasableSyntaxOnly`: no enums, namespaces or
   parameter properties; use `declare` for fields a subclass sets). Node 24 strips the types, so relative imports keep the `.ts` extension. `npm test`
-  runs `tsc -p .` first, then `node --test` on the `.ts` tests. Vercel only ships `.ts` files named in `vercel.json`'s `includeFiles`: a new top-level
+  runs `tsc -p .` first, then `node --test` on the `.ts` tests (`.claude/hooks/run-mcp-tests.sh` runs it after an edit to a file it covers; the site's Vitest tests have their own hook). Vercel only ships `.ts` files named in `vercel.json`'s `includeFiles`: a new top-level
   folder the functions import from must be added there. Data shapes come from `../shared/` (zod); the backend's own shapes (the caller, recipe inputs and index rows, shopping-list rows and edits, the tray's items and cards,
-  Supabase rows) are in `lib/types/` (`import type`), and `lib/errors.ts` has `errorMessage(err)` for `catch (err)` (always `unknown`). Untrusted JSON is `unknown` until checked; some of
-  the older code is still typed with explicit `any` at its JSON edges (OpenRouter, the chat): tighten as you touch it.
+  Supabase rows, the OpenRouter and chat-stream shapes, the photo pipeline) are in `lib/types/` (`import type`); `lib/errors.ts` has `errorMessage(err)` / `errorStatus(err)` for `catch (err)` (always `unknown`)
+  and `lib/narrow.ts` (`asRecord`, `toList`, `isTimeoutError`) is how untrusted JSON (a model's answer, an API body, a page's JSON-LD) is read: it stays `unknown` until checked. `api/` and `lib/` have no explicit `any`; keep it that way
+  (`scripts/` and `test/` are still loose where fakes and fixtures are involved). The pages the backend serves carry inline browser scripts in template literals, which `tsc` can't see into: write them as plain
+  JavaScript (no type annotations); `test/inline-scripts.test.ts` parses them.
 - Local harness: `npm run dev` (`scripts/dev.ts`): backend on :8787 and the built site on :4000 with fake GitHub / OpenRouter /
   Supabase (`scripts/fakes.ts`) and sign-in accounts; the test accounts and ports are at the top of `scripts/dev.ts`.
 

@@ -180,7 +180,7 @@ Finish with one message to the user containing the items below. **Whenever you l
    - 3 red onions (for the tacos and the salsa)
    - Parsley
 
-7. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute, and that the new list starts without a stocktake: they can sign in there and tap "What's at home?" to tick what they already have, so the Ocado shop only buys the rest.
+7. **Link to the shopping page** (`…/shopping-list.html`) and a note that the site updates in about a minute, and that the new list starts without a stocktake: they can sign in there and open the "At home" tab to set what they already have, so the Ocado shop only buys the rest.
 
 Keep it factual and short; don't repeat the recipe steps.
 

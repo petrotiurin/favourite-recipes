@@ -91,9 +91,9 @@ Alternatives considered:
 
 Today the tools are defined inline in `lib/server.ts` (`registerTool` with zod schemas). Pull them
 into a registry (`lib/tools.ts`: name, description, zod schema, handler, `access: "read" | "stage" | "write"`, see 4.1)
-that both `server.js` (MCP) and `api/chat.ts` (Claude tool definitions via zod → JSON Schema)
-consume. Without this, the two tool sets will drift, the same way CLAUDE.md already warns about
-for `recipe-format.js` and the add-recipe skill.
+that both `lib/server.ts` (MCP) and `lib/chat.ts` (the model's tool definitions via zod → JSON Schema, `toolDefinitions`)
+consume (done: the registry exists, as built). Without this, the two tool sets will drift, the same way the recipe format's
+prose and the add-recipe skill can drift from `shared/recipe.ts` (the schema is the source of truth).
 
 ### D3. Models and spend → **OpenRouter, two keys, two models** (decided)
 

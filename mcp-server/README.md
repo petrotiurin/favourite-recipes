@@ -39,13 +39,13 @@ Internally every write goes through a `ChangeSet` (`lib/github.ts`): reads see w
 ## What's enforced
 
 - **Deletion is limited to drafts.** `remove_draft` is the only way a recipe leaves the site, and it refuses anything without `draft: true` (promoted recipes are protected) and any draft with `next: true` (planned for next week). `assertAllowedPath` still applies to the deleted recipe and photo paths.
-- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.ts`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}` and `shopping-list.json`. The server can't change its own code, the site's code (`src/`, `astro.config.ts`, `shared/`) or the workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
+- **Allowed paths.** Every commit goes through `assertAllowedPath` (`lib/github.ts`), which only accepts `recipes/<slug>.md`, `images/recipes/<slug>.{jpg,jpeg,png,webp}`, `shopping-list.json` and `data/ingredients.json` (the catalogue). The server can't change its own code, the site's code (`src/`, `astro.config.ts`, `shared/`) or the workflows. The agent never writes a path or raw file anyway: it passes structured fields and the server builds the file.
 - **Format.** The input schemas match the `add-recipe` skill:
   - `course` is an enum.
   - `total_mins`, `serves` and `calories` (kcal per serving) must be positive integers.
-  - Each ingredient is `{quantity, name, note}`. The server bolds the name, and a missing quantity is rejected unless the note says "to taste"/"to serve".
+  - Each ingredient is data, `{ amount, unit, name, note, optional, section, item }` (the zod schema in `../shared/recipe.ts`, which the site's build uses too; `docs/structured-ingredients.md`). The server fills `item` (the id in the ingredient catalogue, `data/ingredients.json`) from the name, checks every amount converts, and refuses with the exact fix (set `item`, or send a `catalogue` change with the recipe). A missing amount is rejected unless the note says "to taste"/"to serve".
   - Instructions are numbered by the server, and you get a warning if an ingredient is mentioned without being bolded.
-  - Quantities stay in the ingredient list, because the site's servings selector rescales only that list. ASCII fractions ("1/2") are converted to "½" so they scale. You get a warning if a step repeats an amount (e.g. "add 37.5g **sugar**"); the server's instructions tell the agent to write "half the **sugar**" / "the remaining **sugar**" instead.
+  - Amounts live only in the ingredient list, because the site's servings selector rescales only that list (the page writes each amount as `data-qty`). You get a warning if a step repeats an amount (e.g. "add 37.5g **sugar**"); the server's instructions tell the agent to write "half the **sugar**" / "the remaining **sugar**" instead.
   - `scalable: false` (optional) hides the servings selector, for recipes whose ingredient list can't be multiplied.
   - New recipes are drafts (`draft: true`) by default, and the server's instructions tell the agent to keep it that way until the family has tried the dish, then call `promote_recipe`, or `remove_draft` if they didn't like it. The site marks a draft only by a line on its recipe page (tiles are labelled by week); being a draft says nothing about the week.
   - The slug is derived from the title.
@@ -159,5 +159,6 @@ The endpoint is `https://<vercel-domain>/mcp`.
 ```
 cd mcp-server
 npm install
-npm test        # unit tests + end-to-end MCP tests against a fake GitHub
+npm test        # tsc -p . (types), then node --test: unit tests + end-to-end MCP tests against a fake GitHub
+npm run typecheck   # just the types
 ```
