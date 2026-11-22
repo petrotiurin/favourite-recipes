@@ -156,7 +156,7 @@ test("toolDefinitions: plain JSON Schema, filtered by role", () => {
 test("the functions that commit throw for a public caller (or none), before touching GitHub", async (t) => {
   t.mock.method(console, "warn", () => {});
   const change = [{ path: "recipes/a.md", content: Buffer.from("x") }];
-  for (const caller of [PUBLIC, undefined, {}]) {
+  for (const caller of [PUBLIC, undefined, {}] as never[]) { // a caller with no role is not a Caller: the guards must still refuse it
     await assert.rejects(() => commitChanges(change, "m", caller), /Refusing to commit/);
     const cs = new ChangeSet();
     cs.write("recipes/a.md", Buffer.from("x"));

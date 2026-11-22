@@ -113,7 +113,7 @@ Adding the photo, best option first:
 The server resizes to <=1600px, fixes rotation, strips metadata and stores it as images/recipes/<slug>.jpg.`;
 
 /** The prompts (workflow guides) and the registry's tools, each tool call going through dispatch() as the agent caller. */
-export function buildServer({ origin }: any) {
+export function buildServer({ origin }: { origin: string }) {
   const server = new McpServer({ name: "favourite-recipes", version: "1.0.0" }, { instructions: INSTRUCTIONS });
 
   for (const [name, wf] of Object.entries(WORKFLOWS)) {
@@ -150,7 +150,7 @@ export function buildServer({ origin }: any) {
         inputSchema: tool.inputSchema,
         ...(accessOf(tool) === "read" ? { annotations: { readOnlyHint: true } } : {}),
       },
-      (args: any) => dispatch(tool.name, args, AGENT, { origin })
+      (args) => dispatch(tool.name, args, AGENT, { origin })
     );
   }
 

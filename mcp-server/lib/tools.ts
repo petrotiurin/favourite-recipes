@@ -14,7 +14,20 @@ import { SECTIONS, SHOP_UNITS } from "./catalogue.ts";
 import { ingredientsOf } from "./recipe-format.ts";
 import { recipesFromHome } from "./at-home.ts";
 import { runOperation, weekLines, switchLines } from "./operations.ts";
-import type { TrayItemOf } from "./types/tray.ts";
+import type { OperationOutcome } from "./operations.ts";
+import { errorMessage } from "./errors.ts";
+import type { CommitResult } from "./github.ts";
+import type { Caller, Week } from "./types/common.ts";
+import type { CreateRecipeInput, Ingredient, ImageInput, IngredientRow, ListRow, RecipeSummary, StoredIngredient, UpdateRecipeInput } from "./types/recipe.ts";
+import type { CatalogueChange } from "./types/catalogue.ts";
+import type { ListEdit, ShoppingList, ShoppingSectionInput, StoredShoppingList } from "./types/shopping.ts";
+import type { PhotoNumber, PhotoReadRow } from "./types/rows.ts";
+import type { TrayItem, TrayItemOf, TrayOp } from "./types/tray.ts";
+import type { ChatToolContext, DispatchContext, FunctionTool, ToolAccess, ToolContext, ToolDef, ToolResult } from "./types/tools.ts";
+
+/** A stored line as the line formatters take it (a file may say `optional: false`, which reads like leaving it out). */
+const asLine = (i: StoredIngredient): Partial<Ingredient> => i as Partial<Ingredient>;
+import type { StageSpec } from "./tray.ts";
 import { stageOp, dropItem, resolveClash, loadTray, replay, trayNote, assertCanStage, warmReads, finaliseState } from "./tray.ts";
 import { getMessages } from "./chat-store.ts";
 import { readsOf, enqueuePhotos, applyCorrections, readerConfigured } from "./photo-queue.ts";
@@ -59,7 +72,8 @@ import {
 // A recipe's ingredients are data (docs/structured-ingredients.md section 1): the page, the servings selector and the shopping list are
 // generated from these fields. The server fills `item` from the name (the catalogue's names and aliases) and checks every amount converts.
 /** A recipe's ingredient lines as Markdown list rows, with a "Sauce:" line above each section's rows. */
-const grouped = (ingredients: any, line: any) => ingredientGroups(ingredients).flatMap((g) => [...(g.section ? [`${g.section}:`] : []), ...g.items.map((i) => `- ${line(i)}`)]);
+const grouped = (ingredients: readonly StoredIngredient[], line: (i: Partial<Ingredient>) => string): string[] =>
+  ingredientGroups(ingredients.map(asLine)).flatMap((g) => [...(g.section ? [`${g.section}:`] : []), ...g.items.map((i) => `- ${line(i)}`)]);
 
 // The ingredient's fields (types, descriptions, messages) are shared/recipe.ts's: the site's build checks the same rules.
 const ingredientSchema = ingredientObject;
@@ -200,7 +214,7 @@ const listEditSchema = z
     scale: z.object({ item: itemId, factor: z.number().positive().max(10) }).optional(),
     remember: z.boolean().optional().describe("merge / move / rename only: also change the ingredient catalogue, for every week"),
   })
-  .refine((e) => ["round_up", "merge", "note", "move", "rename", "drop", "scale"].filter((k) => (e as any)[k] !== undefined).length === 1, "Each edit is exactly one of round_up, merge, note, move, rename, drop, scale")
+  .refine((e) => (["round_up", "merge", "note", "move", "rename", "drop", "scale"] as const).filter((k) => e[k] !== undefined).length === 1, "Each edit is exactly one of round_up, merge, note, move, rename, drop, scale")
   .describe("One patch to the built list.");
 
 const servingsSchema = z
@@ -233,54 +247,74 @@ const operationSchema = z.discriminatedUnion("action", [
  * The stored list as a compact table for the chat: "Section | Name | quantity | have | recipes", recipes as R1, R2 (a legend first).
  * Names are exactly what stage_stocktake wants.
  */
-export function compactListLines(list: any) {
-  const slugs = [...new Set<any>((list.sections || []).flatMap((s: any) => s.items.flatMap((i: any) => i.recipes || [])))];
-  const tag = new Map<any, any>(slugs.map((slug, i) => [slug, `R${i + 1}`]));
-  const have = (h: any) => (h === true ? "at home" : typeof h === "number" ? `have ${h}` : "");
+export function compactListLines(list: ShoppingList): string[] {
+  const slugs = [...new Set((list.sections || []).flatMap((s) => s.items.flatMap((i) => i.recipes || [])))];
+  const tag = new Map<string, string>(slugs.map((slug, i) => [slug, `R${i + 1}`]));
+  const have = (h: boolean | number | undefined) => (h === true ? "at home" : typeof h === "number" ? `have ${h}` : "");
   return [
     `Stored list${list.stocktake ? ` (stocktake ${list.stocktake})` : ""}, 2-serving amounts, one line per item: Section | Name | quantity | at home | recipes`,
     ...(slugs.length ? [`Recipes: ${slugs.map((s) => `${tag.get(s)}=${s}`).join(", ")}`] : []),
-    ...(list.sections || []).flatMap((s: any) => s.items.map((i: any) => [s.name, i.name, i.quantity || "", have(i.have), (i.recipes || []).map((r: any) => tag.get(r)).join(",")].join(" | "))),
+    ...(list.sections || []).flatMap((s) => s.items.map((i) => [s.name, i.name, i.quantity || "", have(i.have), (i.recipes || []).map((r) => tag.get(r)).join(",")].join(" | "))),
   ];
 }
 
-function ok(text: any, extra: any[] = []) {
+function ok(text: string, extra: ToolResult["content"] = []): ToolResult {
   return { content: [{ type: "text", text }, ...extra] };
 }
 
-function fail(err: any, caller: any) {
+function fail(err: unknown, caller: Caller | undefined): ToolResult {
   const expected = err instanceof UserError || err instanceof ShoppingListError;
   // An unexpected error (GitHub, Supabase, a bug) can carry internal detail: it goes to the log, and only the MCP agent, who is
   // trusted, sees it. Everyone else (a visitor in the chat) gets a generic line.
-  const msg = expected ? err.message : caller?.role === "agent" ? `Server error: ${err.message}` : "Something went wrong on the server. Try again in a moment.";
+  const msg = expected ? err.message : caller?.role === "agent" ? `Server error: ${errorMessage(err)}` : "Something went wrong on the server. Try again in a moment.";
   if (!expected) console.error(err);
   return { content: [{ type: "text", text: msg }], isError: true };
 }
 
-const safe = (fn: any) => async (args: any, ctx: any) => {
-  try {
-    return await fn(args, ctx);
-  } catch (err: any) {
-    return fail(err, ctx?.caller);
-  }
-};
+/** Runs a handler and turns whatever it throws into a result the caller can read (see fail). */
+const safe =
+  <A>(fn: (args: A, ctx: ToolContext) => Promise<ToolResult> | ToolResult) =>
+  async (args: A, ctx: ToolContext): Promise<ToolResult> => {
+    try {
+      return await fn(args, ctx);
+    } catch (err) {
+      return fail(err, ctx?.caller);
+    }
+  };
 
-function shoppingResult({ list, next, commit }: any) {
-  const items = list.sections.reduce((n: any, s: any) => n + s.items.length, 0);
+/** A commit's result where the write was not a staged one (no ChangeSet was passed, so it committed). */
+function committed(commit: CommitResult | null): CommitResult {
+  if (!commit) throw new Error("The write did not commit");
+  return commit;
+}
+
+function shoppingResult({ list, next, commit }: { list: StoredShoppingList; next: ListRow[]; commit: CommitResult | null }): string {
+  const items = list.sections.reduce((n, s) => n + s.items.length, 0);
   return [
-    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${next.length} next-week recipe${next.length === 1 ? "" : "s"}) and committed to main: ${commit.url}`,
+    `Saved the shopping list (${items} items in ${list.sections.length} sections, covering ${next.length} next-week recipe${next.length === 1 ? "" : "s"}) and committed to main: ${committed(commit).url}`,
     `It will be live in about a minute at ${shoppingPageUrl()}`,
     "",
     "The page keeps showing this list until you call update_shopping_list again, so refresh it whenever next week's recipes change (the switch to a new week doesn't touch it).",
     "A new list starts without a stocktake: the user marks what's already at home on the page (signed in), and get_shopping_list then shows what's left to buy.",
     "",
     "Covers (planned servings, which the page opens on):",
-    ...next.map((r: any) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}: ${list.servings[r.slug]}`),
+    ...next.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}: ${list.servings[r.slug]}`),
   ].join("\n");
 }
 
-function resultText(verb: any, { slug, markdown, commit, draft, week, warnings, catalogueLines }: any) {
-  const lines: any[] = [];
+/** What the tools that write a recipe say about it. */
+interface WrittenRecipe {
+  slug: string;
+  markdown: string;
+  commit: CommitResult | null;
+  draft?: boolean;
+  week?: Week | null;
+  warnings?: string[];
+  catalogueLines?: string[];
+}
+
+function resultText(verb: string, { slug, markdown, commit, draft, week, warnings, catalogueLines }: WrittenRecipe): string {
+  const lines: string[] = [];
   if (catalogueLines?.length) lines.push(...catalogueLines, "");
   if (commit) {
     lines.push(`${verb} "${slug}" and committed to main: ${commit.url}`);
@@ -291,7 +325,7 @@ function resultText(verb: any, { slug, markdown, commit, draft, week, warnings, 
     lines.push("", `It's a draft. Once the user has cooked it and wants to keep it, call promote_recipe with slug "${slug}".`);
   }
   if (warnings?.length) {
-    lines.push("", "Warnings (consider fixing with update_recipe):", ...warnings.map((w: any) => `- ${w}`));
+    lines.push("", "Warnings (consider fixing with update_recipe):", ...warnings.map((w) => `- ${w}`));
   }
   lines.push("", "Saved file:", "```markdown", markdown.trimEnd(), "```");
   return lines.join("\n");
@@ -304,31 +338,32 @@ function resultText(verb: any, { slug, markdown, commit, draft, week, warnings, 
 // /mcp (lib/server.ts skips stage tools), where the write tools keep committing as before. Planning always targets NEXT week.
 const reasonSchema = z.string().max(120).optional().describe('One short line for the card: why this change, e.g. "from the quick dinners chat". Plain text, no emoji.');
 
-const needChat = (ctx: any) => {
+function needChat(ctx: ToolContext): asserts ctx is ChatToolContext {
   if (!ctx?.chat) throw new UserError("That tool only works inside the chat.");
   assertCanStage(ctx.caller);
-};
+}
 
-/** Runs one staging call and says what happened, for the model. */
+/** The words the card uses for a recipe field. */
+const FIELD_WORDS: Record<string, string> = { total_mins: "time", instructions: "steps", course: "course" };
+
 /** What a staged item is, in a few plain words, for the confirmation line ("Avocado Toast — new time"). */
-export async function stagedLabel(item: any) {
+export async function stagedLabel(item: TrayItem | null | undefined): Promise<string> {
   if (!item) return "";
-  const op = item.op || {};
-  const titles = new Map<any, any>((await recipeSummaries().catch(() => [])).map((r: any) => [r.slug, r.title]));
-  const name = (slug: any) => titles.get(slug) || String(slug).replace(/-/g, " ");
+  const titles = new Map<string, string>((await recipeSummaries().catch((): RecipeSummary[] => [])).map((r) => [r.slug, r.title]));
+  const name = (slug: string) => titles.get(slug) || String(slug).replace(/-/g, " ");
   switch (item.kind) {
     case "new":
-      return op.title;
+      return item.op.title;
     case "edit": {
-      const fields = Object.keys(op).filter((k) => !["action", "slug", "image"].includes(k)).map((k) => ({ total_mins: "time", instructions: "steps", course: "course" })[k] || k.replace(/_/g, " "));
-      return `${name(op.slug)} — new ${fields.length ? fields.join(", ") : "photo"}`;
+      const fields = Object.keys(item.op).filter((k) => !["action", "slug", "image"].includes(k)).map((k) => FIELD_WORDS[k] || k.replace(/_/g, " "));
+      return `${name(item.op.slug)} — new ${fields.length ? fields.join(", ") : "photo"}`;
     }
     case "promote":
-      return `${name(op.slug)} becomes a regular recipe`;
+      return `${name(item.op.slug)} becomes a regular recipe`;
     case "remove":
-      return `${name(op.slug)} removed`;
+      return `${name(item.op.slug)} removed`;
     case "next":
-      return `${(op.slugs || []).map(name).join(", ")} ${op.add ? "in" : "out of"} next week`;
+      return `${(item.op.slugs || []).map(name).join(", ")} ${item.op.add ? "in" : "out of"} next week`;
     case "switch":
       return "the switch to a new week";
     case "list":
@@ -342,9 +377,13 @@ export async function stagedLabel(item: any) {
   }
 }
 
-async function staged(spec: any, ctx: any, onStaged?: any) {
+/** What stageOp resolves. */
+type Staged = Awaited<ReturnType<typeof stageOp>>;
+
+/** Runs one staging call and says what happened, for the model: the text of the result. */
+async function stagedText(spec: StageSpec & { notes?: string[] }, ctx: ToolContext, onStaged?: (out: Staged) => Promise<void>): Promise<string> {
   needChat(ctx);
-  const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle, trace: ctx.chat.trace });
+  const out = await stageOp(spec, ctx.caller, { conversationTitle: ctx.chat.conversationTitle ?? undefined, trace: ctx.chat.trace });
   if (onStaged) await onStaged(out);
   ctx.chat.emit?.({ type: "tray", added: out.item ? [out.item.id] : [], label: await stagedLabel(out.item).catch(() => "") });
   const n = out.tray?.items?.length ?? 0;
@@ -354,8 +393,10 @@ async function staged(spec: any, ctx: any, onStaged?: any) {
   for (const w of out.warnings || []) lines.push(`warning: ${w}`);
   for (const note of spec.notes || []) lines.push(`note: ${note}`);
   if (out.needs) lines.push("This tray changes next week, so the site rebuilds next week's shopping list in the tray with every change (no work for you); Finalise list reviews it before Save.");
-  return ok(lines.join("\n"));
+  return lines.join("\n");
 }
+
+const staged = async (spec: StageSpec & { notes?: string[] }, ctx: ToolContext, onStaged?: (out: Staged) => Promise<void>): Promise<ToolResult> => ok(await stagedText(spec, ctx, onStaged));
 
 const attachmentSchema = z
   .number()
@@ -366,20 +407,24 @@ const attachmentSchema = z
   .describe("Use a photo the user attached in this chat as the recipe's photo: its number (photo-6 -> 6). Only when the user said to use their photo for this recipe (usually a photo of the dish); it wins over image_url.");
 
 /** The stored path of attached photo `n` (1-based) of the current message, or a UserError the model can read. */
-export const asksToUsePhoto = (text: any) =>
-  /\b(use|keep|take|set|make|put|have|want)\b[^.!?\n]{0,40}\b(this|that|these|my|the|attached|it)\b[^.!?\n]{0,30}\b(photos?|pictures?|pics?|images?)\b/i.test(text || "") ||
-  /\bas (?:the |its |a )?(?:recipe'?s? |main |hero |card )?(?:photo|picture|pic|image)\b/i.test(text || "") ||
-  /\b(use|keep) (?:it|this|that) as (?:the |its )?(?:photo|picture|pic|image)\b/i.test(text || "");
+export const asksToUsePhoto = (text: unknown): boolean => {
+  const t = String(text || "");
+  return (
+    /\b(use|keep|take|set|make|put|have|want)\b[^.!?\n]{0,40}\b(this|that|these|my|the|attached|it)\b[^.!?\n]{0,30}\b(photos?|pictures?|pics?|images?)\b/i.test(t) ||
+    /\bas (?:the |its |a )?(?:recipe'?s? |main |hero |card )?(?:photo|picture|pic|image)\b/i.test(t) ||
+    /\b(use|keep) (?:it|this|that) as (?:the |its )?(?:photo|picture|pic|image)\b/i.test(t)
+  );
+};
 
 /**
  * The stored path of attached photo `n` (1-based) of the current message. The photo only becomes a recipe's card photo when the user's
  * message asks for that ("use this as the photo"): a model passing it unasked (a screenshot of a recipe's text is not its photo) is ignored,
  * logged, and told so. Returns { path } or { ignored: "..." }.
  */
-const attachedPath = (n: any, ctx: any) => {
+const attachedPath = (n: number | undefined, ctx: ToolContext): { path?: string; ignored?: string } => {
   if (n === undefined) return {};
   // the conversation's photo numbers (photo-6), as the panel's badges show them
-  const path = ctx.chat?.photos?.length ? ctx.chat.photos.find((p: any) => p.n === n)?.path : ctx.chat?.attachments?.[n - 1]?.path;
+  const path = ctx.chat?.photos?.length ? ctx.chat.photos.find((p) => p.n === n)?.path : ctx.chat?.attachments?.[n - 1]?.path;
   if (!path) throw new UserError(`There is no photo-${n} in this chat.`);
   if (!asksToUsePhoto(ctx.chat?.userText)) {
     console.warn("Ignored photo_from_attachment: the user's message didn't ask to use their photo as the recipe's photo");
@@ -388,12 +433,12 @@ const attachedPath = (n: any, ctx: any) => {
   return { path };
 };
 
-const asAttachment = (n: any, ctx: any) => {
+const asAttachment = (n: number | undefined, ctx: ToolContext): { uploadPath: string | undefined; notes?: string[] } => {
   const { path, ignored } = attachedPath(n, ctx);
   return { uploadPath: path, ...(ignored ? { notes: [ignored] } : {}) };
 };
 
-const createFields = Object.fromEntries(Object.entries<any>(createShape).filter(([k]) => !["image", "week"].includes(k)));
+const { image: _createImage, week: _createWeek, ...createFields } = createShape;
 const stageCreateShape = {
   from_photo: z
     .string()
@@ -401,45 +446,56 @@ const stageCreateShape = {
     .optional()
     .describe('Stage the recipe the photo reader read off the user\'s photos, by its id from the site\'s "photos read" note, e.g. "photo-3" or "photo-3+4" (screenshots read together). Then pass only what the user changed (course, serves, a corrected title…): every other field comes from the photo.'),
   keep_both: z.boolean().optional().describe("With from_photo: stage it even though it looks like a recipe already in the tray or the book. Only when the user said to add theirs anyway."),
-  ...Object.fromEntries(Object.entries<any>(createFields).map(([k, v]) => [k, v.optional()])),
+  ...z.object(createFields).partial().shape,
   image_url: z.string().url().optional().describe("A link to the recipe's page or straight to its photo (http/https). Its photo (og:image) is used; leave out to have a photo generated."),
   photo_from_attachment: attachmentSchema,
   next_week: z.boolean().optional().describe("Default true: the recipe is planned for next week. false only to add it to the book without planning it."),
   reason: reasonSchema,
 };
-const stageUpdateShape: Record<string, any> = {
-  ...updateShape,
+const { image: _updateImage, ...updateFields } = updateShape;
+const stageUpdateShape = {
+  ...updateFields,
   image_url: z.string().url().optional().describe("A link to a page or photo to take a new photo from."),
   new_photo: z.boolean().optional().describe("true: make a new generated photo for it."),
   photo_from_attachment: attachmentSchema,
   reason: reasonSchema,
 };
-delete stageUpdateShape.image;
 
 async function recipeIngredientsSafe() {
   const { recipeIngredients } = await import("./recipes.ts");
-  return recipeIngredients().catch(() => []);
+  return recipeIngredients().catch((): IngredientRow[] => []);
 }
 
-async function markStaged(rows: any, itemId: any) {
+async function markStaged(rows: readonly PhotoReadRow[], itemId: string) {
   const { rest, q } = await import("./chat-store.ts");
-  await rest("photo_reads", { method: "PATCH", query: q({ id: `in.(${rows.map((r: any) => r.id).join(",")})` }), body: { tray_item_id: itemId } });
+  await rest("photo_reads", { method: "PATCH", query: q({ id: `in.(${rows.map((r) => r.id).join(",")})` }), body: { tray_item_id: itemId } });
+}
+
+/** What the photo reader read for a `from_photo` id, ready to stage. */
+interface PhotoRecipe {
+  fields: Record<string, unknown>;
+  /** The fields the reader had to estimate (not in the photo). */
+  estimated: string[];
+  rows: PhotoReadRow[];
+  /** The tray items staged from these photos before. */
+  staged: string[];
+  label: string;
 }
 
 /**
  * What the photo reader read for `from_photo` ("photo-3+4") in THIS conversation: { fields, estimated, rows, staged (tray item ids staged from
  * them before), label }. Only the conversation the turn belongs to can resolve its photo ids; anything else is "not in this chat".
  */
-async function photoRecipe(id: any, ctx: any) {
-  const ns = parsePhotoId(id);
+async function photoRecipe(id: string, ctx: ToolContext): Promise<PhotoRecipe> {
+  const ns: number[] | null = parsePhotoId(id);
   if (!ns) throw new UserError(`"${id}" isn't a photo id: use the id from the site's note, like "photo-3" or "photo-3+4".`);
   const conversationId = ctx.chat?.conversationId;
-  const rows = conversationId ? await readsOf(conversationId) : [];
-  const byN = new Map<any, any>(rows.map((r: any) => [r.n, r]));
-  const label = photoLabel(ns);
+  const rows: PhotoReadRow[] = conversationId ? await readsOf(conversationId) : [];
+  const byN = new Map<number, PhotoReadRow>(rows.map((r) => [r.n, r]));
+  const label: string = photoLabel(ns);
   const gone = ns.filter((n) => !byN.has(n));
   if (gone.length) throw new UserError(`${gone.map((n) => `photo-${n}`).join(", ")} isn't a photo that was read in this chat.`);
-  const members = ns.map((n) => byN.get(n));
+  const members = ns.flatMap((n) => byN.get(n) ?? []); // every n is in byN (gone is empty)
   if (members.some((r) => r.status === "queued" || r.status === "reading")) throw new UserError(`${label} is still being read: wait for the site's note.`);
   const bad = members.find((r) => r.status !== "read");
   if (bad) throw new UserError(`photo-${bad.n} ${bad.status === "skipped" ? "was skipped" : `couldn't be read (${bad.error || "the reader failed"})`}: ask the user for a clearer photo or the text.`);
@@ -453,14 +509,19 @@ async function photoRecipe(id: any, ctx: any) {
   if (!read) throw new UserError(`${label} hasn't been read together yet: wait for the site's note.`);
   if (read.kind === "dish") throw new UserError(`${label} is a photo of a dish, not a recipe. It can be a recipe's photo (photo_from_attachment) if the user asks.`);
   if (read.kind !== "recipe") throw new UserError(`${label} isn't a recipe.`);
-  const { fields, estimated }: any = fieldsFromRead(read);
-  for (const k of Object.keys(fields)) if (Array.isArray(fields[k]) && !fields[k].length && k !== "tags") delete fields[k];
+  const { fields, estimated }: { fields: Record<string, unknown>; estimated: string[] } = fieldsFromRead(read);
+  for (const [k, v] of Object.entries(fields)) if (Array.isArray(v) && !v.length && k !== "tags") delete fields[k];
   if (!fields.title) delete fields.title;
-  return { fields, estimated, rows: members, staged: [...new Set<any>(members.map((r) => r.tray_item_id).filter(Boolean))], label };
+  return { fields, estimated, rows: members, staged: [...new Set(members.map((r) => r.tray_item_id).filter((x): x is string => !!x))], label };
+}
+
+/** Defines a registry entry: the handler's arguments are typed from its inputSchema (dispatch() parses them with it before calling). */
+function defineTool<S extends z.ZodRawShape>(tool: ToolDef<S>): ToolDef {
+  return tool;
 }
 
 const STAGE_TOOLS: ToolDef[] = [
-  {
+  defineTool({
     name: "stage_create_recipe",
     title: "Stage a new recipe",
     description:
@@ -468,96 +529,94 @@ const STAGE_TOOLS: ToolDef[] = [
       "It goes into next week unless next_week is false. A photo is made at once in the background: pass image_url (the recipe's page or photo) if the user gave a link, else it is generated. Staging the same title again replaces it.",
     inputSchema: stageCreateShape,
     access: "stage",
-    handler: safe(async ({ from_photo, keep_both, image_url, photo_from_attachment, next_week, reason, ...given }: any, ctx: any) => {
+    handler: safe(async ({ from_photo, keep_both, image_url, photo_from_attachment, next_week, reason, ...given }, ctx) => {
       needChat(ctx);
-      let fields = given;
-      let fromRows: any = null;
-      let replaces: any[] = [];
-      const notes: any[] = [];
+      let merged: Record<string, unknown> = given;
+      let fromRows: PhotoReadRow[] | null = null;
+      let replaces: string[] = [];
+      const notes: string[] = [];
       if (from_photo !== undefined) {
         const read = await photoRecipe(from_photo, ctx);
-        fields = { ...read.fields, ...Object.fromEntries(Object.entries<any>(given).filter(([, v]) => v !== undefined)) };
+        merged = { ...read.fields, ...Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)) };
         fromRows = read.rows;
         replaces = read.staged;
-        if (read.estimated.length) notes.push(`estimated (not in the photo): ${read.estimated.map((e: any) => e.replace("total_mins", "time")).join(", ")}; say so`);
+        if (read.estimated.length) notes.push(`estimated (not in the photo): ${read.estimated.map((e) => e.replace("total_mins", "time")).join(", ")}; say so`);
         reason = `from photo ${read.label.replace(/^photo-/, "").replace(/\+/g, " + ")}`; // the card names its photos (a model's own reason can be made up)
       }
-      const parsed = z.object(createFields).safeParse(fields);
+      const parsed = z.object(createFields).safeParse(merged);
       if (!parsed.success) {
         const missing = parsed.error.issues.map((i) => i.path.join(".") || "(root)");
-        throw new UserError(from_photo !== undefined ? `The photo doesn't give everything a recipe needs (${[...new Set<any>(missing)].join(", ")}). Ask the user for the missing part (another screenshot, or the text), or pass it yourself if they told you.` : `Invalid arguments: ${parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}`);
+        throw new UserError(from_photo !== undefined ? `The photo doesn't give everything a recipe needs (${[...new Set(missing)].join(", ")}). Ask the user for the missing part (another screenshot, or the text), or pass it yourself if they told you.` : `Invalid arguments: ${parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ")}`);
       }
-      fields = parsed.data;
+      const fields = parsed.data;
       const tray = await loadTray();
       if (from_photo !== undefined && !keep_both) {
-        const trayNew = (tray?.items || []).filter((i: any) => i.kind === "new").map((i: any) => ({ id: i.id, title: i.op.title, ingredients: (i.op.ingredients || []).map((x: any) => x.name), added_by: i.added_by?.name || "Someone" }));
-        const book = (await recipeIngredientsSafe()).map((r: any) => ({ slug: r.slug, title: r.title, ingredients: r.ingredients }));
-        const { match } = findDuplicate({ title: fields.title, ingredients: fields.ingredients.map((i: any) => i.name) }, { tray: trayNew, book, skipIds: replaces });
+        const trayNew = (tray?.items || []).filter((i): i is TrayItemOf<"new"> => i.kind === "new").map((i) => ({ id: i.id, title: i.op.title, ingredients: (i.op.ingredients || []).map((x) => x.name), added_by: i.added_by?.name || "Someone" }));
+        const book = (await recipeIngredientsSafe()).map((r) => ({ slug: r.slug, title: r.title, ingredients: r.ingredients }));
+        const { match } = findDuplicate({ title: fields.title, ingredients: fields.ingredients.map((i) => i.name) }, { tray: trayNew, book, skipIds: replaces });
         if (match?.kind === "tray") return ok(`Not staged: it looks like "${match.title}", which ${match.added_by} already added to the tray ${JSON.stringify({ duplicate_of: match.id, added_by: match.added_by })}. Tell the user; stage it with keep_both: true only if they say to add theirs anyway.`);
         if (match?.kind === "book") return ok(`Not staged: it looks like "${match.title}" (${match.slug}), already in the book. Add that one to next week with stage_set_week_recipes instead, or stage with keep_both: true if the user says it's a different recipe.`);
       }
       // a re-read group replaces the card staged from its photos before, whatever its title
-      const { slugify } = await import("./recipe-format.ts");
       for (const id of replaces) {
-        const old = tray?.items.find((i: any) => i.id === id);
+        const old = tray?.items.find((i) => i.id === id);
         if (old && !(old.kind === "new" && slugify(old.op.title) === slugify(fields.title))) await dropItem(id, ctx.caller, { trace: ctx.chat.trace });
       }
-      const spec = { op: { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" }) }, imageUrl: image_url, ...asAttachment(photo_from_attachment, ctx), reason };
-      spec.notes = [...(spec.notes || []), ...notes];
-      return staged(spec, ctx, async (out: any) => {
-        if (fromRows && out.item) await markStaged(fromRows, out.item.id).catch((e) => console.error("Remembering the staged card failed:", e.message));
+      const op: TrayOp = { action: "create_recipe", ...fields, ...(next_week === false ? {} : { week: "next" as const }) };
+      const attachment = asAttachment(photo_from_attachment, ctx);
+      return staged({ op, imageUrl: image_url, ...attachment, notes: [...(attachment.notes || []), ...notes], reason }, ctx, async (out) => {
+        if (fromRows && out.item) await markStaged(fromRows, out.item.id).catch((e) => console.error("Remembering the staged card failed:", errorMessage(e)));
       });
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "stage_update_recipe",
     title: "Stage an edit",
     description: "Stage an edit of an existing recipe (only the fields you pass change; ingredients and instructions replace the whole list). Call get_recipe first so you edit the current version. A second edit of the same recipe merges into the first card; editing a recipe that is new in the tray edits that card.",
     inputSchema: stageUpdateShape,
     access: "stage",
-    handler: safe(async ({ image_url, new_photo, photo_from_attachment, reason, ...fields }: any, ctx: any) => staged({ op: { action: "update_recipe", ...fields }, imageUrl: image_url, newPhoto: new_photo, ...asAttachment(photo_from_attachment, ctx), reason }, ctx)),
-  },
-  {
+    handler: safe(async ({ image_url, new_photo, photo_from_attachment, reason, ...fields }, ctx) => staged({ op: { action: "update_recipe", ...fields }, imageUrl: image_url, newPhoto: new_photo, ...asAttachment(photo_from_attachment, ctx), reason }, ctx)),
+  }),
+  defineTool({
     name: "stage_promote_recipe",
     title: "Stage promoting a draft",
     description: "Stage turning a draft into a regular recipe (the family cooked it and keeps it). Its weeks don't change.",
     inputSchema: { slug: z.string().describe("Slug of the draft"), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ slug, reason }: any, ctx: any) => staged({ op: { action: "promote_recipe", slug }, reason }, ctx)),
-  },
-  {
+    handler: safe(async ({ slug, reason }, ctx) => staged({ op: { action: "promote_recipe", slug }, reason }, ctx)),
+  }),
+  defineTool({
     name: "stage_remove_draft",
     title: "Stage removing a draft",
     description: "Stage deleting a draft the family tried and did NOT like (the recipe and its photo). Only drafts; refused for a draft planned for next week (the family keeps those: tell the user instead).",
     inputSchema: { slug: z.string().describe("Slug of the draft"), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ slug, reason }: any, ctx: any) => staged({ op: { action: "remove_draft", slug }, reason }, ctx)),
-  },
-  {
+    handler: safe(async ({ slug, reason }, ctx) => staged({ op: { action: "remove_draft", slug }, reason }, ctx)),
+  }),
+  defineTool({
     name: "stage_set_week_recipes",
     title: "Stage next week's recipes",
     description: "Stage adding existing recipes to NEXT week (add: true) or taking them out (add: false). Planning always targets next week; this week only changes through stage_start_next_week. Each recipe is its own card; adding and then taking out the same recipe cancels out.",
     inputSchema: { slugs: z.array(z.string()).min(1).describe("Recipe slugs"), add: z.boolean().describe("true = into next week, false = out of it"), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ slugs, add, reason }: any, ctx: any) => {
-      let last;
-      const seen: any[] = [];
-      for (const slug of [...new Set<any>(slugs)]) {
-        last = await staged({ op: { action: "set_week_recipes", week: "next", slugs: [slug], add }, reason }, ctx);
-        seen.push(last.content[0].text.split("\n")[0]);
+    handler: safe(async ({ slugs, add, reason }, ctx) => {
+      const seen: string[] = [];
+      for (const slug of [...new Set(slugs)]) {
+        const text = await stagedText({ op: { action: "set_week_recipes", week: "next", slugs: [slug], add }, reason }, ctx);
+        seen.push(text.split("\n")[0]);
       }
       return ok(seen.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "stage_start_next_week",
     title: "Stage the switch",
     description: "Stage the switch to a new week: next week's recipes become this week and next week is emptied. Stage it only when the user says next week is ready to become this week (asked at Finalise). carry_over: this week's recipes that stay in this week (untried drafts the user wants to keep cooking). Staging it again replaces it.",
     inputSchema: { carry_over: z.array(z.string()).optional().describe("Slugs in this week now that stay in this week"), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ carry_over, reason }: any, ctx: any) => staged({ op: { action: "start_next_week", ...(carry_over?.length ? { carry_over } : {}) }, reason }, ctx)),
-  },
-  {
+    handler: safe(async ({ carry_over, reason }, ctx) => staged({ op: { action: "start_next_week", ...(carry_over?.length ? { carry_over } : {}) }, reason }, ctx)),
+  }),
+  defineTool({
     name: "stage_shopping_list_edits",
     title: "Change the staged shopping list",
     description:
@@ -567,32 +626,35 @@ const STAGE_TOOLS: ToolDef[] = [
       "remember: true on merge / move / rename when it's generally true (it becomes an ingredient catalogue change, for every week). A newer patch to the same item replaces the older one; a bad patch is refused on its own.",
     inputSchema: { edits: z.array(listEditSchema).min(1).max(30), reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ edits, reason }: any, ctx: any) => {
+    handler: safe(async ({ edits, reason }, ctx) => {
       needChat(ctx);
       const tray = await loadTray();
-      if (!tray?.items?.some((i: any) => i.kind === "list")) throw new UserError("There's no shopping list in the tray: it appears once the tray changes next week. To change the list on the site, change next week's recipes.");
-      const remembered = edits.filter((e: any) => e.remember);
-      const changes = remembered.map((e: any) => (e.merge ? { merge: { into: e.merge[0], from: e.merge[1] } } : e.move ? { set: { item: e.move.item, section: e.move.section } } : e.rename ? { set: { item: e.rename.item, name: e.rename.name } } : null)).filter(Boolean);
-      const forList = edits.filter((e: any) => !(e.remember && (e.merge || e.move || e.rename))).map(({ remember, ...e }: any) => e);
-      const outs: any[] = [];
-      if (changes.length) outs.push(await staged({ op: { action: "update_catalogue", changes }, reason }, ctx));
-      if (forList.length) outs.push(await staged({ op: { action: "update_shopping_list", build: true, edits: forList }, reason }, ctx));
+      if (!tray?.items?.some((i) => i.kind === "list")) throw new UserError("There's no shopping list in the tray: it appears once the tray changes next week. To change the list on the site, change next week's recipes.");
+      const changes: CatalogueChange[] = [];
+      for (const e of edits.filter((e) => e.remember)) {
+        if (e.merge) changes.push({ merge: { into: e.merge[0], from: e.merge[1] } });
+        else if (e.move) changes.push({ set: { item: e.move.item, section: e.move.section } });
+        else if (e.rename) changes.push({ set: { item: e.rename.item, name: e.rename.name } });
+      }
+      const forList: ListEdit[] = edits.filter((e) => !(e.remember && (e.merge || e.move || e.rename))).map(({ remember: _remember, ...e }) => e);
+      const lines: string[] = [];
+      if (changes.length) lines.push(await stagedText({ op: { action: "update_catalogue", changes }, reason }, ctx));
+      if (forList.length) lines.push(await stagedText({ op: { action: "update_shopping_list", build: true, edits: forList }, reason }, ctx));
       const after = await finaliseState(ctx.caller);
       const stale = after?.built?.stale || [];
-      const lines = outs.map((o) => o.content[0].text);
-      if (stale.length) lines.push(`These patches don't apply (refused, the list is otherwise as before): ${stale.map((x: any) => x.why).join("; ")}`);
+      if (stale.length) lines.push(`These patches don't apply (refused, the list is otherwise as before): ${stale.map((x) => x.why).join("; ")}`);
       return ok(lines.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "stage_set_shopping_servings",
     title: "Stage planned servings",
     description: "Stage how many people individual recipes are planned for on the shopping list (\"breakfasts for 2, the rest for 4\"): the list in the tray when the tray changes next week, else the list on the site. Any time; it never needs the list rebuilt. Staging again merges into the same card.",
     inputSchema: { servings: servingsSchema, reason: reasonSchema },
     access: "stage",
-    handler: safe(async ({ servings, reason }: any, ctx: any) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
-  },
-  {
+    handler: safe(async ({ servings, reason }, ctx) => staged({ op: { action: "set_shopping_servings", servings }, reason }, ctx)),
+  }),
+  defineTool({
     name: "stage_stocktake",
     title: "Stage what's at home",
     description:
@@ -604,44 +666,44 @@ const STAGE_TOOLS: ToolDef[] = [
       reason: reasonSchema,
     },
     access: "stage",
-    handler: safe(async ({ items, reason }: any, ctx: any) => {
+    handler: safe(async ({ items, reason }, ctx) => {
       needChat(ctx);
       // What the update is made against: the list as the tray would leave it (a staged new list counts), so Save can tell if it changed since.
       const tray = await loadTray();
-      const { cs } = await replay((tray?.items || []).filter((i: any) => i.kind !== "stocktake"), ctx.caller, await warmReads());
+      const { cs } = await replay((tray?.items || []).filter((i) => i.kind !== "stocktake"), ctx.caller, await warmReads());
       const { list } = await getShoppingList(cs);
       // refuse bad input up front (unknown names, amounts the list can't take) with the page's own rules, rather than staging a card with a problem
       applyStocktake(list, mergeStocktake(list, items).items);
       return staged({ op: { action: "update_stocktake", items, list_sig: listSignature(list) }, reason }, ctx);
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "resolve_clash",
     title: "Resolve a clash",
     description: 'Settle a tray item flagged as a clash (its recipe changed on the site since it was staged). "keep_mine" keeps the staged change and overwrites what changed; "keep_theirs" and "drop" remove the item. Ask the user first with ask_user.',
     inputSchema: { id: z.string().describe("The item id from the tray note"), resolution: z.enum(["keep_mine", "keep_theirs", "drop"]) },
     access: "stage",
-    handler: safe(async ({ id, resolution }: any, ctx: any) => {
+    handler: safe(async ({ id, resolution }, ctx) => {
       needChat(ctx);
       const out = await resolveClash(id, resolution, ctx.caller, { trace: ctx.chat.trace });
       ctx.chat.emit?.({ type: "tray" });
       return ok(`${out.message}.`);
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "drop_tray_item",
     title: "Drop a tray item",
     description: "Take one item out of the plan tray (by its id from the tray note). Use when the user asks to remove something they had added.",
     inputSchema: { id: z.string().describe("The item id from the tray note") },
     access: "stage",
-    handler: safe(async ({ id }: any, ctx: any) => {
+    handler: safe(async ({ id }, ctx) => {
       needChat(ctx);
       const dropped = await dropItem(id, ctx.caller, { trace: ctx.chat.trace });
       ctx.chat.emit?.({ type: "tray" });
       return ok(dropped ? `Dropped the ${dropped.kind} item from the tray.` : "That item isn't in the tray.");
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "get_tray",
     title: "Read the plan tray",
     description:
@@ -649,7 +711,7 @@ const STAGE_TOOLS: ToolDef[] = [
       "with what the site flags for review and the optional items. Use it for the Finalise review and when the user asks about the staged list. It reads only; it changes nothing.",
     inputSchema: { include_recipes: z.boolean().optional().describe("Include each next-week recipe's ingredient lines (default false)") },
     access: "stage",
-    handler: safe(async ({ include_recipes }: any, ctx: any) => {
+    handler: safe(async ({ include_recipes }, ctx) => {
       needChat(ctx);
       const tray = await loadTray();
       const note = await trayNote(tray, ctx.caller);
@@ -658,42 +720,30 @@ const STAGE_TOOLS: ToolDef[] = [
       if (include_recipes) {
         for (const slug of nextSlugs) {
           const { data } = await getRecipe(slug, cs);
-          lines.push(`- ${data.title} (${slug}, serves ${data.serves}): ${ingredientsOf(data).map((i: any) => ingredientMarkdown(i).replace(/\*\*/g, "")).join("; ") || "no ingredients recorded"}`);
+          lines.push(`- ${data.title} (${slug}, serves ${data.serves}): ${ingredientsOf(data).map((i) => ingredientMarkdown(asLine(i)).replace(/\*\*/g, "")).join("; ") || "no ingredients recorded"}`);
         }
       }
       const listItem = tray?.items?.find((i): i is TrayItemOf<"list"> => i.kind === "list");
-      const r = listItem && results.get(listItem.id);
-      if (r?.result?.built) {
-        const { built } = r.result;
+      const r = listItem ? results.get(listItem.id) : undefined;
+      if (listItem && r?.result?.built && r.result.list) {
+        const { built, list } = r.result;
         lines.push("", "Shopping list built by the site (2-serving amounts; item id | name | quantity | note | recipes):");
-        for (const sec of r.result.list!.sections) {
-          const byName = new Map<any, any>([...built.rows.values()].map((row) => [row.name, row.item]));
+        for (const sec of list.sections) {
+          const byName = new Map<string, string>([...built.rows.values()].map((row) => [row.name, row.item]));
           for (const i of sec.items) lines.push(`${sec.name}: ${byName.get(i.name)} | ${i.name} | ${i.quantity || ""} | ${i.note || ""} | ${i.recipes!.join(",")}`);
         }
-        if ((listItem!.op.edits || []).length) lines.push(`Patches already staged: ${listItem!.op.edits!.map((e: any) => editLabel(e, built.rows)).join("; ")}`);
+        if ((listItem.op.edits || []).length) lines.push(`Patches already staged: ${(listItem.op.edits || []).map((e) => editLabel(e, built.rows)).join("; ")}`);
         lines.push(...builtReport(built));
       } else if (r?.error) lines.push("", `The shopping list can't be built: ${r.error}`);
       else lines.push("", "No shopping list in the tray (the tray doesn't change next week).");
       return ok(lines.join("\n"));
     }),
-  },
+  }),
 ];
 
 const photoNums = z.number().int().min(1).max(10_000);
-/** One entry of the registry. `access` is "read" | "stage" | "write" (a missing one counts as write). */
-export interface ToolDef {
-  name: string;
-  title?: string;
-  description: string;
-  inputSchema: Record<string, z.ZodType>;
-  access?: string;
-  editorOnly?: boolean;
-  chatOnly?: boolean;
-  handler: (args: any, ctx: any) => any;
-}
-
 export const TOOLS: ToolDef[] = [
-  {
+  defineTool({
     name: "read_recipe_photos",
     title: "Read the user's photos",
     description:
@@ -707,7 +757,7 @@ export const TOOLS: ToolDef[] = [
     access: "read",
     editorOnly: true, // reading uses the editor's photos and spends on the vision model: signed-in editors only (dispatch, offeredTools and the handler check)
     chatOnly: true,
-    handler: safe(async ({ join, split, skip }: any, ctx: any) => {
+    handler: safe(async ({ join, split, skip }, ctx) => {
       if (ctx?.caller?.role !== "editor") throw new UserError('Not allowed: "read_recipe_photos" needs a signed-in editor.');
       const conversationId = ctx.chat?.conversationId;
       if (!conversationId) throw new UserError("That tool only works inside the chat.");
@@ -725,17 +775,17 @@ export const TOOLS: ToolDef[] = [
         for (let i = 0; i < (join?.length || 0) + pairs.length; i++) {
           if (!(await checkRateLimit(ctx.caller)).ok) throw new UserError("You've sent a lot in the last hour, so the photos can't be read again right now. Try again in a while.");
         }
-        const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] }, { caller: ctx.caller, origin: ctx.origin });
+        const lines = await applyCorrections(conversationId, { join: join || [], split: pairs, skip: skip || [] } as Parameters<typeof applyCorrections>[1], { caller: ctx.caller, origin: ctx.origin });
         const rereads = (join?.length || 0) + pairs.length > 0;
         return ok([...lines, rereads ? "The corrected photos are read again in the background: the result arrives as a note from the site. Tell the user, then end your turn." : "Nothing is read again: tell the user what was skipped."].join("\n"));
       }
-      const reads = await readsOf(conversationId);
-      const queuedPaths = new Set<any>(reads.map((r: any) => r.path));
+      const reads: PhotoReadRow[] = await readsOf(conversationId);
+      const queuedPaths = new Set<string>(reads.map((r) => r.path));
       const all = ctx.chat?.photos || [];
-      const latest = (ctx.chat?.attachments || []).map((a: any) => all.find((p: any) => p.path === a.path)).filter(Boolean);
-      let todo = latest.filter((p: any) => !queuedPaths.has(p.path));
-      if (!latest.length) todo = all.filter((p: any) => !queuedPaths.has(p.path));
-      const active = reads.filter((r: any) => r.status === "queued" || r.status === "reading").length;
+      const latest = (ctx.chat?.attachments || []).map((a) => all.find((p) => p.path === a.path)).filter((p): p is PhotoNumber => !!p);
+      let todo = latest.filter((p) => !queuedPaths.has(p.path));
+      if (!latest.length) todo = all.filter((p) => !queuedPaths.has(p.path));
+      const active = reads.filter((r) => r.status === "queued" || r.status === "reading").length;
       if (!todo.length) {
         return ok(JSON.stringify({ queued: 0, reading: active, note: active ? "Those photos are already being read: the result arrives as a note from the site. Tell the user and end your turn." : "There are no new photos to read in this chat. Ask the user to attach them." }));
       }
@@ -743,7 +793,7 @@ export const TOOLS: ToolDef[] = [
       for (; allowed < todo.length; allowed++) if (!(await checkRateLimit(ctx.caller)).ok) break; // each photo read counts as one message toward the editor's limit
       if (!allowed) throw new UserError("You've sent a lot in the last hour, so the photos can't be read right now. Try again in a while.");
       const out = await enqueuePhotos({ conversationId, caller: ctx.caller, photos: todo.slice(0, allowed), origin: ctx.origin });
-      const ns = out.queued.map((r: any) => r.n).sort((a: any, b: any) => a - b);
+      const ns = out.queued.map((r: { n: number }) => r.n).sort((a: number, b: number) => a - b);
       const refused = out.refused + (todo.length - allowed);
       return ok(JSON.stringify({
         queued: ns.length,
@@ -753,8 +803,8 @@ export const TOOLS: ToolDef[] = [
         note: "Reading in the background. Tell the user, then end your turn: the result arrives as a note from the site.",
       }));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "fetch_url",
     title: "Read a web page",
     description:
@@ -763,16 +813,16 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { url: z.string().url().describe("http(s) link to the page") },
     access: "read",
     editorOnly: true, // offered to and callable by signed-in editors only (dispatch, offeredTools and the handler all check)
-    handler: safe(async ({ url }: any, ctx: any) => {
+    handler: safe(async ({ url }, ctx) => {
       if (ctx?.caller?.role !== "editor") throw new UserError('Not allowed: "fetch_url" needs a signed-in editor.');
       try {
         return ok(formatPage(await readPage(url)));
-      } catch (err: any) {
-        throw new UserError(`Couldn't read ${url}: ${err.message}. Ask the user to paste the recipe or send a screenshot instead.`);
+      } catch (err) {
+        throw new UserError(`Couldn't read ${url}: ${errorMessage(err)}. Ask the user to paste the recipe or send a screenshot instead.`);
       }
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "scale_recipe",
     title: "Scale a recipe",
     description:
@@ -781,7 +831,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { slug: z.string().describe("Recipe slug"), servings: z.number().int().min(1).max(50).describe("How many people to scale to") },
     access: "read",
     chatOnly: true, // the chat's helper; /mcp keeps its tools as they were
-    handler: safe(async ({ slug, servings }: any) => {
+    handler: safe(async ({ slug, servings }) => {
       const { data } = await getRecipe(slug);
       const base = Number(data.serves) || 1;
       const ingredients = ingredientsOf(data);
@@ -789,10 +839,10 @@ export const TOOLS: ToolDef[] = [
         return ok([`${data.title} (serves ${base}) can't be rescaled by multiplying: its ingredient list already gives amounts per person or per portion. As written:`, ...grouped(ingredients, ingredientMarkdown)].join("\n"));
       }
       const factor = servings / base;
-      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...grouped(ingredients, (i: any) => scaledMarkdown(i, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
+      return ok([`${data.title}: serves ${base} as written, scaled to ${servings} (x${Math.round(factor * 100) / 100}):`, ...grouped(ingredients, (i) => scaledMarkdown(i, factor)), "", "Amounts only; check cooking times and pan sizes yourself."].join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "recipes_from_home",
     title: "What can we make from what's at home",
     description:
@@ -805,7 +855,7 @@ export const TOOLS: ToolDef[] = [
     },
     access: "read",
     chatOnly: true,
-    handler: safe(async ({ limit, max_missing }: any) => {
+    handler: safe(async ({ limit, max_missing }) => {
       const out = await recipesFromHome({ limit, maxMissing: max_missing });
       if (!out.stocktake) return ok("No stocktake is saved, so nothing is known to be at home. Ask the user what they have (or suggest marking it on the shopping page).");
       if (!out.home.length) return ok(`The stocktake (${out.stocktake}) has nothing marked as at home.`);
@@ -816,18 +866,18 @@ export const TOOLS: ToolDef[] = [
         ...out.rows.map((r) => `${r.slug} | ${r.title}${r.draft ? " [draft]" : ""} | ${r.have}/${r.total} | ${r.missing.length ? r.missing.join(", ") : "nothing"}`),
       ].join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "get_workflow_guide",
     title: "Get workflow guide",
     description:
       "The step-by-step guide for a multi-step job with this server. Call it before starting one and follow it. " +
-      WORKFLOW_NAMES.map((n) => `"${n}": ${(WORKFLOWS as Record<string, any>)[n].description}`).join(" "),
+      WORKFLOW_NAMES.map((n) => `"${n}": ${WORKFLOWS[n].description}`).join(" "),
     inputSchema: { name: z.enum(WORKFLOW_NAMES).describe("Which workflow") },
     access: "read",
-    handler: safe(async ({ name }: any) => ok((WORKFLOWS as Record<string, any>)[name].text)),
-  },
-  {
+    handler: safe(async ({ name }) => ok(WORKFLOWS[name].text)),
+  }),
+  defineTool({
     name: "list_recipes",
     title: "List recipes",
     description:
@@ -840,8 +890,8 @@ export const TOOLS: ToolDef[] = [
       const recipes = await listRecipes();
       return ok(JSON.stringify(recipes, null, 2));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "search_recipes",
     title: "Search recipes",
     description:
@@ -862,12 +912,12 @@ export const TOOLS: ToolDef[] = [
       week: z.enum(["this", "next", "none"]).optional().describe('"this" = in this week, "next" = in next week, "none" = in neither'),
     },
     access: "read",
-    handler: safe(async (args: any) => {
+    handler: safe(async (args) => {
       const rows = await searchRecipes(args);
       return ok(rows.length ? JSON.stringify(rows, null, 2) : "No recipes match those filters.");
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "get_recipe",
     title: "Get recipe",
     description: "Get one recipe's full Markdown source (frontmatter + body). Optionally include its hero photo so you can see it.",
@@ -876,9 +926,9 @@ export const TOOLS: ToolDef[] = [
       include_image: z.boolean().optional().describe("Also return the hero image. Default false."),
     },
     access: "read",
-    handler: safe(async ({ slug, include_image }: any) => {
+    handler: safe(async ({ slug, include_image }) => {
       const { data, markdown } = await getRecipe(slug);
-      const extra: any[] = [];
+      const extra: ToolResult["content"] = [];
       if (include_image) {
         const img = await readRecipeImage(data.image);
         if (img) {
@@ -889,8 +939,8 @@ export const TOOLS: ToolDef[] = [
       }
       return ok(`Page: ${pageUrl(slug)}\n\n\`\`\`markdown\n${markdown.trimEnd()}\n\`\`\``, extra);
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "create_image_upload_link",
     title: "Create photo upload link",
     description:
@@ -917,10 +967,10 @@ export const TOOLS: ToolDef[] = [
       slug: z.string().optional().describe("Shortcut for a single EXISTING recipe: same as recipes: [{ slug }]."),
     },
     access: "write",
-    handler: safe(async ({ recipes, title, slug }: any, { origin }: any) => {
+    handler: safe(async ({ recipes, title, slug }, { origin }) => {
       if ([recipes, title, slug].filter(Boolean).length !== 1) throw new UserError("Pass exactly one of: recipes, title or slug");
       const requested = recipes || [{ title, slug }];
-      const items: any[] = [];
+      const items: { slug: string; label: string; isNew: boolean }[] = [];
       for (const [i, r] of requested.entries()) {
         const where = requested.length > 1 ? `recipes[${i}]: ` : "";
         if (!!r.title === !!r.slug) throw new UserError(`${where}pass exactly one of: title (new recipe) or slug (existing recipe)`);
@@ -930,7 +980,7 @@ export const TOOLS: ToolDef[] = [
           const exists = await getRecipe(target).then(() => true, () => false);
           if (exists) throw new UserError(`${where}a recipe with slug "${target}" already exists. Pass slug: "${target}" to replace its photo instead.`);
           items.push({ slug: target, label: r.title.trim(), isNew: true });
-        } else {
+        } else if (r.slug) {
           const { data } = await getRecipe(r.slug); // throws if it doesn't exist
           items.push({ slug: r.slug, label: data.title || r.slug, isNew: false });
         }
@@ -957,8 +1007,8 @@ export const TOOLS: ToolDef[] = [
       if (items.length > newOnes.length) lines.push("Existing recipes switch to their new photo as soon as it's uploaded; nothing else to do for them.");
       return ok(lines.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "create_recipe",
     title: "Create recipe",
     description:
@@ -967,9 +1017,9 @@ export const TOOLS: ToolDef[] = [
       "promote_recipe once the user has tried and liked them. Pass week: \"next\" to plan it for next week.",
     inputSchema: createShape,
     access: "write",
-    handler: safe(async (args: any, { caller }: any) => ok(resultText("Created", await createRecipe(args, undefined, caller)))),
-  },
-  {
+    handler: safe(async (args, { caller }) => ok(resultText("Created", await createRecipe(args, undefined, caller)))),
+  }),
+  defineTool({
     name: "promote_recipe",
     title: "Promote draft recipe",
     description:
@@ -980,9 +1030,9 @@ export const TOOLS: ToolDef[] = [
       slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
     },
     access: "write",
-    handler: safe(async ({ slug }: any, { caller }: any) => ok(resultText("Promoted", await promoteRecipe(slug, undefined, caller)))),
-  },
-  {
+    handler: safe(async ({ slug }, { caller }) => ok(resultText("Promoted", await promoteRecipe(slug, undefined, caller)))),
+  }),
+  defineTool({
     name: "remove_draft",
     title: "Remove draft recipe",
     description:
@@ -995,7 +1045,7 @@ export const TOOLS: ToolDef[] = [
       slug: z.string().describe("Slug of the draft recipe (list_recipes shows drafts with draft: true)"),
     },
     access: "write",
-    handler: safe(async ({ slug }: any, { caller }: any) => {
+    handler: safe(async ({ slug }, { caller }) => {
       const { title, removedImages, commit } = await removeDraft(slug, undefined, caller);
       return ok(
         [
@@ -1005,8 +1055,8 @@ export const TOOLS: ToolDef[] = [
         ].join("\n")
       );
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "update_recipe",
     title: "Update recipe",
     description:
@@ -1015,9 +1065,9 @@ export const TOOLS: ToolDef[] = [
       "Call get_recipe first so you edit the current version.",
     inputSchema: updateShape,
     access: "write",
-    handler: safe(async (args: any, { caller }: any) => ok(resultText("Updated", await updateRecipe(args, undefined, caller)))),
-  },
-  {
+    handler: safe(async (args, { caller }) => ok(resultText("Updated", await updateRecipe(args, undefined, caller)))),
+  }),
+  defineTool({
     name: "set_week_recipes",
     title: "Set this week's / next week's recipes",
     description:
@@ -1031,15 +1081,15 @@ export const TOOLS: ToolDef[] = [
       add: z.boolean().describe("true = put them in that week, false = take them out of it"),
     },
     access: "write",
-    handler: safe(async ({ week, slugs, add }: any, { caller }: any) => {
+    handler: safe(async ({ week, slugs, add }, { caller }) => {
       const r = await setWeekRecipes(slugs, week, add, undefined, caller);
       const lines = weekLines(r);
       if (r.commit) lines.push(`Committed to main: ${r.commit.url}`, `The site updates in about a minute at ${config.siteUrl}/`);
       if (r.commit && week === "next") lines.push("", "Next week changed: call update_shopping_list to refresh the shopping list.");
       return ok(lines.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "start_next_week",
     title: "Start next week",
     description:
@@ -1056,14 +1106,14 @@ export const TOOLS: ToolDef[] = [
         .describe("Slugs of recipes in this week now that should stay in this week (e.g. untried drafts the user wants to carry over)."),
     },
     access: "write",
-    handler: safe(async ({ carry_over }: any, { caller }: any) => {
+    handler: safe(async ({ carry_over }, { caller }) => {
       const r = await startNextWeek(carry_over, undefined, caller);
       const lines = switchLines(r);
       if (r.commit) lines.push(`Committed to main: ${r.commit.url}`, `The site updates in about a minute at ${config.siteUrl}/`);
       return ok(lines.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "get_shopping_list",
     title: "Get shopping list",
     description:
@@ -1075,7 +1125,7 @@ export const TOOLS: ToolDef[] = [
       "with what is left to buy at the planned servings.",
     inputSchema: {},
     access: "read",
-    handler: safe(async (_args: any, ctx: any) => {
+    handler: safe(async (_args, ctx) => {
       const { list, next, status } = await getShoppingList();
       const note: Record<string, string> = {
         outdated: " (next week's recipes changed; the site still shows the old list until you call update_shopping_list)",
@@ -1086,14 +1136,14 @@ export const TOOLS: ToolDef[] = [
         `Page: ${shoppingPageUrl()}`,
         "",
         next.length ? "Next week's recipes (the ones to combine):" : "Next week has no recipes yet.",
-        ...next.map((r: any) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
+        ...next.map((r) => `- ${r.title} (${r.slug})${r.draft ? " [draft]" : ""}`),
       ];
       // In chat the stored list is a compact table (one line per item): the pretty JSON is ~20k characters and gets cut by the chat's result cap.
       if (list) lines.push("", ...stocktakeLines(list), "", ...(ctx?.chat ? compactListLines(list) : ["Stored list:", "```json", JSON.stringify(list, null, 2), "```"]));
       return ok(lines.join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "update_shopping_list",
     title: "Update shopping list",
     description:
@@ -1112,16 +1162,18 @@ export const TOOLS: ToolDef[] = [
         .describe(`Planned servings for individual recipes, by slug. Recipes left out keep what the previous list planned, else ${DEFAULT_SERVINGS}.`),
     },
     access: "write",
-    handler: safe(async ({ build, edits, sections, servings }: any, { caller }: any) => {
-      if (!build === !sections) throw new UserError("Pass build: true (recommended: the server builds the list), or sections, not both.");
+    handler: safe(async ({ build, edits, sections, servings }, { caller }) => {
+      const notBoth = () => new UserError("Pass build: true (recommended: the server builds the list), or sections, not both.");
       if (build) {
+        if (sections) throw notBoth();
         const r = await buildAndSaveShoppingList({ edits }, undefined, servings, caller);
         return ok([shoppingResult(r), "", ...builtReport(r.built)].join("\n"));
       }
+      if (!sections) throw notBoth();
       return ok(shoppingResult(await updateShoppingList(sections, undefined, servings, caller)));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "set_shopping_servings",
     title: "Set shopping list servings",
     description:
@@ -1130,7 +1182,7 @@ export const TOOLS: ToolDef[] = [
       "change single recipes, on the page. Doesn't rebuild the list: quantities and the stocktake stay. Only recipes on the saved list.",
     inputSchema: { servings: servingsSchema },
     access: "write",
-    handler: safe(async ({ servings }: any, { caller }: any) => {
+    handler: safe(async ({ servings }, { caller }) => {
       const { list, changed, commit } = await setShoppingServings(servings, undefined, caller);
       const lines = commit
         ? [`Saved the planned servings and committed to main: ${commit.url}`, `It will be live in about a minute at ${shoppingPageUrl()}`]
@@ -1138,8 +1190,8 @@ export const TOOLS: ToolDef[] = [
       if (changed.length) lines.push("", `Changed: ${changed.map(([slug, n]) => `${slug} -> ${n}`).join(", ")}`);
       return ok([...lines, "", "Planned servings:", ...servingsLines(list)].join("\n"));
     }),
-  },
-  {
+  }),
+  defineTool({
     name: "batch_changes",
     title: "Batch changes",
     description:
@@ -1153,20 +1205,21 @@ export const TOOLS: ToolDef[] = [
       dry_run: z.boolean().optional().describe("Validate and report only; commit nothing. Default false."),
     },
     access: "write",
-    handler: safe(async ({ operations, dry_run }: any, { caller }: any) => {
+    handler: safe(async ({ operations, dry_run }, { caller }) => {
       const cs = new ChangeSet();
-      const results: any[] = [];
+      const results: OperationOutcome[] = [];
       for (const [i, op] of startImageGenerations(operations, { dryRun: dry_run }).entries()) {
         try {
           results.push(await runOperation(op, cs, caller));
-        } catch (err: any) {
+        } catch (err) {
           const prefix = `operations[${i}] (${op.action}) failed, so nothing was committed`;
-          if (err instanceof UserError || err instanceof ShoppingListError) throw new (err.constructor as any)(`${prefix}:\n${err.message}`);
-          throw new Error(`${prefix}: ${err.message}`, { cause: err });
+          // the same kind of error again, with the operation named (a ShoppingListError subclass keeps its own constructor)
+          if (err instanceof UserError || err instanceof ShoppingListError) throw new (err.constructor as new (message: string) => Error)(`${prefix}:\n${err.message}`);
+          throw new Error(`${prefix}: ${errorMessage(err)}`, { cause: err });
         }
       }
 
-      const report = results.flatMap((r, i) => r.lines.map((l: any, j: number) => (j === 0 ? `${i + 1}. ${l}` : `   ${l}`)));
+      const report = results.flatMap((r, i) => r.lines.map((l, j) => (j === 0 ? `${i + 1}. ${l}` : `   ${l}`)));
       const lastShopping = results.findLastIndex((r) => r.shoppingList);
       const staleList = results.some((r, i) => r.nextChanged && i > lastShopping);
       const footer = staleList ? ["", "Next week's recipes changed after the last shopping list update: refresh it with update_shopping_list."] : [];
@@ -1181,10 +1234,10 @@ export const TOOLS: ToolDef[] = [
         subjects.length === 1
           ? `${subjects[0]}\n\nUpdated via the recipes MCP server.`
           : `Batch update: ${subjects.length} changes\n\n${subjects.map((s) => `- ${s}`).join("\n")}\n\nUpdated via the recipes MCP server.`;
-      const commit = await cs.commit(message, caller);
+      const commit = committed(await cs.commit(message, caller));
       return ok(
         [
-          `Committed ${subjects.length} change(s) to main in one commit: ${commit!.url}`,
+          `Committed ${subjects.length} change(s) to main in one commit: ${commit.url}`,
           `The site deploys once and will be live in about a minute at ${config.siteUrl}/`,
           "",
           ...report,
@@ -1192,42 +1245,48 @@ export const TOOLS: ToolDef[] = [
         ].join("\n")
       );
     }),
-  },
+  }),
   ...STAGE_TOOLS,
 ];
 
 // --- dispatch ------------------------------------------------------------------------------------------
 // The one place a tool call runs, for MCP and chat alike (docs/chatbot-design.md 4.1 layers 3 and 7).
 
-const WRITER_ROLES = new Set(["editor", "agent"]);
-const ACCESS_LEVELS = new Set(["read", "stage", "write"]);
+const WRITER_ROLES = new Set<string>(["editor", "agent"]);
 
 /** The access a tool needs. A missing or unknown level counts as "write": a new tool can't be public by accident. */
-export const accessOf = (tool: any) => (ACCESS_LEVELS.has(tool?.access) ? tool.access : "write");
+export const accessOf = (tool: { access?: string } | null | undefined): ToolAccess => {
+  const access = tool?.access;
+  return access === "read" || access === "stage" || access === "write" ? access : "write";
+};
 
 /** May this role run a tool of this access level? public: read only. editor and agent: everything. */
-export const roleMay = (role: any, access: any) => access === "read" || WRITER_ROLES.has(role);
+export const roleMay = (role: string, access: ToolAccess): boolean => access === "read" || WRITER_ROLES.has(role);
 
 /** A frozen caller: { role: "public" | "editor" | "agent", email?, userId?, ip?, via? }. Built by the transport, never from request data. */
-export const makeCaller = (caller: any) => Object.freeze({ ...caller });
+export const makeCaller = <C extends Caller>(caller: C): Readonly<C & Caller> => Object.freeze({ ...caller });
 
-function errorResult(text: any) {
+function errorResult(text: string): ToolResult {
   return { content: [{ type: "text", text }], isError: true };
 }
 
 // Who is asking, for the log: role plus email or ip when we have them. Never a token.
-const describeCaller = (c: any) => [`role=${c?.role ?? "none"}`, c?.email && `email=${c.email}`, c?.ip && `ip=${c.ip}`].filter(Boolean).join(" ");
+const field = (c: unknown, key: string): unknown => (c && typeof c === "object" ? Reflect.get(c, key) : undefined);
+const describeCaller = (c: unknown): string => [`role=${field(c, "role") ?? "none"}`, field(c, "email") && `email=${field(c, "email")}`, field(c, "ip") && `ip=${field(c, "ip")}`].filter(Boolean).join(" ");
+
+/** Does this look like a caller the transports built (a role at least)? dispatch() refuses anything else before it looks at the tool. */
+const isCaller = (c: unknown): c is Caller => typeof field(c, "role") === "string";
 
 /**
  * Runs a tool for a caller: looks the tool up (unknown name -> error), checks its access level against caller.role
  * (refused -> error result, logged), validates the arguments against its zod schema, then calls the handler.
  * Always resolves to an MCP-shaped result ({ content, isError? }). ctx carries transport details the handlers need ({ origin }).
  */
-export async function dispatch(name: any, args: any, caller: any, ctx: any = {}) {
+export async function dispatch(name: string, args: unknown, caller: unknown, ctx: DispatchContext = {}): Promise<ToolResult> {
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) return errorResult(`Unknown tool "${name}".`);
   const access = accessOf(tool);
-  if (!caller || typeof caller.role !== "string" || !roleMay(caller.role, access)) {
+  if (!isCaller(caller) || !roleMay(caller.role, access)) {
     console.warn(`Refused tool "${name}" (access ${access}) for ${describeCaller(caller)}`);
     return errorResult(`Not allowed: "${name}" changes the site, so it needs a signed-in editor.`);
   }
@@ -1246,9 +1305,32 @@ export async function dispatch(name: any, args: any, caller: any, ctx: any = {})
  * The registry as OpenAI-style function tool definitions (plain JSON Schema, model-agnostic), limited to what the role may call.
  * The model is only offered these, but dispatch() is what actually enforces access.
  */
-export function toolDefinitions(role: any) {
+export function toolDefinitions(role: string): FunctionTool[] {
   return TOOLS.filter((t) => roleMay(role, accessOf(t)) && (!t.editorOnly || role === "editor")).map((t) => {
     const { $schema, ...parameters } = z.toJSONSchema(z.object(t.inputSchema), { target: "draft-7", io: "input", unrepresentable: "any" });
     return { type: "function", function: { name: t.name, description: t.description, parameters } };
   });
 }
+
+// --- the hand-written mirrors of the schemas, checked at compile time -------------------------------------------------------------
+// lib/types/recipe.ts, catalogue.ts, shopping.ts and tray.ts spell out the shapes these zod schemas parse (the backend's functions take the
+// mirrors). `Fits<A, B>` is true when A can be passed where B is wanted: schema -> mirror always has to hold (it is what a handler does), and
+// mirror -> schema where the mirror has no run-time extras. A schema that drifts from its mirror stops this file compiling.
+type Assert<T extends true> = T;
+type Fits<A, B> = [A] extends [B] ? true : false;
+type SchemaInput<S extends z.ZodRawShape> = z.infer<z.ZodObject<S>>;
+type WithoutImage<T> = Omit<T, "image">;
+
+export type MirrorChecks = [
+  Assert<Fits<SchemaInput<typeof createShape>, CreateRecipeInput>>,
+  Assert<Fits<WithoutImage<CreateRecipeInput>, WithoutImage<SchemaInput<typeof createShape>>>>,
+  Assert<Fits<SchemaInput<typeof updateShape>, UpdateRecipeInput>>,
+  Assert<Fits<WithoutImage<UpdateRecipeInput>, WithoutImage<SchemaInput<typeof updateShape>>>>,
+  Assert<Fits<z.infer<typeof imageSchema>, ImageInput>>,
+  Assert<Fits<z.infer<typeof listEditSchema>, ListEdit>>,
+  Assert<Fits<ListEdit, z.infer<typeof listEditSchema>>>,
+  Assert<Fits<z.infer<typeof catalogueChangeSchema>, CatalogueChange>>,
+  Assert<Fits<CatalogueChange, z.infer<typeof catalogueChangeSchema> | { merge: { into: string; from: string } }>>,
+  Assert<Fits<z.infer<typeof sectionsSchema>, ShoppingSectionInput[]>>,
+  Assert<Fits<z.infer<typeof operationSchema>, TrayOp>>,
+];

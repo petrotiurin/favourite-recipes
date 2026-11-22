@@ -8,15 +8,27 @@ import { readFileSync } from "node:fs";
 
 const INCLUDE = /^<!--\s*include:\s*([\w/-]+)\s*-->\s*$/gm;
 
-const read = (name: any, seen: any[] = []): string => {
+const read = (name: string, seen: string[] = []): string => {
   if (seen.includes(name)) throw new Error(`workflow include cycle: ${[...seen, name].join(" -> ")}`);
   return readFileSync(new URL(`../workflows/${name}.md`, import.meta.url), "utf8")
     .replace(/^<!--[\s\S]*?-->\s*/, "") // the maintainers' note at the top
-    .replace(INCLUDE, (_, inc) => read(inc, [...seen, name]))
+    .replace(INCLUDE, (_, inc: string) => read(inc, [...seen, name]))
     .trim();
 };
 
-export const WORKFLOWS = {
+/** The workflows, in the order they are offered. */
+export const WORKFLOW_NAMES = ["plan-recipes", "ocado-shop", "sainsburys-shop"] as const;
+export type WorkflowName = (typeof WORKFLOW_NAMES)[number];
+
+export interface Workflow {
+  title: string;
+  description: string;
+  /** What the prompt's `request` argument is for. */
+  request: string;
+  text: string;
+}
+
+export const WORKFLOWS: Record<WorkflowName, Workflow> = {
   "plan-recipes": {
     title: "Plan recipes and the shopping list",
     description:
@@ -44,8 +56,6 @@ export const WORKFLOWS = {
   },
 };
 
-export const WORKFLOW_NAMES = Object.keys(WORKFLOWS);
-
 /**
  * The parts of plan-recipes that the chat's editor model needs in its system prompt: the recipe-writing rules ("Writing a recipe that passes
  * first time"), "3. Build the shopping list" and the "In chat" section, which says how the rest maps onto the tray. Cut out by heading, so the
@@ -53,7 +63,7 @@ export const WORKFLOW_NAMES = Object.keys(WORKFLOWS);
  */
 export function chatGuide() {
   const text = WORKFLOWS["plan-recipes"].text;
-  const between = (start: any, end?: any) => {
+  const between = (start: string, end?: string) => {
     const i = text.indexOf(start);
     if (i === -1) throw new Error(`plan-recipes.md has no "${start}" section`);
     const j = end ? text.indexOf(end, i) : text.length;

@@ -14,14 +14,19 @@ import { userEmail } from "./auth.ts";
 import { loadTray, trayNote } from "./tray.ts";
 import { getEvent, conversationById, takeTurnLock, releaseTurnLock, claimEvents, unhandledEvents, getMessages, appendMessages, historyForModel, withPhotoNotes, photoList, newId } from "./chat-store.ts";
 import { readsOf, progressNote, startFollowUp } from "./photo-queue.ts";
+import { errorMessage } from "./errors.ts";
+import type { ConversationLock, MessageRow } from "./types/rows.ts";
+
+/** The panel's status line a stored note carries, if it has one. */
+const summaryOf = (e: Pick<MessageRow, "content">): string | undefined => ("summary" in e.content ? e.content.summary : undefined);
 
 /** How long a turn holds the conversation's lock: past the hard deadline of any turn, so a dead turn's lock expires by itself. */
 export const TURN_LOCK_MS = () => config.chatTurnDeadlineMs + 30_000;
 
 /** Runs the follow-up for one note. Resolves { status: "done" | "handled" | "busy" | "gone" | "not-editor" }. Never throws. */
-export async function runFollowUp(eventId: any, { origin }: any = {}) {
-  let convo;
-  let token;
+export async function runFollowUp(eventId: string, { origin }: { origin?: string } = {}): Promise<{ status: "done" | "handled" | "busy" | "gone" | "not-editor" | "error" }> {
+  let convo: ConversationLock | null | undefined;
+  let token: string | null | undefined;
   try {
     const ev = await getEvent(eventId);
     if (!ev) return { status: "gone" };
@@ -45,22 +50,22 @@ export async function runFollowUp(eventId: any, { origin }: any = {}) {
     const photos = photoList(rows);
     const reads = await readsOf(convo.id).catch(() => []);
     // the notes this turn answers go LAST (one may have been stored while another turn was still writing its reply)
-    const claimedIds = new Set(claimed.map((e: any) => e.id));
-    const messages = withPhotoNotes(historyForModel(rows.filter((r: any) => !claimedIds.has(r.id))), photos, reads);
-    const note = claimed.map((e: any) => `[Note from the site, not from the user: ${String(e.content?.content || "")}]`).join("\n\n");
+    const claimedIds = new Set(claimed.map((e) => e.id));
+    const messages = withPhotoNotes(historyForModel(rows.filter((r) => !claimedIds.has(r.id))), photos, reads);
+    const note = claimed.map((e) => `[Note from the site, not from the user: ${String(e.content?.content || "")}]`).join("\n\n");
     const last = messages[messages.length - 1];
     if (last?.role === "user" && typeof last.content === "string") messages[messages.length - 1] = { ...last, content: `${last.content}\n\n${note}` };
     else messages.push({ role: "user", content: note });
     let extraNote = "";
     try {
       extraNote = [await trayNote(await loadTray(), caller), progressNote(reads, photos)].filter(Boolean).join("\n");
-    } catch (err: any) {
-      console.error("Reading the tray for the follow-up's note failed:", err.message);
+    } catch (err) {
+      console.error("Reading the tray for the follow-up's note failed:", errorMessage(err));
     }
     const turnId = newId();
-    const summary = claimed.map((e: any) => e.content?.summary).filter(Boolean).join("; ") || "note from the site";
-    const trace = startTrace({ name: "chat follow-up", sessionId: convo.id, userId: convo.user_id, tags: ["editor", "follow-up"], metadata: { mode: "follow-up", model: config.chatEditorModel, turnId, events: claimed.map((e: any) => e.id) }, input: summary });
-    let output;
+    const summary = claimed.map((e) => summaryOf(e)).filter(Boolean).join("; ") || "note from the site";
+    const trace = startTrace({ name: "chat follow-up", sessionId: convo.id, userId: convo.user_id, tags: ["editor", "follow-up"], metadata: { mode: "follow-up", model: config.chatEditorModel, turnId, events: claimed.map((e) => e.id) }, input: summary });
+    let output: string | undefined;
     try {
       const result = await runChat({
         caller,
@@ -75,21 +80,21 @@ export async function runFollowUp(eventId: any, { origin }: any = {}) {
         conversation: { id: convo.id, title: convo.title },
         photos,
         // the user's own words are their last message (this turn has none): "use this as the photo" with the photos still counts, nothing else does
-        userText: String(rows.findLast((r: any) => r.role === "user")?.content?.content || ""),
+        userText: String(rows.findLast((r) => r.role === "user")?.content?.content || ""),
         followUp: true, // no corrections and no new reads from here: those wait for the user's own answer
       });
       output = result.reply;
       await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
-    } catch (err: any) {
-      output = `error: ${err.message}`;
-      console.error(`The follow-up turn failed: ${err.message}`);
+    } catch (err) {
+      output = `error: ${errorMessage(err)}`;
+      console.error(`The follow-up turn failed: ${errorMessage(err)}`);
       await appendMessages(convo.id, [{ role: "assistant", content: "", ui: { error: "I read your photos but couldn't finish adding them. Ask me to carry on." } }], { turnId, traceId: trace.traceId }).catch(() => {});
     } finally {
       trace.finish(output);
     }
     return { status: "done" };
-  } catch (err: any) {
-    console.error(`The follow-up for a note failed: ${err.message}`);
+  } catch (err) {
+    console.error(`The follow-up for a note failed: ${errorMessage(err)}`);
     return { status: "error" };
   } finally {
     if (convo && token) await afterTurn(convo.id, token, { origin });
@@ -100,12 +105,12 @@ export async function runFollowUp(eventId: any, { origin }: any = {}) {
  * The end of every turn (user or follow-up): releases the lock FIRST, then starts the follow-up for a note no turn has handled yet. In that order,
  * a note stored while this turn ran is never left behind: either its follow-up found the lock free, or this check sees it.
  */
-export async function afterTurn(conversationId: any, token: any, { origin }: any = {}) {
+export async function afterTurn(conversationId: string, token: string, { origin }: { origin?: string } = {}) {
   await releaseTurnLock(conversationId, token);
   try {
     const events = await unhandledEvents(conversationId);
     if (events.length) startFollowUp(events[0].id, { origin });
-  } catch (err: any) {
-    console.error("Checking for notes after a turn failed:", err.message);
+  } catch (err) {
+    console.error("Checking for notes after a turn failed:", errorMessage(err));
   }
 }
