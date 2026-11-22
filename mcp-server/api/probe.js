@@ -1,5 +1,5 @@
 // TEMPORARY (docs/typescript-migration.md 5.1): imports a file from the repo's top-level shared/ to see whether the Vercel build
-// includes files outside mcp-server/. Delete together with shared/vercel-probe.js once the answer is in.
+// includes files outside mcp-server/. Delete together with shared/vercel-probe.js once the answer is in. (shared/package.json makes it ESM.)
 import { probe } from "../../shared/vercel-probe.js";
 
 export function GET() {
