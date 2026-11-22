@@ -841,6 +841,24 @@ describe("photos (editors)", () => {
     expect(text(".chat-attachment-note")).toBe("Only photos can be attached.");
   });
 
+  it("a conversation opened on page load while its photos are still being read shows the line and polls until they are", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const shot = `${SB}/storage/v1/object/sign/chat-uploads/a.jpg?token=t`;
+    localStorage.setItem("recipes-chat-editor", JSON.stringify({ email: "owner@example.com", id: CONV }));
+    route("GET", `${API}/conversations/${CONV}`, json({ id: CONV, messages: [{ role: "user", content: "", images: [shot], photo_numbers: [1] }], photos: { total: 2, read: 1, reading: 1, active: true } }));
+    await mount();
+    await click($(".chat-bubble"));
+    expect(log()).toEqual(["chat-msg is-user", "chat-status chat-reading"]);
+    expect(text(".chat-reading")).toBe("Reading photos… 1 of 2");
+    const polls = () => requests.filter((r) => r.path === `/chat/conversations/${CONV}`).length;
+    const before = polls();
+    route("GET", `${API}/conversations/${CONV}`, json({ id: CONV, messages: [{ role: "user", content: "", images: [shot], photo_numbers: [1] }, { role: "event", content: "Photos read: 1 recipe" }], photos: null }));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(15100))); // scheduled while the panel was still closed: the slower 15 s
+    await settle();
+    expect(polls()).toBeGreaterThan(before);
+    expect(log()).toEqual(["chat-msg is-user", "chat-event"]);
+  });
+
   it("photos being read: after the message, the panel polls and shows the line under the conversation, then the note from the site", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const shot = `${SB}/storage/v1/object/sign/chat-uploads/a.jpg?token=t`;

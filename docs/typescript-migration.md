@@ -527,10 +527,10 @@ step.
   before `#auth-sheet-root` instead of after it (the sheet is above the panel by z-index either way); a tray item whose kind is an `Object` prototype name was accepted
   by the script's `TRAY_KINDS[...]` lookup and isn't now; event data that isn't a JSON object reads as an empty one (the script threw on it, which looked like a
   dropped connection).
-- **A bug found and kept as it was:** opening a conversation straight from a page load while its photos are still being read (`GET /chat/conversations/:id` with
-  `photos.active`) shows no "Reading photos…" line and doesn't poll: `schedulePhotoPoll` compares with `photoChangedAt`, which is still 0, so it treats the reading as
-  quiet for 10 minutes and drops it (after a message of one's own it works). The one-line fix is to set `photoChangedAt = Date.now()` in `loadConversation` before it
-  calls `schedulePhotoPoll`; not made here, to keep the comparison clean.
+- **A bug found, fixed after the comparison:** opening a conversation straight from a page load while its photos were still being read (`GET /chat/conversations/:id`
+  with `photos.active`) showed no "Reading photos…" line and didn't poll: `schedulePhotoPoll` compares with `photoChangedAt`, which was still 0, so it treated the
+  reading as quiet for 10 minutes and dropped it (after a message of one's own it worked; the old script had the same bug). `loadConversation` now sets
+  `photoChangedAt = Date.now()` before it schedules the poll; `chat.test.tsx` ("a conversation opened on page load while its photos are still being read") covers it.
 - **JS shipped** (iPhone emulation, all four variables, scripts as served, gzipped in brackets, inline as "+"): home page 179.6 KB (54.4) + 5.5 inline before, 112.9 KB
   (39.4) + 5.8 after; next week 175.7 (52.4) + 0.6 → 112.0 (38.9) + 5.7; a recipe page 183.3 (56.4) + 5.7 → 116.6 (41.4) + 6.0; the shopping page 194.1 (60.0) + 5.5
   → 127.4 (44.9) + 5.8. The island is 75 KB minified (the script was 150 KB as written) and shares Preact, the signals and the store with the other islands; the

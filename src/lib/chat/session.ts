@@ -148,6 +148,8 @@ export function loadConversation(app: ChatApp, id: string): Promise<void> {
         app.renderAll();
         app.saveUi();
         if (j && !app.panelHidden) app.markSeen(j.last_reply_at);
+        // the reading counts from now: without this a page load (photoChangedAt still 0) took it for 10 quiet minutes and dropped it
+        app.photoChangedAt = Date.now();
         schedulePhotoPoll(app, app.photoState);
       },
       (err: Error) => {
