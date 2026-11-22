@@ -1,5 +1,7 @@
 import { assertConfigured } from "../lib/config.ts";
 import { verifyUploadToken } from "../lib/auth.ts";
+import type { UploadItem } from "../lib/auth.ts";
+import { errorMessage } from "../lib/errors.ts";
 import { saveUploadedImage, pageUrl } from "../lib/recipes.ts";
 import { makeCaller } from "../lib/tools.ts";
 
@@ -14,9 +16,9 @@ const UPLOAD_LINK = makeCaller({ role: "agent", via: "upload-link" });
 // lets one failed photo be retried on its own). The browser downsizes each photo first;
 // the server normalises it again anyway.
 
-const escapeHtml = (s: any) => String(s).replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }) as Record<string, string>)[c]);
+const escapeHtml = (s: unknown): string => String(s).replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }) as Record<string, string>)[c]);
 
-function page(body: any, status = 200) {
+function page(body: string, status = 200) {
   return new Response(
     `<!doctype html>
 <html lang="en">
@@ -59,7 +61,7 @@ function expired() {
   return page(`<h1>Link expired</h1><p>This upload link is invalid or has expired. Ask your assistant for a new one.</p>`, 403);
 }
 
-function itemForm({ slug, label }: any, i: any, many: any) {
+function itemForm({ slug, label }: UploadItem, i: number, many: boolean) {
   return `
 <form class="item" method="post" enctype="multipart/form-data">
   <input type="hidden" name="slug" value="${escapeHtml(slug)}">
@@ -73,7 +75,7 @@ function itemForm({ slug, label }: any, i: any, many: any) {
 </form>`;
 }
 
-export async function GET(request: any) {
+export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("t");
   const claim = verifyUploadToken(token);
   if (!claim) return expired();
@@ -81,7 +83,7 @@ export async function GET(request: any) {
   return page(`
 <h1>${n === 1 ? "Upload the recipe photo" : `Upload ${n} recipe photos`}</h1>
 <p>Pick a photo of each finished dish. Each one uploads as soon as you pick it${n === 1 ? "" : ", in any order"}.</p>
-${claim.items.map((item: any, i: any) => itemForm(item, i, n > 1)).join("")}
+${claim.items.map((item, i) => itemForm(item, i, n > 1)).join("")}
 <p id="summary" role="status"></p>
 <script>
 (() => {
@@ -151,10 +153,10 @@ ${claim.items.map((item: any, i: any) => itemForm(item, i, n > 1)).join("")}
 </script>`);
 }
 
-export async function POST(request: any) {
+export async function POST(request: Request) {
   const wantsJson = (request.headers.get("accept") || "").includes("application/json");
   const back = `<p><a href="${escapeHtml(request.url)}">Back to the upload page</a></p>`;
-  const reply = (status: any, payload: any) =>
+  const reply = (status: number, payload: { error?: string; ok?: true; slug?: string; commit?: string; page?: string }) =>
     wantsJson
       ? Response.json(payload, { status })
       : page(
@@ -166,13 +168,13 @@ export async function POST(request: any) {
 
   try {
     assertConfigured();
-  } catch (err: any) {
-    return reply(500, { error: err.message });
+  } catch (err) {
+    return reply(500, { error: errorMessage(err) });
   }
   const claim = verifyUploadToken(new URL(request.url).searchParams.get("t"));
   if (!claim) return reply(403, { error: "This upload link is invalid or has expired. Ask your assistant for a new one." });
 
-  let form;
+  let form: FormData;
   try {
     form = await request.formData();
   } catch {
@@ -180,15 +182,15 @@ export async function POST(request: any) {
   }
   // The link only covers the recipes it was made for; a single-recipe link doesn't need the field.
   const slug = form.get("slug") || (claim.items.length === 1 ? claim.items[0].slug : null);
-  if (!claim.items.some((i: any) => i.slug === slug)) return reply(403, { error: "This link doesn't cover that recipe." });
+  if (typeof slug !== "string" || !claim.items.some((i) => i.slug === slug)) return reply(403, { error: "This link doesn't cover that recipe." });
   const photo = form.get("photo");
   if (!photo || typeof photo === "string" || !photo.size) return reply(400, { error: "No photo received" });
 
   try {
     const commit = await saveUploadedImage(slug, Buffer.from(await photo.arrayBuffer()), UPLOAD_LINK);
-    return reply(200, { ok: true, slug, commit: commit!.url, page: pageUrl(slug) });
-  } catch (err: any) {
+    return reply(200, { ok: true, slug, commit: commit?.url, page: pageUrl(slug) });
+  } catch (err) {
     console.error(err);
-    return reply(400, { error: err.message });
+    return reply(400, { error: errorMessage(err) });
   }
 }

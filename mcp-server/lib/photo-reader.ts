@@ -5,12 +5,39 @@
 import { UNITS } from "../../shared/ingredient-line.ts";
 import { config, COURSES } from "./config.ts";
 import { readerSystemPrompt, readerInstruction, READER_SCHEMA, PHOTO_READER_PROMPT_VERSION } from "./photo-reader-prompt.ts";
+import { errorMessage } from "./errors.ts";
+import { asRecord, isTimeoutError } from "./narrow.ts";
+import type {
+  Completion,
+  DuplicateMatch,
+  DuplicateResult,
+  FieldsFromRead,
+  FindDuplicateOptions,
+  PairDecisionName,
+  PairSignals,
+  PhotoGroup,
+  PhotoPair,
+  PhotoRead,
+  ReadFields,
+  ReadIngredient,
+  ReadKind,
+  ReadPhotosOptions,
+  ReadRecipe,
+  ReaderErrorKind,
+  ReaderErrorOptions,
+  ReaderRequest,
+  ReaderResult,
+  SimilarRecipe,
+  Unit,
+} from "./types/photos.ts";
+import type { Course } from "./types/common.ts";
+import type { PhotoReadRow } from "./types/rows.ts";
 
 export class ReaderError extends Error {
-  declare kind: string;
+  declare kind: ReaderErrorKind;
   declare transient: boolean;
   /** kind: timeout | unparseable | refused | upstream | out-of-credit | not-configured. transient: worth one more try. */
-  constructor(message: any, { kind = "upstream", transient = false }: any = {}) {
+  constructor(message: string, { kind = "upstream", transient = false }: ReaderErrorOptions = {}) {
     super(message);
     this.kind = kind;
     this.transient = transient;
@@ -21,16 +48,16 @@ export const readerConfigured = () => !!config.chatVisionModel && !!config.chatV
 const TEMPERATURE = 0.1;
 
 /** The request body the reader sends: the reader prompt, ONE user message with the fixed instruction and the image parts, the schema. */
-export function readerRequest(imageUrls: any, { consecutive = false, forcedTool = false }: any = {}) {
-  const messages = [
+export function readerRequest(imageUrls: string[], { consecutive = false, forcedTool = false }: { consecutive?: boolean; forcedTool?: boolean } = {}): ReaderRequest {
+  const messages: ReaderRequest["messages"] = [
     { role: "system", content: readerSystemPrompt() },
-    { role: "user", content: [{ type: "text", text: readerInstruction(consecutive) }, ...imageUrls.map((url: any) => ({ type: "image_url", image_url: { url } }))] },
+    { role: "user", content: [{ type: "text", text: readerInstruction(consecutive) }, ...imageUrls.map((url) => ({ type: "image_url" as const, image_url: { url } }))] },
   ];
   const r = config.chatVisionReasoning;
-  const reasoning = r === "off" ? { reasoning: { enabled: false } } : ["low", "medium", "high"].includes(r) ? { reasoning: { effort: r } } : {};
+  const reasoning: Pick<ReaderRequest, "reasoning"> = r === "off" ? { reasoning: { enabled: false } } : ["low", "medium", "high"].includes(r) ? { reasoning: { effort: r } } : {};
   // require_parameters: OpenRouter only routes to providers that honour response_format / the forced tool. Some providers of a model ignore the
   // schema, and a model left free can loop and invent fields until it runs out of tokens (seen with Qwen 3.5 397B).
-  const base = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens, ...reasoning, provider: { require_parameters: true } };
+  const base: ReaderRequest = { model: config.chatVisionModel, messages, temperature: TEMPERATURE, max_tokens: config.chatVisionMaxTokens, ...reasoning, provider: { require_parameters: true } };
   if (forcedTool) {
     // for providers without response_format: one forced tool with the same schema, and nothing else
     return { ...base, tools: [{ type: "function", function: { name: "recipe_read", description: "Report what the photo(s) show.", parameters: READER_SCHEMA } }], tool_choice: { type: "function", function: { name: "recipe_read" } } };
@@ -38,7 +65,7 @@ export function readerRequest(imageUrls: any, { consecutive = false, forcedTool 
   return { ...base, response_format: { type: "json_schema", json_schema: { name: "recipe_read", strict: true, schema: READER_SCHEMA } } };
 }
 
-async function call(body: any, signal: any) {
+async function call(body: ReaderRequest, signal: AbortSignal): Promise<{ json: unknown; status: number }> {
   let res;
   try {
     res = await fetch(`${config.openrouterBaseUrl}/chat/completions`, {
@@ -47,16 +74,16 @@ async function call(body: any, signal: any) {
       headers: { Authorization: `Bearer ${config.chatVisionKey}`, "Content-Type": "application/json", "HTTP-Referer": config.siteUrl, "X-Title": "Our Favourite Recipes" },
       body: JSON.stringify(body),
     });
-  } catch (err: any) {
-    if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
+  } catch (err) {
+    if (isTimeoutError(err)) throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
     throw new ReaderError("Couldn't reach the photo reader", { transient: true });
   }
   let text;
   try {
     text = await res.text();
-  } catch (err: any) {
+  } catch (err) {
     // the time limit can run out while the answer is still arriving: that's a timeout, not a garbled answer
-    if (err?.name === "TimeoutError" || err?.name === "AbortError") throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
+    if (isTimeoutError(err)) throw new ReaderError("The photo took too long to read", { kind: "timeout", transient: true });
     throw new ReaderError("The photo reader's answer was cut off", { transient: true });
   }
   if (!res.ok) {
@@ -75,7 +102,7 @@ async function call(body: any, signal: any) {
  * Reads one photo, or a group of consecutive screenshots of one recipe, as JPEG data URLs. Resolves { read (normalised), usage, ms, request }
  * or throws ReaderError. The call has its own timeout (CHAT_VISION_TIMEOUT_MS) and max_tokens.
  */
-export async function readPhotos(imageUrls: any, { consecutive = imageUrls.length > 1, trace, name = "photo read" }: any = {}) {
+export async function readPhotos(imageUrls: string[], { consecutive = imageUrls.length > 1, trace, name = "photo read" }: ReadPhotosOptions = {}): Promise<ReaderResult> {
   if (!readerConfigured()) throw new ReaderError("Photo reading isn't set up.", { kind: "not-configured" });
   const started = Date.now();
   let body = readerRequest(imageUrls, { consecutive });
@@ -84,40 +111,51 @@ export async function readPhotos(imageUrls: any, { consecutive = imageUrls.lengt
     let out;
     try {
       out = await call(body, AbortSignal.timeout(config.chatVisionTimeoutMs));
-    } catch (err: any) {
+    } catch (err) {
       if (!(err instanceof ReaderError) || err.kind !== "no-schema") throw err;
       body = readerRequest(imageUrls, { consecutive, forcedTool: true });
       out = await call(body, AbortSignal.timeout(config.chatVisionTimeoutMs));
     }
-    const choice = out.json?.choices?.[0];
-    const raw = (body as any).tools ? choice?.message?.tool_calls?.[0]?.function?.arguments : choice?.message?.content;
-    if (choice?.finish_reason === "error") throw new ReaderError("The photo reader's provider failed mid-answer", { kind: "upstream", transient: true });
-    if (choice?.finish_reason === "length") {
-      const u = out.json?.usage;
-      console.warn(`The photo reader ran out of room: ${u?.completion_tokens ?? "?"} tokens (${u?.completion_tokens_details?.reasoning_tokens ?? 0} thinking) of max ${config.chatVisionMaxTokens}`);
+    const choice = completionOf(out.json);
+    const raw = body.tools ? choice.toolArguments : choice.content;
+    if (choice.finishReason === "error") throw new ReaderError("The photo reader's provider failed mid-answer", { kind: "upstream", transient: true });
+    if (choice.finishReason === "length") {
+      const u = choice.usage;
+      console.warn(`The photo reader ran out of room: ${u?.completion_tokens ?? "?"} tokens (${asRecord(u?.completion_tokens_details)?.reasoning_tokens ?? 0} thinking) of max ${config.chatVisionMaxTokens}`);
       throw new ReaderError("The photo reader ran out of room", { kind: "unparseable", transient: true });
     }
     const parsed = parseReaderJson(raw);
     const read = normaliseRead(parsed);
     if (!read) {
-      if (choice?.message?.refusal) throw new ReaderError("The photo reader refused this photo", { kind: "refused" });
+      if (choice.refusal) throw new ReaderError("The photo reader refused this photo", { kind: "refused" });
       // tried once more (MAX_ATTEMPTS in photo-queue.ts): the same prompt usually lands on another provider and comes back well-formed
       throw new ReaderError("The photo reader's answer didn't fit the schema", { kind: "unparseable", transient: true });
     }
-    gen?.end?.({ output: read, usage: out.json?.usage, finishReason: choice?.finish_reason });
-    return { read, usage: out.json?.usage, ms: Date.now() - started, request: body };
-  } catch (err: any) {
-    gen?.end?.({ error: err.message });
+    gen?.end?.({ output: read, usage: choice.usage, finishReason: choice.finishReason });
+    return { read, usage: choice.usage, ms: Date.now() - started, request: body };
+  } catch (err) {
+    gen?.end?.({ error: errorMessage(err) });
     throw err;
   }
+}
+
+/** The parts of a completion the reader looks at. The body is a provider's JSON: every field may be missing or the wrong type. */
+function completionOf(json: unknown): Completion {
+  const root = asRecord(json);
+  const choices = root?.choices;
+  const choice = asRecord(Array.isArray(choices) ? choices[0] : undefined);
+  const message = asRecord(choice?.message);
+  const toolCalls = message?.tool_calls;
+  const firstCall = asRecord(Array.isArray(toolCalls) ? toolCalls[0] : undefined);
+  return { finishReason: choice?.finish_reason, content: message?.content, toolArguments: asRecord(firstCall?.function)?.arguments, refusal: message?.refusal, usage: asRecord(root?.usage) };
 }
 
 /**
  * The reader's answer as an object. Providers don't all enforce the schema strictly: a model may wrap the object in a one-item array (Qwen does),
  * fence it in ```json, or put a line of prose around it. Anything else is null (a failed read).
  */
-export function parseReaderJson(raw: any) {
-  let value = raw;
+export function parseReaderJson(raw: unknown): Record<string, unknown> | null {
+  let value: unknown = raw;
   if (typeof raw === "string") {
     const text = raw.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "").trim();
     try {
@@ -133,24 +171,27 @@ export function parseReaderJson(raw: any) {
     }
   }
   if (Array.isArray(value) && value.length === 1) value = value[0];
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+  return asRecord(value) ?? null;
 }
 
 // --- normalising what the reader returned (it is untrusted: shapes and lengths are enforced here) ------------------------------------
 
-const clean = (s: any, max: any) => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]+/g, " ").replace(/[ \t]+/g, " ").trim().slice(0, max);
-const strList = (v: any, maxItems: any, maxLen: any) => (Array.isArray(v) ? v.filter((x) => typeof x === "string").map((x) => clean(x, maxLen)).filter(Boolean).slice(0, maxItems) : []);
-const posInt = (v: any, max: any) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= max ? Math.round(Number(v)) : null);
-const bool = (v: any) => v === true;
+const clean = (s: unknown, max: number): string => String(s ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f\u2028\u2029]+/g, " ").replace(/[ \t]+/g, " ").trim().slice(0, max);
+const strList = (v: unknown, maxItems: number, maxLen: number): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map((x) => clean(x, maxLen)).filter(Boolean).slice(0, maxItems) : []);
+const posInt = (v: unknown, max: number): number | null => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= max ? Math.round(Number(v)) : null);
+const bool = (v: unknown): boolean => v === true;
+const isUnit = (u: unknown): u is Unit => (UNITS as readonly unknown[]).includes(u);
+const isKind = (k: unknown): k is ReadKind => k === "recipe" || k === "dish" || k === "other";
+const isCourse = (c: string): c is Course => (COURSES as readonly string[]).includes(c);
 
-const posNum = (v: any) => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 100000 ? Math.round(v * 1000) / 1000 : null);
+const posNum = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 100000 ? Math.round(v * 1000) / 1000 : null);
 /** One read ingredient in the recipe's own shape (docs/structured-ingredients.md section 1); the server fills `item` when it's staged. */
-function readIngredient(i: any) {
+function readIngredient(i: Record<string, unknown>): ReadIngredient {
   const amount = posNum(i.amount);
   const max = posNum(i.amount_max);
-  const unit = UNITS.includes(i.unit) ? i.unit : undefined;
+  const unit = isUnit(i.unit) ? i.unit : undefined;
   return {
-    ...(amount ? { amount: max && max > amount ? [amount, max] : amount } : {}),
+    ...(amount ? { amount: max && max > amount ? ([amount, max] as [number, number]) : amount } : {}),
     ...(unit && amount ? { unit } : {}),
     name: clean(i.name, 100).replace(/\*+/g, ""),
     ...(clean(i.note, 120) ? { note: clean(i.note, 120) } : {}),
@@ -160,16 +201,18 @@ function readIngredient(i: any) {
 }
 
 /** The reader's output reduced to the schema's shape with sane bounds, or null if it isn't an object at all. */
-export function normaliseRead(raw: any) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const r = raw.recipe && typeof raw.recipe === "object" ? raw.recipe : {};
+export function normaliseRead(value: unknown): PhotoRead | null {
+  const raw = asRecord(value);
+  if (!raw) return null;
+  const r = asRecord(raw.recipe) ?? {};
   const ingredients = (Array.isArray(r.ingredients) ? r.ingredients : [])
-    .filter((i: any) => i && typeof i === "object")
-    .map((i: any) => readIngredient(i))
-    .filter((i: any) => i.name)
+    .map((i) => asRecord(i))
+    .filter((i) => i !== undefined)
+    .map((i) => readIngredient(i))
+    .filter((i) => i.name)
     .slice(0, 60);
   return {
-    kind: ["recipe", "dish", "other"].includes(raw.kind) ? raw.kind : "other",
+    kind: isKind(raw.kind) ? raw.kind : "other",
     has_title: bool(raw.has_title),
     has_ingredients: bool(raw.has_ingredients),
     has_method: bool(raw.has_method),
@@ -183,7 +226,7 @@ export function normaliseRead(raw: any) {
     bottom_lines: strList(raw.bottom_lines, 3, 200),
     recipe: {
       title: clean(r.title, 120),
-      course: strList(r.course, 5, 20).filter((c) => (COURSES as readonly string[]).includes(c)),
+      course: strList(r.course, 5, 20).filter(isCourse),
       tags: strList(r.tags, 6, 40),
       total_mins: posInt(r.total_mins, 24 * 60),
       total_mins_estimated: bool(r.total_mins_estimated),
@@ -202,22 +245,22 @@ export function normaliseRead(raw: any) {
 
 // --- grouping neighbouring photos (2.2) ------------------------------------------------------------------------------------------------
 
-const norm = (s: any) => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-const singular = (w: any) => (w.length > 3 ? w.replace(/(ch|sh|ss|x|z|o)es$/, "$1").replace(/ies$/, "y").replace(/([^s])s$/, "$1") : w);
-const nameSet = (list: any) => new Set<any>((list || []).map((x: any) => norm(x).split(" ").map(singular).join(" ")).filter(Boolean));
-const shared = (a: any, b: any) => [...a].filter((x) => b.has(x)).length;
+const norm = (s: unknown): string => String(s || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const singular = (w: string): string => (w.length > 3 ? w.replace(/(ch|sh|ss|x|z|o)es$/, "$1").replace(/ies$/, "y").replace(/([^s])s$/, "$1") : w);
+const nameSet = (list: readonly unknown[] | null | undefined): Set<string> => new Set((list || []).map((x) => norm(x).split(" ").map(singular).join(" ")).filter(Boolean));
+const shared = (a: Set<string>, b: Set<string>): number => [...a].filter((x) => b.has(x)).length;
 
 /** Text that carries on from one screenshot to the next: a line at the top of B that is also at the bottom of A. */
-function overlaps(a: any, b: any) {
-  const bottoms = (a.bottom_lines || []).map(norm).filter((l: any) => l.length >= 12);
+function overlaps(a: PhotoRead, b: PhotoRead): boolean {
+  const bottoms = (a.bottom_lines || []).map(norm).filter((l) => l.length >= 12);
   // the same line on both (a screenshot's last line cut in half still matches when the shorter part is long enough to be telling)
-  const part = (x: any, y: any) => x.length >= 30 && y.includes(x);
-  return (b.top_lines || []).map(norm).filter((l: any) => l.length >= 12).some((top: any) => bottoms.some((bot: any) => bot === top || part(top, bot) || part(bot, top)));
+  const part = (x: string, y: string) => x.length >= 30 && y.includes(x);
+  return (b.top_lines || []).map(norm).filter((l) => l.length >= 12).some((top) => bottoms.some((bot) => bot === top || part(top, bot) || part(bot, top)));
 }
 
 /** The grouping signals for neighbours A (photo n) and B (photo n+1), both read as recipes. */
-export function pairSignals(a: any, b: any) {
-  const signals: any[] = [];
+export function pairSignals(a: PhotoRead, b: PhotoRead): PairSignals {
+  const signals: string[] = [];
   if (a.cut_off_at_bottom) signals.push("cut_off");
   if (b.starts_mid_recipe) signals.push("starts_mid_recipe");
   if (a.last_step && b.first_step === a.last_step + 1) signals.push("next_step");
@@ -226,13 +269,13 @@ export function pairSignals(a: any, b: any) {
 }
 
 /** joined (overlap, or two signs), unsure (one sign), separate. A title on B makes signs alone at most "unsure". */
-export function pairDecision({ overlap, signals, newTitle }: any) {
+export function pairDecision({ overlap, signals, newTitle }: PairSignals): "joined" | "unsure" | "separate" {
   if (overlap) return "joined";
   if (newTitle) return signals.length >= 2 ? "unsure" : "separate";
   return signals.length >= 2 ? "joined" : signals.length === 1 ? "unsure" : "separate";
 }
 
-const lacks = (r: any, n: any) => {
+const lacks = (r: PhotoRead, n: number): string => {
   const missing = [!r.has_title && "no title", !r.has_ingredients && "no ingredients", !r.has_method && "no method"].filter(Boolean);
   return missing.length ? `${n} has ${missing.join(", ")}` : `${n} looks like a whole recipe`;
 };
@@ -242,19 +285,21 @@ const lacks = (r: any, n: any) => {
  * joined automatically (and only two read recipes), plus the user's own corrections (joined_to links a photo to an earlier one; split_from_prev
  * keeps it apart from the one before). Returns { groups: [{ id: "3+4", members: [3, 4] }], pairs: [{ a, b, overlap, signals, decision, why }] }.
  */
-export function groupPhotos(rows: any) {
-  const live = rows.filter((r: any) => r.status === "read" && r.result).sort((x: any, y: any) => x.n - y.n);
-  const byN = new Map<any, any>(live.map((r: any) => [r.n, r]));
-  const parent = new Map<any, any>(live.map((r: any) => [r.n, r.n]));
-  const find = (n: any): any => (parent.get(n) === n ? n : find(parent.get(n)));
-  const union = (a: any, b: any) => parent.set(find(Math.max(a, b)), find(Math.min(a, b)));
-  const pairs: any[] = [];
+export function groupPhotos(rows: GroupableRow[]): { groups: PhotoGroup[]; pairs: PhotoPair[] } {
+  const live = rows.filter((r): r is LiveRow => r.status === "read" && !!r.result).sort((x, y) => x.n - y.n);
+  const byN = new Map<number, LiveRow>(live.map((r) => [r.n, r]));
+  const parent = new Map<number, number>(live.map((r) => [r.n, r.n]));
+  const find = (n: number): number => {
+    const p = parent.get(n);
+    return p === undefined || p === n ? n : find(p);
+  };
+  const union = (a: number, b: number) => parent.set(find(Math.max(a, b)), find(Math.min(a, b)));
+  const pairs: PhotoPair[] = [];
   for (const b of live) {
     const a = byN.get(b.n - 1);
-    const recipes = a && a.result.kind === "recipe" && b.result.kind === "recipe";
-    if (recipes && b.joined_to !== a.n) {
+    if (a && a.result.kind === "recipe" && b.result.kind === "recipe" && b.joined_to !== a.n) {
       const s = pairSignals(a.result, b.result);
-      let decision = pairDecision(s);
+      let decision: PairDecisionName = pairDecision(s);
       if (b.split_from_prev) decision = "split_by_user";
       pairs.push({ a: a.n, b: b.n, ...s, decision, why: decision === "unsure" ? `${lacks(a.result, a.n)}, ${lacks(b.result, b.n)}` : "" });
       if (decision === "joined") union(a.n, b.n);
@@ -265,23 +310,24 @@ export function groupPhotos(rows: any) {
       pairs.push({ a: b.joined_to, b: b.n, overlap: false, signals: [], newTitle: false, decision: "joined_by_user", why: "" });
     }
   }
-  const groups = new Map();
+  const groups = new Map<number, number[]>();
   for (const r of live) {
     const root = find(r.n);
-    if (!groups.has(root)) groups.set(root, []);
-    groups.get(root).push(r.n);
+    const members = groups.get(root) ?? [];
+    members.push(r.n);
+    groups.set(root, members);
   }
   return { groups: [...groups.values()].map((members) => ({ id: members.join("+"), members })), pairs };
 }
 
 /** "photo-3+4" (also "3+4", "photo-3+photo-4", "photo 3") -> [3, 4], or null. */
-export function parsePhotoId(id: any) {
+export function parsePhotoId(id: unknown): number[] | null {
   const s = String(id || "").toLowerCase().replace(/photo[-\s]?/g, "").replace(/\s+/g, "");
   if (!/^\d+(\+\d+)*$/.test(s)) return null;
-  const ns = [...new Set<any>(s.split("+").map(Number))].sort((a, b) => a - b);
+  const ns = [...new Set(s.split("+").map(Number))].sort((a, b) => a - b);
   return ns.every((n) => n >= 1 && n <= 10_000) ? ns : null;
 }
-export const photoLabel = (members: any) => `photo-${members.join("+")}`;
+export const photoLabel = (members: number[]): string => `photo-${members.join("+")}`;
 
 // --- a read recipe as a create_recipe operation --------------------------------------------------------------------------------------
 
@@ -289,41 +335,48 @@ export const photoLabel = (members: any) => `photo-${members.join("+")}`;
  * The create_recipe fields of a read recipe: { fields, estimated: ["serves", ...], missing: ["method", ...] }. Numbers the reader couldn't
  * give get a plain default and are marked estimated, so the model can say so.
  */
-export function fieldsFromRead(read: any) {
-  const r = read?.recipe || {};
-  const estimated: any[] = [];
-  const pick = (key: any, fallback: any) => {
-    if (r[key]) {
-      if (r[`${key}_estimated`]) estimated.push(key);
-      return r[key];
+export function fieldsFromRead(read: PhotoRead | null | undefined): FieldsFromRead {
+  const r: Partial<ReadRecipe> = read?.recipe || {};
+  const estimated: string[] = [];
+  const pick = (key: string, value: number | null | undefined, wasEstimated: boolean | undefined, fallback: number): number => {
+    if (value) {
+      if (wasEstimated) estimated.push(key);
+      return value;
     }
     estimated.push(key);
     return fallback;
   };
-  const fields = {
+  const fields: ReadFields = {
     title: r.title || "",
     course: r.course?.length ? r.course : ["Dinner"],
     tags: r.tags || [],
-    total_mins: pick("total_mins", 30),
-    serves: pick("serves", 2),
-    calories: pick("calories", 500),
-    ingredients: (r.ingredients || []).map((i: any) => ({ ...i })),
+    total_mins: pick("total_mins", r.total_mins, r.total_mins_estimated, 30),
+    serves: pick("serves", r.serves, r.serves_estimated, 2),
+    calories: pick("calories", r.calories, r.calories_estimated, 500),
+    ingredients: (r.ingredients || []).map((i) => ({ ...i })),
     instructions: r.instructions || [],
     ...(r.notes ? { notes: r.notes } : {}),
   };
-  const missing = [!fields.title && "title", !fields.ingredients.length && "ingredients", !fields.instructions.length && "method"].filter(Boolean);
+  const missing: string[] = [];
+  if (!fields.title) missing.push("title");
+  if (!fields.ingredients.length) missing.push("ingredients");
+  if (!fields.instructions.length) missing.push("method");
   return { fields, estimated, missing };
 }
 
 // --- duplicates across the household tray and the book (2.6) -------------------------------------------------------------------------
 
 const STOP = new Set(["the", "a", "an", "and", "with", "of", "in", "on", "for", "recipe", "easy", "best", "ever", "quick", "my", "our", "simple", "perfect", "ultimate", "homemade", "style"]);
-const titleWords = (t: any) => new Set<any>(norm(t).split(" ").filter((w) => w && !STOP.has(w)).map(singular));
+const titleWords = (t: unknown): Set<string> => new Set(norm(t).split(" ").filter((w) => w && !STOP.has(w)).map(singular));
+/** The photo_reads columns grouping looks at. */
+type GroupableRow = Pick<PhotoReadRow, "n" | "status" | "result" | "joined_to" | "split_from_prev">;
+type LiveRow = GroupableRow & { result: PhotoRead };
+
 export const TITLE_MATCH = 0.6;
 export const INGREDIENT_MATCH = 0.6;
 
 /** { title, ingredients } scores against another recipe: share of title words ("most of them") and of ingredient names. */
-export function similarity(a: any, b: any) {
+export function similarity(a: SimilarRecipe, b: SimilarRecipe): { title: number; ingredients: number } {
   const ta = titleWords(a.title);
   const tb = titleWords(b.title);
   const title = ta.size && tb.size ? shared(ta, tb) / Math.max(ta.size, tb.size) : 0;
@@ -338,16 +391,16 @@ export function similarity(a: any, b: any) {
  * null. tray: [{ id, title, ingredients, added_by }], book: [{ slug, title, ingredients }], skipIds: tray items to ignore (its own card).
  * Returns { match: { kind: "tray" | "book", id?, slug?, title, added_by? } | null, checks: [{ against, title, ingredients, duplicate }] }.
  */
-export function findDuplicate(recipe: any, { tray = [], book = [], skipIds = [] }: any = {}) {
-  const checks: any[] = [];
-  let match: any = null;
-  const consider = (kind: any, other: any) => {
+export function findDuplicate(recipe: SimilarRecipe, { tray = [], book = [], skipIds = [] }: FindDuplicateOptions = {}): DuplicateResult {
+  const checks: DuplicateResult["checks"] = [];
+  let match: DuplicateMatch | null = null;
+  const consider = (other: SimilarRecipe, against: string, found: DuplicateMatch) => {
     const s = similarity(recipe, other);
     const duplicate = s.title >= TITLE_MATCH && s.ingredients >= INGREDIENT_MATCH;
-    checks.push({ against: kind === "tray" ? `tray:${other.id}` : `book:${other.slug}`, ...s, duplicate });
-    if (duplicate && !match) match = kind === "tray" ? { kind, id: other.id, title: other.title, added_by: other.added_by } : { kind, slug: other.slug, title: other.title };
+    checks.push({ against, ...s, duplicate });
+    if (duplicate && !match) match = found;
   };
-  for (const item of tray) if (!skipIds.includes(item.id)) consider("tray", item);
-  for (const r of book) consider("book", r);
+  for (const item of tray) if (!skipIds.includes(item.id)) consider(item, `tray:${item.id}`, { kind: "tray", id: item.id, title: item.title, added_by: item.added_by });
+  for (const r of book) consider(r, `book:${r.slug}`, { kind: "book", slug: r.slug, title: r.title });
   return { match, checks };
 }

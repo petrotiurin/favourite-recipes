@@ -30,7 +30,7 @@ export function readerSystemPrompt() {
 }
 
 /** The fixed instruction that goes with the image parts: the single-photo or the consecutive-screenshots variant. */
-export const readerInstruction = (consecutive: any) => (consecutive ? CONSECUTIVE : SINGLE);
+export const readerInstruction = (consecutive: boolean) => (consecutive ? CONSECUTIVE : SINGLE);
 
 const str = { type: "string" };
 const strs = { type: "array", items: str };

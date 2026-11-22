@@ -1,6 +1,7 @@
 // The Supabase rows (supabase/migrations/*.sql) and what the jsonb columns hold. Written to be read from PostgREST with the service-role key:
 // a `select` with a column list gives a `Pick` of these.
 import type { ChatEventDataMap, RecipeCard, Suggestion } from "../../../shared/chat-events.ts";
+import type { PhotoRead } from "./photos.ts";
 import type { TrayRow } from "./tray.ts";
 
 export type { TrayRow };
@@ -148,10 +149,11 @@ export interface PhotoReadRow {
   attempts: number;
   lease_until: string | null;
   /** What the photo reader made of it (lib/photo-reader.ts): `kind` says what is in the photo. */
-  result: { kind?: string; recipe?: { title?: string; [key: string]: unknown }; [key: string]: unknown } | null;
+  result: PhotoRead | null;
   /** The photos read together as one recipe, e.g. "3+4". */
   group_id: string | null;
-  recipe: Record<string, unknown> | null;
+  /** The recipe a joined group makes, read again from all its photos together (kept on the group's first photo). */
+  recipe: PhotoRead | null;
   joined_to: number | null;
   split_from_prev: boolean;
   /** The tray item it was staged as. */

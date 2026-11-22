@@ -10,7 +10,7 @@ const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
  * Always producing .jpg keeps paths predictable: images/recipes/<slug>.jpg
  * With `aspect` (width / height) the image is centre-cropped to that ratio first.
  */
-export async function normalizeImage(buffer: any, { aspect }: any = {}) {
+export async function normalizeImage(buffer: Buffer, { aspect }: { aspect?: number } = {}) {
   let meta;
   try {
     meta = await sharp(buffer, { limitInputPixels: MAX_PIXELS }).metadata();
@@ -36,7 +36,7 @@ export async function normalizeImage(buffer: any, { aspect }: any = {}) {
   return { buffer: out.data, width: out.info.width, height: out.info.height, ext: "jpg" };
 }
 
-export async function downloadImage(url: any) {
+export async function downloadImage(url: string) {
   let parsed;
   try {
     parsed = new URL(url);
@@ -62,8 +62,8 @@ export async function downloadImage(url: any) {
   return buf;
 }
 
-export function decodeBase64Image(data: any) {
-  const cleaned = data.replace(/^data:[^;]+;base64,/, "").replace(/\s+/g, "");
+export function decodeBase64Image(data: string | undefined) {
+  const cleaned = (data ?? "").replace(/^data:[^;]+;base64,/, "").replace(/\s+/g, "");
   const buf = Buffer.from(cleaned, "base64");
   if (!buf.length) throw new Error("image_base64 is empty or not valid base64");
   return buf;

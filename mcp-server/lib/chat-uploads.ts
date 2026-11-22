@@ -9,6 +9,21 @@ import { MAX_IMAGE_EDGE } from "./config.ts";
 import { q, rows, isUuid, StoreError } from "./chat-store.ts";
 import { storage, objectPath, SIGNED_URL_SECONDS } from "./tray-store.ts";
 import { config } from "./config.ts";
+import { errorMessage } from "./errors.ts";
+import { asRecord } from "./narrow.ts";
+
+/** A sanitised upload: the re-encoded JPEG and its size. */
+export interface SanitizedUpload {
+  buffer: Buffer;
+  width: number;
+  height: number;
+}
+/** A stored upload: its path in the bucket and its size. */
+export interface StoredUpload {
+  path: string;
+  width: number;
+  height: number;
+}
 
 export const UPLOAD_BUCKET = "chat-uploads";
 export const MAX_IMAGES = 8; // per message (docs/parallel-photo-reading.md P7)
@@ -18,7 +33,7 @@ const FORMATS = new Set(["jpeg", "png", "webp", "gif", "heif", "avif"]);
 
 export class UploadError extends Error {
   declare status: number;
-  constructor(message: any, status = 400) {
+  constructor(message: string, status = 400) {
     super(message);
     this.status = status;
   }
@@ -28,11 +43,11 @@ export class UploadError extends Error {
  * Validates the `images` field of an editor's request ([ "data:image/jpeg;base64,...", ... ]) and re-encodes each image.
  * Returns [{ buffer (JPEG), width, height }]; throws UploadError with a message that is safe to show.
  */
-export async function sanitizeUploads(raw: any) {
+export async function sanitizeUploads(raw: unknown): Promise<SanitizedUpload[]> {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) throw new UploadError("Photos must be a list.");
   if (raw.length > MAX_IMAGES) throw new UploadError(`At most ${MAX_IMAGES} photos per message.`);
-  const out: any[] = [];
+  const out: SanitizedUpload[] = [];
   for (const item of raw) {
     if (typeof item !== "string") throw new UploadError("A photo wasn't sent properly.");
     const m = item.match(/^data:image\/[a-z0-9.+-]+;base64,([A-Za-z0-9+/=\s]+)$/i);
@@ -46,7 +61,7 @@ export async function sanitizeUploads(raw: any) {
     } catch {
       throw new UploadError("One of the files isn't a readable photo.");
     }
-    if (!FORMATS.has(meta.format) || !meta.width || !meta.height) throw new UploadError("One of the files isn't a supported photo (JPEG, PNG, WebP).");
+    if (!meta.format || !FORMATS.has(meta.format) || !meta.width || !meta.height) throw new UploadError("One of the files isn't a supported photo (JPEG, PNG, WebP).");
     try {
       const { data, info } = await sharp(bytes, { limitInputPixels: MAX_UPLOAD_PIXELS, pages: 1 })
         .rotate()
@@ -62,12 +77,12 @@ export async function sanitizeUploads(raw: any) {
   return out;
 }
 
-export const dataUrl = (buffer: any) => `data:image/jpeg;base64,${buffer.toString("base64")}`;
+export const dataUrl = (buffer: Buffer): string => `data:image/jpeg;base64,${buffer.toString("base64")}`;
 
 /** Stores the sanitized images under the conversation. Returns [{ path, width, height }]. */
-export async function storeUploads(conversationId: any, images: any) {
+export async function storeUploads(conversationId: unknown, images: Pick<SanitizedUpload, "buffer" | "width" | "height">[]): Promise<StoredUpload[]> {
   if (!isUuid(conversationId)) throw new StoreError("bad conversation id");
-  const stored: any[] = [];
+  const stored: StoredUpload[] = [];
   try {
     for (const img of images) {
       const path = `${conversationId}/${randomUUID()}.jpg`;
@@ -75,7 +90,7 @@ export async function storeUploads(conversationId: any, images: any) {
       if (!res.ok) throw new StoreError(`Upload storage answered ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
       stored.push({ path, width: img.width, height: img.height });
     }
-  } catch (err: any) {
+  } catch (err) {
     await removeUploads(stored.map((s) => s.path)).catch(() => {});
     throw err;
   }
@@ -83,10 +98,10 @@ export async function storeUploads(conversationId: any, images: any) {
 }
 
 const PATH = /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/i;
-export const isUploadPath = (p: any) => typeof p === "string" && PATH.test(p);
+export const isUploadPath = (p: unknown): p is string => typeof p === "string" && PATH.test(p);
 
 /** The stored photo's bytes, or null when it's gone. */
-export async function downloadUpload(path: any) {
+export async function downloadUpload(path: unknown): Promise<Buffer | null> {
   if (!isUploadPath(path)) return null;
   const res = await storage(`object/${UPLOAD_BUCKET}/${objectPath(path)}`);
   if (res.status === 404 || res.status === 400) return null;
@@ -95,15 +110,15 @@ export async function downloadUpload(path: any) {
 }
 
 /** A short-lived URL the editor's browser can show the photo with, or null. */
-export async function signedUploadUrl(path: any, seconds = SIGNED_URL_SECONDS) {
+export async function signedUploadUrl(path: unknown, seconds = SIGNED_URL_SECONDS): Promise<string | null> {
   if (!isUploadPath(path)) return null;
   const res = await storage(`object/sign/${UPLOAD_BUCKET}/${objectPath(path)}`, { method: "POST", json: true, body: { expiresIn: seconds } });
   if (!res.ok) return null;
-  const { signedURL } = await res.json();
-  return signedURL ? `${config.supabaseUrl}/storage/v1${signedURL.startsWith("/") ? "" : "/"}${signedURL}` : null;
+  const signedURL = asRecord(await res.json())?.signedURL;
+  return typeof signedURL === "string" && signedURL ? `${config.supabaseUrl}/storage/v1${signedURL.startsWith("/") ? "" : "/"}${signedURL}` : null;
 }
 
-export async function removeUploads(paths: any) {
+export async function removeUploads(paths: unknown[]) {
   const list = [...new Set(paths.filter(isUploadPath))];
   if (!list.length) return;
   const res = await storage(`object/${UPLOAD_BUCKET}`, { method: "DELETE", json: true, body: { prefixes: list } });
@@ -111,15 +126,24 @@ export async function removeUploads(paths: any) {
 }
 
 /** Deletes every photo of one conversation (the editor deleted the chat). Never throws. */
-export async function removeConversationUploads(conversationId: any) {
+export async function removeConversationUploads(conversationId: unknown) {
   if (!isUuid(conversationId)) return;
   try {
     const res = await storage(`object/list/${UPLOAD_BUCKET}`, { method: "POST", json: true, body: { prefix: conversationId, limit: 200 } });
     if (!res.ok) return;
-    await removeUploads((await res.json()).map((o: any) => `${conversationId}/${o.name}`));
-  } catch (err: any) {
-    console.error("Deleting a chat's photos failed:", err.message);
+    await removeUploads((await listedNames(res)).map((name) => `${conversationId}/${name}`));
+  } catch (err) {
+    console.error("Deleting a chat's photos failed:", errorMessage(err));
   }
+}
+
+/** The names in a Storage listing (`object/list`): [{ name }, ...]. */
+async function listedNames(res: Response): Promise<string[]> {
+  const list: unknown = await res.json();
+  return (Array.isArray(list) ? list : []).flatMap((o) => {
+    const name = asRecord(o)?.name;
+    return typeof name === "string" ? [name] : [];
+  });
 }
 
 let lastSweep = 0;
@@ -127,23 +151,23 @@ let lastSweep = 0;
  * Deletes the photos of chats that no longer exist (expired by purge_old_chats, or deleted): lists the bucket's folders (one per conversation),
  * asks which conversations still exist and removes the rest. At most once an hour per instance; never throws.
  */
-export async function sweepOrphans({ now = Date.now(), force = false }: any = {}) {
+export async function sweepOrphans({ now = Date.now(), force = false }: { now?: number; force?: boolean } = {}) {
   if (!force && now - lastSweep < 60 * 60 * 1000) return 0;
   lastSweep = now;
   try {
     const res = await storage(`object/list/${UPLOAD_BUCKET}`, { method: "POST", json: true, body: { prefix: "", limit: 1000 } });
     if (!res.ok) return 0;
-    const folders = (await res.json()).map((o: any) => o.name).filter(isUuid).slice(0, 200);
+    const folders = (await listedNames(res)).filter(isUuid).slice(0, 200);
     if (!folders.length) return 0;
-    const alive = new Set((await rows<{ id: string }>("conversations", { query: q({ select: "id", id: `in.(${folders.join(",")})` }) })).map((r: any) => r.id));
+    const alive = new Set((await rows<{ id: string }>("conversations", { query: q({ select: "id", id: `in.(${folders.join(",")})` }) })).map((r) => r.id));
     let removed = 0;
-    for (const id of folders.filter((f: any) => !alive.has(f))) {
+    for (const id of folders.filter((f) => !alive.has(f))) {
       await removeConversationUploads(id);
       removed++;
     }
     return removed;
-  } catch (err: any) {
-    console.error("Sweeping chat photos failed:", err.message);
+  } catch (err) {
+    console.error("Sweeping chat photos failed:", errorMessage(err));
     return 0;
   }
 }

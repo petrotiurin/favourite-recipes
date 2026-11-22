@@ -14,6 +14,9 @@ import { CARD_ASPECT } from "./config.ts";
 import { normalizeImage } from "./images.ts";
 import { generateDishImage } from "./image-generation.ts";
 import { downloadUpload } from "./chat-uploads.ts";
+import { errorMessage } from "./errors.ts";
+import { asRecord, toList } from "./narrow.ts";
+import type { FetchedFile, MadePhoto, MakePhotoInput, PinnedGetInit } from "./types/photos.ts";
 
 const MAX_HTML_BYTES = 1_500_000;
 const MAX_SCANNED_HTML = 256 * 1024;
@@ -24,15 +27,15 @@ const UA = "Mozilla/5.0 (compatible; favourite-recipes-chat)";
 
 /** Replaceable in tests: how a hostname is resolved. Must resolve to [{ address }]. */
 export const deps = {
-  lookup: (host: any) => dns.lookup(host, { all: true, verbatim: true }),
+  lookup: (host: string) => dns.lookup(host, { all: true, verbatim: true }),
   // How a checked URL is fetched: the default connects to the checked address itself (pinnedGet). Tests and the dev harness swap in the global fetch.
-  get: (url: any, address: any, init: any) => pinnedGet(url, address, init),
+  get: (url: URL, address: string, init: PinnedGetInit): Promise<Response> => pinnedGet(url, address, init),
 };
 
 export class UnsafeUrlError extends Error {}
 
 /** The 16 bytes of an IPv6 address (`::` expanded, an embedded dotted IPv4 tail handled), or null if it doesn't parse. */
-function ipv6Bytes(address: any) {
+function ipv6Bytes(address: string): number[] | null {
   let a = address.toLowerCase().split("%")[0];
   const tail = a.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
   if (tail) a = a.slice(0, tail.index) + (((+tail[1] << 8) | +tail[2]).toString(16)) + ":" + (((+tail[3] << 8) | +tail[4]).toString(16));
@@ -47,7 +50,7 @@ function ipv6Bytes(address: any) {
 }
 
 /** True for an address that isn't on the public internet (private, loopback, link-local, CGNAT, multicast, reserved, mapped, tunnelled). */
-export function isPrivateAddress(address: any) {
+export function isPrivateAddress(address: string): boolean {
   const kind = net.isIP(address);
   if (kind === 4) {
     const [a, b, c] = address.split(".").map(Number);
@@ -65,7 +68,7 @@ export function isPrivateAddress(address: any) {
   if (kind === 6) {
     const x = ipv6Bytes(address);
     if (!x) return true;
-    const zeros = (n: any) => x.slice(0, n).every((v) => v === 0);
+    const zeros = (n: number) => x.slice(0, n).every((v) => v === 0);
     if (zeros(12)) return true; // ::/96: unspecified, loopback and IPv4-compatible
     if (zeros(10) && x[10] === 255 && x[11] === 255) return isPrivateAddress(x.slice(12).join(".")); // ::ffff:a.b.c.d (mapped)
     if (x[0] === 0 && x[1] === 0x64 && x[2] === 0xff && x[3] === 0x9b && x.slice(4, 12).every((v) => v === 0)) return true; // 64:ff9b::/96 (NAT64: embeds any IPv4)
@@ -85,8 +88,8 @@ export function isPrivateAddress(address: any) {
  * Checks `url` is a public http(s) URL and returns { url (parsed), address (the one public address to connect to) }. Every address the name
  * resolves to must be public. The caller connects to `address` itself (see pinnedGet), so the name can't resolve differently a moment later.
  */
-export async function resolvePublic(url: any) {
-  let u;
+export async function resolvePublic(url: unknown): Promise<{ url: URL; address: string }> {
+  let u: URL;
   try {
     u = new URL(String(url));
   } catch {
@@ -101,7 +104,7 @@ export async function resolvePublic(url: any) {
     if (isPrivateAddress(host)) throw new UnsafeUrlError("that address isn't public");
     return { url: u, address: host };
   }
-  let answers;
+  let answers: Awaited<ReturnType<typeof deps.lookup>>;
   try {
     answers = await deps.lookup(host);
   } catch {
@@ -112,7 +115,7 @@ export async function resolvePublic(url: any) {
 }
 
 /** Throws UnsafeUrlError unless `url` is a public http(s) URL. Returns the parsed URL. */
-export async function assertPublicUrl(url: any) {
+export async function assertPublicUrl(url: unknown): Promise<URL> {
   return (await resolvePublic(url)).url;
 }
 
@@ -120,18 +123,19 @@ export async function assertPublicUrl(url: any) {
  * One GET that connects to `address` (already checked) whatever the name would resolve to now: the TLS name and Host header stay the URL's.
  * Resolves a Web Response (status, headers, streaming body). Aborts after timeoutMs, body included.
  */
-export function pinnedGet(url: any, address: any, { headers, timeoutMs = FETCH_TIMEOUT_MS }: any = {}) {
+export function pinnedGet(url: URL, address: string, { headers, timeoutMs = FETCH_TIMEOUT_MS }: PinnedGetInit = {}) {
   return new Promise<Response>((resolve, reject) => {
     const https = url.protocol === "https:";
     const req = (https ? httpsRequest : httpRequest)(
       url,
       { method: "GET", headers, signal: AbortSignal.timeout(timeoutMs), lookup: (_host, _opts, cb) => (_opts?.all ? cb(null, [{ address, family: net.isIP(address) }]) : cb(null, address, net.isIP(address))) },
       (res) => {
-        const nullBody = [101, 204, 205, 304].includes(res.statusCode!) || (res.statusCode! >= 300 && res.statusCode! < 400);
+        const status = res.statusCode ?? 0;
+        const nullBody = [101, 204, 205, 304].includes(status) || (status >= 300 && status < 400);
         const h = new Headers();
-        for (const [k, v] of Object.entries<any>(res.headers)) for (const x of ([] as any[]).concat(v)) h.append(k, x);
+        for (const [k, v] of Object.entries(res.headers)) for (const x of Array.isArray(v) ? v : v === undefined ? [] : [v]) h.append(k, x);
         if (nullBody) res.resume();
-        resolve(new Response(nullBody ? null : Readable.toWeb(res) as any, { status: res.statusCode, headers: h }));
+        resolve(new Response(nullBody ? null : (Readable.toWeb(res) as unknown as ReadableStream), { status: res.statusCode, headers: h }));
       }
     );
     req.on("error", reject);
@@ -139,11 +143,12 @@ export function pinnedGet(url: any, address: any, { headers, timeoutMs = FETCH_T
   });
 }
 
-async function readLimited(res: any, max: any) {
+async function readLimited(res: Response, max: number): Promise<Buffer> {
   const len = Number(res.headers.get("content-length") || 0);
   if (len > max) throw new Error("the file is too large");
-  const chunks: any[] = [];
+  const chunks: Uint8Array[] = [];
   let total = 0;
+  if (!res.body) throw new TypeError("res.body is not async iterable"); // e.g. a 204: a missing body is the caller's "couldn't read" like any failure
   for await (const chunk of res.body) {
     total += chunk.length;
     if (total > max) throw new Error("the file is too large");
@@ -153,14 +158,15 @@ async function readLimited(res: any, max: any) {
 }
 
 /** GETs a public URL, following at most MAX_REDIRECTS redirects (each one checked), with a time and size limit. Returns { buffer, type, url }. */
-export async function fetchPublic(url: any, { accept = "*/*", maxBytes }: any) {
+export async function fetchPublic(url: unknown, { accept = "*/*", maxBytes }: { accept?: string; maxBytes: number }): Promise<FetchedFile> {
   let target = await resolvePublic(url);
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const current = target.url;
     const res = await deps.get(current, target.address, { headers: { "User-Agent": UA, Accept: accept }, timeoutMs: FETCH_TIMEOUT_MS });
-    if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
       await res.body?.cancel?.().catch(() => {});
-      target = await resolvePublic(new URL(res.headers.get("location")!, current).href); // each hop is checked and pinned again
+      target = await resolvePublic(new URL(location, current).href); // each hop is checked and pinned again
       continue;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -169,32 +175,36 @@ export async function fetchPublic(url: any, { accept = "*/*", maxBytes }: any) {
   throw new Error("too many redirects");
 }
 
-const decodeEntities = (s: any) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+const decodeEntities = (s: string): string => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
 /** The dish photo URL a recipe page advertises: og:image / twitter:image, else the image of its JSON-LD Recipe. Resolved against the page URL. */
-export function pageImageUrl(html: any, pageUrl: any) {
+export function pageImageUrl(html: string, pageUrl: string): string | null {
   html = html.slice(0, MAX_SCANNED_HTML); // meta tags and JSON-LD live at the top; don't run regexes over a megabyte of body
   const metas = [...html.matchAll(/<meta\b[^>]*>/gi)].map((m) => m[0]);
-  const content = (tag: any) => decodeEntities(tag.match(/\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x: any) => x !== undefined) || "");
-  const prop = (tag: any) => (tag.match(/\b(?:property|name)\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x: any) => x !== undefined) || "").toLowerCase();
-  const candidates: any[] = [];
+  const content = (tag: string): string => decodeEntities(tag.match(/\bcontent\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x) => x !== undefined) || "");
+  const prop = (tag: string): string => (tag.match(/\b(?:property|name)\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find((x) => x !== undefined) || "").toLowerCase();
+  const candidates: string[] = [];
   for (const wanted of ["og:image:secure_url", "og:image", "twitter:image"]) {
     for (const tag of metas) if (prop(tag) === wanted && content(tag)) candidates.push(content(tag));
   }
-  const fromLd: any[] = [];
+  const fromLd: string[] = [];
   for (const m of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
-    let data;
+    let data: unknown;
     try {
       data = JSON.parse(m[1]);
     } catch {
       continue;
     }
-    const walk = (node: any) => {
-      if (Array.isArray(node)) return node.forEach(walk);
-      if (!node || typeof node !== "object") return;
-      const types = ([] as any[]).concat(node["@type"] || []).map(String);
+    const walk = (value: unknown): void => {
+      if (Array.isArray(value)) return value.forEach(walk);
+      const node = asRecord(value);
+      if (!node) return;
+      const types = toList(node["@type"]).map(String);
       if (types.includes("Recipe")) {
-        const img = ([] as any[]).concat(node.image || []).flatMap((i) => (typeof i === "string" ? [i] : i && typeof i.url === "string" ? [i.url] : []));
+        const img = toList(node.image).flatMap((i) => {
+          const url = asRecord(i)?.url;
+          return typeof i === "string" ? [i] : typeof url === "string" ? [url] : [];
+        });
         fromLd.push(...img);
       }
       if (node["@graph"]) walk(node["@graph"]);
@@ -216,7 +226,7 @@ export function pageImageUrl(html: any, pageUrl: any) {
  * The model gave a link: either straight to a photo, or to the recipe's page (then its og:image / JSON-LD image is used). Returns the
  * normalised JPEG, or throws with a short reason (the caller then generates one instead).
  */
-export async function photoFromLink(link: any) {
+export async function photoFromLink(link: unknown): Promise<Buffer> {
   const first = await fetchPublic(link, { accept: "text/html,image/*;q=0.9,*/*;q=0.5", maxBytes: MAX_IMAGE_BYTES });
   let bytes = first.buffer;
   if (!first.type.startsWith("image/")) {
@@ -234,25 +244,25 @@ export async function photoFromLink(link: any) {
  * The photo for a staged recipe. With `imageUrl`: the source's own photo; if that fails (or there is none), a generated one. Without: generated.
  * Resolves { buffer, source: "upload" | "link" | "generated", note? }; rejects only when generation fails too.
  */
-export async function makePhoto({ title, ingredients = [], description, imageUrl, uploadPath, regenerate = false }: any) {
-  let note;
+export async function makePhoto({ title, ingredients = [], description, imageUrl, uploadPath, regenerate = false }: MakePhotoInput): Promise<MadePhoto> {
+  let note: string | undefined;
   if (uploadPath && !regenerate) {
     // The editor's own attached photo (stored by /chat, server-built path): re-cropped to the card shape like any other photo.
     try {
       const bytes = await downloadUpload(uploadPath);
       if (!bytes) throw new Error("the attached photo is gone");
       return { buffer: (await normalizeImage(bytes, { aspect: CARD_ASPECT })).buffer, source: "upload" };
-    } catch (err: any) {
-      note = `couldn't use the attached photo (${err.message})`;
+    } catch (err) {
+      note = `couldn't use the attached photo (${errorMessage(err)})`;
     }
   }
   if (imageUrl && !regenerate && !(uploadPath && !note)) {
     try {
       return { buffer: await photoFromLink(imageUrl), source: "link" };
-    } catch (err: any) {
-      note = `couldn't use the link's photo (${err instanceof UnsafeUrlError ? err.message : err.message})`;
+    } catch (err) {
+      note = `couldn't use the link's photo (${errorMessage(err)})`;
     }
   }
-  const generated = await generateDishImage({ title, ingredients, description });
+  const generated = await generateDishImage({ title, ingredients, description: description ?? undefined });
   return { buffer: (await normalizeImage(generated, { aspect: CARD_ASPECT })).buffer, source: "generated", ...(note ? { note } : {}) };
 }
