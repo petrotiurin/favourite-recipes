@@ -90,13 +90,12 @@ a build step for the backend is needed. Checked the same way as 4.2, before the 
 
 ### 4.4 Vite bundles the browser code
 
-- `vite build` with one input per browser entry (`src/client/*.ts`, `build.rollupOptions.input`), output into `dist/`
+- `vite build` with one input per island (`src/islands/*.tsx`, `build.rollupOptions.input`), output into `dist/`
   without emptying it (`emptyOutDir: false`: the HTML comes from our build). `auth` and `chat` are left out of the inputs when their
   env vars aren't set, as today.
 - Our build writes the HTML, not Vite: Vite's `index.html` entry model isn't used for the pages.
-- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`). That makes 5.4 nearly
-  free.
-- **Dev server (to design):** `vite` serves the pages our build writes, and in dev `layout` links `/src/client/<name>.ts` so Vite
+- `build.manifest: true` gives the output file names, so `layout` can link hashed names (`chat-3f9a.js`, 4.12).
+- **Dev server (to design):** `vite` serves the pages our build writes, and in dev `layout` links `/src/islands/<name>.tsx` so Vite
   can hot-reload them; the build re-runs on a change to a recipe or a renderer. To work out in step 1.
 
 ### 4.5 Pages are rendered at build time and taken over in the browser, from one code
@@ -117,8 +116,8 @@ support (`@preact/preset-vite`).
 
 - **The chat's safety rule stays:** model text becomes DOM nodes, never HTML (`chat-render.test.js` today). In Preact: never
   `dangerouslySetInnerHTML` for anything from the model or a user; the test moves to the component.
-- **JSX isn't erasable syntax**, so Node 24 can't run `.tsx` directly. That changes 4.1's "the build runs with `node build.ts`":
-  see question 5.1.
+- **JSX isn't erasable syntax**, so Node 24 can't run `.tsx` directly. So the site's build goes through Vite
+  (4.9).
 
 ### 4.7 Strict TypeScript; `chat.js` is split before it's converted
 
