@@ -178,8 +178,21 @@ Checked the same way as 4.3.
 ### 4.11 Hashed script names
 
 Astro names every script and the stylesheet after their contents (`_astro/chat.3f9a.js`), and each page links the exact files it
-was built with. With fixed names a phone can run yesterday's cached `chat.js` against today's page; with hashed names a page always
-gets the files that match it. Astro's default; nothing to build.
+was built with. Astro's default; nothing to build.
+
+- **What it fixes, and how much:** GitHub Pages tells browsers a file is good for 10 minutes (`Cache-Control: max-age=600`, which
+  we can't change). With fixed names, a phone can get today's page with the `chat.js` it saved before a deploy, for up to those 10
+  minutes. With hashed names a page always gets the files it was built with. A small gain; we take it because it comes free.
+  Caching files for a year (the usual reason for hashed names) isn't possible on Pages.
+- **What it adds: a page left open across a deploy.** Islands load their script later (when scrolled into view, or when the
+  browser is idle), and each deploy replaces the whole site, so the old hashed files are gone. A recipe page left open for hours
+  then scrolled to the servings selector asks for `servings.3f9a.js`, gets a 404, and the selector stays dead. With fixed names it
+  would have got the new `servings.js`, which usually works.
+- **The fix: reload once.** The layout adds a few lines that listen for Vite's `vite:preloadError` event (a script or one of its
+  parts failed to load) and reload the page, so it comes back with today's files. To avoid a loop when the file is really missing,
+  it reloads at most once per page per minute (a timestamp in `sessionStorage`) and otherwise leaves the page as it is. It skips the
+  reload while the chat has an unsent message in its box. Step 6 adds it with the first island; a test checks it reloads once and
+  not again.
 
 ### 4.12 It ships as one PR
 
@@ -233,7 +246,7 @@ step.
    shopping page, as `.astro`; `templates/` renderers and `build.js` go. Compare the pages' text with `main`. Rewrite the JS-off
    rules (4.5).
 5. **Photos** sized by Astro (4.13), the image cache in the workflow, and the check of who links to the originals.
-6. **Small islands:** search, servings, wake-lock, cook with Claude.
+6. **Small islands:** search, servings, wake-lock, cook with Claude; the reload-once guard for scripts gone after a deploy (4.11).
 7. **Shopping and sign-in islands:** one render for the shopping list; the sign-in store replaces `window.RecipeAuth`.
 8. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
 9. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.10), then `lib/`, `api/` and the tests.
