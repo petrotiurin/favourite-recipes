@@ -8,6 +8,7 @@
     "node": "24.x"
   },
   "scripts": {
+    "postinstall": "npm ci --prefix ../shared --omit=dev --no-audit --no-fund",
     "test": "node --test test/*.test.js",
     "dev": "node scripts/dev.js"
   },
