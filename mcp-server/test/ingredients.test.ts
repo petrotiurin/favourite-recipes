@@ -10,14 +10,14 @@ import matter from "gray-matter";
 import { checkIngredients, applyCatalogueChange, applyCatalogueChanges, parseCatalogue, factorFor, shopAmount, resolveItem } from "../lib/catalogue.ts";
 
 const ROOT = new URL("../../", import.meta.url);
-const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data }));
+const book = readdirSync(new URL("recipes/", ROOT)).map((f) => ({ slug: f.slice(0, -3), ...matter(readFileSync(new URL(`recipes/${f}`, ROOT), "utf8")).data } as any));
 const catalogue = parseCatalogue(readFileSync(new URL("data/ingredients.json", ROOT), "utf8"));
 
 test("every recipe in the book passes the write-time checks, and every name resolves to the item it was given", () => {
   for (const r of book) {
     assert.deepEqual(checkIngredients(r.ingredients, catalogue).errors, [], r.slug);
-    const filled = checkIngredients(r.ingredients.map(({ item, ...rest }) => rest), catalogue).ingredients;
-    filled.forEach((ing, i) => assert.equal(ing.item, r.ingredients[i].item, `${r.slug}: ${ing.name}`));
+    const filled = checkIngredients(r.ingredients.map(({ item, ...rest }: any) => rest), catalogue).ingredients;
+    filled.forEach((ing: any, i: any) => assert.equal(ing.item, r.ingredients[i].item, `${r.slug}: ${ing.name}`));
   }
 });
 
@@ -30,7 +30,7 @@ test("the write-time checks: schema, the item filled from the name, conversions,
   };
   const ok = checkIngredients([{ amount: 2, unit: "tbsp", name: "Milk" }, { amount: 1, unit: "juice", name: "lime" }, { name: "salt", note: "to taste" }], cat);
   assert.deepEqual(ok.errors, []);
-  assert.deepEqual(ok.ingredients.map((i) => i.item), ["milk", "lime", "salt"]);
+  assert.deepEqual(ok.ingredients.map((i: any) => i.item), ["milk", "lime", "salt"]);
   const bad = checkIngredients([{ amount: 1, unit: "tbsp", name: "baby capers" }, { amount: 2, name: "gochujang paste" }, { name: "pepper" }, { amount: 2, unit: "oz", name: "milk" }, { amount: [3, 2], unit: "g", name: "capers" }], cat);
   assert.match(bad.errors[0], /Capers \(capers\) is bought in g and has no conversion from tbsp\. Add `per: \{ tbsp: … \}` for capers/);
   assert.match(bad.errors[1], /no catalogue item for "gochujang paste"/);
@@ -57,7 +57,7 @@ test("conversions: fixed rules, then the item's per; the top of a range", () => 
 });
 
 test("catalogue changes are checked: ids, names that belong to another item, sections, sane conversions, and nothing in the book may break", () => {
-  const cat = { capers: { name: "Capers", section: "Tins & jars", unit: "g", per: { tbsp: 10 } }, olives: { name: "Olives", section: "Tins & jars", unit: "g" } };
+  const cat: Record<string, any> = { capers: { name: "Capers", section: "Tins & jars", unit: "g", per: { tbsp: 10 } }, olives: { name: "Olives", section: "Tins & jars", unit: "g" } };
   const recipes = [{ slug: "puttanesca", ingredients: [{ amount: 1, unit: "tbsp", name: "capers", item: "capers" }, { amount: 50, unit: "g", name: "olives", item: "olives" }] }];
   const added = applyCatalogueChange(cat, { add: { id: "gochujang", name: "Gochujang", section: "Tins & jars", unit: "g", per: { tbsp: 18 } } }, recipes);
   assert.equal(added.line, "New in the catalogue: Gochujang · Tins & jars");
@@ -69,7 +69,7 @@ test("catalogue changes are checked: ids, names that belong to another item, sec
   assert.throws(() => applyCatalogueChange(cat, { set: { item: "capers", per: { tbsp: 500 } } }, recipes), /far outside a sane range/);
   assert.throws(() => applyCatalogueChange(cat, { set: { item: "capers", unit: "count" } }, recipes), /puttanesca: capers \(tbsp\) would no longer convert/);
   assert.throws(() => applyCatalogueChange(cat, { remove: { item: "capers" } }, recipes), /used by puttanesca/);
-  assert.match(applyCatalogueChange(cat, { set: { item: "capers", section: "Pantry" } }, recipes).line, /used by 1 recipe/);
+  assert.match(applyCatalogueChange(cat, { set: { item: "capers", section: "Pantry" } }, recipes).line as string, /used by 1 recipe/);
   assert.deepEqual(applyCatalogueChange(cat, { alias: { item: "capers", name: "Baby capers" } }, recipes).catalogue.capers.aliases, ["baby capers"]);
   const merged = applyCatalogueChanges(cat, [{ add: { id: "caperberries", name: "Caperberries", section: "Tins & jars", unit: "g", per: { tbsp: 10 } } }, { merge: { into: "capers", from: "caperberries" } }], recipes);
   assert.ok(!merged.catalogue.caperberries);
@@ -105,7 +105,7 @@ test("the write-time checks keep the sections of a line list", () => {
   const split = [{ name: "a", section: "Sauce" }, { name: "b", section: "Pickle" }, { name: "c", section: "Sauce" }];
   const { ingredients, errors } = checkIngredients(list, catalogue);
   assert.deepEqual(errors, []);
-  assert.deepEqual(ingredients.map((i) => i.section), [undefined, "Marinade", "Sauce", "Sauce"]);
+  assert.deepEqual(ingredients.map((i: any) => i.section), [undefined, "Marinade", "Sauce", "Sauce"]);
   assert.deepEqual(Object.keys(ingredients[1]), ["amount", "unit", "name", "section", "item"]);
   assert.match(checkIngredients(split.map((i) => ({ ...i, name: "salt", note: "to taste" })), catalogue).errors.join(), /must sit together/);
 });

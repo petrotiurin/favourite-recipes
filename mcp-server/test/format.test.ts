@@ -61,7 +61,7 @@ test("shopping-list.json is writable; other root files still aren't", () => {
 
 test("shopping list rejects kitchen measures and mixed sums", async () => {
   const { validateSections, ShoppingListError } = await import("../lib/shopping-list.ts");
-  const list = (quantity) => [{ name: "Section", items: [{ name: "Rice vinegar", quantity }] }];
+  const list = (quantity: any) => [{ name: "Section", items: [{ name: "Rice vinegar", quantity }] }];
   assert.doesNotThrow(() => validateSections(list("145ml")));
   assert.doesNotThrow(() => validateSections(list("2 heads")));
   assert.throws(() => validateSections(list("3 tbsp")), ShoppingListError);

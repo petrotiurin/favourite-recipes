@@ -31,7 +31,7 @@ export const langfuseEnabled = () => !!(config.langfusePublicKey && config.langf
 const DATA_URI = /^data:[\w/+.-]+;base64,/;
 
 /** Long strings are cut so one tool result can't bloat a trace. Photos (base64 data URIs) are kept whole: the SDK uploads them as media. */
-export function clip(value, max = MAX_TEXT) {
+export function clip(value: any, max = MAX_TEXT): any {
   if (typeof value === "string" && DATA_URI.test(value)) return value;
   if (typeof value === "string") return value.length > max ? `${value.slice(0, max)}… [${value.length - max} more characters]` : value;
   if (Array.isArray(value)) return value.map((v) => clip(v, max));
@@ -47,12 +47,12 @@ const BEARER = /\bBearer\s+[\w.~+/-]{12,}=*/gi;
 const KEYS = /\b(?:sk-or-v1-[0-9a-f]{16,}|sk-lf-[\w-]{8,}|ghp_[A-Za-z0-9]{20,}|github_pat_\w{20,})/g;
 
 /** Redacts emails, bearer tokens, JWTs and API keys in a string. */
-export function maskText(text) {
+export function maskText(text: any) {
   return text.replace(JWT, "[token]").replace(BEARER, "Bearer [token]").replace(KEYS, "[key]").replace(EMAIL, "[email]");
 }
 
 /** The span processor's mask: runs on every observation's input, output and metadata before export (data may be any JSON value). */
-export function mask({ data }) {
+export function mask({ data }: any) {
   if (typeof data === "string") return maskText(data);
   if (data && typeof data === "object") {
     const json = JSON.stringify(data);
@@ -64,13 +64,13 @@ export function mask({ data }) {
 
 // --- SDK setup (lazy: config is read when tracing is first used, and again if the keys change) ----------------------------------
 
-let state = null; // { key, processor, client }
-let testExporter = null;
+let state: any = null; // { key, processor, client }
+let testExporter: any = null;
 let contextReady = false;
 let warned = false;
 const pending = new Set(); // flushes in flight, so tests (and shutdown) can wait for them
 
-const warnOnce = (what, err) => {
+const warnOnce = (what: any, err: any) => {
   if (warned) return;
   warned = true;
   console.warn(`Langfuse ${what} failed (further failures are not logged): ${err?.message || err}`);
@@ -110,12 +110,12 @@ function sdk() {
 }
 
 /** Test hook: export spans to this exporter (e.g. an InMemorySpanExporter) instead of Langfuse. null goes back to the real one. */
-export function useTestExporter(exporter) {
+export function useTestExporter(exporter: any) {
   testExporter = exporter;
   state = null;
 }
 
-let waitUntilFn; // @vercel/functions' waitUntil, if it can be loaded
+let waitUntilFn: any; // @vercel/functions' waitUntil, if it can be loaded
 async function loadWaitUntil() {
   if (waitUntilFn !== undefined) return waitUntilFn;
   try {
@@ -129,7 +129,7 @@ async function loadWaitUntil() {
 /** Exports everything finished so far; never throws. Kept alive with waitUntil on Vercel. */
 function flushSoon() {
   if (!state) return;
-  const flushing = state.processor.forceFlush().catch((err) => warnOnce("export", err));
+  const flushing = state.processor.forceFlush().catch((err: any) => warnOnce("export", err));
   pending.add(flushing);
   flushing.finally(() => pending.delete(flushing));
   loadWaitUntil().then((waitUntil) => waitUntil?.(flushing)).catch(() => {});
@@ -156,9 +156,9 @@ const OPENAI_USAGE_DETAILS = { prompt_tokens_details: ["cached_tokens", "audio_t
  * OpenRouter's usage in Langfuse's OpenAI usage schema (only the OpenAI keys: an extra key such as `cost` would turn off the mapping
  * and the cached / reasoning subtraction), plus the real charged cost as costDetails.
  */
-export function usageFor(usage) {
+export function usageFor(usage: any) {
   if (!usage || typeof usage !== "object") return {};
-  const usageDetails = {};
+  const usageDetails: Record<string, any> = {};
   for (const k of ["prompt_tokens", "completion_tokens", "total_tokens"]) if (Number.isFinite(usage[k])) usageDetails[k] = usage[k];
   for (const [group, keys] of Object.entries(OPENAI_USAGE_DETAILS)) {
     const picked = Object.fromEntries(keys.filter((k) => Number.isFinite(usage[group]?.[k]) && usage[group][k] > 0).map((k) => [k, usage[group][k]]));
@@ -175,7 +175,7 @@ export function usageFor(usage) {
  * off, and nothing here ever throws. finish() ends the root observation and flushes in the background.
  * opts: { name, sessionId, userId, tags, version, metadata, input }
  */
-export function startTrace(opts = {}) {
+export function startTrace(opts: any = {}) {
   if (!langfuseEnabled()) return NOOP;
   try {
     sdk();
@@ -185,13 +185,13 @@ export function startTrace(opts = {}) {
       { traceName: name, userId: opts.userId, sessionId: opts.sessionId, tags: opts.tags, version: opts.version },
       () => context.active()
     );
-    const inTrace = (fn) => context.with(ctx, fn);
+    const inTrace = (fn: any) => context.with(ctx, fn);
     const root = inTrace(() => startObservation(name, { input: clip(opts.input), metadata: clip(opts.metadata) }, { asType: "agent" }));
-    const child = (childName, attributes, asType) => inTrace(() => root.startObservation(childName, attributes, { asType }));
-    const safe = (fn) => {
+    const child = (childName: any, attributes: any, asType: any) => inTrace(() => root.startObservation(childName, attributes, { asType }));
+    const safe = (fn: any) => {
       try {
         return fn();
-      } catch (err) {
+      } catch (err: any) {
         warnOnce("tracing", err);
         return NOOP_OBS;
       }
@@ -205,11 +205,11 @@ export function startTrace(opts = {}) {
        * A model call. input: the messages it was sent. end({ output, usage (OpenRouter's), finishReason, error, completionStartTime }).
        * output: an OpenAI-style assistant message ({ role, content, tool_calls, reasoning }) or plain text.
        */
-      generation({ name: genName, model, input, modelParameters, metadata }) {
+      generation({ name: genName, model, input, modelParameters, metadata }: any) {
         return safe(() => {
           const gen = child(genName, { model, input: clip(input), modelParameters, metadata: clip(metadata) }, "generation");
           return {
-            end({ output, usage, finishReason, error, completionStartTime, metadata: extra } = {}) {
+            end({ output, usage, finishReason, error, completionStartTime, metadata: extra }: any = {}) {
               safe(() =>
                 gen
                   .update({
@@ -227,11 +227,11 @@ export function startTrace(opts = {}) {
         });
       },
       /** A tool call. type: "tool" (default) or "retriever" (a lookup). end({ output, error, refused }). */
-      span({ name: spanName, input, metadata, type = "tool" }) {
+      span({ name: spanName, input, metadata, type = "tool" }: any) {
         return safe(() => {
           const obs = child(spanName, { input: clip(input), metadata: clip(metadata) }, type);
           return {
-            end({ output, error, refused } = {}) {
+            end({ output, error, refused }: any = {}) {
               safe(() =>
                 obs
                   .update({
@@ -247,18 +247,18 @@ export function startTrace(opts = {}) {
         });
       },
       /** A point-in-time event: rate-limit hits, out-of-credit, tray changes. */
-      event({ name: eventName, metadata, level = "DEFAULT" }) {
+      event({ name: eventName, metadata, level = "DEFAULT" }: any) {
         safe(() => child(eventName, { metadata: clip(metadata), level }, "event"));
       },
       /** Ends the trace. metadata: what else the user was shown (cards, chips, a question), next to the text output. */
-      finish(output, metadata) {
+      finish(output: any, metadata?: any) {
         if (finished) return;
         finished = true;
         safe(() => root.update({ output: clip(output), ...(metadata ? { metadata: clip(metadata) } : {}) }).end());
         flushSoon();
       },
     };
-  } catch (err) {
+  } catch (err: any) {
     warnOnce("tracing", err);
     return NOOP;
   }
@@ -274,7 +274,7 @@ function client() {
  * Records (or overwrites) the score `user-feedback` on a trace: 1 = up, 0 = down. The id is fixed per turn, so sending it again
  * replaces the earlier score. Resolves true when Langfuse accepted it; false when tracing is off or Langfuse failed (never throws).
  */
-export async function setScore({ id, traceId, value, comment }) {
+export async function setScore({ id, traceId, value, comment }: any) {
   const lf = client();
   if (!lf || !traceId) return false;
   try {
@@ -283,20 +283,20 @@ export async function setScore({ id, traceId, value, comment }) {
     ]);
     if (res && "rejected" in res && res.rejected > 0) throw new Error(JSON.stringify(res.errors).slice(0, 300));
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.warn(`Langfuse score failed: ${err.message}`);
     return false;
   }
 }
 
 /** Deletes a score set with setScore (the editor took their thumb back). Never throws. */
-export async function deleteScore(id) {
+export async function deleteScore(id: any) {
   const lf = client();
   if (!lf) return false;
   try {
     await lf.api.scores.delete(id);
     return true;
-  } catch (err) {
+  } catch (err: any) {
     if (err?.statusCode === 404) return true;
     console.warn(`Langfuse score delete failed: ${err.message}`);
     return false;

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Local dev harness: the whole chat stack on your machine, with nothing real behind it.
 //
-//   cd mcp-server && npm run dev            (builds the site, then starts both servers)
+//   cd mcp-server && npm run dev            (builds the site with Astro, then starts both servers)
 //   npm run dev -- --no-build               (reuse the existing ../dist)
 //
-//   http://localhost:4000   the built site (../dist), built with CHAT_API_URL=http://localhost:8787/chat
-//   http://localhost:8787   the backend: /chat (+ /chat/me, /chat/conversations, /chat/feedback), /stocktake, /upload, /mcp (the api/*.js
+//   http://localhost:4000/favourite-recipes/   the built site (../dist, under the site's base path), built with CHAT_API_URL=http://localhost:8787/chat
+//   http://localhost:8787   the backend: /chat (+ /chat/me, /chat/conversations, /chat/feedback), /stocktake, /upload, /mcp (the api/*.ts
 //                           handlers, as Vercel would run them)
 //   http://localhost:54321  the fake Supabase (Auth + the chat tables), so the real sign-in sheet works in the browser
 //
@@ -16,7 +16,7 @@
 //   Everything is in memory: restart the harness to wipe accounts' changes, chats and stocktakes. To see the retention clock use
 //   the chats list (chats older than 14 days vanish; nothing in the UI can age them, the tests do that).
 //
-// Everything outside is faked in-process (scripts/fakes.js), by wrapping global fetch:
+// Everything outside is faked in-process (scripts/fakes.ts), by wrapping global fetch:
 //   GitHub     your working tree's recipes/, images/ and shopping-list.json, read from disk; commits live in memory only
 //              (the real files are never written, restart to reset)
 //   Editors   the editor's chat also stages into the household plan tray (Supabase table `trays` + private Storage bucket `tray-photos`,
@@ -58,14 +58,15 @@ import { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeI
 const API_PORT = Number(process.env.CHAT_API_PORT) || 8787;
 const SITE_PORT = Number(process.env.SITE_PORT) || 4000;
 const SUPABASE_PORT = Number(process.env.SUPABASE_PORT) || 54321;
+const SITE_BASE = "/favourite-recipes"; // astro.config.ts's `base`: the built pages link their files under it
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
-const DIST = process.env.DEV_DIST ? join(process.cwd(), process.env.DEV_DIST) : join(REPO, "dist"); // DEV_DIST: serve (and build into) another folder, e.g. DEV_DIST=.dev-dist
+const DIST = process.env.DEV_DIST ? join(process.cwd(), process.env.DEV_DIST) : join(REPO, "dist"); // DEV_DIST: serve (and build into) another folder, e.g. DEV_DIST=../.dev-dist (under the repo root, not under mcp-server/: the build resolves its packages from where its output sits)
 
-// Local configuration, set before the handlers (and lib/config.js) are imported. Anything already in the environment wins.
+// Local configuration, set before the handlers (and lib/config.ts) are imported. Anything already in the environment wins.
 const env = {
   GITHUB_TOKEN: "dev-github",
   MCP_AUTH_TOKEN: "dev-secret",
-  PUBLIC_SITE_URL: `http://localhost:${SITE_PORT}`,
+  PUBLIC_SITE_URL: `http://localhost:${SITE_PORT}${SITE_BASE}`,
   SUPABASE_URL: `http://localhost:${SUPABASE_PORT}`,
   SUPABASE_ANON_KEY: "dev-anon",
   SUPABASE_SERVICE_ROLE_KEY: "dev-service",
@@ -96,20 +97,20 @@ const supabase = createFakeSupabase({
   ],
 });
 const realFetch = globalThis.fetch;
-const { deps: photoDeps } = await import("../lib/tray-photos.ts"); // after the env above: lib/config.js reads it on import
+const { deps: photoDeps } = await import("../lib/tray-photos.ts"); // after the env above: lib/config.ts reads it on import
 
 // A fake recipe site for fetch_url and photos from links: https://example.test/recipe (JSON-LD Recipe, og:image) and /photo.jpg. The SSRF guard
 // still runs for real; only the name lookup is told that example.test is a public address, and the fetch below answers for it. Nothing in
 // production code knows about a dev host.
-photoDeps.lookup = async (host) => (host === "example.test" ? [{ address: "93.184.216.34" }] : (await import("node:dns/promises")).lookup(host, { all: true, verbatim: true }));
+photoDeps.lookup = async (host: any): Promise<any> => (host === "example.test" ? [{ address: "93.184.216.34" }] : (await import("node:dns/promises")).lookup(host, { all: true, verbatim: true }));
 const pinnedGet = photoDeps.get;
 photoDeps.get = (url, address, init) => (url.hostname === "example.test" ? globalThis.fetch(url, { redirect: "manual", ...init }) : pinnedGet(url, address, init));
-async function exampleSite(url) {
+async function exampleSite(url: any) {
   const { default: sharp } = await import("sharp");
   const u = new URL(url);
   if (u.pathname === "/photo.jpg") {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900"><rect width="1200" height="900" fill="#f2d9b8"/><circle cx="600" cy="450" r="320" fill="#fff"/><circle cx="600" cy="450" r="230" fill="#c8552d"/></svg>';
-    return new Response(await sharp(Buffer.from(svg)).jpeg().toBuffer(), { headers: { "content-type": "image/jpeg" } });
+    return new Response(new Uint8Array(await sharp(Buffer.from(svg)).jpeg().toBuffer()), { headers: { "content-type": "image/jpeg" } });
   }
   if (u.pathname === "/recipe") {
     const ld = { "@context": "https://schema.org", "@type": "Recipe", name: "Lemon Herb Salmon", image: "https://example.test/photo.jpg", description: "Quick traybake salmon.", totalTime: "PT25M", recipeYield: "2 servings",
@@ -118,18 +119,18 @@ async function exampleSite(url) {
   }
   return new Response("Not found", { status: 404 });
 }
-globalThis.fetch = async (input, init) => {
+globalThis.fetch = async (input: any, init: any) => {
   const url = String(input instanceof Request ? input.url : input);
   if (new URL(url).hostname === "example.test") return exampleSite(url);
   if (url.startsWith("https://api.github.com/")) return github.fetch(url, init);
   if (process.env.REAL_MODELS === "1" && url.startsWith("https://openrouter.ai/api/v1/chat/completions")) return realFetch(input, init);
   if (url.startsWith(process.env.OPENROUTER_BASE_URL || "http://openrouter.fake/") || url.startsWith("https://openrouter.ai/api/v1/chat/completions")) return openrouter.fetch(url, init);
   if (url.startsWith("https://openrouter.ai/api/v1/images")) return images.fetch(url, init);
-  if (url.startsWith(process.env.SUPABASE_URL)) return supabase.fetch(url, init);
+  if (url.startsWith(process.env.SUPABASE_URL!)) return supabase.fetch(url, init);
   return realFetch(input, init);
 };
 
-const handlers = {
+const handlers: Record<string, any> = {
   "/chat": await import("../api/chat.ts"),
   "/stocktake": await import("../api/stocktake.ts"),
   "/upload": await import("../api/upload.ts"),
@@ -138,25 +139,25 @@ const handlers = {
 
 // --- the backend: Node http -> Web Request -> handler -> Web Response ------------------------------------------------------
 const api = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://localhost:${API_PORT}`);
+  const url = new URL(req.url!, `http://localhost:${API_PORT}`);
   // /chat/<route> is what Vercel's rewrite turns into /api/chat?route=<route>
   const sub = url.pathname.match(/^\/chat\/(.+)$/);
   if (sub) url.search = `?${new URLSearchParams([["route", sub[1]], ...url.searchParams]).toString()}`;
   const handler = handlers[sub ? "/chat" : url.pathname];
-  const fn = handler?.[req.method];
+  const fn = handler?.[req.method!];
   if (!fn) {
     res.writeHead(handler ? 405 : 404, { "content-type": "application/json" }).end(JSON.stringify({ error: handler ? "Method not allowed" : "Not found" }));
     return;
   }
-  const chunks = [];
+  const chunks: any[] = [];
   for await (const c of req) chunks.push(c);
   const body = chunks.length ? Buffer.concat(chunks) : undefined;
   const abort = new AbortController();
   res.on("close", () => !res.writableEnded && abort.abort());
   const request = new Request(url, {
     method: req.method,
-    headers: { ...req.headers, "x-forwarded-for": req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1" },
-    body: ["GET", "HEAD", "OPTIONS"].includes(req.method) ? undefined : body,
+    headers: { ...req.headers, "x-forwarded-for": req.headers["x-forwarded-for"] || req.socket.remoteAddress || "127.0.0.1" } as any,
+    body: ["GET", "HEAD", "OPTIONS"].includes(req.method!) ? undefined : body,
     signal: abort.signal,
   });
   try {
@@ -164,7 +165,7 @@ const api = http.createServer(async (req, res) => {
     res.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body) for await (const chunk of response.body) res.write(chunk);
     res.end();
-  } catch (err) {
+  } catch (err: any) {
     console.error(err);
     if (!res.headersSent) res.writeHead(500, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "Server error" }));
@@ -176,9 +177,9 @@ const sbCors = { "access-control-allow-origin": "*", "access-control-allow-heade
 http
   .createServer(async (req, res) => {
     if (req.method === "OPTIONS") return void res.writeHead(204, sbCors).end();
-    const chunks = [];
+    const chunks: any[] = [];
     for await (const c of req) chunks.push(c);
-    const response = await supabase.fetch(new URL(req.url, process.env.SUPABASE_URL).href, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks).toString() : undefined });
+    const response = await supabase.fetch(new URL(req.url!, process.env.SUPABASE_URL).href, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks).toString() : undefined });
     res.writeHead(response.status, { ...sbCors, "content-type": response.headers.get("content-type") || "application/json" }).end(Buffer.from(await response.arrayBuffer()));
   })
   .listen(SUPABASE_PORT, () => console.log(`Supabase http://localhost:${SUPABASE_PORT}  (fake: sign in as editor@example.com / editor-pass or stranger@example.com / stranger-pass)`));
@@ -186,12 +187,17 @@ http
 // --- the site: ../dist, built to talk to the local backend -----------------------------------------------------------------
 if (!process.argv.includes("--no-build")) {
   console.log("Building the site (CHAT_API_URL points at the local backend)…");
-  const build = spawnSync("node", ["build.js"], { cwd: REPO, stdio: "inherit", env: { ...process.env, BUILD_OUT_DIR: DIST, CHAT_API_URL: `http://localhost:${API_PORT}/chat`, STOCKTAKE_API_URL: `http://localhost:${API_PORT}/stocktake`, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY } });
+  const build = spawnSync("node", ["node_modules/astro/bin/astro.mjs", "build"], { cwd: REPO, stdio: "inherit", env: { ...process.env, BUILD_OUT_DIR: DIST, ASTRO_CACHE_DIR: join(REPO, "node_modules", ".astro-dev"), CHAT_API_URL: `http://localhost:${API_PORT}/chat`, STOCKTAKE_API_URL: `http://localhost:${API_PORT}/stocktake`, SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY } });
   if (build.status !== 0) process.exit(build.status || 1);
 }
-const MIME = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".json": "application/json", ".svg": "image/svg+xml" };
+const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".json": "application/json", ".svg": "image/svg+xml" };
 const site = http.createServer((req, res) => {
-  let path = normalize(decodeURIComponent(new URL(req.url, "http://x").pathname)).replace(/^(\.\.[/\\])+/, "");
+  const asked = decodeURIComponent(new URL(req.url!, "http://x").pathname);
+  if (!asked.startsWith(`${SITE_BASE}/`) && asked !== SITE_BASE) {
+    res.writeHead(302, { location: `${SITE_BASE}/` }).end();
+    return;
+  }
+  let path = normalize(asked.slice(SITE_BASE.length) || "/").replace(/^(\.\.[/\\])+/, "");
   let file = join(DIST, path);
   if (existsSync(file) && statSync(file).isDirectory()) file = join(file, "index.html");
   if (!file.startsWith(DIST) || !existsSync(file)) {
@@ -202,4 +208,4 @@ const site = http.createServer((req, res) => {
 });
 
 api.listen(API_PORT, () => console.log(`Backend  http://localhost:${API_PORT}  (/chat, /chat/*, /stocktake, /upload, /mcp)`));
-site.listen(SITE_PORT, () => console.log(`Site     http://localhost:${SITE_PORT}   (open this; the chat bubble is bottom right)`));
+site.listen(SITE_PORT, () => console.log(`Site     http://localhost:${SITE_PORT}${SITE_BASE}/   (open this; the chat bubble is bottom right)`));

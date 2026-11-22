@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config.ts";
 
-function safeEqual(a, b) {
+function safeEqual(a: any, b: any) {
   const ab = Buffer.from(String(a));
   const bb = Buffer.from(String(b));
   return ab.length === bb.length && timingSafeEqual(ab, bb);
@@ -12,7 +12,7 @@ function safeEqual(a, b) {
  * Cursor, etc.) or as "?key=<token>" in the URL (for clients like claude.ai
  * custom connectors that only take a URL).
  */
-export function isAuthorized(request) {
+export function isAuthorized(request: any) {
   if (!config.authToken) return false;
   const header = request.headers.get("authorization") || "";
   const bearer = header.match(/^Bearer\s+(.+)$/i)?.[1];
@@ -24,18 +24,18 @@ export function isAuthorized(request) {
 // open them on their phone without knowing the MCP secret. One link can cover
 // several recipes; it can only ever write images/recipes/<slug>.jpg (plus that
 // recipe's image frontmatter) for the slugs it lists.
-function sign(payload) {
+function sign(payload: any) {
   return createHmac("sha256", `upload-link:${config.authToken}`).update(payload).digest("base64url");
 }
 
 /** items: [{ slug, label }], label being what the page shows (the recipe title). */
-export function createUploadToken(items, ttlMinutes = 60) {
+export function createUploadToken(items: any, ttlMinutes = 60) {
   const payload = Buffer.from(JSON.stringify({ items, exp: Date.now() + ttlMinutes * 60_000 })).toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 
 /** Returns { items: [{ slug, label }], exp } for a valid, unexpired token, else null. */
-export function verifyUploadToken(token) {
+export function verifyUploadToken(token: any) {
   const [payload, sig] = String(token || "").split(".");
   if (!payload || !sig || !config.authToken || !safeEqual(sig, sign(payload))) return null;
   try {
@@ -43,7 +43,7 @@ export function verifyUploadToken(token) {
     if (!(Date.now() <= data.exp)) return null;
     // Links made before multi-recipe uploads carry a single { slug }.
     const items = Array.isArray(data.items) ? data.items : typeof data.slug === "string" ? [{ slug: data.slug, label: data.slug }] : [];
-    const valid = items.filter((i) => typeof i?.slug === "string" && i.slug);
+    const valid = items.filter((i: any) => typeof i?.slug === "string" && i.slug);
     return valid.length && valid.length === items.length ? { items: valid, exp: data.exp } : null;
   } catch {
     return null;
@@ -56,14 +56,14 @@ export function verifyUploadToken(token) {
  * or its old name SHOPPING_EDITORS), or { status, error } when the token is missing, bad or expired (401), or
  * Supabase can't be reached (503). A bad token is never treated as "no token".
  */
-export async function verifyUser(request) {
+export async function verifyUser(request: any): Promise<any> {
   const token = (request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)?.[1];
   if (!token) return { status: 401, error: "Sign in first." };
   if (!config.supabaseUrl || !config.supabaseAnonKey) return { status: 401, error: "Sign-in isn't set up on this server." };
   let res;
   try {
     res = await fetch(`${config.supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: config.supabaseAnonKey, Authorization: `Bearer ${token}` },
+      headers: { apikey: config.supabaseAnonKey as string, Authorization: `Bearer ${token}` },
     });
   } catch {
     return { status: 503, error: "Couldn't check your sign-in. Try again in a minute." };
@@ -78,7 +78,7 @@ export async function verifyUser(request) {
  * The shopping page's editor: a Supabase Auth access token (sign-in on the page) whose email is listed in EDITORS
  * (or its old name SHOPPING_EDITORS). Returns { email, userId }, or { status, error } when refused.
  */
-export async function verifyEditor(request) {
+export async function verifyEditor(request: any): Promise<any> {
   if (!(request.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i)) return { status: 401, error: "Sign in to save the stocktake." };
   const user = await verifyUser(request);
   if (user.error) return user;
@@ -90,11 +90,11 @@ export async function verifyEditor(request) {
  * The email of a Supabase user, by id, through the Auth admin API (service-role key, server only), lower-cased; null if there is no such
  * user or it can't be asked. The server's own follow-up turn uses it to check that a conversation's owner is still in EDITORS.
  */
-export async function userEmail(userId) {
+export async function userEmail(userId: any) {
   if (!userId || !config.supabaseUrl || !config.supabaseServiceKey) return null;
   try {
     const res = await fetch(`${config.supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
-      headers: { apikey: config.supabaseServiceKey, Authorization: `Bearer ${config.supabaseServiceKey}` },
+      headers: { apikey: config.supabaseServiceKey as string, Authorization: `Bearer ${config.supabaseServiceKey}` },
     });
     if (!res.ok) return null;
     const user = await res.json();

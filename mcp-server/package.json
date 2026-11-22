@@ -9,8 +9,9 @@
   },
   "scripts": {
     "postinstall": "npm ci --prefix ../shared --omit=dev --no-audit --no-fund",
-    "test": "node --test test/*.test.{js,ts}",
-    "dev": "node scripts/dev.js"
+    "typecheck": "tsc -p .",
+    "test": "tsc -p . && node --test test/*.test.{js,ts}",
+    "dev": "node scripts/dev.ts"
   },
   "dependencies": {
     "@langfuse/client": "^6.1.1",

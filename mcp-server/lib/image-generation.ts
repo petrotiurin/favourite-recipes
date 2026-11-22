@@ -5,8 +5,8 @@ const GENERATION_TIMEOUT_MS = 120_000; // Muse usually answers in 10-20s; leave 
 const MAX_PROMPT_INGREDIENTS = 20;
 
 /** Builds the image prompt from the recipe itself, in one fixed style so every generated photo on the site looks alike. */
-export function dishPrompt({ title, ingredients = [], description }) {
-  const names = [...new Set(ingredients.map((i) => i.name.trim()).filter(Boolean))].slice(0, MAX_PROMPT_INGREDIENTS);
+export function dishPrompt({ title, ingredients = [], description }: any) {
+  const names = [...new Set(ingredients.map((i: any) => i.name.trim()).filter(Boolean))].slice(0, MAX_PROMPT_INGREDIENTS);
   return [
     `A realistic, appetising food photograph of "${title}", a home-cooked dish, finished and ready to eat.`,
     description?.trim() ? `How it looks: ${description.trim()}` : "",
@@ -20,7 +20,7 @@ export function dishPrompt({ title, ingredients = [], description }) {
 }
 
 /** Generates a dish photo with OpenRouter and returns the raw image bytes (normalise them before saving). */
-export async function generateDishImage(recipe) {
+export async function generateDishImage(recipe: any) {
   if (!config.openrouterKey) throw new Error("image generation isn't set up on the server (OPENROUTER_API_KEY is missing)");
   const prompt = dishPrompt(recipe);
   // Its own small trace (Langfuse, design 8.1): the photo is made in the background, after the turn that asked for it has finished.
@@ -31,14 +31,14 @@ export async function generateDishImage(recipe) {
     gen.end({ output: `[image, ${bytes.length} bytes]`, usage });
     trace.finish(`photo generated (${bytes.length} bytes)`);
     return bytes;
-  } catch (err) {
+  } catch (err: any) {
     gen.end({ error: err.message });
     trace.finish(`failed: ${err.message}`.slice(0, 200));
     throw err;
   }
 }
 
-async function requestImage(prompt) {
+async function requestImage(prompt: any) {
   let res;
   try {
     res = await fetch("https://openrouter.ai/api/v1/images", {
@@ -47,7 +47,7 @@ async function requestImage(prompt) {
       body: JSON.stringify({ model: config.imageModel, prompt }),
       signal: AbortSignal.timeout(GENERATION_TIMEOUT_MS),
     });
-  } catch (err) {
+  } catch (err: any) {
     throw new Error(err.name === "TimeoutError" ? `${config.imageModel} took longer than ${GENERATION_TIMEOUT_MS / 1000}s` : err.message);
   }
   const body = await res.json().catch(() => null);

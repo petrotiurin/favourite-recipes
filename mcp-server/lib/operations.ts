@@ -14,9 +14,9 @@ import { updateShoppingList, buildAndSaveShoppingList, setShoppingServings, upda
 import { stageCatalogueChanges } from "./recipes.ts";
 
 /** Applies one batch_changes operation to the ChangeSet and returns its report lines. */
-export async function runOperation(op, cs, caller) {
+export async function runOperation(op: any, cs: any, caller: any) {
   const { action, ...args } = op;
-  const warn = (warnings) => (warnings?.length ? warnings.map((w) => `  warning: ${w}`) : []);
+  const warn = (warnings: any) => (warnings?.length ? warnings.map((w: any) => `  warning: ${w}`) : []);
   switch (action) {
     case "create_recipe": {
       const r = await createRecipe(args, cs, caller);
@@ -47,8 +47,8 @@ export async function runOperation(op, cs, caller) {
     case "update_shopping_list": {
       // build: true (docs/structured-ingredients.md 3): the server adds up next week's recipes; `sections` is the older, agent-written list
       if (!args.build === !args.sections) throw new UserError("update_shopping_list: pass build: true (the server builds the list), or sections, not both");
-      const r = args.build ? await buildAndSaveShoppingList({ edits: args.edits }, cs, args.servings, caller) : await updateShoppingList(args.sections, cs, args.servings, caller);
-      const items = r.list.sections.reduce((n, sec) => n + sec.items.length, 0);
+      const r: any = args.build ? await buildAndSaveShoppingList({ edits: args.edits }, cs, args.servings, caller) : await updateShoppingList(args.sections, cs, args.servings, caller);
+      const items = r.list.sections.reduce((n: any, sec: any) => n + sec.items.length, 0);
       const plan = Object.entries(r.list.servings).map(([slug, n]) => `${slug} x${n}`).join(", ");
       return { ...r, shoppingList: true, lines: [`Shopping list: ${items} items in ${r.list.sections.length} sections, covering ${plan}`, ...builtReport(r.built).map((l) => `  ${l}`)] };
     }
@@ -71,16 +71,16 @@ export async function runOperation(op, cs, caller) {
   }
 }
 
-const WEEK_NAME = { this: "this week", next: "next week" };
+const WEEK_NAME: Record<string, string> = { this: "this week", next: "next week" };
 
-export function weekLines({ changed, unchanged, week, add }) {
+export function weekLines({ changed, unchanged, week, add }: any) {
   const lines = [changed.length ? `${add ? "Added to" : "Taken out of"} ${WEEK_NAME[week]}: ${changed.join(", ")}` : "set_week_recipes: nothing changed"];
   if (unchanged.length) lines.push(`  already ${add ? "in" : "not in"} ${WEEK_NAME[week]}: ${unchanged.join(", ")}`);
   return lines;
 }
 
-export function switchLines({ started, stayed, carried, left, droppedDrafts, subject }) {
-  const list = (xs) => (xs.length ? xs.join(", ") : "none");
+export function switchLines({ started, stayed, carried, left, droppedDrafts, subject }: any) {
+  const list = (xs: any) => (xs.length ? xs.join(", ") : "none");
   return [
     subject ? "Started next week: next week's recipes are now this week, and next week is empty." : "start_next_week: nothing to change (both weeks were already empty).",
     `  this week now: ${list([...started, ...stayed, ...carried])}`,

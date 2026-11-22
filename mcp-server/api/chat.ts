@@ -101,13 +101,13 @@ export const STILL_WORKING_MS = 15_000;
 const MAX_BODY_BYTES = 100_000;
 const MAX_EDITOR_BODY_BYTES = 4_300_000; // an editor's message may carry photos (Vercel allows 4.5 MB bodies)
 const MAX_UPLOAD_BODY_BYTES = 4_300_000; // one photo per /chat/uploads request
-const originOf = (request) => {
+const originOf = (request: any) => {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
   return config.chatInternalUrl || (host ? `https://${host}` : new URL(request.url).origin);
 };
 const FEEDBACK_REASONS = ["Wrong recipe", "Didn't do what I asked", "Wrong amounts", "Too slow", "Something else"];
 
-function corsHeaders(request) {
+function corsHeaders(request: any): Record<string, string> {
   const origin = request.headers.get("origin");
   if (origin !== new URL(config.siteUrl).origin) return { Vary: "Origin" };
   return {
@@ -119,12 +119,12 @@ function corsHeaders(request) {
   };
 }
 
-export function OPTIONS(request) {
+export function OPTIONS(request: any) {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
 
 /** The sub-path after /chat: "" | "me" | "conversations" | "conversations/<id>" | "feedback". Vercel's rewrite passes it as ?route=. */
-function routeOf(request) {
+function routeOf(request: any) {
   const url = new URL(request.url);
   const q = url.searchParams.get("route");
   if (q !== null) return q.replace(/^\/+|\/+$/g, "");
@@ -132,9 +132,9 @@ function routeOf(request) {
 }
 
 /** The page context the client reports, reduced to plain values (the server re-resolves anything that matters). */
-function pageFrom(raw) {
+function pageFrom(raw: any) {
   if (!raw || typeof raw !== "object") return {};
-  const str = (v, max) => (typeof v === "string" ? v.slice(0, max) : undefined);
+  const str = (v: any, max: any) => (typeof v === "string" ? v.slice(0, max) : undefined);
   return {
     page: str(raw.page, 30),
     slug: str(raw.slug, 120),
@@ -146,7 +146,7 @@ function pageFrom(raw) {
 }
 
 /** { user } (null for a visitor with no token; { email, userId, isEditor } for a valid token) or { refusal: { status, error } }. */
-async function whoIs(request) {
+async function whoIs(request: any): Promise<any> {
   if (!request.headers.get("authorization")) return { user: null };
   const ip = clientIp(request);
   // A visitor that keeps presenting bad tokens is stopped before we ask Supabase again (it counts failures per address).
@@ -159,16 +159,16 @@ async function whoIs(request) {
   return { user };
 }
 
-export async function GET(request) {
+export async function GET(request: any) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
-  const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
+  const reply = (body: any, status = 200, extra: any = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
   if (!chatEnabled()) return reply(DISABLED_BODY, 503); // switched off: before any auth, model, GitHub or Supabase work
 
   if (route === "me") {
     const { user, refusal } = await whoIs(request);
     if (refusal) return reply({ error: refusal.error }, refusal.status);
-    let last = null;
+    let last: any = null;
     if (user?.isEditor && storeConfigured()) last = await lastReply(user.userId).catch(() => null); // the bubble's dot on a new page
     return reply({ role: user?.isEditor ? "editor" : "public", signedIn: !!user, public_enabled: publicChatEnabled(), ...(user ? { email: user.email } : {}), ...(last ? { last_reply: last } : {}) });
   }
@@ -188,15 +188,15 @@ export async function GET(request) {
       const messages = messagesForPanel(rows);
       for (const m of messages) {
         if (!m.images) continue;
-        const urls = await Promise.all(m.images.map((p) => signedUploadUrl(p)));
-        m.photo_numbers = m.photo_numbers.filter((_, i) => urls[i]); // a photo that's gone keeps its number for the others
+        const urls = await Promise.all(m.images.map((p: any) => signedUploadUrl(p)));
+        m.photo_numbers = m.photo_numbers.filter((_: any, i: any) => urls[i]); // a photo that's gone keeps its number for the others
         m.images = urls.filter(Boolean);
       }
       const reads = await readsOf(convo.id).catch(() => []);
       const st = statusOf(reads);
       const pendingNotes = await unhandledEvents(convo.id).catch(() => []);
       // a note waiting for its follow-up counts for 10 minutes; one that can never be handed over (its owner left EDITORS) doesn't keep the panel polling
-      const fresh = pendingNotes.filter((e) => Date.now() - Date.parse(e.created_at) < 10 * 60_000);
+      const fresh = pendingNotes.filter((e: any) => Date.now() - Date.parse(e.created_at) < 10 * 60_000);
       const followUp = fresh.length > 0 || (lockHeld(convo) && String(convo.turn_lock_id || "").startsWith("f:"));
       if (st.active || pendingNotes.length) background(() => kick(convo.id, { origin: originOf(request) })); // restarts what a dead instance left behind
       return reply({
@@ -208,7 +208,7 @@ export async function GET(request) {
         last_reply_at: convo.last_reply_at || null,
         photos: { total: st.total, read: st.read + st.failed, reading: st.queued + st.reading, active: st.active, follow_up: followUp },
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Loading chats failed:", err.message);
       return reply({ error: "Couldn't load your chats. Try again in a moment." }, 502);
     }
@@ -221,7 +221,7 @@ export async function GET(request) {
       const tray = await loadTray();
       const [view, reading] = await Promise.all([trayView(tray, caller), readingEntries(editor.userId)]);
       return reply({ tray: view, reading });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Loading the tray failed:", err.message);
       return reply({ error: "Couldn't load the tray. Try again in a moment." }, 502);
     }
@@ -235,12 +235,12 @@ export async function GET(request) {
   return reply({ error: "Not found" }, 404);
 }
 
-const editorCaller = (editor, request) => makeCaller({ role: "editor", email: editor.email, userId: editor.userId, ip: clientIp(request) });
+const editorCaller = (editor: any, request: any) => makeCaller({ role: "editor", email: editor.email, userId: editor.userId, ip: clientIp(request) });
 const ITEM_ID = /^[a-f0-9]{8}$/;
 
-export async function DELETE(request) {
+export async function DELETE(request: any) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
-  const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
+  const reply = (body: any, status = 200, extra: any = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
   const route = routeOf(request);
   if (!chatEnabled()) return reply(DISABLED_BODY, 503);
   const planItem = route.match(/^plan\/items\/([^/]+)$/);
@@ -251,7 +251,7 @@ export async function DELETE(request) {
     try {
       const dropped = await dropItem(planItem[1], editorCaller(editor, request), { userId: editor.userId });
       return dropped ? reply({ ok: true }) : reply({ error: "That item isn't in the tray any more." }, 404);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Dropping a tray item failed:", err.message);
       return reply({ error: "Couldn't drop that. Try again in a moment." }, 502);
     }
@@ -263,14 +263,14 @@ export async function DELETE(request) {
     const gone = await deleteConversation(route.slice("conversations/".length), editor.userId);
     if (gone) await removeConversationUploads(route.slice("conversations/".length));
     return gone ? reply({ ok: true }) : reply({ error: "That chat isn't available." }, 404);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Deleting a chat failed:", err.message);
     return reply({ error: "Couldn't delete that chat. Try again in a moment." }, 502);
   }
 }
 
 /** Editor-only endpoints: 401 without a (good) token, 403 for a signed-in non-editor, 503 if chats aren't set up. */
-async function requireEditor(request, reply, { limited = false } = {}) {
+async function requireEditor(request: any, reply: any, { limited = false }: any = {}) {
   if (!storeConfigured()) return { response: reply({ error: "Saved chats aren't available right now." }, 503) };
   if (!request.headers.get("authorization")) return { response: reply({ error: "Sign in first." }, 401) };
   const { user, refusal } = await whoIs(request);
@@ -286,7 +286,7 @@ async function requireEditor(request, reply, { limited = false } = {}) {
   return { userId: user.userId, email: user.email };
 }
 
-async function feedback(request, reply) {
+async function feedback(request: any, reply: any) {
   const editor = await requireEditor(request, reply);
   if (editor.response) return editor.response;
   let body;
@@ -308,7 +308,7 @@ async function feedback(request, reply) {
       if (row.trace_id) await deleteScore(scoreId);
       return reply({ ok: true });
     }
-    const reasons = (Array.isArray(body.reasons) ? body.reasons : []).filter((r) => FEEDBACK_REASONS.includes(r)).slice(0, FEEDBACK_REASONS.length);
+    const reasons = (Array.isArray(body.reasons) ? body.reasons : []).filter((r: any) => FEEDBACK_REASONS.includes(r)).slice(0, FEEDBACK_REASONS.length);
     const note = typeof body.note === "string" ? body.note.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 300) : "";
     const record = value === 0 ? { value, reasons, note } : { value };
     await setFeedback(row.id, record);
@@ -317,17 +317,17 @@ async function feedback(request, reply) {
       await setScore({ id: scoreId, traceId: row.trace_id, value, comment });
     }
     return reply({ ok: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Saving feedback failed:", err.message);
     return reply({ error: "Couldn't save that. Try again in a moment." }, 502);
   }
 }
 
 /** Save, or Save now ({ item_id }): the human tap. The token is verified on THIS request (requireEditor), so a removed editor is refused at once. */
-async function planApply(request, reply) {
+async function planApply(request: any, reply: any) {
   const editor = await requireEditor(request, reply);
   if (editor.response) return editor.response;
-  let body = {};
+  let body: Record<string, any> = {};
   try {
     body = JSON.parse((await request.text()) || "{}") || {};
   } catch {
@@ -342,13 +342,13 @@ async function planApply(request, reply) {
     if (isUuid(body.conversation_id)) {
       try {
         posted = !!(await postAssistantMessage(body.conversation_id, caller.userId, out.summary, out.cards.length ? { cards: out.cards } : undefined));
-      } catch (err) {
+      } catch (err: any) {
         console.error("Posting the save summary failed:", err.message);
       }
     }
     trace.finish(`saved ${out.saved}`);
     return reply({ ok: true, saved: out.saved, left: out.left, commit: out.commit, summary: out.summary, cards: out.cards, posted });
-  } catch (err) {
+  } catch (err: any) {
     trace.finish(`refused: ${err.message}`.slice(0, 200));
     if (err instanceof PlanError) return reply({ error: err.message, ...err.extra }, err.status);
     console.error("Saving the tray failed:", err.message);
@@ -356,21 +356,21 @@ async function planApply(request, reply) {
   }
 }
 
-async function planPhoto(request, reply, id) {
+async function planPhoto(request: any, reply: any, id: any) {
   const editor = await requireEditor(request, reply, { limited: true });
   if (editor.response) return editor.response;
   if (!ITEM_ID.test(id)) return reply({ error: "That item isn't in the tray." }, 404);
   try {
     const item = await regeneratePhoto(id, editorCaller(editor, request));
     return item ? reply({ ok: true }) : reply({ error: "That item has no photo to remake." }, 404);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Remaking a photo failed:", err.message);
     return reply({ error: "Couldn't do that. Try again in a moment." }, 502);
   }
 }
 
 /** One photo, uploaded on pick (design P7): validated and re-encoded like a message's photos, stored under the conversation (made if needed). */
-async function upload(request, reply) {
+async function upload(request: any, reply: any) {
   const editor = await requireEditor(request, reply, { limited: true });
   if (editor.response) return editor.response;
   if (Number(request.headers.get("content-length") || 0) > MAX_UPLOAD_BODY_BYTES) return reply({ error: "That photo is too big." }, 413);
@@ -385,7 +385,7 @@ async function upload(request, reply) {
   let images;
   try {
     images = await sanitizeUploads([body?.image]);
-  } catch (err) {
+  } catch (err: any) {
     if (err instanceof UploadError) return reply({ error: err.message }, err.status);
     return reply({ error: "Couldn't read that photo. Try again." }, 400);
   }
@@ -397,19 +397,19 @@ async function upload(request, reply) {
     } else convo = await createConversation({ userId: editor.userId, title: null }); // titled by its first message
     const [stored] = await storeUploads(convo.id, images);
     return reply({ path: stored.path, conversation_id: convo.id, width: stored.width, height: stored.height });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Storing an uploaded photo failed:", err.message);
     return reply({ error: "Couldn't keep that photo. Try again in a moment." }, 502);
   }
 }
 
 /** The server's own routes: the follow-up turn and a fresh drainer. Only with the secret; the work runs after the 202. */
-async function internal(request, reply, route) {
+async function internal(request: any, reply: any, route: any) {
   if (!internalSecretOk(request.headers.get("x-chat-internal-secret"))) {
     console.warn(`Refused ${route}: bad or missing internal secret`);
     return reply({ error: "Not found" }, 404);
   }
-  let body = {};
+  let body: Record<string, any> = {};
   try {
     body = JSON.parse((await request.text()) || "{}") || {};
   } catch {
@@ -426,9 +426,9 @@ async function internal(request, reply, route) {
   return reply({ accepted: true }, 202);
 }
 
-export async function POST(request) {
+export async function POST(request: any) {
   const headers = { ...corsHeaders(request), "Cache-Control": "no-store" };
-  const reply = (body, status = 200, extra = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
+  const reply = (body: any, status = 200, extra: any = {}) => Response.json(body, { status, headers: { ...headers, ...extra } });
 
   const route = routeOf(request);
   if (!chatEnabled()) return reply(DISABLED_BODY, 503);
@@ -443,7 +443,7 @@ export async function POST(request) {
   warnSharedKeys();
   try {
     assertChatConfigured();
-  } catch (err) {
+  } catch (err: any) {
     console.error(err.message);
     return reply({ error: "The chat isn't available right now." }, 503);
   }
@@ -477,19 +477,19 @@ export async function POST(request) {
     return reply({ error: "Sending photos needs a signed-in editor." }, 403);
   }
   const page = pageFrom(body?.page);
-  let messages; // what the loop starts from
-  let convo = null; // an editor's conversation (existing, or null until created below)
-  let storedUser; // the editor's new user message, as stored
+  let messages: any; // what the loop starts from
+  let convo: any = null; // an editor's conversation (existing, or null until created below)
+  let storedUser: any; // the editor's new user message, as stored
   let finalise = false;
   let review = false; // Done on the drafts review card
-  let reviewDrafts = [];
-  let reviewAnswers = null;
+  let reviewDrafts: any[] = [];
+  let reviewAnswers: any = null;
   let optionalReview = false; // Done on the optional items card
-  let optionalItems = [];
-  let optionalAnswers = null;
-  let history = [];
-  let rows = []; // the conversation's stored rows (an editor's)
-  let imagePaths = []; // photos uploaded on pick (POST /chat/uploads), in picked order
+  let optionalItems: any[] = [];
+  let optionalAnswers: any = null;
+  let history: any[] = [];
+  let rows: any[] = []; // the conversation's stored rows (an editor's)
+  let imagePaths: any[] = []; // photos uploaded on pick (POST /chat/uploads), in picked order
   if (isEditor) {
     finalise = body?.action === "finalise";
     review = body?.action === "review_drafts";
@@ -500,7 +500,7 @@ export async function POST(request) {
       try {
         const st = await finaliseState(caller);
         optionalItems = st?.built ? [...st.built.optional, ...st.built.droppedOptional] : [];
-      } catch (err) {
+      } catch (err: any) {
         console.error("Reading the optional items failed:", err.message);
         return reply({ error: "The tray isn't available right now." }, 502);
       }
@@ -514,7 +514,7 @@ export async function POST(request) {
       if (!isUuid(body?.conversation_id)) return reply({ error: "That question isn't in a chat." }, 400);
       try {
         reviewDrafts = await thisWeeksDrafts();
-      } catch (err) {
+      } catch (err: any) {
         console.error("Reading this week's drafts failed:", err.message);
         return reply({ error: "The chat isn't available right now." }, 502);
       }
@@ -534,11 +534,11 @@ export async function POST(request) {
     if (!text && !hasImages && !imagePaths.length) return reply({ error: "Send a message to start the chat." }, 400);
     if (finalise) {
       try {
-        const view = await trayView(await loadTray(), caller);
+        const view: any = await trayView(await loadTray(), caller);
         if (!view?.count) return reply({ error: "The tray is empty." }, 400);
         if (!view.needs_list) return reply({ error: "No shopping list is needed: the tray can be saved as it is." }, 409);
         // startFinalise runs once this turn holds the chat's lock (below): a busy chat must not leave the tray "finalising"
-      } catch (err) {
+      } catch (err: any) {
         console.error("Starting Finalise failed:", err.message);
         return reply({ error: "The tray isn't available right now." }, 502);
       }
@@ -551,14 +551,14 @@ export async function POST(request) {
           rows = await getMessages(convo.id);
           history = historyForModel(rows);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Loading the conversation failed:", err.message);
         return reply({ error: "The chat isn't available right now." }, 502);
       }
       if (!convo) return reply({ error: "That chat isn't available." }, 404);
       // photos uploaded on pick belong to this conversation, and only once
       const used = new Set(photoList(rows).map((p) => p.path));
-      if (imagePaths.some((p) => !p.startsWith(`${convo.id}/`) || used.has(p))) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
+      if (imagePaths.some((p: any) => !p.startsWith(`${convo.id}/`) || used.has(p))) return reply({ error: "Those photos weren't uploaded properly. Attach them again." }, 400);
       // another turn of this chat is running (a follow-up, usually): say so before anything is counted; the panel sends again when it's done
       if (lockHeld(convo)) return reply({ busy: true, error: "I'm still working on the last answer. Your message goes as soon as I'm done." }, 409);
       if (review && !reviewOpen(rows)) return reply({ error: "Those drafts were already answered." }, 409);
@@ -573,11 +573,11 @@ export async function POST(request) {
   const limit = await checkRateLimit(caller);
   if (!limit.ok) return reply({ error: limit.message }, 429, { "Retry-After": String(limit.retryAfter) });
 
-  let images = []; // the editor's validated, re-encoded photos
+  let images: any[] = []; // the editor's validated, re-encoded photos
   if (isEditor && !finalise && body?.images) {
     try {
       images = await sanitizeUploads(body.images);
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof UploadError) return reply({ error: err.message }, err.status);
       console.error("Checking photos failed:", err.message);
       return reply({ error: "Couldn't read those photos. Try again." }, 400);
@@ -588,11 +588,11 @@ export async function POST(request) {
   const notYet = shortcutOk && isNotYet(storedUser.content);
   const promoteIt = shortcutOk && isPromoteIt(storedUser.content); // the switch and the drafts review card, no model call
   const turnId = newId();
-  let title;
-  let attachments = []; // [{ path, n }] stored for this message, numbered on from the conversation's earlier photos
-  let photos = []; // every photo of the conversation, this message's included: [{ n, path }]
-  let reads = []; // the conversation's photo_reads rows
-  let lockToken = null;
+  let title: any;
+  let attachments: any[] = []; // [{ path, n }] stored for this message, numbered on from the conversation's earlier photos
+  let photos: any[] = []; // every photo of the conversation, this message's included: [{ n, path }]
+  let reads: any[] = []; // the conversation's photo_reads rows
+  let lockToken: any = null;
   if (isEditor) {
     try {
       if (!convo) {
@@ -613,7 +613,7 @@ export async function POST(request) {
         rows = await getMessages(convo.id);
         history = historyForModel(rows);
         const used = new Set(photoList(rows).map((p) => p.path));
-        if (imagePaths.some((p) => used.has(p))) {
+        if (imagePaths.some((p: any) => used.has(p))) {
           await afterTurn(convo.id, lockToken, { origin: originOf(request) });
           return reply({ error: "Those photos were already sent. Attach them again." }, 400);
         }
@@ -630,7 +630,7 @@ export async function POST(request) {
       if (finalise) await startFinalise(caller);
       const before = photoList(rows);
       const stored = images.length ? await storeUploads(convo.id, images) : [];
-      attachments = [...imagePaths.map((path) => ({ path })), ...stored].map((a, i) => ({ ...a, n: before.length + i + 1 }));
+      attachments = [...imagePaths.map((path: any) => ({ path })), ...stored].map((a, i) => ({ ...a, n: before.length + i + 1 }));
       if (attachments.length) storedUser.images = attachments.map(({ path, width, height }) => ({ path, ...(width ? { width, height } : {}) }));
       await appendMessages(convo.id, [storedUser], { turnId });
       photos = [...before, ...attachments.map(({ n, path }) => ({ n, path }))];
@@ -642,7 +642,7 @@ export async function POST(request) {
       // a note from the site just before (photos read) and the user's message go to the model as ONE user message: providers want turns to alternate
       if (prev?.role === "user" && typeof prev.content === "string") messages[messages.length - 1] = { ...prev, content: `${prev.content}\n\n${newText}` };
       else messages.push({ role: "user", content: newText });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Saving the chat failed:", err.message);
       if (finalise) await settleFinalise(caller);
       if (lockToken && convo) await afterTurn(convo.id, lockToken, { origin: originOf(request) });
@@ -650,7 +650,7 @@ export async function POST(request) {
     }
   }
   // Photos sent with no words while others are still being read need no model: they join the queue and the report covers them all.
-  const photosOnly = isEditor && !finalise && attachments.length > 0 && !storedUser.content && reads.some((r) => r.status === "queued" || r.status === "reading");
+  const photosOnly = isEditor && !finalise && attachments.length > 0 && !storedUser.content && reads.some((r: any) => r.status === "queued" || r.status === "reading");
 
   let extraNote = "";
   if (isEditor) {
@@ -663,7 +663,7 @@ export async function POST(request) {
       }
       const progress = progressNote(reads, photos.filter((p) => !attachments.some((a) => a.path === p.path)));
       if (progress) extraNote += `\n${progress}`;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Reading the tray for the note failed:", err.message);
     }
   }
@@ -694,7 +694,7 @@ export async function POST(request) {
         const heartbeat = setInterval(() => {
           if (!closed && Date.now() - lastEvent > STILL_WORKING_MS) send("status", { text: "Still working on it…" });
         }, 5000);
-        const send = (event, data) => {
+        const send = (event: any, data: any) => {
           if (closed) return;
           lastEvent = Date.now();
           if (!["meta", "title", "done", "status"].includes(event)) content = true;
@@ -704,27 +704,27 @@ export async function POST(request) {
             closed = true;
           }
         };
-        const emit = ({ type, ...data }) => send(type, data);
-        let output;
-        let shown; // cards, chips, a question: recorded on the trace next to the text
+        const emit = ({ type, ...data }: any) => send(type, data);
+        let output: any;
+        let shown: any; // cards, chips, a question: recorded on the trace next to the text
         let listTurn = false; // the drafts are answered and this turn builds the list: the tray shows "finalising" meanwhile
-        const store = async (msgs) => {
+        const store = async (msgs: any) => {
           try {
             await appendMessages(convo.id, msgs, { turnId, traceId: trace.traceId });
-          } catch (err) {
+          } catch (err: any) {
             console.error("Saving the answer failed:", err.message);
           }
         };
         // Finalise list after the drafts (docs/structured-ingredients.md 6): the site has already built the list. The model reviews it only when
         // the site flags something; then the optional items card (no model), then Save. Each step ends the turn if it needs an answer.
-        const saveOffer = async (line) => {
-          const view = await trayView(await loadTray(), caller);
+        const saveOffer = async (line: any) => {
+          const view: any = await trayView(await loadTray(), caller);
           const save = trayAction(view) === "apply_plan";
           const text = [line, save ? (view.needs_list ? "The shopping list is ready: tap Save to site when you're ready." : "No shopping list is needed: tap Save to site when you're ready.") : view.blocked ? `${view.blocked}: see the tray.` : ""].filter(Boolean).join(" ");
           const chips = save ? [{ label: "Save to site", action: "apply_plan" }] : [];
           return { text, chips };
         };
-        const optionalStep = async (line) => {
+        const optionalStep = async (line: any) => {
           const st = await finaliseState(caller);
           const card = st?.optionalOpen?.length ? await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items) : null;
           if (card) {
@@ -735,16 +735,16 @@ export async function POST(request) {
           const offer = await saveOffer(line);
           return { text: offer.text, ui: offer.chips.length ? { replies: offer.chips } : null, chips: offer.chips };
         };
-        const finish = async (step, { prefix = "" } = {}) => {
+        const finish = async (step: any, { prefix = "" }: any = {}) => {
           emit({ type: "text", delta: `${prefix}${step.text}` });
           if (step.event) emit(step.event);
           if (step.chips?.length) emit({ type: "suggestions", replies: step.chips });
           emit({ type: "done", suggestions: !!step.chips?.length });
           output = `${output ? `${output}\n\n` : ""}${step.text}`;
-          if (step.ui?.optional) shown = { ...(shown || {}), optional: step.ui.optional.items.map((i) => i.item) };
+          if (step.ui?.optional) shown = { ...(shown || {}), optional: step.ui.optional.items.map((i: any) => i.item) };
           await store([{ role: "assistant", content: step.text, ...(step.ui ? { ui: step.ui } : {}) }]);
         };
-        const afterDrafts = async (line) => {
+        const afterDrafts = async (line: any) => {
           const st = await finaliseState(caller);
           if (!st?.needs) return finish(await saveOffer(line));
           if (st.error) return finish({ text: `${line ? `${line} ` : ""}The shopping list can't be built: ${st.error}` });
@@ -753,11 +753,11 @@ export async function POST(request) {
           listTurn = true;
           await startFinalise(caller);
           if (line) emit({ type: "text", delta: `${line}\n\n` });
-          const flags = st.flagsOpen.map((f) => `- [${f.key}] ${f.text}`).join("\n");
+          const flags = st.flagsOpen.map((f: any) => `- [${f.key}] ${f.text}`).join("\n");
           const note = `${await trayNote(await loadTray(), caller)}\nFinalise step (2): the site has built next week's shopping list from the recipes (call get_tray to see it, with item ids). Review ONLY what the site flags:\n${flags}\nFix what needs it with ONE stage_shopping_list_edits call (patches by item id: round_up a fraction of something bought whole, merge two names that are the same thing, a note where it helps; leave what is fine), then say in one short line what you changed, or that it looks right. Don't recite the list, don't ask about optional items (the site asks about them next), don't offer Save or Finalise.`;
-          const held = (event) => (event.type === "done" || event.type === "suggestions" ? undefined : emit(event));
+          const held = (event: any) => (event.type === "done" || event.type === "suggestions" ? undefined : emit(event));
           const result = await runChat({ caller, messages, page, emit: held, trace, model, apiKey: config.chatEditorKey, origin: originOf(request), extraNote: note, userText: storedUser.content, conversation: { id: convo.id, title: convo.title || title } });
-          await markReviewed(caller, { flags: st.flagsOpen.map((f) => f.key) });
+          await markReviewed(caller, { flags: st.flagsOpen.map((f: any) => f.key) });
           output = line ? `${line}\n\n${result.reply}` : result.reply;
           shown = result.shown;
           const produced = result.produced.map((m) => ({ ...m, ...(m.ui ? { ui: { ...m.ui, replies: undefined } } : {}) }));
@@ -797,8 +797,8 @@ export async function POST(request) {
           if (finalise) {
             // the promote question only when next week on the site has recipes and the switch isn't staged yet (design 7.1 step 1); it needs the
             // model (it shows next week's recipes). Otherwise Finalise goes straight to the review, run by the site.
-            const siteNext = (await recipeSummaries()).some((r) => r.next);
-            const switched = (await loadTray())?.items?.some((i) => i.kind === "switch");
+            const siteNext = (await recipeSummaries()).some((r: any) => r.next);
+            const switched = (await loadTray())?.items?.some((i: any) => i.kind === "switch");
             if (!siteNext || switched) {
               await afterDrafts("");
               return;
@@ -817,8 +817,8 @@ export async function POST(request) {
             // "Promote it": the switch goes in the tray, then ONE card asks about every draft of this week (design 7.1), with no model call
             const now = await loadTray();
             try {
-              if (!now?.items?.some((i) => i.kind === "switch")) await stageOp({ op: { action: "start_next_week" } }, caller, { conversationTitle: convo.title || title, trace });
-            } catch (err) {
+              if (!now?.items?.some((i: any) => i.kind === "switch")) await stageOp({ op: { action: "start_next_week" } }, caller, { conversationTitle: convo.title || title, trace });
+            } catch (err: any) {
               if (err instanceof UserError) throw new ChatError(`Couldn't stage the switch: ${err.message}`);
               throw err;
             }
@@ -834,7 +834,7 @@ export async function POST(request) {
             emit({ type: "review", ...card });
             emit({ type: "done", suggestions: false });
             output = line;
-            shown = { review: card.drafts.map((d) => d.slug) };
+            shown = { review: card.drafts.map((d: any) => d.slug) };
             await store([{ role: "assistant", content: line, ui: { review: card } }]);
             return;
           }
@@ -844,11 +844,11 @@ export async function POST(request) {
             let staged;
             try {
               staged = await stageReview(reviewDrafts, reviewAnswers, caller, { trace });
-            } catch (err) {
+            } catch (err: any) {
               // nothing was staged: the card comes back with their answers on it, so Done can be tapped again
               console.error("Staging the drafts' answers failed:", err.message);
               const line = `I couldn't add your answers to the tray${err instanceof UserError ? `: ${err.message}` : ""}. Tap Done to try again.`;
-              const card = reviewCard(reviewDrafts, []);
+              const card: any = reviewCard(reviewDrafts, []);
               for (const d of card.drafts) {
                 const a = reviewAnswers.get(d.slug);
                 if (a === "liked" || a === "remove") d.answer = a;
@@ -861,14 +861,14 @@ export async function POST(request) {
               await store([{ role: "assistant", content: line, ui: { review: card } }]);
               return;
             }
-            emit({ type: "tray", added: staged.items.map((i) => i.id) });
+            emit({ type: "tray", added: staged.items.map((i: any) => i.id) });
             await afterDrafts(staged.line);
             return;
           }
           if (notYet) {
             // "Not yet" to the promote question: nothing is staged, the tray goes back to collecting, no model call (design 7.1)
             await settleFinalise(caller);
-            let chips = [];
+            let chips: any[] = [];
             try {
               if (trayAction(await trayView(await loadTray(), caller)) === "finalise_plan") chips = [{ label: "Finalise list", action: "finalise_plan" }];
             } catch {
@@ -880,7 +880,7 @@ export async function POST(request) {
             output = NOT_YET_REPLY;
             try {
               await appendMessages(convo.id, [{ role: "assistant", content: NOT_YET_REPLY, ...(chips.length ? { ui: { replies: chips } } : {}) }], { turnId, traceId: trace.traceId });
-            } catch (err) {
+            } catch (err: any) {
               console.error("Saving the answer failed:", err.message);
             }
             return;
@@ -906,11 +906,11 @@ export async function POST(request) {
           if (isEditor) {
             try {
               await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
-            } catch (err) {
+            } catch (err: any) {
               console.error("Saving the answer failed:", err.message);
             }
           }
-        } catch (err) {
+        } catch (err: any) {
           if (err?.name !== "AbortError") {
             if (!(err instanceof ChatError)) console.error(err);
             else if (err.kind === "out-of-credit") trace.event({ name: "out-of-credit", level: "ERROR" });

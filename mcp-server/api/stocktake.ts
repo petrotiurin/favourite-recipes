@@ -7,7 +7,7 @@ import { makeCaller } from "../lib/tools.ts";
 // fully or partly. The editor is signed in with Supabase Auth on the page; only EDITORS
 // may save. Saving commits shopping-list.json, so the site redeploys with the stocktake baked in.
 
-function corsHeaders(request) {
+function corsHeaders(request: any): Record<string, string> {
   const origin = request.headers.get("origin");
   if (origin !== new URL(config.siteUrl).origin) return { Vary: "Origin" };
   return {
@@ -19,16 +19,16 @@ function corsHeaders(request) {
   };
 }
 
-export function OPTIONS(request) {
+export function OPTIONS(request: any) {
   return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
 
-export async function POST(request) {
+export async function POST(request: any) {
   const headers = corsHeaders(request);
-  const reply = (body, status = 200) => Response.json(body, { status, headers: { ...headers, "Cache-Control": "no-store" } });
+  const reply = (body: any, status = 200) => Response.json(body, { status, headers: { ...headers, "Cache-Control": "no-store" } });
   try {
     assertStocktakeConfigured();
-  } catch (err) {
+  } catch (err: any) {
     return reply({ error: err.message }, 503);
   }
   const editor = await verifyEditor(request);
@@ -42,8 +42,8 @@ export async function POST(request) {
   }
   try {
     const { list, commit, counts } = await saveStocktake(body?.items, makeCaller({ role: "editor", email: editor.email, userId: editor.userId }));
-    return reply({ ok: true, stocktake: list.stocktake, counts, commit: commit.url });
-  } catch (err) {
+    return reply({ ok: true, stocktake: list.stocktake, counts, commit: commit!.url });
+  } catch (err: any) {
     if (err instanceof StocktakeError) return reply({ error: err.message }, err.status);
     console.error(err);
     return reply({ error: "Saving failed. Try again in a minute." }, 500);

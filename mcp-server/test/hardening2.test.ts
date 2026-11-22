@@ -12,11 +12,11 @@ Object.assign(process.env, {
   CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000",
 });
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase } = await import("../scripts/fakes.ts");
-let github, supabase, ghCalls;
+let github: any, supabase: any, ghCalls: any;
 const realFetch = globalThis.fetch;
-let chat, tools, config, photos, chatUi, rateLimit;
+let chat: any, tools: any, config: any, photos: any, chatUi: any, rateLimit: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) { ghCalls++; return github.fetch(s, init); }
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
@@ -41,9 +41,9 @@ beforeEach(() => {
   config.supabaseServiceKey = "service-test";
 });
 let ip = 0;
-const get = (path, token = "owner-token") => chat.GET(new Request(`https://mcp.test/api/chat?route=${path}`, { headers: { authorization: `Bearer ${token}`, "x-forwarded-for": `198.51.100.${++ip % 250}` } }));
+const get = (path: any, token = "owner-token") => chat.GET(new Request(`https://mcp.test/api/chat?route=${path}`, { headers: { authorization: `Bearer ${token}`, "x-forwarded-for": `198.51.100.${++ip % 250}` } }));
 const slugs = () => [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3)).sort();
-const stage = (slug, n) => tools.dispatch("stage_update_recipe", { slug, total_mins: n }, editor(), { chat: { emit() {} } });
+const stage = (slug: any, n: any) => tools.dispatch("stage_update_recipe", { slug, total_mins: n }, editor(), { chat: { emit() {} } });
 
 test("the tray's dry runs and the panel's reads cost a small constant number of GitHub calls, however many items are staged", async () => {
   const all = slugs();
@@ -109,18 +109,18 @@ test("private IPv6 forms are refused: IPv4-compatible, NAT64, site-local, 6to4, 
 
 test("the fetcher connects to the checked address, not to whatever the name resolves to later", async () => {
   const server = http.createServer((req, res) => res.writeHead(200, { "content-type": "text/plain", "x-host": req.headers.host }).end("pinned ok"));
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
   try {
-    const url = new URL(`http://rebind.example:${server.address().port}/x`);
+    const url = new URL(`http://rebind.example:${(server.address() as any).port}/x`);
     // the name would resolve elsewhere (nowhere reachable): the request still lands on the pinned address and keeps the Host header
     const res = await photos.pinnedGet(url, "127.0.0.1", { headers: {}, timeoutMs: 3000 });
     assert.equal(res.status, 200);
-    assert.equal(res.headers.get("x-host"), `rebind.example:${server.address().port}`);
+    assert.equal(res.headers.get("x-host"), `rebind.example:${(server.address() as any).port}`);
     assert.equal(await res.text(), "pinned ok");
     // redirects come back as a Response with no body, for fetchPublic to check and pin again
     const redirect = http.createServer((req, res) => res.writeHead(302, { location: "http://127.0.0.1/" }).end());
-    await new Promise((r) => redirect.listen(0, "127.0.0.1", r));
-    const r2 = await photos.pinnedGet(new URL(`http://x.example:${redirect.address().port}/`), "127.0.0.1", { headers: {} });
+    await new Promise<void>((r) => redirect.listen(0, "127.0.0.1", () => r()));
+    const r2 = await photos.pinnedGet(new URL(`http://x.example:${(redirect.address() as any).port}/`), "127.0.0.1", { headers: {} });
     assert.equal(r2.status, 302);
     assert.equal(r2.headers.get("location"), "http://127.0.0.1/");
     redirect.close();
@@ -130,10 +130,10 @@ test("the fetcher connects to the checked address, not to whatever the name reso
 });
 
 test("fetchPublic re-checks and re-pins every redirect hop", async () => {
-  const calls = [];
+  const calls: any[] = [];
   const saved = [photos.deps.lookup, photos.deps.get];
-  photos.deps.lookup = async (host) => (host === "evil.example" ? [{ address: "10.0.0.5" }] : [{ address: "93.184.216.34" }]);
-  photos.deps.get = async (url, address) => {
+  photos.deps.lookup = async (host: any) => (host === "evil.example" ? [{ address: "10.0.0.5" }] : [{ address: "93.184.216.34" }]);
+  photos.deps.get = async (url: any, address: any) => {
     calls.push([url.hostname, address]);
     return url.hostname === "good.example" ? new Response(null, { status: 302, headers: { location: "https://evil.example/x" } }) : new Response("never");
   };

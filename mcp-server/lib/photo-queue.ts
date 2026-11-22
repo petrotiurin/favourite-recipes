@@ -28,15 +28,15 @@ const KICK_THROTTLE_MS = 10_000;
 // calls (no structured output -> forced tool) of CHAT_VISION_TIMEOUT_MS each; a report runs its second passes side by side, plus the checks.
 const readLeaseMs = () => Math.max(config.chatVisionLeaseMs, 2 * config.chatVisionTimeoutMs + 30_000);
 const reportLeaseMs = () => Math.max(config.chatVisionLeaseMs, 2 * config.chatVisionTimeoutMs + 120_000);
-export const deps = { sleep: (ms) => new Promise((r) => setTimeout(r, ms)) }; // tests can make waiting instant
+export const deps = { sleep: (ms: any) => new Promise((r) => setTimeout(r, ms)) }; // tests can make waiting instant
 
 // --- the table ----------------------------------------------------------------------------------------------------------------------
 
-export async function readsOf(conversationId) {
+export async function readsOf(conversationId: any) {
   return (await rest("photo_reads", { query: q({ select: "*", conversation_id: `eq.${conversationId}`, order: "n.asc" }) })) || [];
 }
 
-async function patchRead(id, patch, extra = {}) {
+async function patchRead(id: any, patch: any, extra: any = {}) {
   return rest("photo_reads", { method: "PATCH", prefer: "return=representation", query: q({ id: `eq.${id}`, ...extra }), body: patch });
 }
 
@@ -46,7 +46,7 @@ export async function householdReading() {
 }
 
 /** The tray strip's entries: [{ name, count, mine }], one per editor with photos still being read. */
-export async function readingEntries(userId) {
+export async function readingEntries(userId: any) {
   const by = new Map();
   for (const r of await householdReading().catch(() => [])) {
     const e = by.get(r.user_id) || { name: r.name || "Someone", count: 0, mine: r.user_id === userId };
@@ -57,26 +57,26 @@ export async function readingEntries(userId) {
 }
 
 /** Counts for one conversation: { total, queued, reading, read, failed, skipped, unreported, newestAt, active }. */
-export function statusOf(rows) {
-  const count = (s) => rows.filter((r) => r.status === s).length;
-  const st = { total: rows.length, queued: count("queued"), reading: count("reading"), read: count("read"), failed: count("failed"), skipped: count("skipped") };
-  st.unreported = rows.filter((r) => (r.status === "read" || r.status === "failed") && !r.reported_at).length;
-  st.newestAt = rows.reduce((t, r) => Math.max(t, Date.parse(r.created_at) || 0), 0);
+export function statusOf(rows: any) {
+  const count = (s: any) => rows.filter((r: any) => r.status === s).length;
+  const st: Record<string, any> = { total: rows.length, queued: count("queued"), reading: count("reading"), read: count("read"), failed: count("failed"), skipped: count("skipped") };
+  st.unreported = rows.filter((r: any) => (r.status === "read" || r.status === "failed") && !r.reported_at).length;
+  st.newestAt = rows.reduce((t: any, r: any) => Math.max(t, Date.parse(r.created_at) || 0), 0);
   st.active = st.queued + st.reading > 0 || st.unreported > 0;
   return st;
 }
 
-export async function photoStatus(conversationId) {
+export async function photoStatus(conversationId: any) {
   return statusOf(await readsOf(conversationId));
 }
 
 /** "[photos still being read: 4 of 6]" for the turn's note while reading, plus photos that were attached but never handed to the reader. */
-export function progressNote(rows, photos = []) {
-  const lines = [];
-  const pending = rows.filter((r) => r.status === "queued" || r.status === "reading").length;
-  const batch = rows.filter((r) => r.status !== "skipped" && (!r.reported_at || r.status === "queued" || r.status === "reading"));
+export function progressNote(rows: any, photos: any[] = []) {
+  const lines: any[] = [];
+  const pending = rows.filter((r: any) => r.status === "queued" || r.status === "reading").length;
+  const batch = rows.filter((r: any) => r.status !== "skipped" && (!r.reported_at || r.status === "queued" || r.status === "reading"));
   if (pending) lines.push(`[photos still being read: ${batch.length - pending} of ${batch.length} done. The result arrives as a note from the site: don't say they are read, and don't call read_recipe_photos for them again.]`);
-  const queued = new Set(rows.map((r) => r.path));
+  const queued = new Set<any>(rows.map((r: any) => r.path));
   const never = photos.filter((p) => !queued.has(p.path));
   if (never.length) lines.push(`Photos the user attached that haven't been sent to the photo reader yet: ${never.map((p) => `photo-${p.n}`).join(", ")}. Call read_recipe_photos to read them.`);
   return lines.join("\n");
@@ -88,32 +88,32 @@ export function progressNote(rows, photos = []) {
  * Queues photos ([{ n, path }]) of a conversation for reading and starts a drainer. Photos already queued are skipped (unique per conversation
  * and path). Returns { queued: rows, refused: n (over the 30-unreported limit), status }.
  */
-export async function enqueuePhotos({ conversationId, caller, photos, origin }) {
+export async function enqueuePhotos({ conversationId, caller, photos, origin }: any) {
   if (caller?.role !== "editor" || !caller.userId) throw new Error("Refusing to queue photos: only an editor may");
   const rows = await readsOf(conversationId);
-  const have = new Set(rows.map((r) => r.path));
-  const fresh = photos.filter((p) => !have.has(p.path) && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/i.test(p.path) && p.path.startsWith(`${conversationId}/`));
-  const room = Math.max(0, MAX_UNREPORTED - rows.filter((r) => r.status !== "skipped" && !r.reported_at).length);
+  const have = new Set<any>(rows.map((r: any) => r.path));
+  const fresh = photos.filter((p: any) => !have.has(p.path) && /^[0-9a-f-]{36}\/[0-9a-f-]{36}\.jpg$/i.test(p.path) && p.path.startsWith(`${conversationId}/`));
+  const room = Math.max(0, MAX_UNREPORTED - rows.filter((r: any) => r.status !== "skipped" && !r.reported_at).length);
   const take = fresh.slice(0, room);
-  let queued = [];
+  let queued: any[] = [];
   if (take.length) {
     queued = (await rest("photo_reads", {
       method: "POST",
       prefer: "return=representation,resolution=ignore-duplicates",
       query: q({ on_conflict: "conversation_id,path" }),
-      body: take.map((p) => ({ conversation_id: conversationId, user_id: caller.userId, name: nameOf(caller.email), n: p.n, path: p.path, created_at: new Date(clock.now()).toISOString() })),
+      body: take.map((p: any) => ({ conversation_id: conversationId, user_id: caller.userId, name: nameOf(caller.email), n: p.n, path: p.path, created_at: new Date(clock.now()).toISOString() })),
     })) || [];
     startDrainer(conversationId, { origin });
   }
   return { queued, refused: fresh.length - take.length, status: statusOf([...rows, ...queued]) };
 }
 
-const nameOf = (email) => String(email || "").split("@")[0].split(/[._+-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || "Someone";
+const nameOf = (email: any) => String(email || "").split("@")[0].split(/[._+-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || "Someone";
 
 // --- draining -----------------------------------------------------------------------------------------------------------------------
 
 /** Starts a drainer for the conversation: in a fresh function run through the internal route when it can, else here in the background. */
-export function startDrainer(conversationId, { origin, fresh = false } = {}) {
+export function startDrainer(conversationId: any, { origin, fresh = false }: any = {}) {
   if (fresh && internalReachable(origin)) {
     return background(async () => {
       if (!(await internalCall("internal/drain", { conversation_id: conversationId }, origin))) await drain(conversationId, { origin });
@@ -123,7 +123,7 @@ export function startDrainer(conversationId, { origin, fresh = false } = {}) {
 }
 
 /** Claims, reads and reports until the conversation's queue is empty (see the top of this file). Never throws. */
-export async function drain(conversationId, { origin, startedAt = clock.now() } = {}) {
+export async function drain(conversationId: any, { origin, startedAt = clock.now() }: any = {}) {
   try {
     for (;;) {
       if (clock.now() - startedAt > DRAIN_BUDGET_MS) {
@@ -132,7 +132,7 @@ export async function drain(conversationId, { origin, startedAt = clock.now() } 
       }
       const claimed = (await rest("rpc/claim_photo_reads", { method: "POST", body: { p_conversation: conversationId, p_max: config.chatVisionConcurrency, p_cap: config.chatVisionConcurrency, p_lease_ms: readLeaseMs(), p_max_attempts: MAX_ATTEMPTS } })) || [];
       if (claimed.length) {
-        await Promise.all(claimed.map((row) => readOne(row)));
+        await Promise.all(claimed.map((row: any) => readOne(row)));
         continue;
       }
       const st = await photoStatus(conversationId);
@@ -160,18 +160,18 @@ export async function drain(conversationId, { origin, startedAt = clock.now() } 
       const after = await photoStatus(conversationId);
       if (!(after.queued || after.reading || after.unreported)) return;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error(`Photo drainer for a conversation failed: ${err.message}`);
   }
 }
 
-const friendly = (err) =>
+const friendly = (err: any) =>
   err instanceof ReaderError
     ? { timeout: "it took too long to read", unparseable: "the reader's answer didn't make sense", refused: "the reader refused it", missing: "the photo is gone", "out-of-credit": "the photo reader is out of credit", "not-configured": "photo reading isn't set up" }[err.kind] || "the reader failed"
     : "something went wrong reading it";
 
 /** Reads one claimed photo (the first pass) and stores the result; a transient failure goes back on the queue once. */
-export async function readOne(row) {
+export async function readOne(row: any) {
   const trace = startTrace({ name: `photo read photo-${row.n}`, sessionId: row.conversation_id, userId: row.user_id, tags: ["editor", "photos"], version: PHOTO_READER_PROMPT_VERSION, metadata: { photo: `chat-uploads/${row.path}`, attempt: row.attempts, model: config.chatVisionModel }, input: `photo-${row.n}` });
   try {
     const bytes = await downloadUpload(row.path);
@@ -179,7 +179,7 @@ export async function readOne(row) {
     const { read } = await readPhotos([dataUrl(bytes)], { consecutive: false, trace, name: `photo read photo-${row.n}` });
     await patchRead(row.id, { status: "read", result: read, lease_until: null, read_at: new Date(clock.now()).toISOString(), error: null }, { status: "eq.reading" });
     trace.finish(read.kind === "recipe" ? read.recipe.title || "(recipe, no title)" : read.kind);
-  } catch (err) {
+  } catch (err: any) {
     const retry = err instanceof ReaderError ? err.transient && row.attempts < MAX_ATTEMPTS : row.attempts < MAX_ATTEMPTS;
     if (!(err instanceof ReaderError)) console.error(`Reading photo-${row.n} failed: ${err.message}`);
     else console.warn(`Reading photo-${row.n} failed (${err.kind}${retry ? ", will retry" : ""}): ${err.message}`);
@@ -190,23 +190,23 @@ export async function readOne(row) {
 
 // --- the report ---------------------------------------------------------------------------------------------------------------------
 
-const quote = (s, max = 60) => JSON.stringify(String(s || "").replace(/\s+/g, " ").trim().slice(0, max));
-const ingNames = (fields) => fields.ingredients.map((i) => i.name);
+const quote = (s: any, max = 60) => JSON.stringify(String(s || "").replace(/\s+/g, " ").trim().slice(0, max));
+const ingNames = (fields: any) => fields.ingredients.map((i: any) => i.name);
 
 /** The household tray's new recipes, for the duplicate check: [{ id, title, ingredients, added_by }]. */
 async function trayRecipes() {
   const { loadTray } = await import("./tray.ts");
   const tray = await loadTray().catch(() => null);
-  return (tray?.items || []).filter((i) => i.kind === "new").map((i) => ({ id: i.id, title: i.op.title, ingredients: (i.op.ingredients || []).map((x) => x.name), added_by: i.added_by?.name || "Someone" }));
+  return (tray?.items || []).filter((i: any) => i.kind === "new").map((i: any) => ({ id: i.id, title: i.op.title, ingredients: (i.op.ingredients || []).map((x: any) => x.name), added_by: i.added_by?.name || "Someone" }));
 }
 
 async function bookRecipes() {
   const { recipeIngredients } = await import("./recipes.ts");
-  return (await recipeIngredients().catch(() => [])).map((r) => ({ slug: r.slug, title: r.title, ingredients: r.ingredients }));
+  return (await recipeIngredients().catch(() => [])).map((r: any) => ({ slug: r.slug, title: r.title, ingredients: r.ingredients }));
 }
 
 /** A dry run of create_recipe for a read recipe, against the repo as it is: null when it would pass, else the problem. */
-export async function dryRunCheck(fields, caller) {
+export async function dryRunCheck(fields: any, caller: any): Promise<any> {
   const { ChangeSet } = await import("./github.ts");
   const { slugify } = await import("./recipe-format.ts");
   const { runOperation } = await import("./operations.ts");
@@ -218,19 +218,19 @@ export async function dryRunCheck(fields, caller) {
     cs.write(`images/recipes/${slug}.jpg`, Buffer.from("check"));
     const r = await runOperation({ action: "create_recipe", ...fields, image: { uploaded: true }, week: "next" }, cs, caller);
     return { warnings: r.warnings || [] };
-  } catch (err) {
+  } catch (err: any) {
     return { error: String(err.message).replace(/^[^\n]*rejected:\n- /, "").replace(/\n- /g, "; ").replace(/\n/g, " ").slice(0, 240) };
   }
 }
 
 /** The recipe a group of photos makes: the first pass for one photo; the second pass (all photos in one call) for a joined group. */
-async function groupRead(group, byN, trace) {
-  const rows = group.members.map((n) => byN.get(n));
+async function groupRead(group: any, byN: any, trace: any) {
+  const rows = group.members.map((n: any) => byN.get(n));
   if (rows.length === 1) return { read: rows[0].result, pass: 1 };
   const first = rows[0];
   if (first.group_id === group.id && first.recipe) return { read: first.recipe, pass: 2, cached: true };
   try {
-    const urls = [];
+    const urls: any[] = [];
     for (const r of rows) {
       const bytes = await downloadUpload(r.path);
       if (!bytes) throw new ReaderError("The photo is gone", { kind: "missing" });
@@ -238,13 +238,13 @@ async function groupRead(group, byN, trace) {
     }
     const { read } = await readPhotos(urls, { consecutive: true, trace, name: `photo read ${group.id}` });
     return { read, pass: 2, fresh: true };
-  } catch (err) {
+  } catch (err: any) {
     // the second pass failed: glue the first-pass reads together (title from the first, lists in order)
     console.warn(`Second pass for photos ${group.id} failed (${err.kind || err.message}): joining the first reads`);
     const merged = structuredClone(rows[0].result);
     for (const r of rows.slice(1)) {
-      merged.recipe.ingredients.push(...r.result.recipe.ingredients.filter((i) => !merged.recipe.ingredients.some((x) => x.name.toLowerCase() === i.name.toLowerCase())));
-      merged.recipe.instructions.push(...r.result.recipe.instructions.filter((s) => !merged.recipe.instructions.includes(s)));
+      merged.recipe.ingredients.push(...r.result.recipe.ingredients.filter((i: any) => !merged.recipe.ingredients.some((x: any) => x.name.toLowerCase() === i.name.toLowerCase())));
+      merged.recipe.instructions.push(...r.result.recipe.instructions.filter((s: any) => !merged.recipe.instructions.includes(s)));
       merged.recipe.title ||= r.result.recipe.title;
     }
     return { read: merged, pass: 1, glued: true };
@@ -255,31 +255,31 @@ async function groupRead(group, byN, trace) {
  * Builds and stores the report for the claimed photos (`lot`): groups (with their neighbours already reported), second pass, checks, the note.
  * Then sets reported_at and starts the follow-up turn. Exported for tests.
  */
-export async function report(conversationId, lot, { origin } = {}) {
+export async function report(conversationId: any, lot: any, { origin }: any = {}) {
   const rows = await readsOf(conversationId);
-  const byN = new Map(rows.map((r) => [r.n, r]));
-  const newIds = new Set(lot.map((r) => r.id));
-  const isNew = (n) => newIds.has(byN.get(n)?.id);
+  const byN = new Map<any, any>(rows.map((r: any) => [r.n, r]));
+  const newIds = new Set<any>(lot.map((r: any) => r.id));
+  const isNew = (n: any) => newIds.has(byN.get(n)?.id);
   const owner = rows[0]?.user_id;
   const convo = await conversationById(conversationId);
   const email = convo ? await userEmail(convo.user_id) : null;
   const editor = !!email && config.shoppingEditors.includes(email);
   const { makeCaller } = await import("./tools.ts");
   const caller = editor ? makeCaller({ role: "editor", email, userId: convo.user_id, ip: "server" }) : null;
-  const trace = startTrace({ name: "photo report", sessionId: conversationId, userId: owner, tags: ["editor", "photos"], version: PHOTO_READER_PROMPT_VERSION, input: `photos ${lot.map((r) => r.n).join(", ")}` });
+  const trace = startTrace({ name: "photo report", sessionId: conversationId, userId: owner, tags: ["editor", "photos"], version: PHOTO_READER_PROMPT_VERSION, input: `photos ${lot.map((r: any) => r.n).join(", ")}` });
 
   const { groups, pairs } = groupPhotos(rows);
   const [tray, book] = await Promise.all([trayRecipes(), bookRecipes()]);
-  const lines = [];
-  const meta = { pairs: pairs.map(({ a, b, overlap, signals, decision }) => ({ a, b, overlap, signals, decision })), duplicates: [], groups: [] };
+  const lines: any[] = [];
+  const meta: any = { pairs: pairs.map(({ a, b, overlap, signals, decision }) => ({ a, b, overlap, signals, decision })), duplicates: [], groups: [] };
   const counts = { ok: 0, check: 0 };
   const why = { duplicate: 0, unsure: 0, unreadable: 0, incomplete: 0 };
-  const dupTitles = [];
-  const newNs = lot.map((r) => r.n).sort((a, b) => a - b);
-  lines.push(`new since last time: ${newNs.length === 1 ? `photo-${newNs[0]}` : `photo-${newNs[0]} to photo-${newNs[newNs.length - 1]}`}${newNs.length > 1 && newNs[newNs.length - 1] - newNs[0] + 1 !== newNs.length ? ` (${newNs.map((n) => `photo-${n}`).join(", ")})` : ""}`);
-  const seenThisLot = [];
-  const updates = []; // [id, patch]
-  const changed = groups.filter((g) => g.members.some(isNew) || !g.members.every((n) => byN.get(n).group_id === g.id)); // the rest is unchanged and already reported
+  const dupTitles: any[] = [];
+  const newNs = lot.map((r: any) => r.n).sort((a: any, b: any) => a - b);
+  lines.push(`new since last time: ${newNs.length === 1 ? `photo-${newNs[0]}` : `photo-${newNs[0]} to photo-${newNs[newNs.length - 1]}`}${newNs.length > 1 && newNs[newNs.length - 1] - newNs[0] + 1 !== newNs.length ? ` (${newNs.map((n: any) => `photo-${n}`).join(", ")})` : ""}`);
+  const seenThisLot: any[] = [];
+  const updates: any[] = []; // [id, patch]
+  const changed = groups.filter((g) => g.members.some(isNew) || !g.members.every((n: any) => byN.get(n).group_id === g.id)); // the rest is unchanged and already reported
   const groupReads = await Promise.all(changed.map((g) => groupRead(g, byN, trace))); // second passes side by side
   for (const [gi, g] of changed.entries()) {
     const members = g.members;
@@ -287,14 +287,14 @@ export async function report(conversationId, lot, { origin } = {}) {
     const { read, pass, fresh, glued } = groupReads[gi];
     for (const n of members) {
       const r = byN.get(n);
-      const patch = { group_id: g.id };
+      const patch: any = { group_id: g.id };
       // a joined group's recipe is kept on its first photo, whether the second pass read it or it was pieced together (from_photo stages from it)
       if (n === members[0] && members.length > 1 && (fresh || glued)) patch.recipe = read;
       if (r.group_id !== g.id || patch.recipe) updates.push([r.id, patch]);
     }
-    const carries = members.length > 1 && members.some((n) => !isNew(n)) ? ` (${members.filter(isNew).map((n) => `photo-${n}`).join(", ")} carries on ${members.filter((n) => !isNew(n)).map((n) => `photo-${n}`).join(", ")})` : "";
+    const carries = members.length > 1 && members.some((n: any) => !isNew(n)) ? ` (${members.filter(isNew).map((n: any) => `photo-${n}`).join(", ")} carries on ${members.filter((n: any) => !isNew(n)).map((n: any) => `photo-${n}`).join(", ")})` : "";
     const together = members.length > 1 ? `: read together${glued ? " (pieced together from the separate reads)" : ""}` : "";
-    const stagedIds = [...new Set(members.map((n) => byN.get(n).tray_item_id).filter(Boolean))];
+    const stagedIds = [...new Set<any>(members.map((n: any) => byN.get(n).tray_item_id).filter(Boolean))];
     if (read.kind === "dish") {
       lines.push(`${label}: a photo of a dish, not a recipe${read.dish_description ? ` (${quote(read.dish_description, 120)})` : ""}. You can't see it, so don't guess which recipe it belongs to and don't offer that as a chip; mention it once, and use it as a recipe's photo (photo_from_attachment: ${members[0]}) only when the user names the recipe.`);
       continue;
@@ -334,7 +334,7 @@ export async function report(conversationId, lot, { origin } = {}) {
     seenThisLot.push({ label, title: fields.title, ingredients: ingNames(fields) });
     meta.groups.push({ photos: label, pass, status, estimated });
   }
-  for (const r of lot.filter((x) => x.status === "failed")) {
+  for (const r of lot.filter((x: any) => x.status === "failed")) {
     lines.push(`photo-${r.n}: couldn't be read (${r.error || "the reader failed"}). Ask the user for a clearer photo or the text.`);
     counts.check++;
     why.unreadable++;
@@ -343,10 +343,10 @@ export async function report(conversationId, lot, { origin } = {}) {
   lines.push(`unsure: ${unsure.length ? unsure.map((p) => `photo-${p.a} and photo-${p.b} may be one recipe (${p.why})`).join("; ") : "none"}`);
   counts.check += unsure.length;
   why.unsure += unsure.length;
-  const earlier = rows.filter((r) => r.reported_at && !newIds.has(r.id) && r.status !== "skipped");
+  const earlier = rows.filter((r: any) => r.reported_at && !newIds.has(r.id) && r.status !== "skipped");
   if (earlier.length) {
-    const staged = earlier.filter((r) => r.tray_item_id).length;
-    const failed = earlier.filter((r) => r.status === "failed").map((r) => `photo-${r.n}`);
+    const staged = earlier.filter((r: any) => r.tray_item_id).length;
+    const failed = earlier.filter((r: any) => r.status === "failed").map((r: any) => `photo-${r.n}`);
     lines.push(`earlier: ${earlier.length} photo${earlier.length === 1 ? "" : "s"} (photo-${earlier[0].n} to photo-${earlier[earlier.length - 1].n}), ${staged} staged${failed.length ? `, unreadable: ${failed.join(", ")}` : ""}`);
   }
   lines.push(
@@ -354,14 +354,14 @@ export async function report(conversationId, lot, { origin } = {}) {
   );
   const recipes = meta.groups.length;
   // the panel's status line says what "to check" is, in plain words
-  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const plural = (n: any, one: any, many: any) => `${n} ${n === 1 ? one : many}`;
   const checks = [
     why.duplicate && `${dupTitles.slice(0, 2).join(", ")}${dupTitles.length > 2 ? ` and ${dupTitles.length - 2} more` : ""} already added`,
     why.unsure && plural(why.unsure, "pair that may be one recipe", "pairs that may be one recipe"),
     why.incomplete && plural(why.incomplete, "incomplete", "incomplete"),
     why.unreadable && plural(why.unreadable, "unreadable", "unreadable"),
   ].filter(Boolean);
-  const again = lot.every((r) => r.group_id || r.status === "failed") && lot.some((r) => r.group_id); // only photos reported before: a correction
+  const again = lot.every((r: any) => r.group_id || r.status === "failed") && lot.some((r: any) => r.group_id); // only photos reported before: a correction
   const summary = `${again ? "Photos read again" : "Photos read"}: ${plural(recipes, "recipe", "recipes")}${checks.length ? ` · ${checks.join(" · ")}` : ""}`;
   const content = `photos read.\n${lines.join("\n")}`;
 
@@ -382,16 +382,16 @@ export async function report(conversationId, lot, { origin } = {}) {
  * The user's corrections ("3 and 4 are one recipe", "2 and 3 are different", "skip photo 4"): stored on the rows, the affected photos are
  * reported again (and joined groups read again together). Returns lines for the model.
  */
-export async function applyCorrections(conversationId, { join = [], split = [], skip = [] }, { caller, origin } = {}) {
+export async function applyCorrections(conversationId: any, { join = [], split = [], skip = [] }, { caller, origin }: any = {}) {
   const rows = await readsOf(conversationId);
-  const byN = new Map(rows.map((r) => [r.n, r]));
-  const lines = [];
+  const byN = new Map<any, any>(rows.map((r: any) => [r.n, r]));
+  const lines: any[] = [];
   const touched = new Map(); // id -> patch
-  const touch = (r, patch = {}) => touched.set(r.id, { ...(touched.get(r.id) || {}), reported_at: null, report_lease_until: null, ...patch });
-  const groupOf = (r) => (r.group_id ? r.group_id.split("+").map(Number) : [r.n]);
+  const touch = (r: any, patch: any = {}) => touched.set(r.id, { ...(touched.get(r.id) || {}), reported_at: null, report_lease_until: null, ...patch });
+  const groupOf = (r: any) => (r.group_id ? r.group_id.split("+").map(Number) : [r.n]);
   const regrouped = new Set(); // rows whose grouping the user changed: their old cards no longer match what they are
   for (const g of join) {
-    const ns = [...new Set(g)].sort((a, b) => a - b);
+    const ns = [...new Set<any>(g)].sort((a, b) => a - b);
     const missing = ns.filter((n) => !byN.has(n) || byN.get(n).status === "skipped");
     if (ns.length < 2 || missing.length) {
       lines.push(`Can't join ${ns.map((n) => `photo-${n}`).join(" and ")}: ${missing.length ? `${missing.map((n) => `photo-${n}`).join(", ")} isn't a photo being read in this chat` : "give at least two photos"}.`);
@@ -402,7 +402,7 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
     lines.push(`Joining ${ns.map((n) => `photo-${n}`).join(" + ")}: they are read again together.`);
   }
   for (const pair of split) {
-    const [a, b] = [...new Set(pair)].sort((x, y) => x - y);
+    const [a, b] = [...new Set<any>(pair)].sort((x, y) => x - y);
     if (b === undefined) {
       lines.push(`Can't split photo-${a} from itself: give two different photos.`);
       continue;
@@ -418,16 +418,16 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
     lines.push(`photo-${a} and photo-${b} are now separate recipes.`);
   }
   const { dropItem, loadTray } = await import("./tray.ts");
-  const trayIds = new Set(((await loadTray().catch(() => null))?.items || []).map((i) => i.id));
+  const trayIds = new Set<any>(((await loadTray().catch(() => null))?.items || []).map((i: any) => i.id));
   // A join or split makes the cards staged from those photos wrong (two halves of one recipe, or one card for two): they come out of the tray now,
   // whatever the re-read finds, so the tray never keeps both the old cards and the new one.
-  const oldCards = [...new Set([...regrouped].map((r) => r.tray_item_id).filter((id) => id && trayIds.has(id)))];
+  const oldCards = [...new Set([...regrouped].map((r: any) => r.tray_item_id).filter((id: any) => id && trayIds.has(id)))];
   if (oldCards.length && caller) {
     for (const id of oldCards) await dropItem(id, caller).catch(() => null);
-    for (const r of regrouped) if (r.tray_item_id) touch(r, { tray_item_id: null });
+    for (const r of regrouped as Set<any>) if (r.tray_item_id) touch(r, { tray_item_id: null });
     lines.push(`Took ${oldCards.length === 1 ? "their earlier card" : `their ${oldCards.length} earlier cards`} out of the tray; the new read replaces ${oldCards.length === 1 ? "it" : "them"}.`);
   }
-  for (const n of [...new Set(skip)]) {
+  for (const n of [...new Set<any>(skip)]) {
     const r = byN.get(n);
     if (!r) {
       lines.push(`There is no photo-${n} in this chat.`);
@@ -444,7 +444,7 @@ export async function applyCorrections(conversationId, { join = [], split = [], 
     lines.push(`Skipped photo-${n}.${dropped}`);
   }
   for (const [id, patch] of touched) {
-    const r = rows.find((x) => x.id === id);
+    const r = rows.find((x: any) => x.id === id);
     // a skipped photo isn't reported; a read photo comes back into the next report; a queued one stays queued
     const p = { ...patch };
     if (r.status === "skipped" && p.status !== "skipped") delete p.reported_at;
@@ -461,7 +461,7 @@ const lastKick = new Map();
  * Called by the panel's polling: restarts what a dead instance left behind. A drainer for photos queued a while ago, an expired lease or a report
  * that never came; the follow-up for a note no turn picked up. Throttled per conversation; never throws.
  */
-export async function kick(conversationId, { origin, force = false } = {}) {
+export async function kick(conversationId: any, { origin, force = false }: any = {}) {
   const now = clock.now();
   if (!force && now - (lastKick.get(conversationId) || 0) < KICK_THROTTLE_MS) return;
   lastKick.set(conversationId, now);
@@ -469,26 +469,26 @@ export async function kick(conversationId, { origin, force = false } = {}) {
     const rows = await readsOf(conversationId);
     // Only work nobody is doing: a live lease (a read or a report in progress) means a drainer is alive, and a running turn means the drainer is
     // waiting for it on purpose. Photos waiting for a free slot while others are being read are normal, not stuck.
-    const old = (r, ms) => now - (Date.parse(r.created_at) || 0) > ms;
+    const old = (r: any, ms: any) => now - (Date.parse(r.created_at) || 0) > ms;
     const st = statusOf(rows);
     const convo = await conversationById(conversationId);
     const busyTurn = lockHeld(convo, now);
-    const liveRead = rows.some((r) => r.status === "reading" && Date.parse(r.lease_until) > now);
-    const liveReport = rows.some((r) => !r.reported_at && Date.parse(r.report_lease_until) > now);
+    const liveRead = rows.some((r: any) => r.status === "reading" && Date.parse(r.lease_until) > now);
+    const liveReport = rows.some((r: any) => !r.reported_at && Date.parse(r.report_lease_until) > now);
     const stuck =
-      rows.some((r) => r.status === "reading" && Date.parse(r.lease_until) < now) ||
-      (!liveRead && rows.some((r) => r.status === "queued" && old(r, 30_000))) ||
+      rows.some((r: any) => r.status === "reading" && Date.parse(r.lease_until) < now) ||
+      (!liveRead && rows.some((r: any) => r.status === "queued" && old(r, 30_000))) ||
       (!busyTurn && !liveReport && st.unreported && !st.queued && !st.reading && now - st.newestAt > config.chatVisionSettleMs + 20_000);
     if (stuck) startDrainer(conversationId, { origin });
     const events = await unhandledEvents(conversationId);
     if (events.length && now - Date.parse(events[0].created_at) > 30_000 && convo && !busyTurn) startFollowUp(events[0].id, { origin });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Kicking the photo queue failed:", err.message);
   }
 }
 
 /** Hands a note to a follow-up turn: through the internal route (its own function run and time limit) when it can, else in this function. */
-export function startFollowUp(eventId, { origin } = {}) {
+export function startFollowUp(eventId: any, { origin }: any = {}) {
   return background(async () => {
     if (internalReachable(origin) && (await internalCall("internal/continue", { event_id: eventId }, origin))) return;
     const { runFollowUp } = await import("./follow-up.ts");
@@ -498,22 +498,22 @@ export function startFollowUp(eventId, { origin } = {}) {
 
 // The secret only ever goes to CHAT_INTERNAL_URL, never to a host taken from a request's headers; without it the work runs in this function.
 const internalBase = () => config.chatInternalUrl || "";
-export const internalReachable = () => !!config.chatInternalSecret && !!internalBase();
+export const internalReachable = (_origin?: any) => !!config.chatInternalSecret && !!internalBase();
 
 /** POSTs to one of the server's own internal routes; true when it was accepted. */
-export async function internalCall(route, body, origin) {
+export async function internalCall(route: any, body: any, origin: any) {
   try {
     const res = await fetch(`${internalBase()}/chat/${route}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Chat-Internal-Secret": config.chatInternalSecret }, body: JSON.stringify(body), signal: AbortSignal.timeout(15_000) });
     if (res.ok) return true;
     console.error(`The internal route ${route} answered ${res.status}`);
-  } catch (err) {
+  } catch (err: any) {
     console.error(`The internal route ${route} couldn't be reached: ${err.message}`);
   }
   return false;
 }
 
 /** Is this the server's own secret? (constant time; refuses everything when no secret is set) */
-export function internalSecretOk(given) {
+export function internalSecretOk(given: any) {
   const want = config.chatInternalSecret;
   if (!want || typeof given !== "string") return false;
   const a = Buffer.from(given);

@@ -1,6 +1,6 @@
 // "What can I make with what's at home?" (docs/chatbot-design.md 11.3): ranks the book by how much of each recipe's ingredient list the stocktake
 // on shopping-list.json says is already at home (have: true, or a positive amount). Plain matching on ingredient names; pantry staples
-// (salt, oil, flour... see STAPLES in lib/recipes.js) are assumed to be there and don't count either way. No model involved.
+// (salt, oil, flour... see STAPLES in lib/recipes.ts) are assumed to be there and don't count either way. No model involved.
 import { getShoppingList } from "./shopping-list.ts";
 import { recipeIngredients, STAPLES } from "./recipes.ts";
 import { sameIngredient } from "./ingredient-match.ts";
@@ -9,22 +9,22 @@ import { loadCatalogue } from "./catalogue.ts";
 export { sameIngredient };
 
 /** The names of the items the stocktake says are at home (all or some of them). */
-export function atHomeNames(list) {
+export function atHomeNames(list: any) {
   if (!list?.stocktake) return [];
-  return list.sections.flatMap((s) => s.items).filter((i) => i.have === true || (typeof i.have === "number" && i.have > 0)).map((i) => i.name);
+  return list.sections.flatMap((s: any) => s.items).filter((i: any) => i.have === true || (typeof i.have === "number" && i.have > 0)).map((i: any) => i.name);
 }
 
 /**
  * Recipes ranked by what is already at home: fewest missing first, then the larger share. Only recipes with at least one match.
  * Resolves { stocktake (ISO string or null), home (item names), rows: [{ slug, title, draft, mins, kcal, have, total, missing: [names] }] }.
  */
-export async function recipesFromHome({ limit = 8, maxMissing = 99 } = {}) {
+export async function recipesFromHome({ limit = 8, maxMissing = 99 }: any = {}) {
   const { list } = await getShoppingList();
   const home = atHomeNames(list);
   if (!home.length) return { stocktake: list?.stocktake || null, home, rows: [] };
-  const rows = [];
+  const rows: any[] = [];
   const catalogue = await loadCatalogue().catch(() => ({}));
-  const homeNames = new Set(home.map((h) => h.trim().toLowerCase()));
+  const homeNames = new Set(home.map((h: any) => h.trim().toLowerCase()));
   for (const r of await recipeIngredients()) {
     // By catalogue item first (the list's names come from the catalogue), then by words. Staples and never-bought items don't count.
     const byName = new Map();
@@ -36,7 +36,7 @@ export async function recipesFromHome({ limit = 8, maxMissing = 99 } = {}) {
     }
     const counted = [...byName.keys()];
     if (!counted.length) continue;
-    const missing = counted.filter((n) => !homeNames.has(byName.get(n)) && !home.some((h) => sameIngredient(h, n)));
+    const missing = counted.filter((n) => !homeNames.has(byName.get(n)) && !home.some((h: any) => sameIngredient(h, n)));
     const have = counted.length - missing.length;
     if (!have || missing.length > maxMissing) continue;
     rows.push({ slug: r.slug, title: r.title, draft: r.draft, mins: r.total_mins, kcal: r.calories, have, total: counted.length, missing });

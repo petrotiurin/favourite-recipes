@@ -19,7 +19,7 @@ const CAT = {
   water: { name: "Water", skip: true },
   sesame: { name: "Sesame seeds", section: "Pantry", unit: "g", per: { tbsp: 9 } },
 };
-const R = (slug, serves, ingredients) => ({ slug, serves, ingredients });
+const R = (slug: any, serves: any, ingredients: any) => ({ slug, serves, ingredients });
 const curry = R("curry", 4, [
   { amount: 1, unit: "cup", name: "rice", item: "rice" },
   { amount: 1, unit: "juice", name: "lime", item: "lime" },
@@ -36,7 +36,7 @@ const bowl = R("bowl", 2, [
   { amount: 1, unit: "tbsp", name: "sesame seeds", item: "sesame" },
   { amount: 6, name: "cherry tomatoes", item: "cherry-tomatoes" },
 ]);
-const items = (b) => Object.fromEntries(b.sections.flatMap((s) => s.items.map((i) => [i.name, { ...i, section: s.name }])));
+const items = (b: any) => Object.fromEntries(b.sections.flatMap((s: any) => s.items.map((i: any) => [i.name, { ...i, section: s.name }])));
 
 test("the list is the sum: converted to the shopping unit, scaled to 2 servings, totalled per item with each recipe's share", () => {
   const b = buildShoppingList([curry, bowl], CAT);
@@ -60,12 +60,12 @@ test("the list is the sum: converted to the shopping unit, scaled to 2 servings,
 });
 
 /** Every item for several recipes carries its shares (a recipe that only seasons "to taste" has none), adding up to its quantity. */
-function sharesAddUp(sections) {
-  for (const i of sections.flatMap((s) => s.items)) {
+function sharesAddUp(sections: any) {
+  for (const i of sections.flatMap((s: any) => s.items)) {
     if (!i.quantity || i.recipes.length < 2) continue;
     assert.ok(i.amounts, `${i.name} has shares`);
     assert.ok(Object.keys(i.amounts).every((slug) => i.recipes.includes(slug)), i.name);
-    const total = Object.values(i.amounts).reduce((a, b) => a + b, 0);
+    const total: any = Object.values(i.amounts).reduce((a: any, b: any) => a + b, 0);
     assert.ok(Math.abs(total - parseFloat(i.quantity)) <= Math.max(0.05, parseFloat(i.quantity) * 0.01), `${i.name}: ${total} vs ${i.quantity}`);
   }
 }
@@ -103,8 +103,8 @@ test("patches: round_up at the planned servings, merge, note, move, rename, drop
   const it = items(b);
   const lime = { name: "Limes", amounts: it.Limes.amounts, recipes: it.Limes.recipes, quantity: it.Limes.quantity };
   const planned = neededAmount(lime, plan);
-  assert.equal(planned, Math.ceil(neededAmount({ ...lime, amounts: items(base).Limes.amounts }, plan)), "whole at the planned servings");
-  assert.ok(neededAmount({ ...lime, amounts: items(base).Limes.amounts }, plan) % 1 !== 0, "it was a fraction before");
+  assert.equal(planned!, Math.ceil(neededAmount({ ...lime, amounts: items(base).Limes.amounts }, plan)!), "whole at the planned servings");
+  assert.ok(neededAmount({ ...lime, amounts: items(base).Limes.amounts }, plan)! % 1 !== 0, "it was a fraction before");
   assert.ok(!b.flags.some((f) => f.key === "fraction:lime"));
   assert.ok(!it["Cherry tomatoes"]);
   assert.equal(it.Tomatoes.quantity, "8");
@@ -130,6 +130,6 @@ test("the real book: next week's list builds for every recipe, valid by construc
   assert.deepEqual(b.problems, []);
   validateSections(b.sections);
   sharesAddUp(b.sections);
-  const covered = new Set(b.sections.flatMap((s) => s.items.flatMap((i) => i.recipes)));
-  assert.deepEqual(book.filter((r) => r.ingredients.length && !covered.has(r.slug)).map((r) => r.slug), [], "every recipe with ingredients is on the list");
+  const covered = new Set(b.sections.flatMap((s: any) => s.items.flatMap((i: any) => i.recipes)));
+  assert.deepEqual(book.filter((r: any) => r.ingredients.length && !covered.has(r.slug)).map((r: any) => r.slug), [], "every recipe with ingredients is on the list");
 });

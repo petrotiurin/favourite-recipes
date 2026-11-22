@@ -14,9 +14,9 @@ const UPLOAD_LINK = makeCaller({ role: "agent", via: "upload-link" });
 // lets one failed photo be retried on its own). The browser downsizes each photo first;
 // the server normalises it again anyway.
 
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const escapeHtml = (s: any) => String(s).replace(/[&<>"']/g, (c) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }) as Record<string, string>)[c]);
 
-function page(body, status = 200) {
+function page(body: any, status = 200) {
   return new Response(
     `<!doctype html>
 <html lang="en">
@@ -59,7 +59,7 @@ function expired() {
   return page(`<h1>Link expired</h1><p>This upload link is invalid or has expired. Ask your assistant for a new one.</p>`, 403);
 }
 
-function itemForm({ slug, label }, i, many) {
+function itemForm({ slug, label }: any, i: any, many: any) {
   return `
 <form class="item" method="post" enctype="multipart/form-data">
   <input type="hidden" name="slug" value="${escapeHtml(slug)}">
@@ -73,7 +73,7 @@ function itemForm({ slug, label }, i, many) {
 </form>`;
 }
 
-export async function GET(request) {
+export async function GET(request: any) {
   const token = new URL(request.url).searchParams.get("t");
   const claim = verifyUploadToken(token);
   if (!claim) return expired();
@@ -81,7 +81,7 @@ export async function GET(request) {
   return page(`
 <h1>${n === 1 ? "Upload the recipe photo" : `Upload ${n} recipe photos`}</h1>
 <p>Pick a photo of each finished dish. Each one uploads as soon as you pick it${n === 1 ? "" : ", in any order"}.</p>
-${claim.items.map((item, i) => itemForm(item, i, n > 1)).join("")}
+${claim.items.map((item: any, i: any) => itemForm(item, i, n > 1)).join("")}
 <p id="summary" role="status"></p>
 <script>
 (() => {
@@ -127,7 +127,7 @@ ${claim.items.map((item, i) => itemForm(item, i, n > 1)).join("")}
         form.classList.add("done");
         status("✅ Uploaded", "ok");
         pickText.textContent = "Replace photo";
-      } catch (err) {
+      } catch (err: any) {
         form.classList.remove("done");
         status(err.message + " Pick the photo again to retry.", "err");
       }
@@ -151,10 +151,10 @@ ${claim.items.map((item, i) => itemForm(item, i, n > 1)).join("")}
 </script>`);
 }
 
-export async function POST(request) {
+export async function POST(request: any) {
   const wantsJson = (request.headers.get("accept") || "").includes("application/json");
   const back = `<p><a href="${escapeHtml(request.url)}">Back to the upload page</a></p>`;
-  const reply = (status, payload) =>
+  const reply = (status: any, payload: any) =>
     wantsJson
       ? Response.json(payload, { status })
       : page(
@@ -166,7 +166,7 @@ export async function POST(request) {
 
   try {
     assertConfigured();
-  } catch (err) {
+  } catch (err: any) {
     return reply(500, { error: err.message });
   }
   const claim = verifyUploadToken(new URL(request.url).searchParams.get("t"));
@@ -180,14 +180,14 @@ export async function POST(request) {
   }
   // The link only covers the recipes it was made for; a single-recipe link doesn't need the field.
   const slug = form.get("slug") || (claim.items.length === 1 ? claim.items[0].slug : null);
-  if (!claim.items.some((i) => i.slug === slug)) return reply(403, { error: "This link doesn't cover that recipe." });
+  if (!claim.items.some((i: any) => i.slug === slug)) return reply(403, { error: "This link doesn't cover that recipe." });
   const photo = form.get("photo");
   if (!photo || typeof photo === "string" || !photo.size) return reply(400, { error: "No photo received" });
 
   try {
     const commit = await saveUploadedImage(slug, Buffer.from(await photo.arrayBuffer()), UPLOAD_LINK);
-    return reply(200, { ok: true, slug, commit: commit.url, page: pageUrl(slug) });
-  } catch (err) {
+    return reply(200, { ok: true, slug, commit: commit!.url, page: pageUrl(slug) });
+  } catch (err: any) {
     console.error(err);
     return reply(400, { error: err.message });
   }

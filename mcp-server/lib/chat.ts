@@ -19,7 +19,7 @@ export const MAX_ASSISTANT_CHARS = 4000;
 export const MAX_TOOL_ROUNDS = 6;
 const MAX_TOOL_RESULT_CHARS = 12000;
 // tools whose answers are legitimately long (the tray with its recipes, the whole shopping list, a fetched page)
-const RESULT_CAPS = { get_tray: 40000, get_shopping_list: 24000, fetch_url: 24000 };
+const RESULT_CAPS: Record<string, number> = { get_tray: 40000, get_shopping_list: 24000, fetch_url: 24000 };
 // Limits on what ONE model reply may ask for, so a single request can't fan out into thousands of GitHub calls or a huge prompt.
 export const MAX_CALLS_PER_ROUND = 4; // tool calls honoured per model reply (the rest get an error result)
 export const MAX_FROM_PHOTO_CALLS_PER_ROUND = 8; // ...unless they are all stage_create_recipe({ from_photo }) calls: tiny, so six recipes go in one round
@@ -28,27 +28,29 @@ export const MAX_RESULT_CHARS_PER_TURN = 80_000; // total tool-result text added
 const TEMPERATURE = 0.4;
 
 // --- Langfuse (design 8.1): how a turn's steps show up in a trace ---------------------------------------------------------------
-const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
+const TOOL_BY_NAME = new Map<any, any>(TOOLS.map((t) => [t.name, t]));
 // Read tools that only look something up are retrievers; everything else (stage tools, the tray, the UI tools, scaling) is a tool.
 const COMPUTED_READS = new Set(["scale_recipe"]);
-export function observationType(name) {
+export function observationType(name: any) {
   const tool = TOOL_BY_NAME.get(name);
   return tool && accessOf(tool) === "read" && !COMPUTED_READS.has(name) ? "retriever" : "tool";
 }
 
 /** A model call's answer as an OpenAI-style assistant message, so Langfuse renders the text, the tool calls (as cards) and the thinking. */
-export function assistantOutput(result) {
+export function assistantOutput(result: any) {
   return {
     role: "assistant",
     content: result.text || null,
-    ...(result.toolCalls?.length ? { tool_calls: result.toolCalls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) } : {}),
+    ...(result.toolCalls?.length ? { tool_calls: result.toolCalls.map((c: any) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.arguments || "{}" } })) } : {}),
     ...(result.reasoning ? { reasoning: result.reasoning } : {}),
   };
 }
 
 /** An error with a message that is safe to show the visitor. */
 export class ChatError extends Error {
-  constructor(message, { status = 500, kind = "error" } = {}) {
+  declare status: number;
+  declare kind: string;
+  constructor(message: any, { status = 500, kind = "error" }: any = {}) {
     super(message);
     this.status = status;
     this.kind = kind;
@@ -59,7 +61,7 @@ const RESTING = "The chat is resting, try again later.";
 const GENERIC = "Something went wrong with the chat. Try again in a moment.";
 
 /** Maps an OpenRouter failure to something friendly. 402 (out of credit) and a dead key both mean "resting". */
-export function friendlyOpenRouterError(status, bodyText = "") {
+export function friendlyOpenRouterError(status: any, bodyText = "") {
   if (status === 402 || status === 401 || status === 403 || /insufficient|credit/i.test(bodyText)) return new ChatError(RESTING, { status: 503, kind: "out-of-credit" });
   // a text-only model sent a photo
   if (/image|modalit|vision|multimodal|multi-modal|image_url/i.test(bodyText) && /support|accept|not (?:allowed|available|valid)|invalid|cannot|can't|unsupported|no endpoints/i.test(bodyText)) {
@@ -76,9 +78,9 @@ export function friendlyOpenRouterError(status, bodyText = "") {
  * tool_calls, unknown roles, non-string content) is dropped, so the client can't inject tool results or system messages.
  * The conversation must start with and end on a user message; returns [] if there is none.
  */
-export function sanitizeMessages(raw) {
+export function sanitizeMessages(raw: any) {
   if (!Array.isArray(raw)) return [];
-  const clean = [];
+  const clean: any[] = [];
   for (const m of raw) {
     if (!m || typeof m !== "object" || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") continue;
     const content = m.content.trim().slice(0, m.role === "user" ? MAX_USER_CHARS : MAX_ASSISTANT_CHARS);
@@ -92,14 +94,14 @@ export function sanitizeMessages(raw) {
 // --- page context: re-resolved by the server, never trusted -------------------------------------------------------
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const oneLine = (s, max) => String(s ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim().slice(0, max);
-const weekWords = (d) => (isThisWeek(d) && isNextWeek(d) ? "in this week and next week" : isThisWeek(d) ? "in this week, not in next week" : isNextWeek(d) ? "in next week, not in this week" : "in neither week");
+const oneLine = (s: any, max: any) => String(s ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim().slice(0, max);
+const weekWords = (d: any) => (isThisWeek(d) && isNextWeek(d) ? "in this week and next week" : isThisWeek(d) ? "in this week, not in next week" : isNextWeek(d) ? "in next week, not in this week" : "in neither week");
 
 /**
  * A short note about the page the user is on, or "". For a recipe page the slug is looked up in the repo (title, servings and status
  * come from OUR data, not from the page); live UI state is reduced to validated values.
  */
-export async function pageNote(page) {
+export async function pageNote(page: any) {
   if (!page || typeof page !== "object" || page.dismissed === true) return "";
   switch (page.page) {
     case "recipe": {
@@ -130,7 +132,7 @@ export async function pageNote(page) {
 // --- OpenRouter streaming ----------------------------------------------------------------------------------------
 
 /** Yields the parsed JSON of each `data:` event of an SSE response body. */
-async function* sseEvents(body) {
+async function* sseEvents(body: any) {
   const decoder = new TextDecoder();
   let buffer = "";
   for await (const chunk of body) {
@@ -158,7 +160,7 @@ export function createThinkFilter() {
   const CLOSE = /<\/think(?:ing)?>/i;
   const MAXTAG = 12;
   return {
-    push(chunk) {
+    push(chunk: any) {
       buf += chunk;
       let out = "";
       for (;;) {
@@ -168,13 +170,13 @@ export function createThinkFilter() {
             buf = buf.slice(-MAXTAG); // keep a possible partial closing tag
             return out;
           }
-          buf = buf.slice(m.index + m[0].length);
+          buf = buf.slice(m.index! + m[0].length);
           inside = false;
         } else {
           const m = buf.match(OPEN);
           if (m) {
             out += buf.slice(0, m.index);
-            buf = buf.slice(m.index + m[0].length);
+            buf = buf.slice(m.index! + m[0].length);
             inside = true;
             continue;
           }
@@ -205,7 +207,7 @@ export function createThinkFilter() {
  * reason: the provider gave up or timed out mid-answer) or null (a normal end). A tool call the provider hadn't finished is often not
  * passed on at all, so a cut answer can look like an empty one: `cut` is what tells them apart.
  */
-async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }) {
+async function streamCompletion({ messages, tools, model, apiKey, signal, onText, onToolProgress, maxTokens, toolChoice = "auto" }: any) {
   const started = Date.now();
   let res;
   try {
@@ -229,7 +231,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
         max_tokens: maxTokens,
       }),
     });
-  } catch (err) {
+  } catch (err: any) {
     if (err?.name === "AbortError") throw err;
     console.error("OpenRouter request failed:", err.message);
     throw new ChatError(GENERIC, { status: 502, kind: "upstream" });
@@ -246,7 +248,7 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
   let usage;
   let finishReason;
   const thinking = createThinkFilter();
-  const calls = []; // by index
+  const calls: any[] = []; // by index
   for await (const event of sseEvents(res.body)) {
     if (event.error) {
       console.error("OpenRouter stream error:", JSON.stringify(event.error).slice(0, 300));
@@ -287,24 +289,24 @@ async function streamCompletion({ messages, tools, model, apiKey, signal, onText
 }
 
 /** One log line about a model call that was cut off or came back empty: enough to tell a timeout from the token cap. */
-function logRound(label, model, maxTokens, result) {
+function logRound(label: any, model: any, maxTokens: any, result: any) {
   const u = result.usage;
   console.warn(
     `${label} (model ${model}): finish ${result.finishReason || "none"}${result.cut ? `, cut off (${result.cut})` : ""}, ${Math.round(result.ms / 1000)}s, ` +
       `tokens ${u ? `${u.prompt_tokens ?? "?"} in / ${u.completion_tokens ?? "?"} out${u.completion_tokens_details?.reasoning_tokens ? ` (${u.completion_tokens_details.reasoning_tokens} reasoning)` : ""}` : "unknown"} of max ${maxTokens}, ` +
-      `text ${result.text.length} chars, calls ${result.toolCalls.map((c) => c.name).join(",") || "none"}`
+      `text ${result.text.length} chars, calls ${result.toolCalls.map((c: any) => c.name).join(",") || "none"}`
   );
 }
 
 /** What the user is told when the model was cut off before it could answer. */
-export function cutOffLine(cut, { photo } = {}) {
+export function cutOffLine(cut: any, { photo }: any = {}) {
   const why = cut === "length" ? "it ran out of room for its answer" : "the connection to it ended early (most likely it took too long)";
   return `Sorry, the model stopped before it finished: ${why}. Nothing was added. ${photo ? "Try again, or send a tighter crop of just the recipe, or paste the link if it's from a website." : "Try again in a moment, or ask for a bit less at once."}`;
 }
 
 // --- tools ----------------------------------------------------------------------------------------------------
 
-const STATUS = {
+const STATUS: Record<string, string> = {
   stage_update_recipe: "Adding the edit to the tray…",
   stage_promote_recipe: "Adding that to the tray…",
   stage_remove_draft: "Adding that to the tray…",
@@ -331,7 +333,7 @@ const STATUS = {
  * ("Adding Lemon Garlic Pasta to the tray…", "Reading Pancakes…", "Building the shopping list: 9 items so far…"). `args` is the parsed
  * arguments, `raw` the argument text streamed so far (it may be incomplete JSON); `titles` maps slug -> recipe title.
  */
-export function statusFor(name, { args, raw = "", titles } = {}) {
+export function statusFor(name: any, { args, raw = "", titles }: any = {}) {
   const title = args?.title || raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)+)"/)?.[1];
   const slug = args?.slug || raw.match(/"slug"\s*:\s*"([a-z0-9-]+)"/)?.[1];
   const named = slug && titles?.get(slug);
@@ -356,16 +358,16 @@ export function statusFor(name, { args, raw = "", titles } = {}) {
 const repliesSchema = z.object({ replies: z.array(z.unknown()).min(1) });
 
 /**
- * Cleans what the model passed to suggest_replies (see chat-ui.js cleanReplyList). `book` (slug -> recipe) is what an action
+ * Cleans what the model passed to suggest_replies (see chat-ui.ts cleanReplyList). `book` (slug -> recipe) is what an action
  * reply's slug is checked against; without it only plain-string replies survive.
  */
-export function cleanReplies(args, book, opts) {
+export function cleanReplies(args: any, book: any, opts: any) {
   const parsed = repliesSchema.safeParse(args);
   return parsed.success ? cleanReplyList(parsed.data.replies, book, opts) : [];
 }
 
 /** Appends the site note to a user message whose content is text or text + image parts. */
-function withNote(content, note) {
+function withNote(content: any, note: any) {
   const add = `\n\n[Note from the site, not from the user: ${note}]`;
   if (!Array.isArray(content)) return `${content}${add}`;
   const parts = content.map((p) => ({ ...p }));
@@ -376,8 +378,8 @@ function withNote(content, note) {
 }
 
 /** Safe chips from the page, for when a model gave none (the same ideas as the panel's starters; never anything that changes the site). */
-export function defaultChips(page, editor) {
-  const by = {
+export function defaultChips(page: any, editor: any) {
+  const by: Record<string, string[]> = {
     recipe: editor ? ["Swap an ingredient", "What goes with it?"] : ["Swap an ingredient", "What goes with it?", "Something similar"],
     index: ["Something quick tonight", "Light and healthy"],
     "next-week": ["What's planned?", "What's on this week?"],
@@ -390,7 +392,7 @@ export function defaultChips(page, editor) {
  * Chips for a turn whose model gave none and whose nudge gave none: tied to what the turn did where possible (cards were shown, something was staged),
  * else the page's safe starters.
  */
-export async function turnChips({ page, editor, ui, fixReplies, staged }) {
+export async function turnChips({ page, editor, ui, fixReplies, staged }: any) {
   if (ui.cards?.length) return [{ label: "Open the first one", url: ui.cards[0].url }, "Under 20 minutes", "Something lighter"];
   if (editor && staged) {
     const chips = await fixReplies(["Finalise list", "Save to site"]); // become real buttons only when the tray allows them
@@ -399,19 +401,19 @@ export async function turnChips({ page, editor, ui, fixReplies, staged }) {
   return defaultChips(page, editor);
 }
 
-const normText = (t) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const normText = (t: any) => String(t || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /**
  * A chip that pairs a photo with a recipe ("Use photo 5 for Caesar Salad", "Make photo 2 the soup's photo"): the model never sees the photos, so
  * that pairing is a guess, and a misleading chip is worse than none. Dropped; the user can still say it in their own words.
  */
-export const photoPairingChip = (text) =>
+export const photoPairingChip = (text: any) =>
   /\b(use|set|make|put|keep|take)\b[^]*\b(photo|picture|pic|image)s?\b/i.test(text) || /\b(photo|picture|pic|image)[-\s]?\d+\b[^]*\b(for|as|on)\b/i.test(text);
 
 const UI_TOOLS = new Set(["suggest_replies", "show_recipes", "offer_navigation", "ask_user", "review_drafts", "review_optional"]);
 
-const resultText = (result, max = MAX_TOOL_RESULT_CHARS) => {
-  const text = (result?.content || []).filter((c) => c.type === "text").map((c) => c.text).join("\n");
+const resultText = (result: any, max = MAX_TOOL_RESULT_CHARS) => {
+  const text = (result?.content || []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
   return text.length > max ? `${text.slice(0, max)}\n… (cut: ${text.length - max} more characters)` : text;
 };
 
@@ -424,7 +426,7 @@ const STAGE_TOOLS = new Set(TOOLS.filter((t) => accessOf(t) === "stage").map((t)
  * stage tools (they change the plan tray, never the repo) and ask_user. The write tools stay out of chat for good: saving is its own
  * request (POST /chat/plan/apply), a button a person taps.
  */
-export function offeredTools(role) {
+export function offeredTools(role: any) {
   const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
   const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
   if (role !== "editor") return [...base, ...ui];
@@ -444,10 +446,10 @@ export function offeredTools(role) {
  *   page      the client's page context (untrusted; see pageNote)
  *   trace     a Langfuse trace (or a no-op)
  */
-export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, followUp = false, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }) {
-  const stagedLabels = []; // what this turn put in the tray, in words
+export async function runChat({ caller, messages, page, emit: rawEmit, trace, signal, attachments = [], photos = [], userText: userTextOverride, followUp = false, model = config.chatPublicModel, apiKey = config.chatPublicKey, origin, extraNote, conversation, maxTokens = caller.role === "editor" ? config.chatEditorMaxTokens : config.chatPublicMaxTokens }: any) {
+  const stagedLabels: any[] = []; // what this turn put in the tray, in words
   let shownUi = false; // cards, a question, replies, a button or a tray change reached the user this turn
-  const emit = (event) => {
+  const emit = (event: any) => {
     if (["cards", "question", "review", "optional", "suggestions", "navigation", "tray"].includes(event.type)) shownUi = true;
     if (event.type === "tray" && event.label && !stagedLabels.includes(event.label)) stagedLabels.push(event.label);
     rawEmit(event);
@@ -459,25 +461,25 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   let rows;
   try {
     rows = catalogueText(await catalogue());
-  } catch (err) {
+  } catch (err: any) {
     console.error("Couldn't load the catalogue:", err.message);
     rows = "";
   }
   const lastMsg = messages[messages.length - 1];
-  const userText = userTextOverride !== undefined ? userTextOverride : Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(lastMsg?.content ?? "");
+  const userText = userTextOverride !== undefined ? userTextOverride : Array.isArray(lastMsg?.content) ? lastMsg.content.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : String(lastMsg?.content ?? "");
   const note = [await pageNote(page), extraNote].filter(Boolean).join("\n");
   const book = await loadBook();
 
   // Stable prefix first (system prompt + catalogue, then the conversation); the volatile page note rides on the latest user message,
   // as plain text, so it works on every model (not all accept a system message mid-conversation) and doesn't break the cached prefix.
-  const convo = messages.map((m) => ({ ...m }));
+  const convo = messages.map((m: any) => ({ ...m }));
   if (note) {
     const last = convo[convo.length - 1];
     last.content = withNote(last.content, note);
   }
   const thread = [{ role: "system", content: systemPrompt(rows, { editor: caller.role === "editor" }) }, ...convo];
   const base = thread.length; // everything pushed after this is new this turn (an editor's turn is stored)
-  const ui = {}; // what the panel shows again on reload: { cards, nav, replies }
+  const ui: Record<string, any> = {}; // what the panel shows again on reload: { cards, nav, replies }
 
   let suggestions = false;
   let askedUser = false;
@@ -489,18 +491,18 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   // Chips of this turn only: answers of an EARLIER ask_user are not suggestions now, and "Save to site" / "Finalise list" typed as plain text
   // become the real buttons (when the tray allows them) or go.
   const oldOptions = new Set(
-    messages.flatMap((m) => (m.role === "assistant" ? (m.tool_calls || []) : [])).filter((c) => c.function?.name === "ask_user").flatMap((c) => {
+    messages.flatMap((m: any) => (m.role === "assistant" ? (m.tool_calls || []) : [])).filter((c: any) => c.function?.name === "ask_user").flatMap((c: any) => {
       try {
         return JSON.parse(c.function.arguments).options || [];
       } catch {
         return [];
       }
-    }).map((o) => normText(o))
+    }).map((o: any) => normText(o))
   );
-  let trayChoice; // "apply_plan" | "finalise_plan" | null, looked up once when a plain chip asks for it
+  let trayChoice: any; // "apply_plan" | "finalise_plan" | null, looked up once when a plain chip asks for it
   const PLAN_WORDS = /^(save to site|save|save it|finalise list|finalize list|finalise|finalize|finalise the list)(\s*\(\d+\))?$/i;
-  const fixReplies = async (replies) => {
-    const out = [];
+  const fixReplies = async (replies: any) => {
+    const out: any[] = [];
     for (const r of replies) {
       if (typeof r !== "string") {
         out.push(r);
@@ -528,16 +530,16 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   };
   let finalRound = false;
   let lastStatus = "";
-  const titles = new Map([...book].map(([slug, r]) => [slug, r.title]));
+  const titles = new Map<any, any>([...book].map(([slug, r]) => [slug, r.title]));
   let roundNote = ""; // told to the model on its next call, not stored
   const startedAt = Date.now();
   let stoppedLong = false;
-  let lastCut = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
+  let lastCut: any = null; // "length" | "dropped": a model call of this turn was cut off (see streamCompletion)
   // The hard stop: the budget above is only checked between model calls, and one call (a thinking model writing the whole shopping list) can
   // run for minutes, past Vercel's maxDuration. Every model call of the turn is aborted at the deadline instead; `signal` is still the client's.
   const deadline = AbortSignal.timeout(Math.max(1, config.chatTurnDeadlineMs));
   const callSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  const pastDeadline = (err) => deadline.aborted && !signal?.aborted && (err?.name === "TimeoutError" || err?.name === "AbortError");
+  const pastDeadline = (err: any) => deadline.aborted && !signal?.aborted && (err?.name === "TimeoutError" || err?.name === "AbortError");
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     // A turn that has been going too long (a slow model looping through tools) stops with a clear line instead of running on in silence.
     if (round > 0 && Date.now() - startedAt > config.chatTurnBudgetMs) {
@@ -559,7 +561,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
     let held = "";
     let guard = reply.trim() ? "check" : "pass"; // check | drop | pass
     let kept = "";
-    const emitText = (delta) => {
+    const emitText = (delta: any) => {
       if (separate) {
         separate = false;
         delta = `\n\n${delta.replace(/^\s+/, "")}`;
@@ -569,7 +571,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
       emit({ type: "text", delta });
     };
     const before = reply;
-    const repeats = (t) => {
+    const repeats = (t: any) => {
       const n = normText(t);
       return n.length >= 12 && normText(before).includes(n.slice(0, Math.min(n.length, 40)));
     };
@@ -581,7 +583,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         apiKey,
         signal: callSignal,
         maxTokens,
-        onToolProgress: (call) => {
+        onToolProgress: (call: any) => {
           // the model is still writing a tool call (a recipe, the shopping list can take a while): say what it is, as it grows
           const text = statusFor(call.name, { raw: call.arguments, titles });
           if (text !== lastStatus) {
@@ -589,7 +591,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
             emit({ type: "status", text });
           }
         },
-        onText: (delta) => {
+        onText: (delta: any) => {
           if (guard === "pass") return emitText(delta);
           if (guard === "drop") return;
           held += delta;
@@ -602,7 +604,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
           }
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       generation.end({ error: err.message });
       if (!pastDeadline(err)) throw err;
       // Out of time mid-call: whatever it was writing is dropped (a half-written tool call is never run); the turn ends with the clear line.
@@ -680,12 +682,12 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         content = JSON.stringify(q ? { shown: true, note: "End your turn now: the answer arrives as the user's next message." } : { shown: false, error: askedUser ? "One question per turn." : "Give a question and 2-6 short options." });
         span.end({ output: content });
       } else if (call.name === "review_drafts") {
-        // the drafts review card, built from the book and the tray (never from the model); Done is answered by the server (lib/draft-review.js)
-        let card = null;
+        // the drafts review card, built from the book and the tray (never from the model); Done is answered by the server (lib/draft-review.ts)
+        let card: any = null;
         if (caller.role === "editor" && offered.has("review_drafts") && !askedUser) {
           try {
             card = reviewCard(await thisWeeksDrafts(), (await loadTray())?.items || []);
-          } catch (err) {
+          } catch (err: any) {
             console.error("Building the drafts review card failed:", err.message);
           }
         }
@@ -699,13 +701,13 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         content = JSON.stringify(card ? { shown: true, drafts: card.drafts.length, note: "End your turn now: the site stages the answers when the user taps Done, then you build the list." } : { shown: false, error: askedUser ? "One question per turn." : "This week has no drafts: nothing to ask about them." });
         span.end({ output: content });
       } else if (call.name === "review_optional") {
-        // the optional items card, built from the tray's list (never from the model); Done is answered by the server (lib/optional-review.js)
-        let card = null;
+        // the optional items card, built from the tray's list (never from the model); Done is answered by the server (lib/optional-review.ts)
+        let card: any = null;
         if (caller.role === "editor" && offered.has("review_optional") && !askedUser) {
           try {
             const st = await finaliseState(caller);
             if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
-          } catch (err) {
+          } catch (err: any) {
             console.error("Building the optional items card failed:", err.message);
           }
         }
@@ -776,7 +778,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   // Chips on (almost) every answer (design 6.1): a model that forgot them gets ONE cheap nudge that offers nothing but suggest_replies; if even
   // that fails, safe chips from the page. No retries, and never after an error (errors leave runChat before this point).
   if (!suggestions && !askedUser && reply.trim() && !stoppedLong) {
-    let nudged = [];
+    let nudged: any[] = [];
     // Try 1 forces the tool. Some providers/models refuse a forced tool_choice (Qwen's thinking mode, for one): then try 2 offers the same single
     // tool without forcing it and asks in words. Whatever goes wrong is logged with the provider's reason, so it shows in the logs.
     const attempts = [
@@ -815,7 +817,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         if (nudged.length) nudged = await fixReplies(nudged);
         if (nudged.length) break;
         console.warn(`Chips nudge ${n + 1} (model ${model}) gave no usable chips: finish ${out.finishReason || "?"}, calls ${out.toolCalls.map((c) => c.name).join(",") || "none"}, text ${JSON.stringify(String(out.text).slice(0, 300))}${call ? `, arguments ${String(call.arguments).slice(0, 300)}` : ""}`);
-      } catch (err) {
+      } catch (err: any) {
         gen.end({ error: err.message });
         if (pastDeadline(err)) break; // out of time: page chips below
         if (err?.name === "AbortError") throw err;
@@ -833,7 +835,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
   if (!reply.trim() && !shownUi) {
     // never end a turn in silence
     // A cut-off answer says so (a photo turn writing a whole recipe is the usual one); only a model that really said nothing gets the generic line.
-    const photo = attachments.length > 0 || (Array.isArray(lastMsg?.content) && lastMsg.content.some((p) => p.type === "image_url"));
+    const photo = attachments.length > 0 || (Array.isArray(lastMsg?.content) && lastMsg.content.some((p: any) => p.type === "image_url"));
     console.warn(`Chat turn ended with no text and nothing shown${lastCut ? ` (cut off: ${lastCut})` : ""}: sending the fallback line`);
     reply = lastCut ? cutOffLine(lastCut, { photo }) : "Sorry, I didn't manage to answer that. Could you try again?";
     emit({ type: "text", delta: reply });
@@ -849,13 +851,13 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
 }
 
 /** What the panel showed besides the text, for the trace: card slugs, chip labels, the question, the button. */
-export function shownFor(ui) {
-  const shown = {};
-  if (ui.cards?.length) shown.cards = ui.cards.map((c) => c.slug);
-  if (ui.replies?.length) shown.replies = ui.replies.map((r) => (typeof r === "string" ? r : r.label));
+export function shownFor(ui: any) {
+  const shown: Record<string, any> = {};
+  if (ui.cards?.length) shown.cards = ui.cards.map((c: any) => c.slug);
+  if (ui.replies?.length) shown.replies = ui.replies.map((r: any) => (typeof r === "string" ? r : r.label));
   if (ui.question) shown.question = { text: ui.question.question, options: ui.question.options };
-  if (ui.review) shown.review = ui.review.drafts.map((d) => d.slug);
-  if (ui.optional) shown.optional = ui.optional.items.map((i) => i.item);
+  if (ui.review) shown.review = ui.review.drafts.map((d: any) => d.slug);
+  if (ui.optional) shown.optional = ui.optional.items.map((i: any) => i.item);
   if (ui.nav) shown.navigation = ui.nav.label;
   return Object.keys(shown).length ? shown : undefined;
 }

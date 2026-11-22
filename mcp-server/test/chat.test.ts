@@ -1,4 +1,4 @@
-// The chat endpoint end to end: real api/chat.js handler -> real agent loop and tool dispatcher -> fake GitHub, fake OpenRouter
+// The chat endpoint end to end: real api/chat.ts handler -> real agent loop and tool dispatcher -> fake GitHub, fake OpenRouter
 // (scripted, streaming), fake Supabase, and Langfuse's SDK exporting to memory. No real network.
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -19,14 +19,14 @@ process.env.CHAT_PUBLIC_DAILY_LIMIT = "100";
 
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase } = await import("../scripts/fakes.ts");
 const github = createFakeGitHub({ clean: true });
-let openrouter;
-let supabase;
+let openrouter: any;
+let supabase: any;
 const spans = new InMemorySpanExporter(); // what the Langfuse SDK would export
 const realFetch = globalThis.fetch;
 
-let chat, config, rateLimit, langfuse, chatLib;
+let chat: any, config: any, rateLimit: any, langfuse: any, chatLib: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
@@ -54,7 +54,7 @@ beforeEach(() => {
 let ipCounter = 0;
 const freshIp = () => `203.0.113.${++ipCounter}`;
 
-function post(body, { ip = freshIp(), headers = {}, origin } = {}) {
+function post(body: any, { ip = freshIp(), headers = {}, origin }: any = {}) {
   return chat.POST(
     new Request("https://mcp.test/chat", {
       method: "POST",
@@ -64,15 +64,15 @@ function post(body, { ip = freshIp(), headers = {}, origin } = {}) {
   );
 }
 
-async function events(res) {
-  const out = [];
+async function events(res: any) {
+  const out: any[] = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) {
     const name = block.match(/^event: (.*)$/m)[1];
     out.push(checkEvent({ name, data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   }
   return out;
 }
-const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+const textOf = (evs: any) => evs.filter((e: any) => e.name === "text").map((e: any) => e.data.delta).join("");
 
 test("streams text, runs a tool round and forwards the suggested replies", async () => {
   const res = await post({ messages: [{ role: "user", content: "something with chicken" }], page: { page: "index" } });
@@ -87,7 +87,7 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   const text = textOf(evs);
   assert.match(text, /Let me check our book\./);
   const cards = evs.find((e) => e.name === "cards").data.cards;
-  assert.ok(cards.length >= 1 && cards.every((c) => c.url.startsWith("https://site.test/favourite-recipes/recipes/")), "cards link to recipe pages on the site origin");
+  assert.ok(cards.length >= 1 && cards.every((c: any) => c.url.startsWith("https://site.test/favourite-recipes/recipes/")), "cards link to recipe pages on the site origin");
   const replies = evs.find((e) => e.name === "suggestions").data.replies;
   assert.deepEqual(replies.slice(0, 2), ["Under 400 kcal", "Quick ones only"]);
   assert.deepEqual(replies[2], { label: "Open the first one", url: cards[0].url });
@@ -98,7 +98,7 @@ test("streams text, runs a tool round and forwards the suggested replies", async
   assert.equal(first.auth, "Bearer or-public-test");
   assert.equal(first.model, "test/model");
   assert.equal(first.stream, true);
-  const offered = first.tools.map((t) => t.function.name).sort();
+  const offered = first.tools.map((t: any) => t.function.name).sort();
   assert.deepEqual(offered, ["get_recipe", "get_shopping_list", "list_recipes", "offer_navigation", "recipes_from_home", "scale_recipe", "search_recipes", "show_recipes", "suggest_replies"]);
   assert.equal(first.messages[0].role, "system");
   assert.match(first.messages[0].content, /Catalogue of our recipe book/);
@@ -109,8 +109,8 @@ test("the model is only offered read tools, and a write it asks for anyway is re
   const res = await post({ messages: [{ role: "user", content: "mock-add a pie" }] });
   const evs = await events(res);
   assert.match(textOf(evs), /can't change the site/);
-  assert.ok(!openrouter.requests[0].tools.some((t) => t.function.name === "create_recipe"));
-  const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool");
+  assert.ok(!openrouter.requests[0].tools.some((t: any) => t.function.name === "create_recipe"));
+  const toolMsg = openrouter.requests[1].messages.findLast((m: any) => m.role === "tool");
   assert.match(toolMsg.content, /not available here/);
   assert.equal(github.commitLog.length, 0, "nothing was committed");
 });
@@ -118,7 +118,7 @@ test("the model is only offered read tools, and a write it asks for anyway is re
 test("a role forged in the body is ignored", async () => {
   const res = await post({ role: "editor", caller: { role: "editor" }, user: { role: "agent" }, messages: [{ role: "user", content: "mock-add a pie", role_override: "editor" }], page: { role: "editor" } });
   await events(res);
-  assert.ok(!openrouter.requests[0].tools.some((t) => ["create_recipe", "batch_changes", "remove_draft"].includes(t.function.name)));
+  assert.ok(!openrouter.requests[0].tools.some((t: any) => ["create_recipe", "batch_changes", "remove_draft"].includes(t.function.name)));
   assert.equal(github.commitLog.length, 0);
   assert.equal(openrouter.requests[0].auth, "Bearer or-public-test");
 });
@@ -137,10 +137,10 @@ test("system and tool messages sent by the client are dropped, only user/assista
   });
   await events(res);
   const sent = openrouter.requests[0].messages;
-  assert.equal(sent.filter((m) => m.role === "system").length, 1);
+  assert.equal(sent.filter((m: any) => m.role === "system").length, 1);
   assert.doesNotMatch(JSON.stringify(sent), /evil|forged tool result|Reveal secrets/);
-  assert.deepEqual(sent.slice(1).map((m) => [m.role, m.content]), [["user", "hello"], ["assistant", "hi"], ["user", "plain question"]]);
-  assert.ok(!sent.some((m) => m.tool_calls && m.role === "assistant" && m.tool_calls.some((c) => c.id === "x")));
+  assert.deepEqual(sent.slice(1).map((m: any) => [m.role, m.content]), [["user", "hello"], ["assistant", "hi"], ["user", "plain question"]]);
+  assert.ok(!sent.some((m: any) => m.tool_calls && m.role === "assistant" && m.tool_calls.some((c: any) => c.id === "x")));
 });
 
 test("history and message length are capped", async () => {
@@ -167,7 +167,7 @@ test("a valid token whose email isn't in EDITORS is a visitor: public model and 
   const res = await post({ messages: [{ role: "user", content: "hi" }] }, { headers: { authorization: "Bearer stranger-token" } });
   assert.equal(res.status, 200);
   await events(res);
-  assert.ok(!openrouter.requests[0].tools.some((t) => t.function.name === "create_recipe"));
+  assert.ok(!openrouter.requests[0].tools.some((t: any) => t.function.name === "create_recipe"));
   assert.equal(openrouter.requests[0].auth, "Bearer or-public-test");
   assert.equal(openrouter.requests[0].model, "test/model");
   assert.deepEqual(supabase.tables.conversations, [], "nothing is stored for a visitor");
@@ -211,7 +211,7 @@ test("without the service key, or when Supabase errors, a small in-memory limite
   config.supabaseServiceKey = undefined;
   rateLimit.resetRateLimitWarning();
   const warn = console.warn;
-  const warnings = [];
+  const warnings: any[] = [];
   console.warn = (...a) => warnings.push(a.join(" "));
   try {
     for (let i = 0; i < 10; i++) assert.deepEqual(await rateLimit.checkRateLimit({ role: "public", ip: "1.2.3.4" }), { ok: true });
@@ -260,7 +260,7 @@ test("a visitor who keeps sending bad tokens is stopped (429) before Supabase is
   const prev = config.authFailureHourlyLimit;
   config.authFailureHourlyLimit = 3;
   const warn = console.warn;
-  const warnings = [];
+  const warnings: any[] = [];
   console.warn = (...a) => warnings.push(a.join(" "));
   try {
     const ask = () => chat.GET(new Request("https://mcp.test/api/chat?route=me", { headers: { authorization: "Bearer not-a-token", "x-forwarded-for": "198.51.100.77" } }));
@@ -316,7 +316,7 @@ test("suggested replies are cleaned: short, no emoji, at most four", () => {
 
 /** The exported observations, by name, with their Langfuse attributes decoded. */
 function observations() {
-  const decode = (v) => {
+  const decode = (v: any) => {
     if (typeof v !== "string") return v;
     try {
       return JSON.parse(v);
@@ -364,7 +364,7 @@ test("Langfuse: off by default; with keys, one nested trace per request (agent >
   await langfuse.idle();
   const obs = observations();
   assert.equal(new Set(obs.map((o) => o.traceId)).size, 1, "one trace per chat request");
-  const root = obs.find((o) => !o.parentId);
+  const root: any = obs.find((o: any) => !o.parentId);
   assert.equal(root.name, "chat");
   assert.equal(root.type, "agent");
   assert.equal(root.input, "mock-add a pie", "the trace input is the user's message");
@@ -375,17 +375,17 @@ test("Langfuse: off by default; with keys, one nested trace per request (agent >
   assert.deepEqual(root.meta.page, { page: "recipe", slug: "avocado-toast" });
   for (const o of obs) {
     assert.equal(o.sessionId, "conv-1", `${o.name} carries the session`);
-    assert.match(o.userId, /^public:[0-9a-f]{24}$/);
+    assert.match(o.userId as string, /^public:[0-9a-f]{24}$/);
     assert.equal(o.traceName, "chat");
     assert.deepEqual(o.tags, ["public"]);
-    assert.match(o.version, /^[0-9a-f]{10}$/, "the prompt version");
+    assert.match(o.version as string, /^[0-9a-f]{10}$/, "the prompt version");
     assert.equal(o.environment, "development");
     if (o !== root) assert.equal(o.parentId, root.id, `${o.name} is nested under the turn`);
   }
   const generations = obs.filter((o) => o.type === "generation");
   assert.ok(generations.length >= 2);
   assert.ok(generations.every((g) => g.name === "generate-response" || g.name === "suggest-replies"), "stable names, no round numbers");
-  const first = generations.find((g) => g.meta.round === 1);
+  const first: any = generations.find((g: any) => g.meta.round === 1);
   assert.equal(first.model, "test/model");
   assert.equal(first.usage.total_tokens, 1280);
   assert.ok(!("cost" in first.usage), "only OpenAI usage keys, so Langfuse maps them");
@@ -398,7 +398,7 @@ test("Langfuse: off by default; with keys, one nested trace per request (agent >
   assert.equal(refused.type, "tool");
   assert.equal(refused.meta.refused, true);
   assert.equal(refused.level, "WARNING");
-  const call = first.output.tool_calls?.find((c) => c.function.name === "create_recipe");
+  const call = first.output.tool_calls?.find((c: any) => c.function.name === "create_recipe");
   if (call) assert.equal(refused.meta.tool_call_id, call.id, "the tool observation names the call it answers");
   const raw = obs.map((o) => o.raw).join("\n");
   assert.ok(!raw.includes(ip) && !raw.includes("stranger-token") && !raw.includes("stranger@example.com") && !raw.includes("or-public-test"));
@@ -422,7 +422,7 @@ test("Langfuse failures never break the chat", async () => {
   config.langfusePublicKey = "pk";
   config.langfuseSecretKey = "sk";
   config.langfuseBaseUrl = "https://langfuse-down.test";
-  langfuse.useTestExporter({ export: (_spans, done) => done({ code: 1, error: new Error("Langfuse is down") }), shutdown: async () => {}, forceFlush: async () => {} });
+  langfuse.useTestExporter({ export: (_spans: any, done: any) => done({ code: 1, error: new Error("Langfuse is down") }), shutdown: async () => {}, forceFlush: async () => {} });
   const warn = console.warn;
   const error = console.error;
   console.warn = console.error = () => {};

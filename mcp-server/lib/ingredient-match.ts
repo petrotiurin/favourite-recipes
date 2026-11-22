@@ -1,6 +1,6 @@
 // Matching an ingredient name against another ("cherry tomatoes" ~ "tomatoes"), shared by the at-home ranking and the stocktake by chat.
 
-const norm = (name) =>
+const norm = (name: any) =>
   String(name || "")
     .toLowerCase()
     .replace(/\([^)]*\)/g, " ")
@@ -11,12 +11,12 @@ const norm = (name) =>
     .join(" ");
 
 /** Does the at-home item cover the recipe ingredient? Same words, or one name contains the other as whole words ("cherry tomatoes" ~ "tomatoes"). */
-export function sameIngredient(a, b) {
+export function sameIngredient(a: any, b: any) {
   const x = norm(a);
   const y = norm(b);
   if (!x || !y) return false;
   if (x === y) return true;
-  const has = (long, short) => ` ${long} `.includes(` ${short} `);
+  const has = (long: any, short: any) => ` ${long} `.includes(` ${short} `);
   return has(x, y) || has(y, x);
 }
 

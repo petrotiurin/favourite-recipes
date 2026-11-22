@@ -14,11 +14,11 @@ Object.assign(process.env, {
   CHAT_EDITOR_DAILY_LIMIT: "100000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000", CHAT_VISION_MODEL: "vision/test-model", CHAT_VISION_SETTLE_MS: "0",
 });
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.ts");
-let github, openrouter, supabase, images, web;
+let github: any, openrouter: any, supabase: any, images: any, web: any;
 const realFetch = globalThis.fetch;
-let chat, tools, config, photos, reader, uploads, store, background, chatMod;
+let chat: any, tools: any, config: any, photos: any, reader: any, uploads: any, store: any, background: any, chatMod: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
@@ -39,9 +39,9 @@ before(async () => {
 const OWNER = "00000000-0000-4000-8000-0000000000e1";
 const STRANGER = "00000000-0000-4000-8000-0000000000a1";
 const editor = () => tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
-const jpegOf = (w, h, color = "#c8552d") => sharp({ create: { width: w, height: h, channels: 3, background: color } }).jpeg().toBuffer();
-const asUrl = (buf, type = "image/jpeg") => `data:${type};base64,${buf.toString("base64")}`;
-let photo;
+const jpegOf = (w: any, h: any, color = "#c8552d") => sharp({ create: { width: w, height: h, channels: 3, background: color } }).jpeg().toBuffer();
+const asUrl = (buf: any, type = "image/jpeg") => `data:${type};base64,${buf.toString("base64")}`;
+let photo: any;
 beforeEach(async () => {
   clearCache();
   github = createFakeGitHub({ clean: true });
@@ -51,20 +51,20 @@ beforeEach(async () => {
   supabase = createFakeSupabase({ url: "https://sb.test", anonKey: "anon-test", serviceKey: "service-test", users: { "owner-token": { id: OWNER, email: "owner@example.com" }, "stranger-token": { id: STRANGER, email: "stranger@example.com" } } });
   config.shoppingEditors = ["owner@example.com"];
   config.supabaseServiceKey = "service-test";
-  photos.deps.lookup = async (host) => (host === "intranet.example" ? [{ address: "10.1.2.3" }] : [{ address: "93.184.216.34" }]);
-  photos.deps.get = async (url, _address, init) => web(url, init);
+  photos.deps.lookup = async (host: any) => (host === "intranet.example" ? [{ address: "10.1.2.3" }] : [{ address: "93.184.216.34" }]);
+  photos.deps.get = async (url: any, _address: any, init: any) => web(url, init);
   photo = await jpegOf(1200, 900);
 });
 let ip = 0;
-const post = (body, token = "owner-token") =>
+const post = (body: any, token: string | null = "owner-token") =>
   chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) }));
-const get = (route, token = "owner-token") => chat.GET(new Request(`https://mcp.test/api/chat?route=${route}`, { headers: { authorization: `Bearer ${token}`, "x-forwarded-for": `198.51.100.${++ip % 250}` } }));
-async function events(res) {
-  const out = [];
+const get = (route: any, token = "owner-token") => chat.GET(new Request(`https://mcp.test/api/chat?route=${route}`, { headers: { authorization: `Bearer ${token}`, "x-forwarded-for": `198.51.100.${++ip % 250}` } }));
+async function events(res: any) {
+  const out: any[] = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
-const say = async (message, extra = {}) => {
+const say = async (message: any, extra: any = {}) => {
   const res = await post({ message, page: { page: "index" }, ...extra });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json().catch(() => "")));
   const evs = await events(res);
@@ -72,35 +72,35 @@ const say = async (message, extra = {}) => {
   return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id };
 };
 const chatObjects = () => [...supabase.objects.keys()].filter((k) => k.startsWith("chat-uploads/"));
-const trayItems = () => (supabase.tables.trays[0]?.items || []).filter((i) => i.kind !== "list"); // the list card follows next week on its own
+const trayItems = () => (supabase.tables.trays[0]?.items || []).filter((i: any) => i.kind !== "list"); // the list card follows next week on its own
 
 // --- fetch_url: editors only ---------------------------------------------------------------------------------------------
 
 test("fetch_url is offered to editors only, and refused by the dispatcher and the handler for everyone else", async (t) => {
   t.mock.method(console, "warn", () => {});
-  assert.ok(!chatMod.offeredTools("public").some((d) => d.function.name === "fetch_url"));
-  assert.ok(chatMod.offeredTools("editor").some((d) => d.function.name === "fetch_url"));
+  assert.ok(!chatMod.offeredTools("public").some((d: any) => d.function.name === "fetch_url"));
+  assert.ok(chatMod.offeredTools("editor").some((d: any) => d.function.name === "fetch_url"));
   for (const role of ["public", "agent"]) {
     const res = await tools.dispatch("fetch_url", { url: "https://example.com/" }, tools.makeCaller({ role }));
     assert.equal(res.isError, true, role);
     assert.match(res.content[0].text, /Not allowed/);
   }
   // the handler checks the role itself, should the dispatcher ever be skipped
-  const tool = tools.TOOLS.find((x) => x.name === "fetch_url");
+  const tool = tools.TOOLS.find((x: any) => x.name === "fetch_url");
   const direct = await tool.handler({ url: "https://example.com/" }, { caller: tools.makeCaller({ role: "public" }) });
   assert.equal(direct.isError, true);
   assert.match(direct.content[0].text, /Not allowed/);
   // and through /chat a visitor's model asking for it is refused without reaching it
   const res = await chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.9" }, body: JSON.stringify({ messages: [{ role: "user", content: "mock-call:fetch_url" }] }) }));
   await events(res);
-  const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool");
+  const toolMsg = openrouter.requests[1].messages.findLast((m: any) => m.role === "tool");
   assert.match(toolMsg.content, /not available here/);
-  assert.ok(!openrouter.requests[0].tools.some((d) => d.function.name === "fetch_url"));
+  assert.ok(!openrouter.requests[0].tools.some((d: any) => d.function.name === "fetch_url"));
 });
 
 test("fetch_url refuses private, local and odd addresses, and a redirect into one", async () => {
   let reached = 0;
-  web = (url) => {
+  web = (url: any) => {
     reached++;
     return url.hostname === "short.example" ? new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } }) : new Response("<html></html>", { headers: { "content-type": "text/html" } });
   };
@@ -155,7 +155,7 @@ test("fetch_url caps the text, and says so when a link isn't a page", async () =
 });
 
 test("a link in the chat: the editor model reads it with fetch_url and stages the recipe with the page's own photo", async () => {
-  web = (url) => (url.pathname === "/photo.jpg" ? new Response(photo, { headers: { "content-type": "image/jpeg" } }) : new Response(PAGE(), { headers: { "content-type": "text/html" } }));
+  web = (url: any) => (url.pathname === "/photo.jpg" ? new Response(photo, { headers: { "content-type": "image/jpeg" } }) : new Response(PAGE(), { headers: { "content-type": "text/html" } }));
   const { evs } = await say("add this https://recipes.example/salmon please");
   assert.ok(evs.some((e) => e.name === "status" && /Reading the link/.test(e.data.text)));
   const item = trayItems()[0];
@@ -165,7 +165,7 @@ test("a link in the chat: the editor model reads it with fetch_url and stages th
   assert.equal(item.photo.status, "ready");
   assert.equal(item.photo.source, "link", "the source page's photo, not a generated one");
   assert.equal(images.requests.length, 0);
-  const toolMsg = openrouter.requests[1].messages.findLast((m) => m.role === "tool");
+  const toolMsg = openrouter.requests[1].messages.findLast((m: any) => m.role === "tool");
   assert.match(toolMsg.content, /BEGIN UNTRUSTED PAGE CONTENT/);
 });
 
@@ -176,12 +176,12 @@ test("photos are an editor feature: a visitor, a non-editor account and a bad to
   assert.equal((await post(body, null)).status, 403);
   assert.equal((await post(body, "stranger-token")).status, 403);
   assert.equal(openrouter.requests.length, 0, "the model was never called");
-  assert.equal(openrouter.requests.every((r) => !JSON.stringify(r.messages).includes("image_url")), true);
+  assert.equal(openrouter.requests.every((r: any) => !JSON.stringify(r.messages).includes("image_url")), true);
   assert.equal(chatObjects().length, 0);
 });
 
 test("photo validation: not an image, too big, too many, malformed", async () => {
-  const bad = async (images, status, pattern) => {
+  const bad = async (images: any, status: any, pattern: any) => {
     const res = await post({ message: "look", images });
     assert.equal(res.status, status, JSON.stringify(images).slice(0, 60));
     assert.match((await res.json()).error, pattern);
@@ -210,18 +210,18 @@ test("an attached photo is re-encoded, stored privately, NEVER sent to the main 
   assert.equal(meta.exif, undefined, "metadata dropped");
   assert.match(chatObjects()[0], new RegExp(`^chat-uploads/${conversation_id}/[0-9a-f-]{36}\\.jpg$`));
   for (const req of openrouter.requests) assert.ok(!JSON.stringify(req.messages).includes("\"type\":\"image_url\""), "no image part ever reaches the main model");
-  const user = openrouter.requests[0].messages.findLast((m) => m.role === "user");
+  const user = openrouter.requests[0].messages.findLast((m: any) => m.role === "user");
   assert.equal(typeof user.content, "string");
   assert.match(user.content, /here is a recipe[\s\S]*attached 2 photos to this message: photo-1 to photo-2/);
   assert.equal(openrouter.readerRequests.length, 2, "the reader read each photo on its own");
   assert.ok(evs.some((e) => e.name === "photos" && JSON.stringify(e.data.numbers) === "[1,2]"), "the panel learns the numbers");
   // the stored row keeps paths, not bytes
-  const row = supabase.tables.messages.find((m) => m.role === "user");
+  const row = supabase.tables.messages.find((m: any) => m.role === "user");
   assert.equal(row.content.images.length, 2);
   assert.ok(!JSON.stringify(row.content).includes("base64"));
   // reload: signed URLs, with their numbers
   const loaded = await (await get(`conversations/${conversation_id}`)).json();
-  const first = loaded.messages.find((m) => m.role === "user");
+  const first = loaded.messages.find((m: any) => m.role === "user");
   assert.equal(first.images.length, 2);
   assert.deepEqual(first.photo_numbers, [1, 2]);
   assert.match(first.images[0], /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/chat-uploads\//);
@@ -239,7 +239,7 @@ test("an attached photo is re-encoded, stored privately, NEVER sent to the main 
 test("a photo sent with no text still works (and an empty message with no photo doesn't)", async () => {
   assert.equal((await post({ message: "   " })).status, 400);
   await say("", { images: [asUrl(photo)] });
-  const user = openrouter.requests[0].messages.findLast((m) => m.role === "user");
+  const user = openrouter.requests[0].messages.findLast((m: any) => m.role === "user");
   assert.match(user.content, /^\(no message, just the photos\)/);
   assert.equal(supabase.tables.photo_reads.length, 1);
 });
@@ -248,7 +248,7 @@ test("photo_from_attachment can't point at a photo that isn't in the chat, or at
   const none = await tools.dispatch("stage_create_recipe", { title: "X Soup", course: ["Lunch"], total_mins: 5, serves: 1, calories: 100, ingredients: [{ amount: 1, name: "water" }], instructions: ["Heat the **water**."], photo_from_attachment: 2 }, editor(), { chat: { emit() {}, photos: [{ n: 1, path: `${OWNER}/${OWNER}.jpg` }] } });
   assert.equal(none.isError, true);
   assert.match(none.content[0].text, /no photo-2 in this chat/);
-  const shape = tools.toolDefinitions("editor").find((d) => d.function.name === "stage_create_recipe").function.parameters.properties;
+  const shape = tools.toolDefinitions("editor").find((d: any) => d.function.name === "stage_create_recipe").function.parameters.properties;
   assert.equal(shape.photo_from_attachment.type, "integer");
 });
 
@@ -262,7 +262,7 @@ test("history: earlier photos become one text line with their numbers and what w
     { path: "a/2.jpg", status: "read", result: { kind: "recipe", recipe: { title: "" } }, group_id: "1+2" },
   ];
   const out = store.withPhotoNotes(hist, photos, reads);
-  assert.ok(out.every((m) => !("images" in m)));
+  assert.ok(out.every((m: any) => !("images" in m)));
   assert.equal(out[0].content, 'm0\n[Photos on this message: photo-1 (read as "Dal Makhani", part of photo-1+2, staged), photo-2 (read, part of photo-1+2)]');
   assert.equal(out[2].content, "[Photos on this message: photo-3 (not read yet)]");
   assert.deepEqual(hist[0].images, ["a/1.jpg", "a/2.jpg"], "the input isn't changed");
@@ -274,8 +274,8 @@ test("a later turn in the same chat names the earlier photos as text, never as i
   await say("and now?", { conversation_id });
   const req = openrouter.requests[0];
   assert.ok(!JSON.stringify(req.messages).includes("\"type\":\"image_url\""));
-  assert.ok(req.messages.some((m) => m.role === "user" && /\[Photos on this message: photo-1 \(read as /.test(m.content)));
-  assert.ok(!req.messages.some((m) => "images" in m));
+  assert.ok(req.messages.some((m: any) => m.role === "user" && /\[Photos on this message: photo-1 \(read as /.test(m.content)));
+  assert.ok(!req.messages.some((m: any) => "images" in m));
 });
 
 test("traces keep photos whole (Langfuse uploads data URIs as media) but still clip long text", async () => {
@@ -304,7 +304,7 @@ test("photo_from_attachment is honoured only when the user's message asks for th
   const { conversation_id } = await say("first", { images: [asUrl(photo)] });
   supabase.tables.trays.length = 0;
   images.requests.length = 0;
-  const warned = [];
+  const warned: any[] = [];
   const warn = console.warn;
   console.warn = (...a) => warned.push(a.join(" "));
   let res;
@@ -314,7 +314,7 @@ test("photo_from_attachment is honoured only when the user's message asks for th
   } finally {
     console.warn = warn;
   }
-  const item = trayItems().find((i) => i.op.title === "Unasked Soup");
+  const item = trayItems().find((i: any) => i.op.title === "Unasked Soup");
   assert.equal(item.photo.source, "generated");
   assert.equal(item.photo.upload, undefined);
   assert.ok(warned.some((w) => /Ignored photo_from_attachment/.test(w)), "logged");

@@ -19,34 +19,34 @@ process.env.CHAT_PUBLIC_DAILY_LIMIT = "1000";
 const { createFakeGitHub, createFakeSupabase } = await import("../scripts/fakes.ts");
 const github = createFakeGitHub({ clean: true });
 // A known book: avocado-toast is in this week, steamed-rice is a draft in next week, the rest are plain.
-const flag = (slug, line) => {
+const flag = (slug: any, line: any) => {
   const path = `recipes/${slug}.md`;
-  github.files.set(path, Buffer.from(github.files.get(path).toString().replace(/^---\n([\s\S]*?)\n---/, (_, fm) => `---\n${fm}\n${line}\n---`)));
+  github.files.set(path, Buffer.from(github.files.get(path).toString().replace(/^---\n([\s\S]*?)\n---/, (_: any, fm: any) => `---\n${fm}\n${line}\n---`)));
 };
 flag("avocado-toast", "current: true");
 const draftSlug = [...github.files.keys()].find((k) => k.startsWith("recipes/") && k !== "recipes/avocado-toast.md" && k.endsWith(".md")).slice(8, -3);
 flag(draftSlug, "draft: true\nnext: true");
 
-let scripted; // the model's turns: array of { text?, calls? }
-const sse = (events) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
-const modelTurn = ({ text = "", calls = [] }) => {
-  const chunk = (delta, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
-  const ev = [chunk({ role: "assistant", content: text })];
+let scripted: any; // the model's turns: array of { text?, calls? }
+const sse = (events: any) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
+const modelTurn = ({ text = "", calls = [] }: { text?: string; calls?: any[] }) => {
+  const chunk = (delta: any, finish: string | null = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
+  const ev: any[] = [chunk({ role: "assistant", content: text })];
   calls.forEach((c, index) => ev.push(chunk({ tool_calls: [{ index, id: `c${index}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } }] })));
   ev.push(chunk({}, calls.length ? "tool_calls" : "stop"), "[DONE]");
   return sse(ev);
 };
-const toolResults = [];
+const toolResults: any[] = [];
 const realFetch = globalThis.fetch;
-let supabase;
-let chat, chatLib, ui;
+let supabase: any;
+let chat: any, chatLib: any, ui: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") {
       const body = JSON.parse(init.body);
-      toolResults.push(body.messages.filter((m) => m.role === "tool").map((m) => m.content));
+      toolResults.push(body.messages.filter((m: any) => m.role === "tool").map((m: any) => m.content));
       return modelTurn(scripted.shift() || {});
     }
     if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
@@ -63,10 +63,10 @@ beforeEach(() => {
 });
 
 let n = 0;
-async function turn(turns, content = "hi") {
+async function turn(turns: any, content = "hi") {
   scripted = turns;
   const res = await chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${++n}` }, body: JSON.stringify({ messages: [{ role: "user", content }] }) }));
-  const out = [];
+  const out: any[] = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
@@ -78,7 +78,7 @@ test("show_recipes: cards are built from the repo, unknown slugs are dropped", a
     { text: "Enjoy." },
   ]);
   const cards = evs.find((e) => e.name === "cards").data.cards;
-  assert.deepEqual(cards.map((c) => c.slug), ["avocado-toast", draftSlug]);
+  assert.deepEqual(cards.map((c: any) => c.slug), ["avocado-toast", draftSlug]);
   const toast = cards[0];
   assert.equal(toast.title, "Avocado Toast");
   assert.equal(toast.url, `${SITE}/recipes/avocado-toast.html`);

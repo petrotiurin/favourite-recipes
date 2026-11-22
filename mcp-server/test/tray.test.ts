@@ -21,13 +21,13 @@ process.env.CHAT_EDITOR_DAILY_LIMIT = "100000";
 process.env.CHAT_PUBLIC_TOTAL_HOURLY_LIMIT = "100000";
 
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.ts");
-let github, openrouter, supabase, images, pages;
+let github: any, openrouter: any, supabase: any, images: any, pages: any;
 const realFetch = globalThis.fetch;
-let clock;
+let clock: any;
 
-let chat, store, tools, tray, photos, config, background, planApply;
+let chat: any, store: any, tools: any, tray: any, photos: any, config: any, background: any, planApply: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
@@ -64,21 +64,21 @@ beforeEach(async () => {
   config.shoppingEditors = ["owner@example.com", "partner@example.com"];
   config.supabaseServiceKey = "service-test";
   photos.deps.lookup = async () => [{ address: "93.184.216.34" }];
-  photos.deps.get = (url, _address, init) => fetch(url, { redirect: "manual", ...init }); // the tests fake the network through the global fetch
+  photos.deps.get = (url: any, _address: any, init: any) => fetch(url, { redirect: "manual", ...init }); // the tests fake the network through the global fetch
 });
 
 let ip = 0;
-const call = (method, path, { token, body } = {}) => {
+const call = (method: any, path: any, { token, body }: any = {}) => {
   const [route, qs] = path.replace(/^\/chat\/?/, "").split("?");
   const real = route ? `https://mcp.test/api/chat?route=${route}${qs ? `&${qs}` : ""}` : "https://mcp.test/chat";
   return chat[method](new Request(real, { method, headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }));
 };
-async function events(res) {
-  const out = [];
+async function events(res: any) {
+  const out: any[] = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
   return out;
 }
-const say = async (message, { token = "owner-token", conversation_id, page, action, answers } = {}) => {
+const say = async (message: any, { token = "owner-token", conversation_id, page, action, answers }: any = {}) => {
   const res = await call("POST", "/chat", { token, body: { message, conversation_id, page: page || { page: "index" }, ...(action ? { action } : {}), ...(answers ? { answers } : {}) } });
   assert.equal(res.status, 200, message);
   const evs = await events(res);
@@ -87,15 +87,15 @@ const say = async (message, { token = "owner-token", conversation_id, page, acti
 };
 const plan = async (token = "owner-token") => (await (await call("GET", "/chat/plan", { token })).json()).tray;
 const trayRow = () => supabase.tables.trays[0];
-const recipePath = (slug) => `recipes/${slug}.md`;
+const recipePath = (slug: any) => `recipes/${slug}.md`;
 const anySlug = (n = 0) => [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3)).sort()[n];
-const setFlag = (slug, flags) => {
+const setFlag = (slug: any, flags: any) => {
   let md = github.files.get(recipePath(slug)).toString().replace(/^(draft|current|next): true\n/gm, "");
-  md = md.replace(/^---\n([\s\S]*?)\n---/, (m, fm) => `---\n${fm}\n${flags}\n---`);
+  md = md.replace(/^---\n([\s\S]*?)\n---/, (m: any, fm: any) => `---\n${fm}\n${flags}\n---`);
   github.files.set(recipePath(slug), Buffer.from(md));
   clearCache(); // changed behind the server's back: drop its branch snapshot
 };
-const pageOf = (slug) => ({ page: "recipe", slug });
+const pageOf = (slug: any) => ({ page: "recipe", slug });
 
 // --- staging ---------------------------------------------------------------------------------------------------------------
 
@@ -106,7 +106,7 @@ test("an editor stages a new recipe: it goes in the tray (not the repo), with a 
   assert.ok(!github.files.has(recipePath("test-pasta")));
 
   const t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list"], "the list card follows next week at once, built by the site");
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "the list card follows next week at once, built by the site");
   const card = t.items[0];
   assert.equal(card.kind, "new");
   assert.match(t.items[1].title, /^\d+ items for 1 recipe$/);
@@ -134,15 +134,15 @@ test("the dry run reports problems on the card at once, and re-staging the same 
   assert.match(out.content[0].text, /PROBLEM on the card/);
   assert.match(out.content[0].text, /needs an amount/);
   const t = await plan();
-  assert.match(t.items.find((i) => i.kind === "new").error, /needs an amount/);
+  assert.match(t.items.find((i: any) => i.kind === "new").error, /needs an amount/);
   assert.equal(t.can_save, false);
   assert.equal(slug.length > 0, true);
   const again = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ amount: 1, unit: "tsp", name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
   assert.doesNotMatch(again.content[0].text, /PROBLEM/);
   await background.backgroundIdle();
   const t2 = await plan();
-  assert.equal(t2.items.filter((i) => i.kind === "new").length, 1, "replaced, not duplicated");
-  assert.equal(t2.items.find((i) => i.kind === "new").error, null);
+  assert.equal(t2.items.filter((i: any) => i.kind === "new").length, 1, "replaced, not duplicated");
+  assert.equal(t2.items.find((i: any) => i.kind === "new").error, null);
 });
 
 test("stage tools and the tray writes refuse a public caller, whatever called them", async () => {
@@ -150,7 +150,7 @@ test("stage tools and the tray writes refuse a public caller, whatever called th
   console.warn = () => {};
   try {
     const pub = tools.makeCaller({ role: "public" });
-    for (const t of tools.TOOLS.filter((x) => tools.accessOf(x) === "stage")) {
+    for (const t of tools.TOOLS.filter((x: any) => tools.accessOf(x) === "stage")) {
       const out = await tools.dispatch(t.name, {}, pub, { chat: { emit() {} } });
       assert.equal(out.isError, true);
       assert.match(out.content[0].text, /Not allowed/);
@@ -171,7 +171,7 @@ test("stage tools and the tray writes refuse a public caller, whatever called th
 test("the MCP server does not expose the stage tools, and its write tools are unchanged", async () => {
   const { buildServer } = await import("../lib/server.ts");
   const server = buildServer({ origin: "https://mcp.test" });
-  const names = Object.keys(server._registeredTools);
+  const names = Object.keys((server as any)._registeredTools);
   assert.ok(names.includes("create_recipe") && names.includes("batch_changes"));
   assert.ok(!names.some((n) => n.startsWith("stage_") || ["get_tray", "drop_tray_item", "resolve_clash"].includes(n)));
 });
@@ -190,7 +190,7 @@ test("Finalise builds the list, then Save commits ONCE with the photo, empties t
   assert.equal(t.state, "ready");
   assert.equal(t.list_current, true);
   assert.equal(t.can_save, true);
-  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list"], "Save order: new recipes, then the list");
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "Save order: new recipes, then the list");
   assert.match(t.items[1].title, /^\d+ items for 1 recipe$/);
   assert.equal(github.commitLog.length, 0, "nothing committed yet");
 
@@ -206,7 +206,7 @@ test("Finalise builds the list, then Save commits ONCE with the photo, empties t
   assert.equal(JSON.parse(github.files.get("shopping-list.json")).recipes[0], "test-pasta");
   assert.equal(supabase.tables.trays.length, 0, "the tray is empty");
   assert.equal(supabase.objects.size, 0, "the staged photo is gone");
-  assert.deepEqual(out.cards.map((c) => [c.slug, c.publishing]), [["test-pasta", true]]);
+  assert.deepEqual(out.cards.map((c: any) => [c.slug, c.publishing]), [["test-pasta", true]]);
   assert.match(out.summary, /Saved 2 changes/);
   const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
   const last = convo.messages.at(-1);
@@ -217,7 +217,7 @@ test("Finalise builds the list, then Save commits ONCE with the photo, empties t
 
 test("Save needs a fresh token AND EDITORS: no token 401, expired 401, a non-editor 403, an editor removed from the list 403, and nothing is committed", async () => {
   await stagedPastaAndList();
-  const apply = (token) => call("POST", "/chat/plan/apply", { token, body: {} });
+  const apply = (token: any) => call("POST", "/chat/plan/apply", { token, body: {} });
   assert.equal((await apply(undefined)).status, 401);
   assert.equal((await apply("nope")).status, 401);
   assert.equal((await apply("stranger-token")).status, 403);
@@ -251,7 +251,7 @@ test("the list is rebuilt on every change: a change after the review keeps Save,
   t = await plan();
   assert.equal(t.list_current, true, "still reviewed");
   assert.equal(t.can_save, true);
-  assert.match(t.items.find((i) => i.kind === "list").title, /for 2 recipes$/, "the List card is live");
+  assert.match(t.items.find((i: any) => i.kind === "list").title, /for 2 recipes$/, "the List card is live");
   // a new optional item: Finalise list comes back, for just that
   await tools.dispatch("stage_create_recipe", { ...base, title: "Chilli Pasta", ingredients: [{ amount: 100, unit: "g", name: "pasta" }, { name: "chilli flakes", note: "to serve", optional: true }] }, ed, ctx);
   await background.backgroundIdle();
@@ -260,7 +260,7 @@ test("the list is rebuilt on every change: a change after the review keeps Save,
   assert.equal(t.can_save, false);
   assert.equal(t.state, "collecting");
   assert.deepEqual(t.review, { flags: 0, optional: 1 });
-  assert.equal(t.items.find((i) => i.kind === "list").sub, "Changed since the review: Finalise list");
+  assert.equal(t.items.find((i: any) => i.kind === "list").sub, "Changed since the review: Finalise list");
   const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
   assert.equal(res.status, 409);
   assert.match((await res.json()).error, /Finalise the list first/);
@@ -270,7 +270,7 @@ test("the list is rebuilt on every change: a change after the review keeps Save,
   const fin = await say("ignored", { conversation_id, action: "finalise" });
   assert.equal(openrouter.requests.length, calls, "nothing flagged: no model call");
   const card = fin.evs.find((e) => e.name === "optional").data;
-  assert.deepEqual(card.items.map((i) => [i.item, i.name]), [["chilli-flakes", "Chilli flakes"]]);
+  assert.deepEqual(card.items.map((i: any) => [i.item, i.name]), [["chilli-flakes", "Chilli flakes"]]);
   assert.equal(card.items[0].recipes[0].slug, "chilli-pasta");
   assert.equal(card.items[0].recipes[0].title, "Chilli Pasta", "a recipe new in the tray: its title from its card, not its address");
   assert.match(card.items[0].recipes[0].image, /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/tray-photos\/.+\/chilli-pasta\.jpg\?token=/, "and its staged photo");
@@ -280,18 +280,18 @@ test("the list is rebuilt on every change: a change after the review keeps Save,
   assert.equal(bad.status, 400);
   const done = await say("ignored", { conversation_id, action: "review_optional", answers: { "chilli-flakes": "drop" } });
   assert.match(done.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /off this week's list.*tap Save to site/);
-  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m) => m.role === "user").at(-1);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
   assert.equal(user.content, "Leaving off: chilli flakes.", "the answers are the editor's message, in words");
   const again = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: {}, page: {} } });
   assert.equal(again.status, 409, "answered once only");
   t = await plan();
   assert.equal(t.can_save, true);
-  assert.deepEqual(t.items.find((i) => i.kind === "list").edits, ["leave off chilli-flakes"]);
+  assert.deepEqual(t.items.find((i: any) => i.kind === "list").edits, ["leave off chilli-flakes"]);
   const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
   assert.equal(saved.status, 200);
   const list = JSON.parse(github.files.get("shopping-list.json"));
-  assert.ok(!list.sections.flatMap((s) => s.items).some((i) => /chilli/i.test(i.name)), "left off this week's list");
-  assert.ok(list.sections.flatMap((s) => s.items).some((i) => i.name === "Dried pasta" && i.recipes.length === 3), "the list is the sum of the recipes");
+  assert.ok(!list.sections.flatMap((s: any) => s.items).some((i: any) => /chilli/i.test(i.name)), "left off this week's list");
+  assert.ok(list.sections.flatMap((s: any) => s.items).some((i: any) => i.name === "Dried pasta" && i.recipes.length === 3), "the list is the sum of the recipes");
 });
 
 test("a tray that doesn't change next week needs no list: Save is available straight away", async () => {
@@ -320,8 +320,8 @@ test("planned servings can be staged at any time: against the list the tray rebu
   assert.match(staged.content[0].text, /^Staged the planned servings/);
   assert.doesNotMatch(staged.content[0].text, /PROBLEM/);
   let t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list", "servings"]);
-  assert.equal(t.items.find((i) => i.kind === "servings").error, null);
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list", "servings"]);
+  assert.equal(t.items.find((i: any) => i.kind === "servings").error, null);
   await say("ignored", { conversation_id, action: "finalise" });
   t = await plan();
   assert.equal(t.list_current, true);
@@ -345,7 +345,7 @@ test("Save now: a quick fix commits alone; new recipes and next-week changes can
   const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
   await tools.dispatch("stage_update_recipe", { slug: other, ingredients: [{ amount: 1, name: "egg" }] }, ed, { chat: { emit() {} } });
   let t = await plan();
-  const byKind = (kind, s) => t.items.find((i) => i.kind === kind && (!s || i.recipe?.url.includes(s)));
+  const byKind = (kind: any, s?: any) => t.items.find((i: any) => i.kind === kind && (!s || i.recipe?.url.includes(s)));
   const fix = byKind("edit", slug);
   assert.equal(fix.save_now, true, "time is a quick fix");
   assert.equal(byKind("new").save_now, false);
@@ -362,7 +362,7 @@ test("Save now: a quick fix commits alone; new recipes and next-week changes can
   assert.match(github.files.get(recipePath(slug)).toString(), /total_mins: 35/);
   t = await plan();
   assert.equal(t.count, 3, "the rest of the tray waits (with the list card)");
-  assert.ok(!t.items.some((i) => i.id === fix.id));
+  assert.ok(!t.items.some((i: any) => i.id === fix.id));
 });
 
 // --- clashes -------------------------------------------------------------------------------------------------------------------
@@ -414,24 +414,24 @@ test("an editor's turn carries on when the panel drops the stream (a phone switc
   assert.equal(res.status, 200);
   const reader = res.body.getReader();
   const first = new TextDecoder().decode((await reader.read()).value);
-  const meta = JSON.parse(first.match(/^event: meta\ndata: (.*)$/m)[1]);
+  const meta = JSON.parse(first.match(/^event: meta\ndata: (.*)$/m)![1]);
   await reader.cancel(); // the browser went away
   await background.backgroundIdle();
-  assert.equal((await plan()).items.filter((i) => i.kind === "new").length, 1, "the staged recipe is in the tray");
+  assert.equal((await plan()).items.filter((i: any) => i.kind === "new").length, 1, "the staged recipe is in the tray");
   const convo = await (await call("GET", `/chat/conversations/${meta.conversation_id}`, { token: "owner-token" })).json();
   assert.deepEqual(convo.ended_turns, { [meta.turn_id]: null }, "the turn ended with an answer");
-  assert.ok(convo.messages.some((m) => m.role === "assistant" && m.turn_id === meta.turn_id && m.content), "the answer was saved");
+  assert.ok(convo.messages.some((m: any) => m.role === "assistant" && m.turn_id === meta.turn_id && m.content), "the answer was saved");
 });
 
 test("an editor's turn that failed leaves a marker the panel can find, which the model never sees", async () => {
   const { conversation_id } = await say("mock-402");
   const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
-  const [[, err]] = Object.entries(convo.ended_turns);
+  const [[, err]] = Object.entries<any>(convo.ended_turns);
   assert.equal(typeof err, "string");
   assert.ok(err.length > 0, "the error the panel showed");
-  assert.ok(!convo.messages.some((m) => m.role === "assistant"), "nothing to show in the chat itself");
+  assert.ok(!convo.messages.some((m: any) => m.role === "assistant"), "nothing to show in the chat itself");
   const { historyForModel, getMessages } = store;
-  assert.ok(!historyForModel(await getMessages(conversation_id)).some((m) => m.role === "assistant"));
+  assert.ok(!historyForModel(await getMessages(conversation_id)).some((m: any) => m.role === "assistant"));
 });
 
 test("a Finalise turn that never ended (its function was killed) doesn't leave the tray without its button for good", async () => {
@@ -461,7 +461,7 @@ test("Finalise asks 'Is it ready to become this week?' when next week has recipe
   const not = await say("Not yet", { conversation_id });
   assert.match(not.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /nothing changes/i);
   const t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new", "list"], "nothing staged, the tray as it was");
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "nothing staged, the tray as it was");
   assert.equal(github.commitLog.length, 0);
 });
 
@@ -476,20 +476,20 @@ test("Finalise > Promote it: the server stages the switch and shows ONE review c
   let r = await say("Promote it", { conversation_id });
   assert.equal(openrouter.requests.length, calls, "Promote it needs no model call");
   const card = r.evs.find((e) => e.name === "review").data;
-  assert.deepEqual(card.drafts.map((d) => d.slug), [draft]);
+  assert.deepEqual(card.drafts.map((d: any) => d.slug), [draft]);
   assert.equal(card.drafts[0].answer, undefined, "no thumb yet");
   assert.ok(!r.evs.some((e) => e.name === "question"), "no per-draft question");
-  assert.deepEqual((await plan()).items.map((i) => i.kind), ["switch", "new", "list"], "the switch is staged at once");
+  assert.deepEqual((await plan()).items.map((i: any) => i.kind), ["switch", "new", "list"], "the switch is staged at once");
   const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
-  assert.deepEqual(convo.messages.at(-1).review.drafts.map((d) => d.slug), [draft], "the card is stored with the turn");
+  assert.deepEqual(convo.messages.at(-1).review.drafts.map((d: any) => d.slug), [draft], "the card is stored with the turn");
 
   r = await say("ignored", { conversation_id, action: "review_drafts", answers: { [draft]: "liked" } });
-  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m) => m.role === "user").at(-1);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
   assert.match(user.content, /^Liked: /, "the answers are the editor's message, in words");
   const text = r.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
   assert.match(text, /In the tray: the switch to a new week\. .+ becomes a regular recipe\./);
   const t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["switch", "promote", "new", "list"], "Save order: switch, drafts, new, list");
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["switch", "promote", "new", "list"], "Save order: switch, drafts, new, list");
   assert.equal(t.state, "ready");
   assert.equal(t.can_save, true);
   const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
@@ -513,10 +513,10 @@ test("the review card: thumbs up promotes, thumbs down removes, no thumb keeps i
   const r = await say("yes", { conversation_id });
   const card = r.evs.find((ev) => ev.name === "review").data;
   assert.equal(card.drafts.length, 4);
-  assert.equal(card.drafts.find((x) => x.slug === e).also_next, true);
+  assert.equal(card.drafts.find((x: any) => x.slug === e).also_next, true);
 
   // only thumbs are answers; photos and a non-object are refused before anything is stored
-  const bad = (body) => call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_drafts", page: { page: "index" }, ...body } });
+  const bad = (body: any) => call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_drafts", page: { page: "index" }, ...body } });
   assert.equal((await bad({ answers: { [a]: "keep" } })).status, 400);
   assert.equal((await bad({ answers: { [a]: "book" } })).status, 400);
   assert.equal((await bad({ answers: "liked" })).status, 400);
@@ -527,12 +527,12 @@ test("the review card: thumbs up promotes, thumbs down removes, no thumb keeps i
   const text = done.evs.filter((ev) => ev.name === "text").map((ev) => ev.data.delta).join("");
   assert.match(text, /stays? for the coming week/);
   assert.match(text, /stays: it's on next week's plan/);
-  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m) => m.role === "user").at(-1);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
   assert.match(user.content, /^Liked: .+\. Not for us: .+\. Kept for the coming week: .+\.$/);
   const items = trayRow().items;
-  assert.deepEqual(items.filter((i) => i.kind === "promote").map((i) => i.op.slug), [a]);
-  assert.deepEqual(items.filter((i) => i.kind === "remove").map((i) => i.op.slug), [b], "only the draft that isn't planned for next week is removed");
-  assert.deepEqual(items.find((i) => i.kind === "switch").op.carry_over, [c], "the draft with no thumb is carried over (the one also in next week needs no carry-over)");
+  assert.deepEqual(items.filter((i: any) => i.kind === "promote").map((i: any) => i.op.slug), [a]);
+  assert.deepEqual(items.filter((i: any) => i.kind === "remove").map((i: any) => i.op.slug), [b], "only the draft that isn't planned for next week is removed");
+  assert.deepEqual(items.find((i: any) => i.kind === "switch").op.carry_over, [c], "the draft with no thumb is carried over (the one also in next week needs no carry-over)");
 
   assert.equal((await bad({ answers })).status, 409, "answered once only");
   assert.equal(github.commitLog.length, 0, "nothing commits before Save");
@@ -548,8 +548,8 @@ test("Done with no thumbs at all keeps every draft for the coming week", async (
   await say("Promote it", { conversation_id });
   await say("x", { conversation_id, action: "review_drafts", answers: {} });
   const items = trayRow().items;
-  assert.deepEqual([...items.find((i) => i.kind === "switch").op.carry_over].sort(), [a, b].sort());
-  assert.ok(!items.some((i) => i.kind === "promote" || i.kind === "remove"));
+  assert.deepEqual([...items.find((i: any) => i.kind === "switch").op.carry_over].sort(), [a, b].sort());
+  assert.ok(!items.some((i: any) => i.kind === "promote" || i.kind === "remove"));
 });
 
 test("the review card replaces earlier answers in the tray, starts on them, and the model can show it with review_drafts", async () => {
@@ -561,17 +561,17 @@ test("the review card replaces earlier answers in the tray, starts on them, and 
   const caller = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
   await tray.stageMany([{ action: "start_next_week", carry_over: [a] }, { action: "promote_recipe", slug: b }], caller);
   const drafts = await thisWeeksDrafts();
-  const card = reviewCard(drafts, trayRow().items);
-  assert.deepEqual(Object.fromEntries(card.drafts.map((d) => [d.slug, d.answer])), { [a]: undefined, [b]: "liked" }, "the card starts on the thumbs the tray holds");
+  const card: any = reviewCard(drafts, trayRow().items);
+  assert.deepEqual(Object.fromEntries(card.drafts.map((d: any) => [d.slug, d.answer])), { [a]: undefined, [b]: "liked" }, "the card starts on the thumbs the tray holds");
   assert.equal(reviewCard([], []), null);
   const { answers } = parseAnswers({ [a]: "liked" }, drafts);
   assert.match(answersText(drafts, answers), /^Liked: .+\. Kept for the coming week: .+\.$/);
   const { stageReview } = await import("../lib/draft-review.ts");
   await stageReview(drafts, answers, caller);
   const items = trayRow().items;
-  assert.deepEqual(items.filter((i) => i.kind === "promote").map((i) => i.op.slug), [a], "b's thumb was taken back (kept), a is promoted");
-  assert.deepEqual(items.find((i) => i.kind === "switch").op.carry_over, [b], "b is carried over, a no longer is");
-  assert.equal(items.filter((i) => i.kind === "switch").length, 1);
+  assert.deepEqual(items.filter((i: any) => i.kind === "promote").map((i: any) => i.op.slug), [a], "b's thumb was taken back (kept), a is promoted");
+  assert.deepEqual(items.find((i: any) => i.kind === "switch").op.carry_over, [b], "b is carried over, a no longer is");
+  assert.equal(items.filter((i: any) => i.kind === "switch").length, 1);
   assert.ok(reviewOpen([{ role: "user" }, { role: "assistant", content: { content: "x", ui: { review: card } } }]));
   assert.ok(!reviewOpen([{ role: "assistant", content: { ui: { review: card } } }, { role: "user" }]));
   for (const yes of ["Promote it", "promote it.", "Yes", "yes please", "Go ahead"]) assert.ok(isPromoteIt(yes), yes);
@@ -643,7 +643,7 @@ test("both editors see and add to the same tray", async () => {
   await say("add a new recipe: test pasta", { token: "owner-token" });
   await say("add a new recipe: second pasta", { token: "partner-token" });
   const t = await plan("partner-token");
-  assert.deepEqual(t.items.filter((i) => i.kind === "new").map((i) => [i.title, i.added_by]).sort(), [["Second Pasta", "Partner"], ["Test Pasta", "Owner"]]);
+  assert.deepEqual(t.items.filter((i: any) => i.kind === "new").map((i: any) => [i.title, i.added_by]).sort(), [["Second Pasta", "Partner"], ["Test Pasta", "Owner"]]);
   assert.equal(supabase.tables.trays.length, 1);
 });
 
@@ -669,8 +669,8 @@ test("the tray table and the photo bucket are server-only: the anon key reads ne
 });
 
 test("status: which pages are live yet (a server-side HEAD to the Pages URL for validated slugs)", async () => {
-  const seen = [];
-  pages = (url, init) => { seen.push([init.method, url]); return new Response(null, { status: url.endsWith("/a-b.html") ? 200 : 404 }); };
+  const seen: any[] = [];
+  pages = (url: any, init: any) => { seen.push([init.method, url]); return new Response(null, { status: url.endsWith("/a-b.html") ? 200 : 404 }); };
   const res = await call("GET", "/chat/status?slugs=a-b,c-d,../etc/passwd", { token: "owner-token" });
   assert.deepEqual((await res.json()).live, { "a-b": true, "c-d": false });
   assert.deepEqual(seen.map((s) => s[0]), ["HEAD", "HEAD"]);
@@ -691,9 +691,9 @@ test("photo links: only public http(s); private, loopback, link-local and mapped
 });
 
 test("a redirect to a private address is refused, and a failed link falls back to a generated photo", async () => {
-  const hits = [];
+  const hits: any[] = [];
   const orig = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     if (String(url).startsWith("https://recipes.example/")) {
       hits.push(String(url));
       return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } });
@@ -718,10 +718,10 @@ test("a recipe page's og:image (or JSON-LD Recipe image) is found and used; the 
   const sharp = (await import("sharp")).default;
   const jpeg = await sharp({ create: { width: 800, height: 600, channels: 3, background: "#c0a080" } }).jpeg().toBuffer();
   const orig = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s === "https://r.example/pasta") return new Response('<meta property="og:image" content="https://r.example/p.jpg">', { headers: { "content-type": "text/html" } });
-    if (s === "https://r.example/p.jpg") return new Response(jpeg, { headers: { "content-type": "image/jpeg" } });
+    if (s === "https://r.example/p.jpg") return new Response(new Uint8Array(jpeg), { headers: { "content-type": "image/jpeg" } });
     return orig(url, init);
   };
   try {
@@ -742,7 +742,7 @@ test("a recipe page's og:image (or JSON-LD Recipe image) is found and used; the 
 test("migrations: trays (one row, RLS, no policies, 7 days) and the private tray-photos bucket", async () => {
   const { readFileSync, readdirSync } = await import("node:fs");
   const dir = new URL("../../supabase/migrations/", import.meta.url);
-  const sql = (re) => readFileSync(new URL(readdirSync(dir).find((f) => re.test(f)), dir), "utf8");
+  const sql = (re: any) => readFileSync(new URL(readdirSync(dir).find((f) => re.test(f))!, dir), "utf8");
   const trays = sql(/_trays\.sql$/);
   assert.match(trays, /create table if not exists public\.trays/);
   assert.match(trays, /unique index if not exists trays_one_per_household on public\.trays \(\(true\)\)/);
@@ -763,11 +763,11 @@ test("Finalise with next week empty on the site: no promote question, no questio
   const r = await say("x", { conversation_id, action: "finalise" });
   assert.ok(!r.evs.some((e) => e.name === "question"), "no question at all");
   const t = await plan();
-  assert.ok(t.items.some((i) => i.kind === "list"), "the list is staged");
-  assert.ok(!t.items.some((i) => ["switch", "promote", "remove"].includes(i.kind)), "nothing about this week");
+  assert.ok(t.items.some((i: any) => i.kind === "list"), "the list is staged");
+  assert.ok(!t.items.some((i: any) => ["switch", "promote", "remove"].includes(i.kind)), "nothing about this week");
   // the switch card lists what is carried over
   await tools.dispatch("stage_start_next_week", { carry_over: [draft] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {} } });
-  const sw = (await plan()).items.find((i) => i.kind === "switch");
+  const sw = (await plan()).items.find((i: any) => i.kind === "switch");
   assert.match(sw.sub, /^Carried over in this week: /);
 });
 
@@ -775,11 +775,11 @@ test("the tray note says which of this week's drafts already have an answer stag
   const [a, b, c] = [anySlug(0), anySlug(1), anySlug(2)];
   for (const s of [a, b, c]) setFlag(s, "draft: true\ncurrent: true");
   const caller = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
-  const stage = (name, args) => tools.dispatch(name, args, caller, { chat: { emit() {} } });
+  const stage = (name: any, args: any) => tools.dispatch(name, args, caller, { chat: { emit() {} } });
   await stage("stage_start_next_week", { carry_over: [c] });
   await stage("stage_promote_recipe", { slug: a });
   const note = await tray.trayNote(await tray.loadTray(), caller);
-  const line = note.split("\n").find((l) => l.startsWith("Finalise progress:"));
+  const line = note.split("\n").find((l: any) => l.startsWith("Finalise progress:"));
   assert.ok(line, note);
   assert.match(line, new RegExp(`${a}, liked: promote staged`));
   assert.match(line, new RegExp(`${c}, kept this week: carry-over staged`));
@@ -846,18 +846,18 @@ test("Finalise with something flagged: ONE model call reviews it with patches (n
   const reviewCalls = openrouter.requests.slice(calls);
   assert.ok(reviewCalls.length >= 1 && reviewCalls.length <= 3, "a short review, not a list build");
   assert.match(JSON.stringify(reviewCalls[0].messages), /\[fraction:lime\]/, "the model is told what the site flags");
-  assert.ok(!reviewCalls.some((r) => (r.tools || []).some((x) => x.function.name === "stage_update_shopping_list")), "no tool writes a whole list any more");
+  assert.ok(!reviewCalls.some((r: any) => (r.tools || []).some((x: any) => x.function.name === "stage_update_shopping_list")), "no tool writes a whole list any more");
   const text = fin.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
   assert.match(text, /rounded up/);
   assert.match(text, /tap Save to site/);
   assert.equal(fin.evs.filter((e) => e.name === "done").length, 1, "one end to the turn");
   t = await plan();
   assert.equal(t.can_save, true);
-  assert.deepEqual(t.items.find((i) => i.kind === "list").edits, ["round lime up"]);
+  assert.deepEqual(t.items.find((i: any) => i.kind === "list").edits, ["round lime up"]);
   const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
   assert.equal(res.status, 200);
   const list = JSON.parse(github.files.get("shopping-list.json"));
-  const limes = list.sections.flatMap((s) => s.items).find((i) => i.name === "Limes");
+  const limes = list.sections.flatMap((s: any) => s.items).find((i: any) => i.name === "Limes");
   assert.equal(Number(limes.quantity) * list.servings["lime-rice"] / 2, 1, "a whole lime at the planned servings");
 });
 
@@ -868,11 +868,11 @@ test("a review patch marked remember becomes an ingredient catalogue change on i
   const out = await tools.dispatch("stage_shopping_list_edits", { edits: [{ move: { item: "dried-pasta", section: "Tins & jars" }, remember: true }, { note: { item: "parmesan", text: "a wedge" } }] }, ed, ctx);
   assert.doesNotMatch(out.content[0].text, /PROBLEM/);
   let t = await plan();
-  assert.deepEqual(t.items.map((i) => i.kind), ["new", "catalogue", "list"], "the catalogue card comes before the list it changes");
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "catalogue", "list"], "the catalogue card comes before the list it changes");
   assert.match(t.items[1].sub, /Dried pasta section "Tins & jars"/);
-  const list = t.items.find((i) => i.kind === "list");
-  assert.ok(list.preview.find((s) => s.name === "Tins & jars").items.some((i) => /^Dried pasta/.test(i)), "the list is rebuilt from the catalogue as the tray leaves it");
-  assert.ok(list.preview.flatMap((s) => s.items).some((i) => /^Parmesan cheese.*a wedge/.test(i)));
+  const list = t.items.find((i: any) => i.kind === "list");
+  assert.ok(list.preview.find((s: any) => s.name === "Tins & jars").items.some((i: any) => /^Dried pasta/.test(i)), "the list is rebuilt from the catalogue as the tray leaves it");
+  assert.ok(list.preview.flatMap((s: any) => s.items).some((i: any) => /^Parmesan cheese.*a wedge/.test(i)));
   // a bad patch is refused on its own; the list stays as it was
   const bad = await tools.dispatch("stage_shopping_list_edits", { edits: [{ round_up: "no-such-item" }] }, ed, ctx);
   assert.match(bad.content[0].text, /don't apply/);
@@ -888,8 +888,8 @@ test("a review patch marked remember becomes an ingredient catalogue change on i
 
 test("the list card can't be dropped: it follows next week", async () => {
   await say("add a new recipe: test pasta");
-  const list = (await plan()).items.find((i) => i.kind === "list");
+  const list = (await plan()).items.find((i: any) => i.kind === "list");
   const res = await call("DELETE", `/chat/plan/items/${list.id}`, { token: "owner-token" });
   assert.notEqual(res.status, 200);
-  assert.ok((await plan()).items.some((i) => i.kind === "list"));
+  assert.ok((await plan()).items.some((i: any) => i.kind === "list"));
 });

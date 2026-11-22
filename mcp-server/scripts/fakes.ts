@@ -1,4 +1,4 @@
-// Fakes for the outside world, shared by the local dev harness (scripts/dev.js) and the tests, so nothing here ever
+// Fakes for the outside world, shared by the local dev harness (scripts/dev.ts) and the tests, so nothing here ever
 // touches the real GitHub, OpenRouter or Supabase:
 //   createFakeGitHub    the repo's recipes/, images/ and shopping-list.json read from disk; commits stay in memory
 //   createMockOpenRouter a scripted, deterministic chat model that streams OpenAI-format SSE and exercises tool calls
@@ -11,21 +11,21 @@ const REPO_ROOT = new URL("../../", import.meta.url);
 // --- GitHub -------------------------------------------------------------------------------------------------------
 
 /**
- * A fake of the GitHub REST calls lib/github.js makes. `files` is a Map of repo path -> Buffer, seeded from the working tree
+ * A fake of the GitHub REST calls lib/github.ts makes. `files` is a Map of repo path -> Buffer, seeded from the working tree
  * (never written back). `clean: true` strips draft/current/next flags so tests start from a known book.
  */
-export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean = false, root = REPO_ROOT } = {}) {
+export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean = false, root = REPO_ROOT }: any = {}) {
   const files = new Map();
   for (const dir of ["recipes", "images/recipes", "data"]) {
     const base = new URL(`${dir}/`, root);
     if (!existsSync(base)) continue;
     for (const f of readdirSync(base)) files.set(`${dir}/${f}`, readFileSync(new URL(f, base)));
   }
-  for (const f of ["shopping-list.json", "build.js"]) if (existsSync(new URL(f, root))) files.set(f, readFileSync(new URL(f, root)));
+  for (const f of ["shopping-list.json", "astro.config.ts"]) if (existsSync(new URL(f, root))) files.set(f, readFileSync(new URL(f, root)));
   // The fake photo reader (fakeRead below) makes a dish's main ingredient from its title's last word: give those words a catalogue item, so
   // its recipes pass the write-time checks. Only in the fake repo.
   if (files.has("data/ingredients.json")) {
-    const cat = JSON.parse(files.get("data/ingredients.json").toString());
+    const cat: Record<string, any> = JSON.parse(files.get("data/ingredients.json").toString());
     cat["test-main"] = { name: "Test main ingredient", section: "Fresh produce", unit: "g", aliases: FAKE_MAINS.filter((w) => !Object.values(cat).some((e) => [e.name, ...(e.aliases || [])].some((n) => n.toLowerCase() === w))) };
     files.set("data/ingredients.json", Buffer.from(JSON.stringify(cat, null, 2) + "\n"));
   }
@@ -33,17 +33,17 @@ export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean
 
   const blobs = new Map();
   const trees = new Map();
-  const commits = new Map([["c0", { tree: "t0" }]]);
+  const commits = new Map<any, any>([["c0", { tree: "t0" }]]);
   let head = "c0";
   let n = 0;
-  const commitLog = [];
+  const commitLog: any[] = [];
 
-  async function fetch(url, init = {}) {
+  async function fetch(url: any, init: any = {}) {
     const u = new URL(url);
     const path = decodeURI(u.pathname.replace(`/repos/${repo}`, ""));
     const method = init.method || "GET";
     const body = init.body ? JSON.parse(init.body) : null;
-    const json = (o, status = 200) => new Response(JSON.stringify(o), { status });
+    const json = (o: any, status = 200) => new Response(JSON.stringify(o), { status });
     if (method === "GET" && path.startsWith("/contents/")) {
       const p = path.slice("/contents/".length);
       if (files.has(p)) return new Response(files.get(p));
@@ -59,7 +59,7 @@ export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean
       const c = commits.get(body.sha);
       for (const e of trees.get(c.tree)) e.sha === null ? files.delete(e.path) : files.set(e.path, blobs.get(e.sha));
       head = body.sha;
-      commitLog.push({ message: c.message, paths: trees.get(c.tree).map((e) => e.path) });
+      commitLog.push({ message: c.message, paths: trees.get(c.tree).map((e: any) => e.path) });
       return json({});
     }
     throw new Error(`fake GitHub: unexpected call ${method} ${path}`);
@@ -69,7 +69,7 @@ export function createFakeGitHub({ repo = "petrotiurin/favourite-recipes", clean
 
 // --- OpenRouter chat -----------------------------------------------------------------------------------------------
 
-const sse = (events, delayMs) => {
+const sse = (events: any, delayMs: any) => {
   const encoder = new TextEncoder();
   return new Response(
     new ReadableStream({
@@ -85,11 +85,11 @@ const sse = (events, delayMs) => {
   );
 };
 
-const chunk = (delta, finish = null) => ({ id: "gen-mock", choices: [{ index: 0, delta, finish_reason: finish }] });
+const chunk = (delta: any, finish: string | null = null) => ({ id: "gen-mock", choices: [{ index: 0, delta, finish_reason: finish }] });
 
 /** Streams `text` word by word, then tool calls (arguments split in two pieces, like a real model), then usage. */
-function scriptedStream({ text = "", calls = [], delayMs = 12 }) {
-  const events = [chunk({ role: "assistant", content: "" })];
+function scriptedStream({ text = "", calls = [], delayMs = 12 }: { text?: string; calls?: any[]; delayMs?: number }) {
+  const events: any[] = [chunk({ role: "assistant", content: "" })];
   for (const word of text.match(/\S+\s*/g) || []) events.push(chunk({ content: word }));
   calls.forEach((c, index) => {
     const args = JSON.stringify(c.arguments);
@@ -99,14 +99,14 @@ function scriptedStream({ text = "", calls = [], delayMs = 12 }) {
     events.push(chunk({ tool_calls: [{ index, function: { arguments: args.slice(half) } }] }));
   });
   events.push(chunk({}, calls.length ? "tool_calls" : "stop"));
-  events.push({ id: "gen-mock", choices: [], usage: { prompt_tokens: 1200, completion_tokens: 80, total_tokens: 1280, cost: 0.0004 } });
+  events.push({ id: "gen-mock", choices: [] as any[], usage: { prompt_tokens: 1200, completion_tokens: 80, total_tokens: 1280, cost: 0.0004 } });
   events.push("[DONE]");
   return sse(events, delayMs);
 }
 
-const replies = (...r) => ({ name: "suggest_replies", arguments: { replies: r } });
-const showRecipes = (slugs) => ({ name: "show_recipes", arguments: { slugs, reason: "mock" } });
-const rowsOf = (toolMessage) => {
+const replies = (...r: any[]) => ({ name: "suggest_replies", arguments: { replies: r } });
+const showRecipes = (slugs: any) => ({ name: "show_recipes", arguments: { slugs, reason: "mock" } });
+const rowsOf = (toolMessage: any) => {
   try {
     const rows = JSON.parse(toolMessage.content);
     return Array.isArray(rows) ? rows : [];
@@ -118,33 +118,33 @@ const rowsOf = (toolMessage) => {
 
 
 // --- the editor's scripted flows (stage tools, ask_user, Finalise) ------------------------------------------------------------------
-const titleCase = (t) => t.replace(/\b\w/g, (c) => c.toUpperCase());
-const parseNoteDrafts = (note) => {
+const titleCase = (t: any) => t.replace(/\b\w/g, (c: any) => c.toUpperCase());
+const parseNoteDrafts = (note: any) => {
   const line = String(note || "").match(/This week's drafts on the site: (.*)\./)?.[1] || "";
   return line === "none" ? [] : [...line.matchAll(/([^,(]+?) \(([a-z0-9-]+)\)/g)].map((m) => ({ title: m[1].trim(), slug: m[2] }));
 };
-const callsOf = (m) => (m.tool_calls || []).map((c) => ({ name: c.function.name, args: (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })(), id: c.id }));
+const callsOf = (m: any) => (m.tool_calls || []).map((c: any) => ({ name: c.function.name, args: (() => { try { return JSON.parse(c.function.arguments); } catch { return {}; } })(), id: c.id }));
 
 /** The editor's flows. Returns a scripted response, or null when the message is not one of them. */
-function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
+function editorFlow({ msgs, lastUserIdx, user, note, opts }: any) {
   const after = msgs.slice(lastUserIdx + 1);
-  const turnCalls = after.filter((m) => m.role === "assistant").flatMap(callsOf);
+  const turnCalls = after.filter((m: any) => m.role === "assistant").flatMap(callsOf);
   const lastCall = turnCalls[turnCalls.length - 1];
-  const lastResult = after.filter((m) => m.role === "tool").at(-1);
+  const lastResult = after.filter((m: any) => m.role === "tool").at(-1);
   const pageSlug = String(note || "").match(/viewing: .+? \(([a-z0-9-]+)\)/)?.[1];
-  const tray = (name, args, text) => scriptedStream({ ...opts, text, calls: [{ name, arguments: args }] });
-  const ask = (question, options, text = "") => scriptedStream({ ...opts, text, calls: [{ name: "ask_user", arguments: { question, options } }] });
-  const done = (text, ...chips) => scriptedStream({ ...opts, text, calls: [replies(...(chips.length ? chips : ["Anything else?"]))] });
+  const tray = (name: any, args: any, text: any) => scriptedStream({ ...opts, text, calls: [{ name, arguments: args }] });
+  const ask = (question: any, options: any, text = "") => scriptedStream({ ...opts, text, calls: [{ name: "ask_user", arguments: { question, options } }] });
+  const done = (text: any, ...chips: any[]) => scriptedStream({ ...opts, text, calls: [replies(...(chips.length ? chips : ["Anything else?"]))] });
 
   // "we've got 6 eggs and plenty of rice": read the list, stage what is at home
   const haveLine = user.match(/we(?:'ve| have)(?: got)? (.+)/);
   if (haveLine) {
     if (!lastCall) return tray("get_shopping_list", {}, "Let me check the list.");
     if (lastCall.name === "get_shopping_list") {
-      let stored = [];
+      let stored: any[] = [];
       // the chat's compact table: "Section | Name | quantity | at home | recipes"
       stored = String(lastResult.content).split("\n").filter((l) => l.split(" | ").length === 5 && !/^Stored list|^Recipes:/.test(l)).map((l) => { const [, name, quantity] = l.split(" | "); return { name, quantity }; });
-      const items = [];
+      const items: any[] = [];
       for (const phrase of haveLine[1].replace(/[.!]$/, "").split(/,| and /)) {
         const m = phrase.trim().match(/^(?:(\d+(?:\.\d+)?)\s*(?:g|ml)?\s+)?(?:plenty of |loads of |lots of )?(.+)$/);
         const word = m?.[2]?.replace(/s$/, "");
@@ -164,7 +164,7 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
     if (lastCall.name === "read_recipe_photos") return done(`I'm reading your ${attached[1] === "1" ? "photo" : `${attached[1]} photos`} now. I'll come back when they're done.`, "What's planned?");
   }
   // corrections: "3 and 4 are one recipe" / "2 and 3 are different" / "skip photo 4"
-  const pairQ = msgs.slice(0, lastUserIdx).reverse().find((m) => m.role === "assistant" && m.tool_calls)?.tool_calls?.map((c) => { try { return JSON.parse(c.function.arguments).question || ""; } catch { return ""; } }).find((q) => /may be one recipe/.test(q));
+  const pairQ = msgs.slice(0, lastUserIdx).reverse().find((m: any) => m.role === "assistant" && m.tool_calls)?.tool_calls?.map((c: any) => { try { return JSON.parse(c.function.arguments).question || ""; } catch { return ""; } }).find((q: any) => /may be one recipe/.test(q));
   const pairAsked = pairQ?.match(/Photos (\d+) and (\d+)/);
   const joinAsk = user.match(/(\d+) and (\d+) are (one|the same) recipe/) || (pairAsked && user === "same recipe" ? pairAsked : null);
   const splitAsk = user.match(/(\d+) and (\d+) are different/) || (pairAsked && user === "two recipes" ? pairAsked : null);
@@ -175,13 +175,13 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   }
   // the site's note: photos read. Stage every recipe marked ok (one reply, several calls), ask about the first unsure pair.
   if (/photos read\./.test(full)) {
-    const ok = [...full.matchAll(/^(photo-[\d+]+)[^\n]*· ok$/gm)].map((m) => m[1]).filter((id) => !/looks like/.test(full.split("\n").find((l) => l.startsWith(`${id}`)) || ""));
+    const ok = [...full.matchAll(/^(photo-[\d+]+)[^\n]*· ok$/gm)].map((m) => m[1]).filter((id) => !/looks like/.test(full.split("\n").find((l: any) => l.startsWith(`${id}`)) || ""));
     const unsure = full.match(/unsure: photo-(\d+) and photo-(\d+) may be one recipe/);
     if (!lastCall && ok.length) {
       const dish = full.match(/^(photo-\d+): a photo of a dish/m)?.[1];
-      return scriptedStream({ ...opts, text: "", calls: ok.map((id) => ({ name: "stage_create_recipe", arguments: { from_photo: id, ...(dish && msgs.some((m) => m.role === "user" && /as the photo/.test(userText(m).toLowerCase())) ? { photo_from_attachment: Number(dish.slice(6)) } : {}) } })) });
+      return scriptedStream({ ...opts, text: "", calls: ok.map((id) => ({ name: "stage_create_recipe", arguments: { from_photo: id, ...(dish && msgs.some((m: any) => m.role === "user" && /as the photo/.test(userText(m).toLowerCase())) ? { photo_from_attachment: Number(dish.slice(6)) } : {}) } })) });
     }
-    if (unsure && !after.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "ask_user"))) {
+    if (unsure && !after.some((m: any) => m.role === "assistant" && m.tool_calls?.some((c: any) => c.function.name === "ask_user"))) {
       return scriptedStream({ ...opts, text: ok.length ? `Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray.` : "", calls: [{ name: "ask_user", arguments: { question: `Photos ${unsure[1]} and ${unsure[2]} may be one recipe. Are they?`, options: ["Same recipe", "Two recipes"] } }] });
     }
     if (ok.length) return done(`Added ${ok.length} recipe${ok.length === 1 ? "" : "s"} from your photos to the tray; their photos are being made.`, "Add another", { label: "Finalise list", action: "finalise_plan" });
@@ -196,15 +196,15 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
       const body = String(lastResult.content);
       const json = body.match(/\(JSON-LD[^\n]*\):\n([\s\S]*?)\nPage text:/)?.[1];
       let recipe;
-      try { recipe = JSON.parse(json); } catch { /* none */ }
+      try { recipe = JSON.parse(json!); } catch { /* none */ }
       if (!recipe) return done("I couldn't read a recipe off that page. Could you paste it or send a screenshot?", "I'll paste it");
-      const ingredients = (recipe.ingredients || []).map((line) => {
+      const ingredients = (recipe.ingredients || []).map((line: any) => {
         const m = line.match(/^(\d+(?:\.\d+)?)\s*(g|kg|ml|l|tbsp|tsp|cup)?\s+(.+)$/i);
         return m ? { amount: Number(m[1]), ...(m[2] ? { unit: m[2].toLowerCase() } : {}), name: m[3].trim() } : { amount: 1, name: line };
       });
       return tray("stage_create_recipe", {
         title: recipe.name || "Linked Recipe", course: ["Dinner"], total_mins: recipe.total_mins || 30, serves: 4, calories: 400,
-        ingredients, instructions: (recipe.steps || ["Cook everything."]).map((x) => x), image_url: link, reason: "from a link",
+        ingredients, instructions: (recipe.steps || ["Cook everything."]).map((x: any) => x), image_url: link, reason: "from a link",
       }, `I read ${recipe.name || "the page"} and will put it in the tray.`);
     }
     if (lastCall.name === "stage_create_recipe") return done("It's in the tray as a draft for next week, with the page's own photo. It isn't on the site until you tap Save.", "Add another", { label: "Finalise list", action: "finalise_plan" });
@@ -248,29 +248,29 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   const clash = String(note || "").match(/\[([a-f0-9]{8})\][^\n]*CLASH/)?.[1];
   if (clash && /clash|changed|resolve/.test(user) && !lastResult) return ask("That recipe changed on the site since you staged this. What now?", ["Keep yours", "Keep theirs", "Drop it"]);
   if (clash && /^(keep yours|keep theirs|drop it)$/.test(user)) {
-    if (!lastResult) return tray("resolve_clash", { id: clash, resolution: { "keep yours": "keep_mine", "keep theirs": "keep_theirs", "drop it": "drop" }[user] }, "");
+    if (!lastResult) return tray("resolve_clash", { id: clash, resolution: ({ "keep yours": "keep_mine", "keep theirs": "keep_theirs", "drop it": "drop" } as Record<string, string>)[user] }, "");
     return done("Done.", { label: "Finalise list", action: "finalise_plan" });
   }
 
   // Finalise list, and the answers it asks for
-  const prev = msgs.slice(0, lastUserIdx).reverse().find((m) => m.role === "assistant" && m.tool_calls);
-  const prevAsk = prev ? callsOf(prev).find((c) => c.name === "ask_user")?.args : null;
+  const prev = msgs.slice(0, lastUserIdx).reverse().find((m: any) => m.role === "assistant" && m.tool_calls);
+  const prevAsk = prev ? callsOf(prev).find((c: any) => c.name === "ask_user")?.args : null;
   const finaliseTap = user === "finalise list" || /tapped "finalise list"/i.test(String(note || ""));
-  const asked = msgs.filter((m) => m.role === "assistant" && m.tool_calls).flatMap(callsOf).filter((c) => c.name === "ask_user").map((c) => c.args.question);
+  const asked = msgs.filter((m: any) => m.role === "assistant" && m.tool_calls).flatMap(callsOf).filter((c: any) => c.name === "ask_user").map((c: any) => c.args.question);
   const drafts = parseNoteDrafts(note);
   const nextN = Number(String(note || "").match(/Next week on the site now: (\d+) recipe/)?.[1] || 0);
-  const carried = [];
-  msgs.forEach((m, i) => {
+  const carried: any[] = [];
+  msgs.forEach((m: any, i: any) => {
     if (m.role !== "user" || String(m.content).toLowerCase().trim() !== "keep it this week") return;
-    const q = msgs.slice(0, i).reverse().find((x) => x.role === "assistant" && x.tool_calls && callsOf(x).some((c) => c.name === "ask_user" && /Keep .* this week/.test(c.args.question)));
-    const title = q && callsOf(q).find((c) => c.name === "ask_user").args.question.match(/Keep (.+?) this week/)?.[1];
+    const q = msgs.slice(0, i).reverse().find((x: any) => x.role === "assistant" && x.tool_calls && callsOf(x).some((c: any) => c.name === "ask_user" && /Keep .* this week/.test(c.args.question)));
+    const title = q && callsOf(q).find((c: any) => c.name === "ask_user").args.question.match(/Keep (.+?) this week/)?.[1];
     const d = drafts.find((x) => x.title === title);
     if (d) carried.push(d.slug);
   });
   const nextStep = () => {
     // what the tray note says is already answered (history may have scrolled out), plus what this conversation asked
     const noted = String(note || "").match(/Drafts with an answer already in the tray \(don't ask again\): (.*?)\. Drafts not yet answered/)?.[1] || "";
-    const left = drafts.find((d) => !asked.some((q) => q.includes(`Did you like ${d.title}?`)) && !noted.includes(`(${d.slug},`));
+    const left = drafts.find((d) => !asked.some((q: any) => q.includes(`Did you like ${d.title}?`)) && !noted.includes(`(${d.slug},`));
     if (left) return ask(`Did you like ${left.title}?`, ["Liked", "Not for us", "Not tried yet"]);
     return done("That's this week's drafts done. Tap Finalise list and the site checks next week's list.", { label: "Finalise list", action: "finalise_plan" });
   };
@@ -312,17 +312,17 @@ function editorFlow({ msgs, lastUserIdx, user, note, opts }) {
   return null;
 }
 
-// --- the photo reader (a separate vision model, lib/photo-reader.js) ----------------------------------------------------------------
+// --- the photo reader (a separate vision model, lib/photo-reader.ts) ----------------------------------------------------------------
 
 /** A reader answer for a whole recipe, in the reader's schema. `over` changes fields (and recipe fields under `recipe`). */
-export function fakeRead(title, over = {}) {
+export function fakeRead(title: any, over: any = {}) {
   const words = title.toLowerCase().split(" ");
   const main = words[words.length - 1];
   const read = {
     kind: "recipe", has_title: true, has_ingredients: true, has_method: true, first_step: 1, last_step: 3, cut_off_at_bottom: false, starts_mid_recipe: false,
     ingredient_names: [main, "onion", "olive oil"], step_ingredients: [main, "onion", "olive oil"], top_lines: [title], bottom_lines: [`Serve the ${title.toLowerCase()} hot.`],
     recipe: {
-      title, course: ["Dinner"], tags: [], total_mins: 30, total_mins_estimated: false, serves: 4, serves_estimated: false, calories: 450, calories_estimated: true,
+      title, course: ["Dinner"], tags: [] as any[], total_mins: 30, total_mins_estimated: false, serves: 4, serves_estimated: false, calories: 450, calories_estimated: true,
       ingredients: [{ amount: 400, amount_max: null, unit: "g", name: main, note: "", optional: false }, { amount: 1, amount_max: null, unit: null, name: "onion", note: "chopped", optional: false }, { amount: 1, amount_max: null, unit: "tbsp", name: "olive oil", note: "", optional: false }],
       instructions: [`Soften the **onion** in the **olive oil**.`, `Add the **${main}** and cook for 20 minutes.`, `Serve the ${title.toLowerCase()} hot.`],
       notes: "",
@@ -336,17 +336,17 @@ const FAKE_MAINS = ["aubergine", "aubergines", "bowl", "makhani", "orzo", "risot
 const DEV_READS = ["Miso Aubergine", "Lemon Chicken Orzo", "Dal Makhani", "Smoky Bean Chilli", "Prawn Pad Thai", "Mushroom Risotto", "Harissa Salmon", "Pea And Mint Soup"];
 
 /** The rounded average colour of a data-URL JPEG ("#c05030"), so tests can tell their solid-colour photos apart after the server re-encodes them. */
-async function colourOf(url) {
+async function colourOf(url: any) {
   const { default: sharp } = await import("sharp");
   const { channels } = await sharp(Buffer.from(String(url).split(",")[1] || "", "base64")).stats();
-  const hex = (c) => (Math.round(c.mean / 16) * 16).toString(16).padStart(2, "0").slice(0, 2);
+  const hex = (c: any) => (Math.round(c.mean / 16) * 16).toString(16).padStart(2, "0").slice(0, 2);
   return `#${channels.slice(0, 3).map(hex).join("")}`;
 }
 
 /** A message's text, whether its content is a string or text + image parts. */
-const contentText = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "text").map((p) => p.text).join("\n") : String(m.content ?? ""));
-const imagesIn = (m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url").length : 0);
-const userText = (m) => contentText(m).replace(/\n\n\[Note from the site[\s\S]*$/, "");
+const contentText = (m: any) => (Array.isArray(m.content) ? m.content.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : String(m.content ?? ""));
+const imagesIn = (m: any) => (Array.isArray(m.content) ? m.content.filter((p: any) => p.type === "image_url").length : 0);
+const userText = (m: any) => contentText(m).replace(/\n\n\[Note from the site[\s\S]*$/, "");
 
 /**
  * A scripted stand-in for OpenRouter's /chat/completions. Behaviour depends on the latest user message:
@@ -373,15 +373,15 @@ const userText = (m) => contentText(m).replace(/\n\n\[Note from the site[\s\S]*$
  *                                         get_tray and stage_update_shopping_list; answers: "Promote it", "Not yet", "Liked", ...
  * `requests` records every request body, so tests can assert on what the server sent.
  */
-export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 } = {}) {
-  const requests = [];
-  const readerRequests = [];
+export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 }: any = {}) {
+  const requests: any[] = [];
+  const readerRequests: any[] = [];
   // The photo reader: `mock.readerFor({ colours, consecutive })` may return a reader answer, { status, body } for an HTTP error, or { throws } to
   // fail the connection; by default every photo is a whole recipe picked by its colour.
-  const mock = { requests, readerRequests, readerFor: null, fetch };
-  async function reader(body, init) {
+  const mock: any = { requests, readerRequests, readerFor: null, fetch };
+  async function reader(body: any, init: any) {
     readerRequests.push({ ...body, auth: init.headers.Authorization });
-    const urls = body.messages.flatMap((m) => (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image_url").map((p) => p.image_url.url) : []));
+    const urls = body.messages.flatMap((m: any) => (Array.isArray(m.content) ? m.content.filter((p: any) => p.type === "image_url").map((p: any) => p.image_url.url) : []));
     const colours = await Promise.all(urls.map(colourOf));
     const consecutive = /consecutive screenshots/.test(JSON.stringify(body.messages[1]?.content?.[0] || ""));
     if (readDelayMs) await new Promise((r) => setTimeout(r, readDelayMs));
@@ -397,27 +397,27 @@ export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 } = {}) {
     if (body.tools) return Response.json({ choices: [{ message: { role: "assistant", content: null, tool_calls: [{ id: "r1", type: "function", function: { name: "recipe_read", arguments: text } }] }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 1000, completion_tokens: 300 } });
     return Response.json({ choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop" }], usage: { prompt_tokens: 1000, completion_tokens: 300 } });
   }
-  async function fetch(url, init) {
+  async function fetch(url: any, init: any) {
     const body = JSON.parse(init.body);
-    if (body.response_format?.json_schema?.name === "recipe_read" || body.tools?.some((t) => t.function?.name === "recipe_read")) return reader(body, init);
+    if (body.response_format?.json_schema?.name === "recipe_read" || body.tools?.some((t: any) => t.function?.name === "recipe_read")) return reader(body, init);
     requests.push({ ...body, auth: init.headers.Authorization, url: String(url) });
     // the loop may add a "you already told the user" note to the last tool result; the mock reads results without it
-    const msgs = body.messages.map((m) => (m.role === "tool" && typeof m.content === "string" ? { ...m, content: m.content.replace(/\n\n\[Note from the site, not a tool result[\s\S]*$/, "") } : m));
-    const lastUserIdx = msgs.findLastIndex((m) => m.role === "user");
+    const msgs = body.messages.map((m: any) => (m.role === "tool" && typeof m.content === "string" ? { ...m, content: m.content.replace(/\n\n\[Note from the site, not a tool result[\s\S]*$/, "") } : m));
+    const lastUserIdx = msgs.findLastIndex((m: any) => m.role === "user");
     const user = userText(msgs[lastUserIdx]).toLowerCase();
     const note = contentText(msgs[lastUserIdx]).match(/\[Note from the site, not from the user: ([\s\S]*)\]$/)?.[1];
     const after = msgs.slice(lastUserIdx + 1);
-    const toolResults = after.filter((m) => m.role === "tool");
+    const toolResults = after.filter((m: any) => m.role === "tool");
     const lastTool = toolResults[toolResults.length - 1];
-    const calledShown = after.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "suggest_replies"));
+    const calledShown = after.some((m: any) => m.role === "assistant" && m.tool_calls?.some((c: any) => c.function.name === "suggest_replies"));
     const opts = { delayMs };
 
     if (user.includes("mock-402")) return new Response(JSON.stringify({ error: { code: 402, message: "Insufficient credits" } }), { status: 402 });
     if (user.includes("mock-500")) return new Response("boom", { status: 500 });
     if (user.includes("mock-stream-error")) return sse([chunk({ role: "assistant", content: "Let me" }), { error: { code: 500, message: "upstream died" } }], delayMs);
     if (calledShown) return scriptedStream({ ...opts }); // nothing more to say after the replies were shown
-    if (after.some((m) => m.role === "assistant" && m.tool_calls?.some((c) => c.function.name === "ask_user"))) return scriptedStream({ ...opts }); // the question is on screen: the answer comes next
-    if (body.tools?.some((t) => t.function.name === "stage_create_recipe")) {
+    if (after.some((m: any) => m.role === "assistant" && m.tool_calls?.some((c: any) => c.function.name === "ask_user"))) return scriptedStream({ ...opts }); // the question is on screen: the answer comes next
+    if (body.tools?.some((t: any) => t.function.name === "stage_create_recipe")) {
       const flow = editorFlow({ msgs, lastUserIdx, user, note, opts });
       if (flow) return flow;
     }
@@ -432,7 +432,7 @@ export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 } = {}) {
       if (!lastTool) return scriptedStream({ ...opts, text: "I'll add that.", calls: [{ name: "create_recipe", arguments: { title: "Mock Pie" } }] });
       return scriptedStream({ ...opts, text: "I can't change the site from here, but an editor can sign in to do that.", calls: [replies("How do editors sign in?", "Show me pies")] });
     }
-    const searchThenCards = (searchArgs, intro, none) => {
+    const searchThenCards = (searchArgs: any, intro: any, none: any) => {
       if (!lastTool) return scriptedStream({ ...opts, text: "Let me check our book.", calls: [{ name: "search_recipes", arguments: searchArgs }] });
       const rows = rowsOf(lastTool);
       const top = rows.slice(0, 3);
@@ -446,10 +446,10 @@ export function createMockOpenRouter({ delayMs = 12, readDelayMs = 0 } = {}) {
         ],
       });
     };
-    if (user.includes("chicken")) return searchThenCards({ include_ingredients: ["chicken"] }, (n) => `We have ${n} with chicken. A few to start with:`, "Nothing with chicken in our book yet.");
+    if (user.includes("chicken")) return searchThenCards({ include_ingredients: ["chicken"] }, (n: any) => `We have ${n} with chicken. A few to start with:`, "Nothing with chicken in our book yet.");
     if (user.includes("quick")) return searchThenCards({ max_minutes: 25 }, () => "These are all quick:", "Nothing that quick in our book yet.");
     if (user.includes("light") || user.includes("healthy")) return searchThenCards({ max_calories: 400 }, () => "These are light and still filling:", "Nothing that light in our book yet.");
-    if (user.includes("planned")) return searchThenCards({ week: "next" }, (n) => `${n} recipe${n === 1 ? " is" : "s are"} planned for next week:`, "Nothing is planned for next week yet.");
+    if (user.includes("planned")) return searchThenCards({ week: "next" }, (n: any) => `${n} recipe${n === 1 ? " is" : "s are"} planned for next week:`, "Nothing is planned for next week yet.");
     if (user.includes("rice")) {
       if (!lastTool) return scriptedStream({ ...opts, calls: [{ name: "search_recipes", arguments: { text: "rice" } }] });
       const first = rowsOf(lastTool)[0];
@@ -509,25 +509,25 @@ const HOUR = 3600;
  *             [{ id, email, password }] can sign in with a password (POST /auth/v1/token?grant_type=password), with the email code
  *             (/otp then /verify with the code "123456") or refresh (grant_type=refresh_token). Tokens it issues expire after
  *             `tokenTtlSeconds` (default an hour), after which /auth/v1/user answers 401 like the real thing; `expire(token)` ages one now.
- *   PostgREST the chat's tables (conversations, messages) with the filters, ordering and limits lib/chat-store.js uses, only
+ *   PostgREST the chat's tables (conversations, messages) with the filters, ordering and limits lib/chat-store.ts uses, only
  *             for the service-role key (the anon key gets 401, like RLS with no policies), and the RPCs rate_limit_hit and
  *             purge_old_chats (rows older than 14 days go, messages with them).
  * Inspect: `tables.conversations` / `tables.messages` (arrays), `counters`, `calls`.
  */
-export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {}, accounts = [], tokenTtlSeconds = HOUR, now = () => Date.now() } = {}) {
+export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "dev-anon", serviceKey = "dev-service", users = {}, accounts = [], tokenTtlSeconds = HOUR, now = () => Date.now() }: any = {}) {
   const counters = new Map();
-  const calls = [];
-  const tables = { conversations: [], messages: [], trays: [], photo_reads: [] };
+  const calls: any[] = [];
+  const tables: Record<string, any[]> = { conversations: [] as any[], messages: [] as any[], trays: [] as any[], photo_reads: [] as any[] };
   const objects = new Map(); // storage: "<bucket>/<path>" -> { bytes, type }
   const signed = new Map(); // token -> { key, exp }
   let seq = 0;
   let issued = 0;
   const tokens = new Map(); // access token -> { id, email, exp (ms, or Infinity) }
-  for (const [token, u] of Object.entries(users)) tokens.set(token, { ...u, exp: Infinity });
+  for (const [token, u] of Object.entries<any>(users)) tokens.set(token, { ...u, exp: Infinity });
   const refreshTokens = new Map(); // refresh token -> account
-  const byEmail = (email) => accounts.find((a) => a.email.toLowerCase() === String(email || "").toLowerCase());
+  const byEmail = (email: any) => accounts.find((a: any) => a.email.toLowerCase() === String(email || "").toLowerCase());
 
-  function issue(account) {
+  function issue(account: any) {
     const n = ++issued;
     const access = `fake-access-${n}`;
     const refresh = `fake-refresh-${n}`;
@@ -542,16 +542,16 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       user: { id: account.id, email: account.email },
     };
   }
-  const expire = (token) => {
+  const expire = (token: any) => {
     const t = tokens.get(token);
     if (t) t.exp = 0;
   };
 
-  const json = (body, status = 200) => Response.json(body, { status });
-  const bearer = (headers) => String(headers.Authorization || headers.authorization || "").replace(/^Bearer /, "");
+  const json = (body: any, status = 200) => Response.json(body, { status });
+  const bearer = (headers: any) => String(headers.Authorization || headers.authorization || "").replace(/^Bearer /, "");
 
   // ----- Auth
-  async function auth(u, init, headers) {
+  async function auth(u: any, init: any, headers: any) {
     const method = init.method || "GET";
     if (headers.apikey !== anonKey && !(headers.apikey === serviceKey && /^\/auth\/v1\/admin\//.test(u.pathname))) return json({ msg: "bad apikey" }, 401);
     const body = init.body ? JSON.parse(init.body) : {};
@@ -561,7 +561,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       // the Auth admin API: service-role key only (the server's follow-up turn looks up a conversation owner's email)
       if (bearer(headers) !== serviceKey) return json({ msg: "not admin" }, 401);
       const id = decodeURIComponent(admin[1]);
-      const a = accounts.find((x) => x.id === id) || [...tokens.values()].find((t) => t.id === id);
+      const a = accounts.find((x: any) => x.id === id) || [...tokens.values()].find((t) => t.id === id);
       return a ? json({ id, email: a.email }) : json({ msg: "User not found" }, 404);
     }
     if (route === "user" && method === "GET") {
@@ -591,7 +591,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     }
     if (route === "user" && method === "PUT") {
       const t = tokens.get(bearer(headers));
-      const a = t && t.exp > now() && accounts.find((x) => x.id === t.id);
+      const a = t && t.exp > now() && accounts.find((x: any) => x.id === t.id);
       if (!a) return json({ msg: "invalid JWT" }, 401);
       a.password = body.password;
       return json({ id: a.id, email: a.email });
@@ -604,13 +604,13 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
   }
 
   // ----- PostgREST
-  const COLUMNS = {
+  const COLUMNS: Record<string, any> = {
     conversations: () => ({ id: UUID_V4(), title: null, created_at: new Date(now()).toISOString(), updated_at: new Date(now()).toISOString(), archived: false, turn_lock_until: null, turn_lock_id: null, last_reply_at: null }),
     messages: () => ({ id: UUID_V4(), seq: ++seq, turn_id: null, trace_id: null, feedback: null, created_at: new Date(now()).toISOString(), handled_at: null }),
     photo_reads: () => ({ id: UUID_V4(), name: null, status: "queued", attempts: 0, lease_until: null, result: null, group_id: null, recipe: null, joined_to: null, split_from_prev: false, tray_item_id: null, error: null, created_at: new Date(now()).toISOString(), read_at: null, report_lease_until: null, reported_at: null }),
-    trays: () => ({ id: UUID_V4(), status: "collecting", items: [], list_hash: null, version: 0, created_at: new Date(now()).toISOString(), expires_at: new Date(now() + 7 * 24 * HOUR * 1000).toISOString(), updated_at: new Date(now()).toISOString(), updated_by: null }),
+    trays: () => ({ id: UUID_V4(), status: "collecting", items: [] as any[], list_hash: null, version: 0, created_at: new Date(now()).toISOString(), expires_at: new Date(now() + 7 * 24 * HOUR * 1000).toISOString(), updated_at: new Date(now()).toISOString(), updated_by: null }),
   };
-  function matches(row, params) {
+  function matches(row: any, params: any) {
     for (const [k, v] of params) {
       if (["select", "order", "limit"].includes(k)) continue;
       const [op, ...rest] = v.split(".");
@@ -625,18 +625,18 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     }
     return true;
   }
-  const order = (rows, spec) => {
+  const order = (rows: any, spec: any) => {
     if (!spec) return rows;
     const [col, dir] = spec.split(".");
     return [...rows].sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (dir === "desc" ? -1 : 1));
   };
-  function dropConversation(id) {
+  function dropConversation(id: any) {
     tables.conversations = tables.conversations.filter((c) => c.id !== id);
     tables.messages = tables.messages.filter((m) => m.conversation_id !== id); // on delete cascade
     tables.photo_reads = tables.photo_reads.filter((m) => m.conversation_id !== id);
   }
 
-  async function rest(u, init, headers) {
+  async function rest(u: any, init: any, headers: any) {
     if (headers.apikey !== serviceKey || bearer(headers) !== serviceKey) return json({ message: "permission denied", code: "42501" }, 401);
     const method = init.method || "GET";
     const name = u.pathname.replace("/rest/v1/", "");
@@ -650,7 +650,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       return json(counters.get(k));
     }
     const iso = () => new Date(now()).toISOString();
-    const later = (ms) => new Date(now() + ms).toISOString();
+    const later = (ms: any) => new Date(now() + ms).toISOString();
     if (name === "rpc/take_turn_lock") {
       const c = tables.conversations.find((x) => x.id === body.p_conversation);
       if (!c || (c.turn_lock_until && c.turn_lock_until > iso())) return json(false);
@@ -693,9 +693,9 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     if (!tables[name]) return json({ message: `unknown table ${name}` }, 404);
     const wantRows = /return=representation/.test(headers.Prefer || "");
     if (method === "GET") {
-      const rows = order(tables[name].filter((r) => matches(r, u.searchParams)), u.searchParams.get("order"));
+      const rows = order(tables[name].filter((r: any) => matches(r, u.searchParams)), u.searchParams.get("order"));
       const limit = Number(u.searchParams.get("limit")) || rows.length;
-      return json(rows.slice(0, limit).map((r) => structuredClone(r))); // a copy, like a real response: callers can't change the table by accident
+      return json(rows.slice(0, limit).map((r: any) => structuredClone(r))); // a copy, like a real response: callers can't change the table by accident
     }
     if (method === "POST") {
       const inserted = (Array.isArray(body) ? body : [body]).map((r) => ({ ...COLUMNS[name](), ...Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined)) }));
@@ -703,7 +703,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       if (name === "trays" && tables.trays.length) return json({ message: "duplicate key value violates unique constraint trays_one_per_household", code: "23505" }, 409);
       let added = inserted;
       if (name === "photo_reads") {
-        const clash = (r) => tables.photo_reads.some((x) => x.conversation_id === r.conversation_id && (x.path === r.path || x.n === r.n));
+        const clash = (r: any) => tables.photo_reads.some((x) => x.conversation_id === r.conversation_id && (x.path === r.path || x.n === r.n));
         if (/resolution=ignore-duplicates/.test(headers.Prefer || "")) added = inserted.filter((r) => !clash(r));
         else if (inserted.some(clash)) return json({ message: "duplicate key", code: "23505" }, 409);
         if (added.some((r) => !tables.conversations.some((c) => c.id === r.conversation_id))) return json({ message: "foreign key violation", code: "23503" }, 409);
@@ -712,26 +712,26 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
       return wantRows ? json(added.map((r) => ({ ...r })), 201) : new Response(null, { status: 201 });
     }
     if (method === "PATCH") {
-      const rows = tables[name].filter((r) => matches(r, u.searchParams));
-      rows.forEach((r) => Object.assign(r, structuredClone(body)));
-      return wantRows ? json(rows.map((r) => structuredClone(r))) : new Response(null, { status: 204 });
+      const rows = tables[name].filter((r: any) => matches(r, u.searchParams));
+      rows.forEach((r: any) => Object.assign(r, structuredClone(body)));
+      return wantRows ? json(rows.map((r: any) => structuredClone(r))) : new Response(null, { status: 204 });
     }
     if (method === "DELETE") {
-      const rows = tables[name].filter((r) => matches(r, u.searchParams));
-      if (name === "conversations") rows.forEach((r) => dropConversation(r.id));
-      else tables[name] = tables[name].filter((r) => !rows.includes(r));
+      const rows = tables[name].filter((r: any) => matches(r, u.searchParams));
+      if (name === "conversations") rows.forEach((r: any) => dropConversation(r.id));
+      else tables[name] = tables[name].filter((r: any) => !rows.includes(r));
       return wantRows ? json(rows) : new Response(null, { status: 204 });
     }
     return json({ message: "unsupported" }, 405);
   }
 
   // ----- Storage (the private bucket tray-photos): upload, download, delete (one or many), list, signed URLs
-  async function storage(u, init, headers) {
+  async function storage(u: any, init: any, headers: any) {
     const method = init.method || "GET";
     const route = u.pathname.replace("/storage/v1/", "");
     const isService = headers.apikey === serviceKey && bearer(headers) === serviceKey;
-    const bytes = (body) => (typeof body === "string" ? Buffer.from(body) : Buffer.from(body || []));
-    let m;
+    const bytes = (body: any) => (typeof body === "string" ? Buffer.from(body) : Buffer.from(body || []));
+    let m: any;
     if ((m = route.match(/^object\/sign\/([^/]+)\/(.+)$/)) && method === "GET") {
       const t = signed.get(u.searchParams.get("token"));
       const key = `${m[1]}/${decodeURIComponent(m[2])}`;
@@ -772,7 +772,7 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
     return json({ message: `fake Supabase: unexpected storage call ${method} ${route}` }, 404);
   }
 
-  async function fetch(input, init = {}) {
+  async function fetch(input: any, init: any = {}) {
     const u = new URL(input);
     const headers = init.headers || {};
     if (u.pathname.startsWith("/storage/v1/")) return storage(u, init, headers);
@@ -787,8 +787,8 @@ export function createFakeSupabase({ url = "http://supabase.fake", anonKey = "de
 
 /** A fake of OpenRouter's image endpoint: a plain coloured "plate" JPEG per prompt, so staged photos have something to show. */
 export function createFakeImageApi() {
-  const requests = [];
-  async function fetch(url, init) {
+  const requests: any[] = [];
+  async function fetch(url: any, init: any) {
     const { default: sharp } = await import("sharp");
     const prompt = JSON.parse(init.body).prompt || "";
     requests.push({ prompt, auth: init.headers?.Authorization });

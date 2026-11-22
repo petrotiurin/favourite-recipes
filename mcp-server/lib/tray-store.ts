@@ -4,7 +4,7 @@
 //
 // A tray row is { id, status, items (jsonb array), list_hash, version, created_at, expires_at, updated_at, updated_by }. Writes are
 // optimistic: patchTray() only succeeds when `version` is still what the caller read, so two editors (or a background photo job and an
-// editor) adding at the same moment never overwrite each other; callers re-read and retry (see lib/tray.js mutate()).
+// editor) adding at the same moment never overwrite each other; callers re-read and retry (see lib/tray.ts mutate()).
 import { config } from "./config.ts";
 import { rest, q, clock, StoreError } from "./chat-store.ts";
 
@@ -20,7 +20,7 @@ export async function readTray() {
 }
 
 /** Starts the household's tray with its first items; expires 7 days from now. Returns the row, or null if one was created meanwhile. */
-export async function createTray({ items, listHash = null, status = "collecting", updatedBy }) {
+export async function createTray({ items, listHash = null, status = "collecting", updatedBy }: any) {
   const now = clock.now();
   try {
     const rows = await rest("trays", {
@@ -29,14 +29,14 @@ export async function createTray({ items, listHash = null, status = "collecting"
       body: { items, list_hash: listHash, status, version: 0, created_at: new Date(now).toISOString(), expires_at: new Date(now + TRAY_TTL_MS).toISOString(), updated_at: new Date(now).toISOString(), updated_by: updatedBy ?? null },
     });
     return rows[0];
-  } catch (err) {
+  } catch (err: any) {
     if (/ 409:/.test(err.message)) return null; // the unique index: someone else started the tray first
     throw err;
   }
 }
 
 /** Writes `patch` (items, list_hash, status) if the row is still at `version`; returns the new row, or null when it changed under us. */
-export async function patchTray(id, version, patch, updatedBy) {
+export async function patchTray(id: any, version: any, patch: any, updatedBy?: any) {
   const rows = await rest("trays", {
     method: "PATCH",
     prefer: "return=representation",
@@ -46,36 +46,36 @@ export async function patchTray(id, version, patch, updatedBy) {
   return rows[0] || null;
 }
 
-export async function deleteTrayRow(id) {
+export async function deleteTrayRow(id: any) {
   await rest("trays", { method: "DELETE", query: q({ id: `eq.${id}` }) });
 }
 
 // --- Storage ----------------------------------------------------------------------------------------------------------
 
-export async function storage(path, { method = "GET", body, headers = {}, json = false } = {}) {
+export async function storage(path: any, { method = "GET", body, headers = {}, json = false }: any = {}) {
   let res;
   try {
     res = await fetch(`${config.supabaseUrl}/storage/v1/${path}`, {
       method,
-      headers: { apikey: config.supabaseServiceKey, Authorization: `Bearer ${config.supabaseServiceKey}`, ...(json ? { "Content-Type": "application/json" } : {}), ...headers },
+      headers: { apikey: config.supabaseServiceKey as string, Authorization: `Bearer ${config.supabaseServiceKey}`, ...(json ? { "Content-Type": "application/json" } : {}), ...headers },
       body: json ? JSON.stringify(body) : body,
     });
-  } catch (err) {
+  } catch (err: any) {
     throw new StoreError(`Supabase Storage unreachable: ${err.message}`);
   }
   return res;
 }
 
-export const objectPath = (path) => path.split("/").map(encodeURIComponent).join("/");
+export const objectPath = (path: any) => path.split("/").map(encodeURIComponent).join("/");
 
 /** Stores (or replaces) a staged photo. `path` is "<tray id>/<slug>.jpg". */
-export async function uploadPhoto(path, bytes) {
+export async function uploadPhoto(path: any, bytes: any) {
   const res = await storage(`object/${PHOTO_BUCKET}/${objectPath(path)}`, { method: "POST", body: bytes, headers: { "Content-Type": "image/jpeg", "x-upsert": "true", "Cache-Control": "max-age=60" } });
   if (!res.ok) throw new StoreError(`Storage upload answered ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
 }
 
 /** The staged photo's bytes, or null when it isn't there. */
-export async function downloadPhoto(path) {
+export async function downloadPhoto(path: any) {
   const res = await storage(`object/${PHOTO_BUCKET}/${objectPath(path)}`);
   if (res.status === 404 || res.status === 400) return null;
   if (!res.ok) throw new StoreError(`Storage download answered ${res.status}`);
@@ -83,7 +83,7 @@ export async function downloadPhoto(path) {
 }
 
 /** Deletes staged photos (best effort per call: a missing one is not an error). */
-export async function removePhotos(paths) {
+export async function removePhotos(paths: any) {
   const list = [...new Set(paths.filter(Boolean))];
   if (!list.length) return;
   const res = await storage(`object/${PHOTO_BUCKET}`, { method: "DELETE", json: true, body: { prefixes: list } });
@@ -91,15 +91,15 @@ export async function removePhotos(paths) {
 }
 
 /** Deletes everything under a tray's folder (the tray was saved, expired or emptied). */
-export async function removeTrayPhotos(trayId) {
+export async function removeTrayPhotos(trayId: any) {
   const res = await storage(`object/list/${PHOTO_BUCKET}`, { method: "POST", json: true, body: { prefix: trayId, limit: 200 } });
   if (!res.ok) throw new StoreError(`Storage list answered ${res.status}`);
-  const names = (await res.json()).map((o) => `${trayId}/${o.name}`);
+  const names = (await res.json()).map((o: any) => `${trayId}/${o.name}`);
   await removePhotos(names);
 }
 
 /** A signed URL (valid SIGNED_URL_SECONDS) the editor's browser can show the staged photo with, or null. */
-export async function signedPhotoUrl(path, seconds = SIGNED_URL_SECONDS) {
+export async function signedPhotoUrl(path: any, seconds = SIGNED_URL_SECONDS) {
   const res = await storage(`object/sign/${PHOTO_BUCKET}/${objectPath(path)}`, { method: "POST", json: true, body: { expiresIn: seconds } });
   if (!res.ok) return null;
   const { signedURL } = await res.json();

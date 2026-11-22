@@ -9,14 +9,14 @@ export const MAX_CARDS = 8;
 const MAX_LABEL = 40;
 
 /** The site pages the chat may send someone to. The key is what the model (and a chip's action) names. */
-export const PAGES = {
+export const PAGES: Record<string, { path: string; label: string; }> = {
   index: { path: "", label: "Open all recipes" },
   "next-week": { path: "next-week.html", label: "Open next week" },
   shopping: { path: "shopping-list.html", label: "Open the shopping list" },
 };
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const clean = (s, max) => String(s ?? "").replace(/\p{Extended_Pictographic}/gu, "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+const clean = (s: any, max: any) => String(s ?? "").replace(/\p{Extended_Pictographic}/gu, "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 
 /** A URL on the site, from config.siteUrl and a path we wrote; throws if it would ever leave the site's origin. */
 export function siteUrl(path = "") {
@@ -28,8 +28,8 @@ export function siteUrl(path = "") {
 /** The book as a Map(slug -> summary), loaded once per chat turn. An unreadable repo gives an empty book (nothing resolves). */
 export async function loadBook() {
   try {
-    return new Map((await recipeSummaries()).map((r) => [r.slug, r]));
-  } catch (err) {
+    return new Map<any, any>((await recipeSummaries()).map((r: any) => [r.slug, r]));
+  } catch (err: any) {
     console.error("Couldn't load the book for the chat's UI tools:", err.message);
     return new Map();
   }
@@ -39,7 +39,7 @@ export async function loadBook() {
  * Resolves what the model named to a site URL, or null. `target` is a page key ("index", "next-week", "shopping"), a recipe slug
  * that exists in the book, or { slug } / { page } of the same. URLs, other schemes and unknown names all give null.
  */
-export function resolveTarget(book, target) {
+export function resolveTarget(book: any, target: any) {
   const key = typeof target === "string" ? target : target && typeof target === "object" ? (typeof target.slug === "string" ? target.slug : target.page) : undefined;
   if (typeof key !== "string") return null;
   if (Object.hasOwn(PAGES, key)) return { kind: "page", key, url: siteUrl(PAGES[key].path), label: PAGES[key].label };
@@ -51,7 +51,7 @@ export function resolveTarget(book, target) {
 // --- show_recipes ---------------------------------------------------------------------------------------------------
 
 /** One card, from the recipe's own data. kicker.kind picks the colour (this: accent, next: teal, draft: purple, none: muted). */
-export function cardFor(r) {
+export function cardFor(r: any) {
   const kicker = r.current ? { kind: "this", label: "This week" } : r.next ? { kind: "next", label: "Next week" } : r.draft ? { kind: "draft", label: "Draft" } : { kind: "", label: (r.course || []).join(" · ") };
   const meta = [Number.isFinite(r.total_mins) ? `${r.total_mins} min` : "", Number.isFinite(r.calories) ? `${r.calories} kcal` : ""].filter(Boolean).join(" · ");
   const image = typeof r.image === "string" && r.image.startsWith("/images/") ? new URL(`${config.siteUrl}${r.image}`).href : "";
@@ -59,9 +59,9 @@ export function cardFor(r) {
 }
 
 /** { cards, dropped }: unknown or malformed slugs are dropped, duplicates collapse, at most MAX_CARDS. */
-export function buildCards(book, slugs) {
-  const cards = [];
-  const dropped = [];
+export function buildCards(book: any, slugs: any) {
+  const cards: any[] = [];
+  const dropped: any[] = [];
   const seen = new Set();
   for (const slug of Array.isArray(slugs) ? slugs : []) {
     if (typeof slug !== "string" || seen.has(slug)) continue;
@@ -75,7 +75,7 @@ export function buildCards(book, slugs) {
 // --- offer_navigation -----------------------------------------------------------------------------------------------
 
 /** { label, url } for a button, or null when the target is unknown. The model's label is tidied; the default is "Open <title>". */
-export function buildNavigation(book, { slug, page, label } = {}) {
+export function buildNavigation(book: any, { slug, page, label }: any = {}) {
   const target = resolveTarget(book, slug !== undefined ? { slug } : { page });
   if (!target) return null;
   return { label: clean(label, MAX_LABEL) || target.label, url: target.url };
@@ -92,11 +92,11 @@ const MAX_REPLY_CHARS = 30;
 export const PLAN_ACTIONS = new Set(["apply_plan", "finalise_plan"]);
 // Chips that press a button which commits or starts work never carry the model's words: the label is fixed here (the panel draws its own
 // text too), so an injected or confused model can't dress "Save to site" up as something harmless.
-export const PLAN_ACTION_LABELS = { apply_plan: "Save to site", finalise_plan: "Finalise list" };
+export const PLAN_ACTION_LABELS: Record<string, string> = { apply_plan: "Save to site", finalise_plan: "Finalise list" };
 
-export function cleanReplyList(replies, book, { editor = false } = {}) {
+export function cleanReplyList(replies: any, book: any, { editor = false }: any = {}) {
   const seen = new Set();
-  const out = [];
+  const out: any[] = [];
   for (const r of Array.isArray(replies) ? replies : []) {
     if (editor && r && typeof r === "object" && typeof r.action === "string" && PLAN_ACTIONS.has(r.action)) {
       if (!out.some((x) => x.action === r.action)) out.push({ label: PLAN_ACTION_LABELS[r.action], action: r.action });
@@ -120,9 +120,9 @@ export function cleanReplyList(replies, book, { editor = false } = {}) {
 // --- ask_user ------------------------------------------------------------------------------------------------------------
 
 /** A question that needs an answer: { question, options (2-6 short, distinct), multi }, or null when it isn't usable. */
-export function cleanQuestion(args) {
+export function cleanQuestion(args: any) {
   const question = clean(args?.question, 240);
-  const options = [];
+  const options: any[] = [];
   for (const o of Array.isArray(args?.options) ? args.options : []) {
     const text = clean(o, MAX_REPLY_CHARS * 2);
     if (typeof o === "string" && text && text.length <= MAX_REPLY_CHARS && !options.some((x) => x.toLowerCase() === text.toLowerCase())) options.push(text);

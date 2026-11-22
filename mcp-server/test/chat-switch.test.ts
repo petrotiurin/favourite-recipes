@@ -5,11 +5,11 @@ import assert from "node:assert/strict";
 Object.assign(process.env, { GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", EDITORS: "owner@example.com", OPENROUTER_CHAT_PUBLIC_KEY: "or-public-test", OPENROUTER_CHAT_EDITOR_KEY: "or-editor-test", CHAT_PUBLIC_HOURLY_LIMIT: "1000", CHAT_EDITOR_HOURLY_LIMIT: "1000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000" });
 const { createFakeGitHub, createMockOpenRouter, createFakeSupabase } = await import("../scripts/fakes.ts");
 const github = createFakeGitHub({ clean: true });
-let openrouter, supabase, outside; // outside: every call that left the handler
+let openrouter: any, supabase: any, outside: any; // outside: every call that left the handler
 const realFetch = globalThis.fetch;
-let chat;
+let chat: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     outside.push(s);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
@@ -29,7 +29,7 @@ afterEach(() => {
   delete process.env.CHAT_PUBLIC_ENABLED;
 });
 let n = 0;
-const req = (method, route, { token, body } = {}) => {
+const req = (method: any, route: any, { token, body }: any = {}) => {
   const url = route ? `https://mcp.test/api/chat?route=${route}` : "https://mcp.test/chat";
   return chat[method](new Request(url, { method, headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++n % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }));
 };
@@ -82,7 +82,7 @@ test("CHAT_PUBLIC_ENABLED=false: visitors and non-editor accounts get 403 { sign
     const res = await req("POST", "", { token, body: visitor });
     assert.equal(res.status, 403, String(token));
     assert.deepEqual(await res.json(), { error: "The chat is only for signed-in editors.", signin: true });
-    assert.ok(!outside.some((u) => u.includes("openrouter") || u.includes("rate_limit_hit") || u.startsWith("https://api.github.com")), `no model, rate limit or GitHub call (${outside.join(", ")})`);
+    assert.ok(!outside.some((u: any) => u.includes("openrouter") || u.includes("rate_limit_hit") || u.startsWith("https://api.github.com")), `no model, rate limit or GitHub call (${outside.join(", ")})`);
   }
   const editor = await req("POST", "", { token: "owner-token", body: { message: "hi" } });
   assert.equal(editor.status, 200);
@@ -98,14 +98,17 @@ test("CHAT_PUBLIC_ENABLED=false: visitors and non-editor accounts get 403 { sign
 });
 
 test("the build adds data-public=\"false\" to the chat script only with CHAT_PUBLIC=false, and no chat script without CHAT_API_URL", async () => {
-  const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+  const { mkdirSync, mkdtempSync, readFileSync, rmSync } = await import("node:fs");
   const { spawnSync } = await import("node:child_process");
-  const { tmpdir } = await import("node:os");
   const root = new URL("../../", import.meta.url).pathname;
   // Its own image cache (not the repo's node_modules/.astro, which other test builds in parallel would write at the same time); the first build fills it, the rest reuse it.
-  const cacheDir = mkdtempSync(`${tmpdir()}/recipes-cache-`);
-  const html = (env) => {
-    const out = mkdtempSync(`${tmpdir()}/recipes-dist-`);
+  // The output goes inside the project too: Astro 7 puts its `.prerender` build folder in the output folder when that is under the working
+  // directory, and in the project's shared `.astro/` when it isn't, where two builds running at once (the other test files build too) clobber each other.
+  const scratch = `${root}node_modules/.astro-test`;
+  mkdirSync(scratch, { recursive: true });
+  const cacheDir = mkdtempSync(`${scratch}/cache-`);
+  const html = (env: any) => {
+    const out = mkdtempSync(`${scratch}/dist-`);
     try {
       const clean = { ...process.env };
       for (const k of ["CHAT_API_URL", "CHAT_PUBLIC"]) delete clean[k];

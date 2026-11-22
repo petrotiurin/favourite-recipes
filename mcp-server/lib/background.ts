@@ -1,7 +1,7 @@
 // Work that carries on after the response has gone (staged photos): handed to Vercel's waitUntil so the function stays alive for it,
 // and tracked here so tests (and the dev harness) can wait for it. Never throws.
 const pending = new Set();
-let waitUntilFn;
+let waitUntilFn: any;
 
 async function loadWaitUntil() {
   if (waitUntilFn !== undefined) return waitUntilFn;
@@ -14,7 +14,7 @@ async function loadWaitUntil() {
 }
 
 /** Starts `promise` (or the result of calling `fn`) in the background. Errors are logged, not thrown. */
-export function background(job) {
+export function background(job: any) {
   const promise = (typeof job === "function" ? Promise.resolve().then(job) : Promise.resolve(job)).catch((err) => console.error("Background job failed:", err?.message || err));
   pending.add(promise);
   promise.finally(() => pending.delete(promise));

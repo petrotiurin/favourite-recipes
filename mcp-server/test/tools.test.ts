@@ -17,23 +17,23 @@ const EDITOR = makeCaller({ role: "editor", email: "owner@example.com", userId: 
 const AGENT = makeCaller({ role: "agent" });
 
 // --- fake GitHub: recipes/*.md in a Map; counts every call so "never reached" can be asserted ----------------
-const recipe = (fm, ingredients) =>
+const recipe = (fm: any, ingredients: any) =>
   `---\n${Object.entries(fm).map(([k, v]) => `${k}: ${Array.isArray(v) ? `[${v.join(", ")}]` : v}`).join("\n")}\ningredients:\n${ingredients
-    .map((i) => `  - { amount: 1, name: ${i}, item: ${i.toLowerCase().replace(/ /g, "-")} }`)
+    .map((i: any) => `  - { amount: 1, name: ${i}, item: ${i.toLowerCase().replace(/ /g, "-")} }`)
     .join("\n")}\n---\n\n## Instructions\n\n1. Cook the **${ingredients[0]}** until golden.\n`;
 
-const FILES = {
+const FILES: Record<string, string> = {
   "recipes/lemon-chicken.md": recipe({ title: "Lemon Chicken", slug: "lemon-chicken", image: "/images/recipes/lemon-chicken.jpg", course: ["Dinner"], tags: ["High Protein"], total_mins: 35, serves: 4, calories: 280, current: true }, ["chicken breasts", "lemon", "olive oil", "salt"]),
   "recipes/chicken-nut-salad.md": recipe({ title: "Chicken Nut Salad", slug: "chicken-nut-salad", image: "/images/recipes/x.jpg", course: ["Lunch"], tags: ["High Protein", "Low Carb"], total_mins: 15, serves: 2, calories: 450, draft: true, next: true }, ["Chicken thighs", "peanuts", "lettuce"]),
   "recipes/tomato-soup.md": recipe({ title: "Tomato Soup", slug: "tomato-soup", image: "/images/recipes/y.jpg", course: ["Lunch", "Dinner"], tags: [], total_mins: 25, serves: 4, calories: 150 }, ["tomatoes", "basil", "salt", "black pepper"]),
   "recipes/porridge.md": recipe({ title: "Porridge", slug: "porridge", image: "/images/recipes/z.jpg", course: ["Breakfast"], tags: ["Vegetarian"], total_mins: 10, serves: 1, calories: 220, draft: true, current: true, next: true }, ["oats", "milk"]),
 };
-let calls;
+let calls: any;
 const realFetch = globalThis.fetch;
 beforeEach(() => {
   calls = [];
   clearCache();
-  globalThis.fetch = async (url, init = {}) => {
+  globalThis.fetch = async (url: any, init: any = {}) => {
     calls.push(`${init.method || "GET"} ${url}`);
     const path = decodeURI(new URL(url).pathname.replace("/repos/petrotiurin/favourite-recipes", ""));
     if (path === "/contents/recipes") return Response.json(Object.keys(FILES).map((k) => ({ type: "file", name: k.split("/").pop() })));
@@ -45,8 +45,8 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
-const text = (r) => r.content.map((c) => c.text).join("\n");
-const slugs = async (filters) => (await searchRecipes(filters)).map((r) => r.slug);
+const text = (r: any) => r.content.map((c: any) => c.text).join("\n");
+const slugs = async (filters: any) => (await searchRecipes(filters)).map((r: any) => r.slug);
 
 // --- dispatcher ------------------------------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ test("every registry entry declares an access level, reads are the known four pl
   const reads = TOOLS.filter((t) => accessOf(t) === "read").map((t) => t.name).sort();
   assert.deepEqual(reads, ["fetch_url", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "read_recipe_photos", "recipes_from_home", "scale_recipe", "search_recipes"]);
   assert.deepEqual(TOOLS.filter((t) => t.editorOnly).map((t) => t.name).sort(), ["fetch_url", "read_recipe_photos"], "fetch_url and read_recipe_photos are the editor-only read tools");
-  for (const t of TOOLS) assert.ok(["read", "stage", "write"].includes(t.access), `${t.name} has an access level`);
+  for (const t of TOOLS) assert.ok(["read", "stage", "write"].includes(t.access as string), `${t.name} has an access level`);
 });
 
 test("a public caller is refused every non-read tool, and neither the handler nor GitHub is reached", async (t) => {
@@ -96,7 +96,7 @@ test("refusals are refused even with a forged-looking caller, and no caller at a
 test("a tool without access is treated as write: denied to public, allowed to editor and agent", async (t) => {
   t.mock.method(console, "warn", () => {});
   let ran = 0;
-  const tool = { name: "no_access_declared", description: "x", inputSchema: {}, handler: async () => (ran++, { content: [{ type: "text", text: "ran" }] }) };
+  const tool: any = { name: "no_access_declared", description: "x", inputSchema: {}, handler: async () => (ran++, { content: [{ type: "text", text: "ran" }] }) };
   TOOLS.push(tool);
   try {
     assert.equal(accessOf(tool), "write");
@@ -125,12 +125,12 @@ test("dispatch validates arguments and runs reads for a public caller", async ()
   assert.match(text(bad), /max_calories/);
   const ok = await dispatch("search_recipes", { include_ingredients: ["chicken"] }, PUBLIC);
   assert.notEqual(ok.isError, true);
-  assert.deepEqual(JSON.parse(text(ok)).map((r) => r.slug), ["lemon-chicken", "chicken-nut-salad"]);
+  assert.deepEqual(JSON.parse(text(ok)).map((r: any) => r.slug), ["lemon-chicken", "chicken-nut-salad"]);
   assert.equal(text(await dispatch("search_recipes", { text: "zzz" }, PUBLIC)), "No recipes match those filters.");
 });
 
 test("toolDefinitions: plain JSON Schema, filtered by role", () => {
-  const names = (role) => toolDefinitions(role).map((d) => d.function.name);
+  const names = (role: any) => toolDefinitions(role).map((d) => d.function.name);
   assert.deepEqual(names("public").sort(), ["get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "recipes_from_home", "scale_recipe", "search_recipes"]);
   assert.equal(names("editor").length, TOOLS.length);
   assert.equal(names("agent").length, TOOLS.length - 2, "the MCP agent gets no editor-only tool");
@@ -143,11 +143,11 @@ test("toolDefinitions: plain JSON Schema, filtered by role", () => {
     assert.equal(def.function.parameters.$schema, undefined);
     assert.doesNotMatch(JSON.stringify(def), /\$ref/);
   }
-  const search = toolDefinitions("public").find((d) => d.function.name === "search_recipes").function.parameters;
+  const search = toolDefinitions("public").find((d: any) => d.function.name === "search_recipes")!.function.parameters as any;
   assert.equal(search.properties.max_calories.type, "number");
   assert.deepEqual(search.properties.week.enum, ["this", "next", "none"]);
   assert.equal(search.required, undefined);
-  const create = toolDefinitions("editor").find((d) => d.function.name === "create_recipe").function.parameters;
+  const create = toolDefinitions("editor").find((d: any) => d.function.name === "create_recipe")!.function.parameters as any;
   assert.ok(create.required.includes("title"));
 });
 
@@ -205,7 +205,7 @@ test("search: text, course, tags, calories, minutes, draft and week", async () =
 
 test("search: compact rows, in the list_recipes order", async () => {
   const rows = await searchRecipes({});
-  assert.deepEqual(rows.map((r) => r.slug), ["porridge", "lemon-chicken", "chicken-nut-salad", "tomato-soup"]);
+  assert.deepEqual(rows.map((r: any) => r.slug), ["porridge", "lemon-chicken", "chicken-nut-salad", "tomato-soup"]);
   assert.deepEqual(rows[1], {
     slug: "lemon-chicken",
     title: "Lemon Chicken",
@@ -222,7 +222,7 @@ test("search: compact rows, in the list_recipes order", async () => {
 
 test("the recipe index is cached for a minute and shared by search and the catalogue", async () => {
   await searchRecipes({});
-  const first = calls.length;
+  const first: any = calls.length;
   assert.ok(first > 0);
   await searchRecipes({ draft: true });
   const cat = await catalogue();
@@ -231,10 +231,10 @@ test("the recipe index is cached for a minute and shared by search and the catal
   await catalogue();
   assert.equal(calls.length, first * 2, "reads again once the cache is cleared");
 
-  const soup = cat.find((r) => r.slug === "tomato-soup");
+  const soup = cat.find((r: any) => r.slug === "tomato-soup");
   assert.deepEqual(soup, { slug: "tomato-soup", title: "Tomato Soup", course: ["Lunch", "Dinner"], tags: [], mins: 25, kcal: 150, status: "regular", week: "none", ingredients: ["tomatoes", "basil"] });
-  assert.equal(cat.find((r) => r.slug === "porridge").week, "both");
-  assert.equal(cat.find((r) => r.slug === "chicken-nut-salad").status, "draft");
-  assert.deepEqual(cat.find((r) => r.slug === "lemon-chicken").ingredients, ["chicken breasts", "lemon"], "pantry staples are left out");
+  assert.equal(cat.find((r: any) => r.slug === "porridge").week, "both");
+  assert.equal(cat.find((r: any) => r.slug === "chicken-nut-salad").status, "draft");
+  assert.deepEqual(cat.find((r: any) => r.slug === "lemon-chicken").ingredients, ["chicken breasts", "lemon"], "pantry staples are left out");
   assert.match(catalogueText(cat), /^porridge \| Porridge \| Breakfast \| Vegetarian \| 10 min \| 220 kcal \| draft, this week \+ next week \| oats, milk$/m);
 });

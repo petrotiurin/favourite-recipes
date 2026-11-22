@@ -13,18 +13,18 @@ import { stageMany, loadTray } from "./tray.ts";
 
 /** The thumbs a row can send, and what each answer is called in the stored message. No thumb = "keep". */
 export const THUMBS = ["liked", "remove"];
-const LABELS = { liked: "Liked", remove: "Not for us", keep: "Kept for the coming week" };
+const LABELS: Record<string, string> = { liked: "Liked", remove: "Not for us", keep: "Kept for the coming week" };
 export const MAX_REVIEW_DRAFTS = 20;
 
 /** This week's drafts on the site, from the cached book. */
 export async function thisWeeksDrafts() {
-  return (await recipeSummaries()).filter((r) => r.current && r.draft).slice(0, MAX_REVIEW_DRAFTS);
+  return (await recipeSummaries()).filter((r: any) => r.current && r.draft).slice(0, MAX_REVIEW_DRAFTS);
 }
 
 /** The thumb a draft already has in the tray (a staged promote or removal), or undefined. */
-function stagedAnswer(slug, items) {
-  if (items.some((i) => i.kind === "promote" && i.op.slug === slug)) return "liked";
-  if (items.some((i) => i.kind === "remove" && i.op.slug === slug)) return "remove";
+function stagedAnswer(slug: any, items: any) {
+  if (items.some((i: any) => i.kind === "promote" && i.op.slug === slug)) return "liked";
+  if (items.some((i: any) => i.kind === "remove" && i.op.slug === slug)) return "remove";
   return undefined;
 }
 
@@ -32,10 +32,10 @@ function stagedAnswer(slug, items) {
  * What the panel draws: { drafts: [{ slug, title, image, url, meta, also_next, answer? }] }, or null when this week has no drafts. A row starts
  * on the thumb the tray already holds for it, if any.
  */
-export function reviewCard(drafts, items = []) {
+export function reviewCard(drafts: any, items: any[] = []) {
   if (!drafts.length) return null;
   return {
-    drafts: drafts.map((r) => {
+    drafts: drafts.map((r: any) => {
       const card = cardFor(r);
       const answer = stagedAnswer(r.slug, items);
       return { slug: r.slug, title: card.title, image: card.image, url: card.url, meta: card.meta, also_next: !!r.next, ...(answer ? { answer } : {}) };
@@ -47,7 +47,7 @@ export function reviewCard(drafts, items = []) {
  * The client's thumbs checked against this week's drafts: { answers: Map(slug -> "liked" | "remove" | "keep") } or { error }. A draft with
  * no thumb is "keep"; slugs that aren't one of this week's drafts are ignored (the card may be older than the book).
  */
-export function parseAnswers(raw, drafts) {
+export function parseAnswers(raw: any, drafts: any) {
   if (raw === undefined || raw === null) raw = {};
   if (typeof raw !== "object" || Array.isArray(raw)) return { error: "Send the thumbs as { slug: \"liked\" | \"remove\" }." };
   const answers = new Map();
@@ -60,10 +60,10 @@ export function parseAnswers(raw, drafts) {
   return { answers };
 }
 
-const list = (titles) => (titles.length <= 1 ? titles.join("") : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`);
+const list = (titles: any) => (titles.length <= 1 ? titles.join("") : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`);
 
 /** The editor's answers as their message in the chat (what the model sees in the history): "Liked: A, B. Not for us: C." */
-export function answersText(drafts, answers) {
+export function answersText(drafts: any, answers: any) {
   const groups = new Map();
   for (const r of drafts) {
     const a = answers.get(r.slug);
@@ -79,37 +79,37 @@ export function answersText(drafts, answers) {
  * week needs no carry-over: the switch puts it in the coming week anyway. An earlier answer in the tray for one of these drafts is replaced.
  * Resolves { line (what the user is told), kept (titles not removed), needs, items }.
  */
-export async function stageReview(drafts, answers, caller, { trace } = {}) {
-  const slugs = new Set(drafts.map((r) => r.slug));
-  const pick = (a, { next } = {}) => drafts.filter((r) => answers.get(r.slug) === a && (next === undefined || !!r.next === next));
+export async function stageReview(drafts: any, answers: any, caller: any, { trace }: any = {}) {
+  const slugs = new Set(drafts.map((r: any) => r.slug));
+  const pick = (a: any, { next }: any = {}) => drafts.filter((r: any) => answers.get(r.slug) === a && (next === undefined || !!r.next === next));
   const liked = pick("liked");
   const removed = pick("remove", { next: false });
   const kept = pick("remove", { next: true });
   const carried = pick("keep", { next: false });
   const staying = pick("keep");
   const before = (await loadTray())?.items || [];
-  const otherCarry = (before.find((i) => i.kind === "switch")?.op.carry_over || []).filter((s) => !slugs.has(s));
-  const carryOver = [...otherCarry, ...carried.map((r) => r.slug)];
+  const otherCarry = (before.find((i: any) => i.kind === "switch")?.op.carry_over || []).filter((s: any) => !slugs.has(s));
+  const carryOver = [...otherCarry, ...carried.map((r: any) => r.slug)];
   const ops = [
     { action: "start_next_week", ...(carryOver.length ? { carry_over: carryOver } : {}) },
-    ...liked.map((r) => ({ action: "promote_recipe", slug: r.slug })),
-    ...removed.map((r) => ({ action: "remove_draft", slug: r.slug })),
+    ...liked.map((r: any) => ({ action: "promote_recipe", slug: r.slug })),
+    ...removed.map((r: any) => ({ action: "remove_draft", slug: r.slug })),
   ];
-  const out = await stageMany(ops, caller, { clear: (i) => ["promote", "remove"].includes(i.kind) && slugs.has(i.op.slug), trace });
+  const out = await stageMany(ops, caller, { clear: (i: any) => ["promote", "remove"].includes(i.kind) && slugs.has(i.op.slug), trace });
   const bits = [
-    liked.length ? `${list(liked.map((r) => r.title))} ${liked.length === 1 ? "becomes a regular recipe" : "become regular recipes"}` : "",
-    removed.length ? `${list(removed.map((r) => r.title))} ${removed.length === 1 ? "is" : "are"} removed` : "",
-    staying.length ? `${list(staying.map((r) => r.title))} ${staying.length === 1 ? "stays" : "stay"} for the coming week` : "",
+    liked.length ? `${list(liked.map((r: any) => r.title))} ${liked.length === 1 ? "becomes a regular recipe" : "become regular recipes"}` : "",
+    removed.length ? `${list(removed.map((r: any) => r.title))} ${removed.length === 1 ? "is" : "are"} removed` : "",
+    staying.length ? `${list(staying.map((r: any) => r.title))} ${staying.length === 1 ? "stays" : "stay"} for the coming week` : "",
   ].filter(Boolean);
   let line = `In the tray: the switch to a new week${bits.length ? `. ${bits.join("; ")}` : ""}.`;
-  if (kept.length) line += ` ${list(kept.map((r) => r.title))} ${kept.length === 1 ? "stays" : "stay"}: ${kept.length === 1 ? "it's" : "they're"} on next week's plan.`;
-  const problems = out.items.filter((i) => i.error);
+  if (kept.length) line += ` ${list(kept.map((r: any) => r.title))} ${kept.length === 1 ? "stays" : "stay"}: ${kept.length === 1 ? "it's" : "they're"} on next week's plan.`;
+  const problems = out.items.filter((i: any) => i.error);
   if (problems.length) line += ` ${problems.length === 1 ? "One card has a problem" : `${problems.length} cards have a problem`}: see the tray.`;
-  return { line, kept: kept.map((r) => r.title), needs: out.needs, items: out.items };
+  return { line, kept: kept.map((r: any) => r.title), needs: out.needs, items: out.items };
 }
 
 /** Is the newest thing the editor was shown (since their last message) a drafts review card that hasn't been answered? Stored rows. */
-export function reviewOpen(rows) {
+export function reviewOpen(rows: any) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
     if (row.role === "user") return false;
@@ -120,4 +120,4 @@ export function reviewOpen(rows) {
 
 const PROMOTE_IT = /^\s*(promote it|promote|promote it please|yes|yes please|yep|yeah|go ahead|it's ready|its ready|ready|it is ready)\s*[.!]?\s*$/i;
 /** "Promote it" (or a plain yes) to the promote question. */
-export const isPromoteIt = (text) => PROMOTE_IT.test(String(text || ""));
+export const isPromoteIt = (text: any) => PROMOTE_IT.test(String(text || ""));

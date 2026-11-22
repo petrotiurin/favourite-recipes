@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 
 const INCLUDE = /^<!--\s*include:\s*([\w/-]+)\s*-->\s*$/gm;
 
-const read = (name, seen = []) => {
+const read = (name: any, seen: any[] = []): string => {
   if (seen.includes(name)) throw new Error(`workflow include cycle: ${[...seen, name].join(" -> ")}`);
   return readFileSync(new URL(`../workflows/${name}.md`, import.meta.url), "utf8")
     .replace(/^<!--[\s\S]*?-->\s*/, "") // the maintainers' note at the top
@@ -53,7 +53,7 @@ export const WORKFLOW_NAMES = Object.keys(WORKFLOWS);
  */
 export function chatGuide() {
   const text = WORKFLOWS["plan-recipes"].text;
-  const between = (start, end) => {
+  const between = (start: any, end?: any) => {
     const i = text.indexOf(start);
     if (i === -1) throw new Error(`plan-recipes.md has no "${start}" section`);
     const j = end ? text.indexOf(end, i) : text.length;
@@ -64,7 +64,7 @@ export function chatGuide() {
 
 /**
  * The recipe-writing rules ("Writing a recipe that passes first time", rules 1-5) on their own, for the photo reader's prompt
- * (lib/photo-reader-prompt.js): one source with the chat guide, so the two can't drift.
+ * (lib/photo-reader-prompt.ts): one source with the chat guide, so the two can't drift.
  */
 export function recipeRules() {
   const text = WORKFLOWS["plan-recipes"].text;

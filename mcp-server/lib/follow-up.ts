@@ -19,7 +19,7 @@ import { readsOf, progressNote, startFollowUp } from "./photo-queue.ts";
 export const TURN_LOCK_MS = () => config.chatTurnDeadlineMs + 30_000;
 
 /** Runs the follow-up for one note. Resolves { status: "done" | "handled" | "busy" | "gone" | "not-editor" }. Never throws. */
-export async function runFollowUp(eventId, { origin } = {}) {
+export async function runFollowUp(eventId: any, { origin }: any = {}) {
   let convo;
   let token;
   try {
@@ -45,21 +45,21 @@ export async function runFollowUp(eventId, { origin } = {}) {
     const photos = photoList(rows);
     const reads = await readsOf(convo.id).catch(() => []);
     // the notes this turn answers go LAST (one may have been stored while another turn was still writing its reply)
-    const claimedIds = new Set(claimed.map((e) => e.id));
-    const messages = withPhotoNotes(historyForModel(rows.filter((r) => !claimedIds.has(r.id))), photos, reads);
-    const note = claimed.map((e) => `[Note from the site, not from the user: ${String(e.content?.content || "")}]`).join("\n\n");
+    const claimedIds = new Set(claimed.map((e: any) => e.id));
+    const messages = withPhotoNotes(historyForModel(rows.filter((r: any) => !claimedIds.has(r.id))), photos, reads);
+    const note = claimed.map((e: any) => `[Note from the site, not from the user: ${String(e.content?.content || "")}]`).join("\n\n");
     const last = messages[messages.length - 1];
     if (last?.role === "user" && typeof last.content === "string") messages[messages.length - 1] = { ...last, content: `${last.content}\n\n${note}` };
     else messages.push({ role: "user", content: note });
     let extraNote = "";
     try {
       extraNote = [await trayNote(await loadTray(), caller), progressNote(reads, photos)].filter(Boolean).join("\n");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Reading the tray for the follow-up's note failed:", err.message);
     }
     const turnId = newId();
-    const summary = claimed.map((e) => e.content?.summary).filter(Boolean).join("; ") || "note from the site";
-    const trace = startTrace({ name: "chat follow-up", sessionId: convo.id, userId: convo.user_id, tags: ["editor", "follow-up"], metadata: { mode: "follow-up", model: config.chatEditorModel, turnId, events: claimed.map((e) => e.id) }, input: summary });
+    const summary = claimed.map((e: any) => e.content?.summary).filter(Boolean).join("; ") || "note from the site";
+    const trace = startTrace({ name: "chat follow-up", sessionId: convo.id, userId: convo.user_id, tags: ["editor", "follow-up"], metadata: { mode: "follow-up", model: config.chatEditorModel, turnId, events: claimed.map((e: any) => e.id) }, input: summary });
     let output;
     try {
       const result = await runChat({
@@ -75,12 +75,12 @@ export async function runFollowUp(eventId, { origin } = {}) {
         conversation: { id: convo.id, title: convo.title },
         photos,
         // the user's own words are their last message (this turn has none): "use this as the photo" with the photos still counts, nothing else does
-        userText: String(rows.findLast((r) => r.role === "user")?.content?.content || ""),
+        userText: String(rows.findLast((r: any) => r.role === "user")?.content?.content || ""),
         followUp: true, // no corrections and no new reads from here: those wait for the user's own answer
       });
       output = result.reply;
       await appendMessages(convo.id, result.produced, { turnId, traceId: trace.traceId });
-    } catch (err) {
+    } catch (err: any) {
       output = `error: ${err.message}`;
       console.error(`The follow-up turn failed: ${err.message}`);
       await appendMessages(convo.id, [{ role: "assistant", content: "", ui: { error: "I read your photos but couldn't finish adding them. Ask me to carry on." } }], { turnId, traceId: trace.traceId }).catch(() => {});
@@ -88,7 +88,7 @@ export async function runFollowUp(eventId, { origin } = {}) {
       trace.finish(output);
     }
     return { status: "done" };
-  } catch (err) {
+  } catch (err: any) {
     console.error(`The follow-up for a note failed: ${err.message}`);
     return { status: "error" };
   } finally {
@@ -100,12 +100,12 @@ export async function runFollowUp(eventId, { origin } = {}) {
  * The end of every turn (user or follow-up): releases the lock FIRST, then starts the follow-up for a note no turn has handled yet. In that order,
  * a note stored while this turn ran is never left behind: either its follow-up found the lock free, or this check sees it.
  */
-export async function afterTurn(conversationId, token, { origin } = {}) {
+export async function afterTurn(conversationId: any, token: any, { origin }: any = {}) {
   await releaseTurnLock(conversationId, token);
   try {
     const events = await unhandledEvents(conversationId);
     if (events.length) startFollowUp(events[0].id, { origin });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Checking for notes after a turn failed:", err.message);
   }
 }

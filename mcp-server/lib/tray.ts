@@ -1,8 +1,8 @@
 // The household plan tray (docs/chatbot-design.md 7.1): what the chat stages instead of committing. Items collect in one shared tray
-// (lib/tray-store.js) until a person taps Save (lib/plan-apply.js), which commits them in ONE commit.
+// (lib/tray-store.ts) until a person taps Save (lib/plan-apply.ts), which commits them in ONE commit.
 //
 // Validation is a dry run of the REAL write logic: every item is an operation in the batch_changes shape ({ action, ...args }), and
-// replay() runs the whole tray, in Save order, through lib/operations.js against a throwaway ChangeSet on top of the current repo. Nothing
+// replay() runs the whole tray, in Save order, through lib/operations.ts against a throwaway ChangeSet on top of the current repo. Nothing
 // is ever committed here: this module never calls ChangeSet.commit, and a ChangeSet only reads from the branch. The tray's earlier items
 // are therefore visible to later ones (a recipe staged as new can be read, put in next week and listed), and any problem shows on the
 // item's card straight away.
@@ -26,7 +26,7 @@ const PHOTO_STALE_MS = 4 * 60 * 1000; // a photo still "pending" after this is t
 const PLACEHOLDER_PHOTO = Buffer.from("staged photo"); // stands in for the real bytes while validating
 
 /** Who may change the tray: an editor (in the chat) or the agent. Checked by every write below, whatever called it (design 4.1 layer 3). */
-export function assertCanStage(caller) {
+export function assertCanStage(caller: any) {
   if (!caller || (caller.role !== "editor" && caller.role !== "agent")) {
     console.warn(`Refused a tray change: caller role "${caller?.role ?? "none"}" may not stage`);
     throw new Error("Refusing to change the tray: only an editor may do that");
@@ -36,24 +36,24 @@ export function assertCanStage(caller) {
 // --- items -----------------------------------------------------------------------------------------------------------------
 
 /** The card kinds, in Save order (design Q16): switch, this week's drafts, new recipes, added to next week, edits, the list, servings. */
-const KIND_GROUP = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, catalogue: 4.5, list: 5, servings: 6, stocktake: 7 };
-const ACTION_KIND = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_catalogue: "catalogue", update_shopping_list: "list", set_shopping_servings: "servings", update_stocktake: "stocktake" };
-export const kindOf = (op) => ACTION_KIND[op?.action];
+const KIND_GROUP: Record<string, number> = { switch: 0, promote: 1, remove: 1, new: 2, next: 3, edit: 4, catalogue: 4.5, list: 5, servings: 6, stocktake: 7 };
+const ACTION_KIND: Record<string, string> = { start_next_week: "switch", promote_recipe: "promote", remove_draft: "remove", create_recipe: "new", set_week_recipes: "next", update_recipe: "edit", update_catalogue: "catalogue", update_shopping_list: "list", set_shopping_servings: "servings", update_stocktake: "stocktake" };
+export const kindOf = (op: any) => ACTION_KIND[op?.action];
 
-const byCreated = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
+const byCreated = (a: any, b: any) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
 /** The order Save applies items in: by group, oldest first within a group. */
-export const saveOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(a, b));
+export const saveOrder = (items: any) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(a, b));
 /** The order cards are shown in: the same groups, newest first within a group. */
-export const displayOrder = (items) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(b, a));
+export const displayOrder = (items: any) => [...items].sort((a, b) => KIND_GROUP[a.kind] - KIND_GROUP[b.kind] || byCreated(b, a));
 
-export const nameFromEmail = (email) =>
+export const nameFromEmail = (email: any) =>
   String(email || "").split("@")[0].split(/[._+-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ") || "Someone";
 
-const oneLine = (s, max) => String(s ?? "").replace(/\p{Extended_Pictographic}/gu, "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+const oneLine = (s: any, max: any) => String(s ?? "").replace(/\p{Extended_Pictographic}/gu, "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
 const newItemId = () => randomBytes(4).toString("hex");
-const slugOf = (item) => (item.kind === "new" ? slugify(item.op.title) : item.op.slug ?? item.op.slugs?.[0]);
+const slugOf = (item: any) => (item.kind === "new" ? slugify(item.op.title) : item.op.slug ?? item.op.slugs?.[0]);
 
-function makeItem(op, { caller, reason, extra = {} }) {
+function makeItem(op: any, { caller, reason, extra = {} }: any) {
   const kind = kindOf(op);
   return {
     id: newItemId(),
@@ -72,11 +72,11 @@ function makeItem(op, { caller, reason, extra = {} }) {
 
 // --- reading the repo as it is now -----------------------------------------------------------------------------------------
 
-const hashOf = (text) => createHash("sha1").update(text).digest("hex");
+const hashOf = (text: any) => createHash("sha1").update(text).digest("hex");
 const PICK = ["title", "course", "tags", "total_mins", "serves", "calories", "scalable", "draft", "current", "next"];
 
 /** { hash, data } of a recipe as it is on the branch right now (not through any ChangeSet), or null. */
-export async function repoSnapshot(slug, { warm = false } = {}) {
+export async function repoSnapshot(slug: any, { warm = false }: any = {}) {
   const raw = await (warm ? new ChangeSet(await warmReads()) : new ChangeSet()).read(`recipes/${slug}.md`);
   if (!raw) return null;
   const text = raw.toString("utf8");
@@ -84,7 +84,7 @@ export async function repoSnapshot(slug, { warm = false } = {}) {
   return { hash: hashOf(text), data: Object.fromEntries(PICK.filter((k) => k in data).map((k) => [k, data[k]])) };
 }
 
-/** Reads for a throwaway ChangeSet from the branch snapshot (lib/github.js): one ref read, everything else shared per head SHA. */
+/** Reads for a throwaway ChangeSet from the branch snapshot (lib/github.ts): one ref read, everything else shared per head SHA. */
 export async function warmReads() {
   const { sha, reads } = await branchSnapshot();
   return { reads, ref: sha };
@@ -92,12 +92,12 @@ export async function warmReads() {
 
 // --- the dry run -----------------------------------------------------------------------------------------------------------
 
-const expectedError = (err) => err instanceof UserError || err instanceof ShoppingListError;
-const tidyError = (err) => oneLine(String(err.message).replace(/^[^\n]*rejected:\n- /, "").replace(/\n- /g, "; ").replace(/\n/g, " "), 300);
-const photoPath = (slug) => `images/recipes/${slug}.jpg`;
+const expectedError = (err: any) => err instanceof UserError || err instanceof ShoppingListError;
+const tidyError = (err: any) => oneLine(String(err.message).replace(/^[^\n]*rejected:\n- /, "").replace(/\n- /g, "; ").replace(/\n/g, " "), 300);
+const photoPath = (slug: any) => `images/recipes/${slug}.jpg`;
 
 /** The operation to run for an item: a staged photo stands in as an already-uploaded image (its bytes are written to the set first). */
-export function applicableOp(item, cs, photoBytes, { listInTray = false } = {}) {
+export function applicableOp(item: any, cs: any, photoBytes: any, { listInTray = false }: any = {}) {
   const op = { ...item.op };
   // With a list in the tray the stocktake is checked against the rebuilt list (items by name), not the one it was staged against.
   if (item.kind === "stocktake" && listInTray) delete op.list_sig;
@@ -114,24 +114,24 @@ export function applicableOp(item, cs, photoBytes, { listInTray = false } = {}) 
  * | { warnings, result }), nextSlugs } where an item that fails is skipped (its half-done edits undone) and later items go on without it.
  * Never commits. Unexpected failures (GitHub down) throw: those aren't a problem with the item.
  */
-export async function replay(items, caller, { reads = new Map(), ref, photoBytes = () => PLACEHOLDER_PHOTO } = {}) {
+export async function replay(items: any, caller: any, { reads = new Map(), ref, photoBytes = () => PLACEHOLDER_PHOTO }: any = {}) {
   assertCanStage(caller);
   const cs = new ChangeSet({ reads, ref });
   const results = new Map();
-  const listInTray = items.some((i) => i.kind === "list");
+  const listInTray = items.some((i: any) => i.kind === "list");
   for (const item of saveOrder(items)) {
     const snapshot = cs.snapshot();
     try {
       const op = applicableOp(item, cs, photoBytes(item), { listInTray });
       const result = await runOperation(op, cs, caller);
       results.set(item.id, { ok: true, result, warnings: result.warnings || [] });
-    } catch (err) {
+    } catch (err: any) {
       cs.restore(snapshot);
       if (!expectedError(err) && !/^Refusing to write/.test(err.message)) throw err;
       results.set(item.id, { error: tidyError(err) });
     }
   }
-  const nextSlugs = (await listRecipes(cs)).filter(isNextWeek).map((r) => r.slug);
+  const nextSlugs = (await listRecipes(cs)).filter(isNextWeek).map((r: any) => r.slug);
   return { cs, results, nextSlugs };
 }
 
@@ -140,10 +140,10 @@ export async function replay(items, caller, { reads = new Map(), ref, photoBytes
  * and next week won't be empty afterwards. A switch alone, a promotion, a typo fix or a new recipe kept out of next week need none; planned
  * servings and what's at home apply to whichever list there is.
  */
-export function needsList(items, nextSlugs) {
+export function needsList(items: any, nextSlugs: any) {
   if (!nextSlugs.length) return false;
   return items.some(
-    (i) =>
+    (i: any) =>
       (i.kind === "new" && i.op.week === "next") ||
       i.kind === "next" ||
       i.kind === "catalogue" ||
@@ -154,11 +154,11 @@ export function needsList(items, nextSlugs) {
 export const LIST_REASON = "built from next week's recipes";
 
 /** The list card follows next week: added (built by the server, no model) when the tray changes it, taken out when it no longer does. */
-export function withList(items, nextSlugs, caller) {
-  const list = items.find((i) => i.kind === "list");
+export function withList(items: any, nextSlugs: any, caller: any) {
+  const list = items.find((i: any) => i.kind === "list");
   const needs = needsList(items, nextSlugs);
   if (needs && !list) return [...items, makeItem({ action: "update_shopping_list", build: true, edits: [] }, { caller, reason: LIST_REASON, extra: { reviewed: null } })];
-  if (!needs && list) return items.filter((i) => i !== list);
+  if (!needs && list) return items.filter((i: any) => i !== list);
   return items;
 }
 
@@ -167,32 +167,32 @@ export function withList(items, nextSlugs, caller) {
  * means Finalise list has run since and nothing the user hasn't seen came in: no flag the model hasn't looked at, no optional item without an
  * answer. A change that brings neither keeps Save.
  */
-export function listState(items, results) {
-  const list = items.find((i) => i.kind === "list");
+export function listState(items: any, results: any) {
+  const list = items.find((i: any) => i.kind === "list");
   if (!list) return { needs: false, list: null, built: null, error: null, reviewed: true, flagsOpen: [], optionalOpen: [] };
   const r = results?.get(list.id) || {};
   const built = r.result?.built || null;
   const rev = list.reviewed || null;
-  const flagsOpen = built ? built.flags.filter((f) => !rev?.flags?.includes(f.key)) : [];
-  const optionalOpen = built ? built.optional.filter((o) => !rev?.optional?.includes(o.item)) : [];
+  const flagsOpen = built ? built.flags.filter((f: any) => !rev?.flags?.includes(f.key)) : [];
+  const optionalOpen = built ? built.optional.filter((o: any) => !rev?.optional?.includes(o.item)) : [];
   return { needs: true, list, built, error: r.error || null, reviewed: !!rev && !r.error && !flagsOpen.length && !optionalOpen.length, flagsOpen, optionalOpen };
 }
 
 // A Finalise turn sets "finalising" and settles it when it ends. One that never ended (its function was killed) must not leave the tray without
 // its button for good: past any turn's lifetime (Vercel's maxDuration is 300s) the flag no longer counts.
 export const FINALISE_STALE_MS = 6 * 60 * 1000;
-const finalising = (tray) => tray?.status === "finalising" && !(Date.parse(tray.updated_at) <= clock.now() - FINALISE_STALE_MS);
-const statusFor = (tray, state) => (state.reviewed ? "ready" : finalising(tray) ? "finalising" : "collecting");
+const finalising = (tray: any) => tray?.status === "finalising" && !(Date.parse(tray.updated_at) <= clock.now() - FINALISE_STALE_MS);
+const statusFor = (tray: any, state: any) => (state.reviewed ? "ready" : finalising(tray) ? "finalising" : "collecting");
 
 /**
  * The tray's items after a change, checked: the list card added or taken out as next week needs, every item dry-run (problems on the cards).
  * Resolves { items, results, nextSlugs, state }.
  */
-export async function checkItems(items, caller, reads) {
+export async function checkItems(items: any, caller: any, reads: any) {
   let run = await replay(items, caller, reads);
   const settled = withList(items, run.nextSlugs, caller);
   if (settled !== items) run = await replay(settled, caller, reads);
-  const checked = settled.map((i) => ({ ...i, error: run.results.get(i.id)?.error || null }));
+  const checked = settled.map((i: any) => ({ ...i, error: run.results.get(i.id)?.error || null }));
   return { items: checked, results: run.results, nextSlugs: run.nextSlugs, cs: run.cs, state: listState(checked, run.results) };
 }
 
@@ -209,10 +209,10 @@ export async function loadTray() {
   return row;
 }
 
-export async function purgeTray(row, why = "emptied") {
+export async function purgeTray(row: any, why = "emptied") {
   try {
     await removeTrayPhotos(row.id);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Deleting staged photos failed:", err.message);
   }
   await deleteTrayRow(row.id);
@@ -223,7 +223,7 @@ export async function purgeTray(row, why = "emptied") {
  * Read-modify-write the tray. `fn(tray | null)` returns { items, listHash?, status?, result } to write (an empty `items` empties the tray) or
  * { result } to leave it. A version clash with another writer re-reads and runs fn again.
  */
-export async function mutate(caller, fn) {
+export async function mutate(caller: any, fn: any) {
   assertCanStage(caller);
   for (let attempt = 0; attempt < 6; attempt++) {
     const tray = await loadTray();
@@ -250,10 +250,10 @@ export async function mutate(caller, fn) {
 const EDIT_FIELDS = ["title", "course", "tags", "total_mins", "serves", "calories", "scalable", "ingredients", "instructions", "notes"];
 
 /** Folds a new change into the existing items: { items, item (the card it ended up on, or null), message }. Pure apart from the clock. */
-function planChange(items, op, { caller, reason, base, photo }) {
-  const make = (o, extra) => makeItem(o, { caller, reason, extra });
-  const find = (kind, slug) => items.find((i) => i.kind === kind && slugOf(i) === slug);
-  const without = (...drop) => items.filter((i) => !drop.includes(i));
+function planChange(items: any, op: any, { caller, reason, base, photo }: any) {
+  const make = (o: any, extra?: any) => makeItem(o, { caller, reason, extra });
+  const find = (kind: any, slug: any) => items.find((i: any) => i.kind === kind && slugOf(i) === slug);
+  const without = (...drop: any[]) => items.filter((i: any) => !drop.includes(i));
   switch (op.action) {
     case "create_recipe": {
       const slug = slugify(op.title);
@@ -262,7 +262,7 @@ function planChange(items, op, { caller, reason, base, photo }) {
       const item = make(op, { photo: photo || old?.photo || null });
       if (old) {
         const merged = { ...old, op, reason: item.reason || old.reason, photo: item.photo, error: null };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: `Updated the staged new recipe "${op.title}"` };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: `Updated the staged new recipe "${op.title}"` };
       }
       return { items: [...items, item], item, message: `Staged the new recipe "${op.title}"` };
     }
@@ -272,12 +272,12 @@ function planChange(items, op, { caller, reason, base, photo }) {
       if (staged) {
         if (fields.title !== undefined && slugify(fields.title) !== op.slug) throw new UserError(`"${op.slug}" is a new recipe in the tray: to give it a different title (which changes its address) drop it and stage it again.`);
         const merged = { ...staged, op: { ...staged.op, ...fields }, error: null, photo: photo || staged.photo };
-        return { items: items.map((i) => (i === staged ? merged : i)), item: merged, message: `Edited the staged new recipe "${merged.op.title}"` };
+        return { items: items.map((i: any) => (i === staged ? merged : i)), item: merged, message: `Edited the staged new recipe "${merged.op.title}"` };
       }
       const old = find("edit", op.slug);
       if (old) {
         const merged = { ...old, op: { ...old.op, ...fields }, error: null, photo: photo || old.photo, reason: oneLine(reason, 100) || old.reason };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: `Added to the staged edit of "${op.slug}"` };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: `Added to the staged edit of "${op.slug}"` };
       }
       const item = make({ action: "update_recipe", slug: op.slug, ...fields }, { base, photo: photo || null });
       return { items: [...items, item], item, message: `Staged an edit of "${op.slug}"` };
@@ -286,23 +286,23 @@ function planChange(items, op, { caller, reason, base, photo }) {
       const staged = find("new", op.slug);
       if (staged) {
         const merged = { ...staged, op: { ...staged.op, draft: false }, error: null };
-        return { items: items.map((i) => (i === staged ? merged : i)), item: merged, message: `"${op.slug}" is a new recipe in the tray: it will be added as a regular recipe, not a draft` };
+        return { items: items.map((i: any) => (i === staged ? merged : i)), item: merged, message: `"${op.slug}" is a new recipe in the tray: it will be added as a regular recipe, not a draft` };
       }
       const dup = find("promote", op.slug);
       if (dup) return { items, item: dup, message: `"${op.slug}" is already staged for promotion` };
-      const gone = items.filter((i) => i.kind === "remove" && slugOf(i) === op.slug);
+      const gone = items.filter((i: any) => i.kind === "remove" && slugOf(i) === op.slug);
       const item = make(op, { base });
       return { items: [...without(...gone), item], item, message: `Staged promoting "${op.slug}" to a regular recipe` };
     }
     case "remove_draft": {
       const staged = find("new", op.slug);
       if (staged) {
-        const kept = items.filter((i) => i !== staged && !(["edit", "next"].includes(i.kind) && slugOf(i) === op.slug));
+        const kept = items.filter((i: any) => i !== staged && !(["edit", "next"].includes(i.kind) && slugOf(i) === op.slug));
         return { items: kept, item: null, message: `"${op.slug}" was only staged in the tray, so it was dropped from it` };
       }
       const dup = find("remove", op.slug);
       if (dup) return { items, item: dup, message: `"${op.slug}" is already staged for removal` };
-      const stale = items.filter((i) => ["promote", "edit", "next"].includes(i.kind) && slugOf(i) === op.slug);
+      const stale = items.filter((i: any) => ["promote", "edit", "next"].includes(i.kind) && slugOf(i) === op.slug);
       const item = make(op, { base });
       return { items: [...without(...stale), item], item, message: `Staged removing the draft "${op.slug}" (deletes the recipe and its photo)` };
     }
@@ -311,62 +311,62 @@ function planChange(items, op, { caller, reason, base, photo }) {
       const staged = find("new", slug);
       if (staged) {
         const merged = { ...staged, op: { ...staged.op, week: op.add ? "next" : undefined }, error: null };
-        return { items: items.map((i) => (i === staged ? merged : i)), item: merged, message: op.add ? `"${slug}" will be in next week` : `"${slug}" will not be in next week` };
+        return { items: items.map((i: any) => (i === staged ? merged : i)), item: merged, message: op.add ? `"${slug}" will be in next week` : `"${slug}" will not be in next week` };
       }
-      const same = items.find((i) => i.kind === "next" && slugOf(i) === slug && i.op.add === op.add);
+      const same = items.find((i: any) => i.kind === "next" && slugOf(i) === slug && i.op.add === op.add);
       if (same) return { items, item: same, message: `"${slug}" is already staged to ${op.add ? "go into" : "come out of"} next week` };
-      const opposite = items.find((i) => i.kind === "next" && slugOf(i) === slug && i.op.add !== op.add);
+      const opposite = items.find((i: any) => i.kind === "next" && slugOf(i) === slug && i.op.add !== op.add);
       if (opposite) return { items: without(opposite), item: null, message: `That cancels the staged ${opposite.op.add ? "adding" : "removing"} of "${slug}" to next week` };
       const item = make(op);
       return { items: [...items, item], item, message: `Staged ${op.add ? "adding" : "taking out"} "${slug}" ${op.add ? "to" : "from"} next week` };
     }
     case "start_next_week": {
-      const old = items.find((i) => i.kind === "switch");
+      const old = items.find((i: any) => i.kind === "switch");
       const item = make(op);
-      if (old) return { items: items.map((i) => (i === old ? { ...old, op, error: null } : i)), item: { ...old, op }, message: "Updated the staged switch to a new week" };
+      if (old) return { items: items.map((i: any) => (i === old ? { ...old, op, error: null } : i)), item: { ...old, op }, message: "Updated the staged switch to a new week" };
       return { items: [...items, item], item, message: "Staged the switch: next week becomes this week" };
     }
     case "update_shopping_list": {
       // the list is built by the server; what is staged here is review patches (a newer patch for the same item and kind replaces the older)
-      const old = items.find((i) => i.kind === "list");
+      const old = items.find((i: any) => i.kind === "list");
       const edits = op.edits || [];
       if (old) {
-        const kept = (old.op.edits || []).filter((e) => !edits.some((n) => sameEdit(e, n)));
+        const kept = (old.op.edits || []).filter((e: any) => !edits.some((n: any) => sameEdit(e, n)));
         const merged = { ...old, op: { ...old.op, edits: [...kept, ...edits] }, error: null };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: edits.length ? `Staged ${edits.length} change${edits.length === 1 ? "" : "s"} to the shopping list` : "The shopping list is in the tray" };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: edits.length ? `Staged ${edits.length} change${edits.length === 1 ? "" : "s"} to the shopping list` : "The shopping list is in the tray" };
       }
       const item = make({ action: "update_shopping_list", build: true, edits }, { reviewed: null });
       return { items: [...items, item], item, message: "Staged the shopping list" };
     }
     case "update_catalogue": {
       // one Catalogue card for review fixes that are generally true (remember: true); a newer change to the same item replaces the older
-      const old = items.find((i) => i.kind === "catalogue");
-      const key = (c) => JSON.stringify([Object.keys(c)[0], c.set?.item || c.merge?.from || c.alias?.name || c.add?.id]);
+      const old = items.find((i: any) => i.kind === "catalogue");
+      const key = (c: any) => JSON.stringify([Object.keys(c)[0], c.set?.item || c.merge?.from || c.alias?.name || c.add?.id]);
       if (old) {
-        const kept = old.op.changes.filter((c) => !op.changes.some((n) => key(n) === key(c)));
+        const kept = old.op.changes.filter((c: any) => !op.changes.some((n: any) => key(n) === key(c)));
         const merged = { ...old, op: { ...old.op, changes: [...kept, ...op.changes] }, error: null };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: "Added to the catalogue changes in the tray" };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: "Added to the catalogue changes in the tray" };
       }
       const item = make(op);
       return { items: [...items, item], item, message: "Staged a catalogue change" };
     }
     case "update_stocktake": {
       // one "At home" card: later updates merge into it (the newest word on an item wins)
-      const old = items.find((i) => i.kind === "stocktake");
+      const old = items.find((i: any) => i.kind === "stocktake");
       if (old) {
-        const byName = new Map(old.op.items.map((u) => [u.name.toLowerCase(), u]));
+        const byName = new Map<any, any>(old.op.items.map((u: any) => [u.name.toLowerCase(), u]));
         for (const u of op.items) byName.set(u.name.toLowerCase(), u);
         const merged = { ...old, op: { ...op, items: [...byName.values()] }, error: null };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: "Updated what's at home in the tray" };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: "Updated what's at home in the tray" };
       }
       const item = make(op);
       return { items: [...items, item], item, message: "Staged what's at home" };
     }
     case "set_shopping_servings": {
-      const old = items.find((i) => i.kind === "servings");
+      const old = items.find((i: any) => i.kind === "servings");
       if (old) {
         const merged = { ...old, op: { ...op, servings: { ...old.op.servings, ...op.servings } }, error: null };
-        return { items: items.map((i) => (i === old ? merged : i)), item: merged, message: "Updated the staged servings" };
+        return { items: items.map((i: any) => (i === old ? merged : i)), item: merged, message: "Updated the staged servings" };
       }
       const item = make(op);
       return { items: [...items, item], item, message: "Staged the planned servings" };
@@ -377,7 +377,7 @@ function planChange(items, op, { caller, reason, base, photo }) {
 }
 
 /** What to look at in the repo before staging, to know later whether the recipe changed under us (clash detection). */
-async function baseFor(op) {
+async function baseFor(op: any) {
   if (!["update_recipe", "promote_recipe", "remove_draft"].includes(op.action)) return null;
   const snap = await repoSnapshot(op.slug, { warm: true });
   return snap ? { slug: op.slug, ...snap } : null;
@@ -388,7 +388,7 @@ async function baseFor(op) {
  * (with its error, if the dry run found one) and starts the photo job for a new recipe. Resolves { item, message, error, warnings, tray, view }.
  * Never commits to the repo.
  */
-export async function stageOp(spec, caller, ctx = {}) {
+export async function stageOp(spec: any, caller: any, ctx: any = {}) {
   assertCanStage(caller);
   const { op } = spec;
   if (!kindOf(op)) throw new UserError(`Unknown change "${op?.action}"`);
@@ -402,14 +402,14 @@ export async function stageOp(spec, caller, ctx = {}) {
   const photoSpec = { status: "pending", image_url: spec.imageUrl || null, ...(spec.uploadPath ? { upload: spec.uploadPath } : {}), started: clock.now() };
   const wantsPhoto = op.action === "create_recipe" || spec.imageUrl || spec.newPhoto || spec.uploadPath ? photoSpec : null;
   const reads = await warmReads();
-  let outcome;
-  const { tray } = await mutate(caller, async (tray) => {
+  let outcome: any;
+  const { tray } = await mutate(caller, async (tray: any) => {
     const items = tray?.items || [];
     if (items.length >= MAX_ITEMS && !(op.action === "update_recipe" || op.action === "create_recipe")) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
     const planned = planChange(items, op, { caller, reason, base, photo: wantsPhoto });
     if (planned.items.length > MAX_ITEMS) throw new UserError(`The tray is full (${MAX_ITEMS} changes). Save or drop some first.`);
     const { items: checked, results, state } = await checkItems(planned.items, caller, reads);
-    const item = planned.item ? checked.find((i) => i.id === planned.item.id) || null : null;
+    const item = planned.item ? checked.find((i: any) => i.id === planned.item.id) || null : null;
     outcome = { item, message: planned.message, warnings: item ? results.get(item.id)?.warnings || [] : [], needs: state.needs, state };
     return { items: checked, status: statusFor(tray, state), result: null };
   });
@@ -419,11 +419,11 @@ export async function stageOp(spec, caller, ctx = {}) {
 }
 
 /**
- * Stages several changes in ONE read-modify-write and ONE dry run (the drafts review card, lib/draft-review.js), instead of a stageOp per
+ * Stages several changes in ONE read-modify-write and ONE dry run (the drafts review card, lib/draft-review.ts), instead of a stageOp per
  * change. `clear(item)` drops existing items first (an earlier answer that changed). Only ops without photos. Same checks as stageOp: the
  * real remove rule up front, a clash base per recipe, the dry run's problems on the cards. Resolves { items (the staged ones), needs, tray }.
  */
-export async function stageMany(ops, caller, { clear, reason = "", trace } = {}) {
+export async function stageMany(ops: any, caller: any, { clear, reason = "", trace }: any = {}) {
   assertCanStage(caller);
   for (const op of ops) {
     if (!kindOf(op) || ["create_recipe", "update_recipe"].includes(op.action)) throw new UserError(`Can't stage "${op?.action}" together`);
@@ -431,11 +431,11 @@ export async function stageMany(ops, caller, { clear, reason = "", trace } = {})
   }
   const bases = await Promise.all(ops.map(baseFor));
   const reads = await warmReads();
-  let outcome = { items: [], needs: false };
-  const { tray } = await mutate(caller, async (tray) => {
-    let items = (tray?.items || []).filter((i) => !clear?.(i));
+  let outcome: any = { items: [], needs: false };
+  const { tray } = await mutate(caller, async (tray: any) => {
+    let items = (tray?.items || []).filter((i: any) => !clear?.(i));
     const ids = new Set();
-    ops.forEach((op, k) => {
+    ops.forEach((op: any, k: any) => {
       const planned = planChange(items, op, { caller, reason, base: bases[k], photo: null });
       items = planned.items;
       if (planned.item) ids.add(planned.item.id);
@@ -446,27 +446,27 @@ export async function stageMany(ops, caller, { clear, reason = "", trace } = {})
       return { items: [], result: null };
     }
     const { items: checked, state } = await checkItems(items, caller, reads);
-    outcome = { items: checked.filter((i) => ids.has(i.id)), needs: state.needs, state };
+    outcome = { items: checked.filter((i: any) => ids.has(i.id)), needs: state.needs, state };
     return { items: checked, status: statusFor(tray, state), result: null };
   });
-  trayEvent("tray-staged-many", { count: ops.length, kinds: outcome.items.map((i) => i.kind).join(","), error: outcome.items.some((i) => i.error), trace });
+  trayEvent("tray-staged-many", { count: ops.length, kinds: outcome.items.map((i: any) => i.kind).join(","), error: outcome.items.some((i: any) => i.error), trace });
   return { ...outcome, tray };
 }
 
 /** Drops an item (and its staged photo). Returns the dropped item, or null if it isn't there. */
-export async function dropItem(id, caller, ctx = {}) {
+export async function dropItem(id: any, caller: any, ctx: any = {}) {
   assertCanStage(caller);
-  let dropped = null;
+  let dropped: any = null;
   const reads = await warmReads();
-  const { tray } = await mutate(caller, async (tray) => {
-    dropped = tray?.items.find((i) => i.id === id) || null;
+  const { tray } = await mutate(caller, async (tray: any) => {
+    dropped = tray?.items.find((i: any) => i.id === id) || null;
     if (!dropped) return { result: null };
     if (dropped.kind === "list") throw new UserError("The shopping list follows next week: it's rebuilt from the recipes in the tray. Drop those instead, or ask to leave an item off.");
-    const items = tray.items.filter((i) => i.id !== id);
+    const items = tray.items.filter((i: any) => i.id !== id);
     if (!items.length) return { items: [], result: null };
     const { items: checked, state } = await checkItems(items, caller, reads);
     // only the list card left (nothing else changes next week any more): the tray is empty
-    if (!checked.length || checked.every((i) => i.kind === "list")) return { items: [], result: null };
+    if (!checked.length || checked.every((i: any) => i.kind === "list")) return { items: [], result: null };
     return { items: checked, status: statusFor(tray, state), result: null };
   });
   if (dropped?.photo?.path) await removePhotos([dropped.photo.path]).catch((err) => console.error("Deleting a staged photo failed:", err.message));
@@ -475,18 +475,18 @@ export async function dropItem(id, caller, ctx = {}) {
 }
 
 /** Settles a clash: keep_mine rebases the item onto the recipe as it is now; keep_theirs and drop remove it. */
-export async function resolveClash(id, resolution, caller, ctx = {}) {
+export async function resolveClash(id: any, resolution: any, caller: any, ctx: any = {}) {
   assertCanStage(caller);
   if (!["keep_mine", "keep_theirs", "drop"].includes(resolution)) throw new UserError('resolution must be "keep_mine", "keep_theirs" or "drop"');
-  const item = (await loadTray())?.items.find((i) => i.id === id);
+  const item = (await loadTray())?.items.find((i: any) => i.id === id);
   if (!item) throw new UserError("That item isn't in the tray any more.");
   if (resolution !== "keep_mine") {
     await dropItem(id, caller, ctx);
     return { item, message: `Dropped it from the tray (kept the site's version)` };
   }
   const snap = item.base ? await repoSnapshot(item.base.slug) : null;
-  await mutate(caller, async (tray) => {
-    const items = (tray?.items || []).map((i) => (i.id === id ? { ...i, clash: null, base: snap ? { slug: item.base.slug, ...snap } : i.base } : i));
+  await mutate(caller, async (tray: any) => {
+    const items = (tray?.items || []).map((i: any) => (i.id === id ? { ...i, clash: null, base: snap ? { slug: item.base.slug, ...snap } : i.base } : i));
     return { items, status: tray.status, result: null };
   });
   trayEvent("tray-clash-resolved", { resolution, trace: ctx.trace });
@@ -496,10 +496,10 @@ export async function resolveClash(id, resolution, caller, ctx = {}) {
 // --- clashes ---------------------------------------------------------------------------------------------------------------
 
 const CLASH_FIELDS = ["title", "course", "tags", "total_mins", "serves", "calories", "scalable"];
-const show = (v) => (Array.isArray(v) ? v.join(", ") : v === undefined ? "none" : String(v));
+const show = (v: any) => (Array.isArray(v) ? v.join(", ") : v === undefined ? "none" : String(v));
 
 /** For each item staged against an existing recipe: has that recipe changed on the site since? Map(id -> { reason, details }). */
-export async function findClashes(items) {
+export async function findClashes(items: any) {
   const clashes = new Map();
   for (const item of items) {
     if (!item.base) continue;
@@ -521,52 +521,52 @@ export async function findClashes(items) {
 
 // --- photos ----------------------------------------------------------------------------------------------------------------
 
-async function photoSubject(item) {
+async function photoSubject(item: any) {
   if (item.kind === "new") return { title: item.op.title, ingredients: item.op.ingredients || [], slug: slugOf(item) };
   const { data } = parseRecipe((await new ChangeSet(await warmReads()).read(`recipes/${item.op.slug}.md`)).toString("utf8"));
   return { title: item.op.title || data.title, ingredients: item.op.ingredients || ingredientsOf(data), slug: item.op.slug };
 }
 
 /** Changes one item inside the tray (retrying on a version clash); does nothing if the item or the tray is gone. Returns the item. */
-async function updateItem(trayId, itemId, change) {
+async function updateItem(trayId: any, itemId: any, change: any) {
   for (let attempt = 0; attempt < 6; attempt++) {
     const tray = await readTray();
-    const item = tray?.items.find((i) => i.id === itemId);
+    const item = tray?.items.find((i: any) => i.id === itemId);
     if (!tray || tray.id !== trayId || !item) return null;
-    const row = await patchTray(tray.id, tray.version, { items: tray.items.map((i) => (i.id === itemId ? change(i) : i)), list_hash: null, status: tray.status });
-    if (row) return row.items.find((i) => i.id === itemId);
+    const row = await patchTray(tray.id, tray.version, { items: tray.items.map((i: any) => (i.id === itemId ? change(i) : i)), list_hash: null, status: tray.status });
+    if (row) return row.items.find((i: any) => i.id === itemId);
   }
   return null;
 }
 
 /** Makes (or remakes) a staged item's photo in the background: "Making the photo…" on the card until it's ready or has failed. */
-export function startPhotoJob(trayId, itemId, { regenerate = false } = {}) {
+export function startPhotoJob(trayId: any, itemId: any, { regenerate = false }: any = {}) {
   return background(async () => {
     const tray = await readTray();
-    const item = tray?.items.find((i) => i.id === itemId);
+    const item = tray?.items.find((i: any) => i.id === itemId);
     if (!tray || tray.id !== trayId || !item?.photo) return;
     const path = `${trayId}/${slugOf(item)}.jpg`;
     try {
       const subject = await photoSubject(item);
       const made = await makePhoto({ title: subject.title, ingredients: subject.ingredients, description: item.photo.description, imageUrl: item.photo.image_url, uploadPath: item.photo.upload, regenerate });
       await uploadPhoto(path, made.buffer);
-      const after = await updateItem(trayId, itemId, (i) => ({ ...i, photo: { ...i.photo, status: "ready", path, source: made.source, note: made.note || null, error: null } }));
+      const after = await updateItem(trayId, itemId, (i: any) => ({ ...i, photo: { ...i.photo, status: "ready", path, source: made.source, note: made.note || null, error: null } }));
       if (!after) await removePhotos([path]).catch(() => {}); // dropped (or saved) while we were making it
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Photo for a staged item failed: ${err.message}`);
-      await updateItem(trayId, itemId, (i) => ({ ...i, photo: { ...i.photo, status: "failed", error: oneLine(err.message, 160) } }));
+      await updateItem(trayId, itemId, (i: any) => ({ ...i, photo: { ...i.photo, status: "failed", error: oneLine(err.message, 160) } }));
     }
   });
 }
 
 /** "New photo" on a card: remakes it (generated, whatever the first source was). Returns the item, or null. */
-export async function regeneratePhoto(id, caller) {
+export async function regeneratePhoto(id: any, caller: any) {
   assertCanStage(caller);
-  let found = null;
-  const { tray } = await mutate(caller, async (tray) => {
-    found = tray?.items.find((i) => i.id === id && i.photo) || null;
+  let found: any = null;
+  const { tray } = await mutate(caller, async (tray: any) => {
+    found = tray?.items.find((i: any) => i.id === id && i.photo) || null;
     if (!found) return { result: null };
-    const items = tray.items.map((i) => (i.id === id ? { ...i, photo: { ...i.photo, status: "pending", error: null, started: clock.now() } } : i));
+    const items = tray.items.map((i: any) => (i.id === id ? { ...i, photo: { ...i.photo, status: "pending", error: null, started: clock.now() } } : i));
     return { items, status: tray.status, result: null };
   });
   if (found) startPhotoJob(tray.id, id, { regenerate: true });
@@ -580,7 +580,7 @@ export async function regeneratePhoto(id, caller) {
  * and ingredient edits to a recipe that isn't in next week. New recipes, removals, anything about next week, the switch, servings and
  * ingredient edits to a next-week recipe wait for Finalise. `inNext`: slugs that are (or will be, through the tray) in next week.
  */
-export function saveNowRule(item, inNext) {
+export function saveNowRule(item: any, inNext: any) {
   if (item.kind === "promote" || item.kind === "stocktake") return true; // neither changes next week
   if (item.kind !== "edit") return false;
   const changesIngredients = item.op.ingredients !== undefined || item.op.serves !== undefined;
@@ -589,11 +589,11 @@ export function saveNowRule(item, inNext) {
 
 // --- what the panel and the model are told --------------------------------------------------------------------------------
 
-const lineOfIngredient = (i) => ingredientText(i);
+const lineOfIngredient = (i: any) => ingredientText(i);
 // A recipe card's detail: its ingredient lines with each line's section (null for none: the panel heads each section), steps, notes.
-const recipeDetail = (op) => ({
+const recipeDetail = (op: any) => ({
   ingredients: (op.ingredients || []).map(lineOfIngredient),
-  sections: (op.ingredients || []).map((i) => String(i.section || "").trim() || null),
+  sections: (op.ingredients || []).map((i: any) => String(i.section || "").trim() || null),
   steps: op.instructions || [],
   notes: op.notes || "",
 });
@@ -603,42 +603,42 @@ const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "
  * Next week as it will be after Save, in numbers (design 11.6; no model): how many recipes, how many are dinners, the average kcal per serving
  * and the total cooking time. `rows` are list rows (course, calories, total_mins). null when there are no recipes.
  */
-export function weekBalance(rows) {
+export function weekBalance(rows: any) {
   if (!rows.length) return null;
-  const kcal = rows.map((r) => Number(r.calories)).filter((n) => Number.isFinite(n) && n > 0);
+  const kcal = rows.map((r: any) => Number(r.calories)).filter((n: any) => Number.isFinite(n) && n > 0);
   return {
     recipes: rows.length,
-    dinners: rows.filter((r) => (r.course || []).includes("Dinner")).length,
-    avg_kcal: kcal.length ? Math.round(kcal.reduce((a, b) => a + b, 0) / kcal.length) : null,
-    total_mins: rows.reduce((n, r) => n + (Number(r.total_mins) || 0), 0),
+    dinners: rows.filter((r: any) => (r.course || []).includes("Dinner")).length,
+    avg_kcal: kcal.length ? Math.round(kcal.reduce((a: any, b: any) => a + b, 0) / kcal.length) : null,
+    total_mins: rows.reduce((n: any, r: any) => n + (Number(r.total_mins) || 0), 0),
   };
 }
 
 /** Everything the panel needs to draw the tray, computed fresh. null when there's no tray. */
-export async function trayView(tray, caller) {
+export async function trayView(tray: any, caller: any) {
   if (!tray) return null;
   const items = tray.items || [];
-  const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
+  const book = new Map<any, any>((await recipeSummaries().catch(() => [])).map((r: any) => [r.slug, r]));
   const { results, cs: afterSave } = await replay(items, caller, await warmReads());
   const balance = weekBalance((await listRecipes(afterSave)).filter(isNextWeek));
   const list = listState(items, results);
   const needs = list.needs;
   const current = list.reviewed;
-  const inNext = new Set([...(await listRecipes().then((rs) => rs.filter(isNextWeek).map((r) => r.slug)).catch(() => [])), ...items.filter((i) => i.kind === "next" && i.op.add).map((i) => slugOf(i))]);
+  const inNext = new Set([...(await listRecipes().then((rs) => rs.filter(isNextWeek).map((r: any) => r.slug)).catch(() => [])), ...items.filter((i: any) => i.kind === "next" && i.op.add).map((i: any) => slugOf(i))]);
   // "Save now" eligibility comes from the one full replay above (plus the quick-fix rule): no replay per item. Save re-checks the item on its own.
-  const saveNow = new Map(items.map((item) => [item.id, !item.error && !item.clash && saveNowRule(item, inNext) && (!item.photo || item.photo.status === "ready") && !results.get(item.id)?.error]));
-  const photoState = (item) => {
+  const saveNow = new Map<any, any>(items.map((item: any) => [item.id, !item.error && !item.clash && saveNowRule(item, inNext) && (!item.photo || item.photo.status === "ready") && !results.get(item.id)?.error]));
+  const photoState = (item: any) => {
     if (!item.photo) return null;
     const stale = item.photo.status === "pending" && clock.now() - (item.photo.started || 0) > PHOTO_STALE_MS;
     return { status: stale ? "failed" : item.photo.status, error: stale ? "The photo took too long" : item.photo.error || item.photo.note || null };
   };
-  const newTitles = new Map(items.filter((i) => i.kind === "new").map((i) => [slugOf(i), i.op.title]));
-  const afterSaveTitle = (slug) => newTitles.get(slug) || slug;
-  const cards = [];
+  const newTitles = new Map<any, any>(items.filter((i: any) => i.kind === "new").map((i: any) => [slugOf(i), i.op.title]));
+  const afterSaveTitle = (slug: any) => newTitles.get(slug) || slug;
+  const cards: any[] = [];
   for (const item of displayOrder(items)) {
     const slug = slugOf(item);
     const recipe = book.get(slug);
-    const card = {
+    const card: any = {
       id: item.id,
       kind: item.kind,
       added_by: item.added_by?.name || "Someone",
@@ -652,7 +652,7 @@ export async function trayView(tray, caller) {
     switch (item.kind) {
       case "switch":
         card.title = "Next week becomes this week";
-        card.sub = item.op.carry_over?.length ? `Carried over in this week: ${item.op.carry_over.map((slug) => book.get(slug)?.title || slug).join(", ")}` : "";
+        card.sub = item.op.carry_over?.length ? `Carried over in this week: ${item.op.carry_over.map((slug: any) => book.get(slug)?.title || slug).join(", ")}` : "";
         break;
       case "new":
         card.title = item.op.title;
@@ -684,33 +684,33 @@ export async function trayView(tray, caller) {
         // live: rebuilt from next week as it will be after Save on every change (docs/structured-ingredients.md 6)
         const stored = results.get(item.id)?.result?.list;
         const sections = stored?.sections || [];
-        const n = sections.reduce((t, s) => t + s.items.length, 0);
+        const n = sections.reduce((t: any, s: any) => t + s.items.length, 0);
         const recipes = stored?.recipes?.length || 0;
         card.title = stored ? `${n} items for ${recipes} recipe${recipes === 1 ? "" : "s"}` : "Shopping list";
         card.sub = current ? "Reviewed" : item.reviewed ? "Changed since the review: Finalise list" : "Built from next week; Finalise list to review it";
         card.current = current;
         const edits = item.op.edits || [];
         const stale = list.built?.stale || [];
-        card.edits = edits.filter((e) => !stale.some((x) => x.edit === e || JSON.stringify(x.edit) === JSON.stringify(e))).map((e) => editLabel(e));
-        card.notes = stale.length ? [`${stale.length} edit${stale.length === 1 ? "" : "s"} no longer appl${stale.length === 1 ? "ies" : "y"}: ${stale.map((x) => x.why.replace(/ no longer applies: .*$/, "")).join("; ")}`] : [];
-        card.preview = sections.map((s) => ({ name: s.name, items: s.items.map((i) => (i.quantity ? `${i.name} (${i.quantity})` : i.name) + (i.note ? `, ${i.note}` : "")) }));
+        card.edits = edits.filter((e: any) => !stale.some((x: any) => x.edit === e || JSON.stringify(x.edit) === JSON.stringify(e))).map((e: any) => editLabel(e));
+        card.notes = stale.length ? [`${stale.length} edit${stale.length === 1 ? "" : "s"} no longer appl${stale.length === 1 ? "ies" : "y"}: ${stale.map((x: any) => x.why.replace(/ no longer applies: .*$/, "")).join("; ")}`] : [];
+        card.preview = sections.map((s: any) => ({ name: s.name, items: s.items.map((i: any) => (i.quantity ? `${i.name} (${i.quantity})` : i.name) + (i.note ? `, ${i.note}` : "")) }));
         card.optional = (list.built?.optional || []).length;
         break;
       }
       case "catalogue":
         card.title = "Ingredient catalogue";
-        card.sub = (results.get(item.id)?.result?.lines || item.op.changes.map((c) => Object.keys(c)[0])).join("; ");
+        card.sub = (results.get(item.id)?.result?.lines || item.op.changes.map((c: any) => Object.keys(c)[0])).join("; ");
         break;
       case "stocktake": {
         const ups = item.op.items || [];
         card.title = `At home: ${ups.length} item${ups.length === 1 ? "" : "s"}`;
-        card.sub = ups.slice(0, 3).map((u) => `${u.name}${u.have === true ? "" : u.have ? ` ${u.have}` : ": none"}`).join(", ") + (ups.length > 3 ? ", …" : "");
-        card.preview = [{ name: "At home", items: ups.map((u) => (u.have === true ? `${u.name}: enough` : u.have ? `${u.name}: ${u.have}` : `${u.name}: none`)) }];
+        card.sub = ups.slice(0, 3).map((u: any) => `${u.name}${u.have === true ? "" : u.have ? ` ${u.have}` : ": none"}`).join(", ") + (ups.length > 3 ? ", …" : "");
+        card.preview = [{ name: "At home", items: ups.map((u: any) => (u.have === true ? `${u.name}: enough` : u.have ? `${u.name}: ${u.have}` : `${u.name}: none`)) }];
         break;
       }
       case "servings":
         card.title = "Planned servings";
-        card.sub = Object.entries(item.op.servings).map(([s, n]) => `${book.get(s)?.title || afterSaveTitle(s)}: ${n}`).join(", ");
+        card.sub = Object.entries<any>(item.op.servings).map(([s, n]) => `${book.get(s)?.title || afterSaveTitle(s)}: ${n}`).join(", ");
         break;
     }
     if (recipe && !["new", "list", "switch", "servings", "stocktake", "catalogue"].includes(item.kind)) {
@@ -718,9 +718,9 @@ export async function trayView(tray, caller) {
     }
     cards.push(card);
   }
-  const problems = items.filter((i) => i.error || i.clash).length;
-  const photosPending = items.some((i) => i.photo && photoState(i).status === "pending");
-  const photosFailed = items.some((i) => i.photo && photoState(i).status === "failed");
+  const problems = items.filter((i: any) => i.error || i.clash).length;
+  const photosPending = items.some((i: any) => i.photo && photoState(i)!.status === "pending");
+  const photosFailed = items.some((i: any) => i.photo && photoState(i)!.status === "failed");
   const ready = !needs || current;
   return {
     id: tray.id,
@@ -739,55 +739,55 @@ export async function trayView(tray, caller) {
 }
 
 /** Which button the tray offers right now, as the panel decides it: "apply_plan" (Save to site), "finalise_plan" (Finalise list) or null (building, blocked, empty). */
-export function trayAction(view) {
+export function trayAction(view: any) {
   if (!view?.count) return null;
   if (view.can_save) return "apply_plan";
   if (view.state === "finalising") return null;
-  if (view.needs_list && !view.list_current && !view.items.some((i) => i.error || i.clash)) return "finalise_plan";
+  if (view.needs_list && !view.list_current && !view.items.some((i: any) => i.error || i.clash)) return "finalise_plan";
   return null;
 }
 
 /** A few lines for the model about the tray and next week on the site, added to its note each turn. */
-export async function trayNote(tray, caller) {
+export async function trayNote(tray: any, caller: any) {
   const book = await recipeSummaries().catch(() => []);
-  const next = book.filter((r) => r.next);
-  const drafts = book.filter((r) => r.current && r.draft);
-  const lines = [];
+  const next = book.filter((r: any) => r.next);
+  const drafts = book.filter((r: any) => r.current && r.draft);
+  const lines: any[] = [];
   if (!tray || !tray.items?.length) lines.push("Plan tray (shared by the household): empty. Nothing is saved to the site until a person taps Save.");
   else {
-    const view = await trayView(tray, caller);
+    const view: any = await trayView(tray, caller);
     lines.push(`Plan tray (shared by the household; nothing in it is on the site until a person taps Save): ${view.count} change${view.count === 1 ? "" : "s"}, state ${view.state}${view.needs_list ? (view.list_current ? ", shopping list up to date" : ", the shopping list is needed and is not up to date (Finalise list builds it)") : ", no shopping list needed"}.`);
     for (const card of view.items) {
       const bits = [card.kind, card.title, card.sub, `added by ${card.added_by}`, card.photo ? `photo ${card.photo.status}` : "", card.error ? `PROBLEM: ${card.error}` : "", card.clash ? `CLASH: ${card.clash.reason}${card.clash.details?.length ? ` (${card.clash.details.join("; ")})` : ""}` : ""].filter(Boolean);
       lines.push(`- [${card.id}] ${bits.join(" | ")}`);
     }
   }
-  lines.push(`Next week on the site now: ${next.length ? `${next.length} recipe${next.length === 1 ? "" : "s"}: ${next.map((r) => `${r.title} (${r.slug})`).join(", ")}` : "no recipes"}.`);
-  lines.push(`This week's drafts on the site: ${drafts.length ? drafts.map((r) => `${r.title} (${r.slug})${r.next ? " [also in next week]" : ""}`).join(", ") : "none"}.`);
+  lines.push(`Next week on the site now: ${next.length ? `${next.length} recipe${next.length === 1 ? "" : "s"}: ${next.map((r: any) => `${r.title} (${r.slug})`).join(", ")}` : "no recipes"}.`);
+  lines.push(`This week's drafts on the site: ${drafts.length ? drafts.map((r: any) => `${r.title} (${r.slug})${r.next ? " [also in next week]" : ""}`).join(", ") : "none"}.`);
   // Finalise progress from the tray itself (the chat history the model sees is capped, so old answers can scroll out): which of this week's drafts
   // already have an answer staged. "Back to the book" leaves no item, so it is only in the conversation.
   const items = tray?.items || [];
-  if (items.some((i) => i.kind === "switch") && drafts.length) {
-    const carried = new Set(items.find((i) => i.kind === "switch")?.op.carry_over || []);
-    const answer = (slug) => (items.some((i) => i.kind === "promote" && i.op.slug === slug) ? "liked: promote staged" : items.some((i) => i.kind === "remove" && i.op.slug === slug) ? "not for us: removal staged" : carried.has(slug) ? "kept this week: carry-over staged" : null);
-    const done = drafts.map((r) => [r, answer(r.slug)]).filter(([, a]) => a);
-    const left = drafts.filter((r) => !answer(r.slug));
-    lines.push(`Finalise progress: the switch is staged. Drafts with an answer already in the tray (don't ask again): ${done.length ? done.map(([r, a]) => `${r.title} (${r.slug}, ${a})`).join(", ") : "none"}. Drafts not yet answered in the tray: ${left.length ? left.map((r) => `${r.title} (${r.slug})`).join(", ") : "none"} (one answered "Not tried yet, back to the book" leaves no item: check the conversation before asking).`);
+  if (items.some((i: any) => i.kind === "switch") && drafts.length) {
+    const carried = new Set<any>(items.find((i: any) => i.kind === "switch")?.op.carry_over || []);
+    const answer = (slug: any) => (items.some((i: any) => i.kind === "promote" && i.op.slug === slug) ? "liked: promote staged" : items.some((i: any) => i.kind === "remove" && i.op.slug === slug) ? "not for us: removal staged" : carried.has(slug) ? "kept this week: carry-over staged" : null);
+    const done = drafts.map((r: any) => [r, answer(r.slug)]).filter(([, a]: any) => a);
+    const left = drafts.filter((r: any) => !answer(r.slug));
+    lines.push(`Finalise progress: the switch is staged. Drafts with an answer already in the tray (don't ask again): ${done.length ? done.map(([r, a]: any) => `${r.title} (${r.slug}, ${a})`).join(", ") : "none"}. Drafts not yet answered in the tray: ${left.length ? left.map((r: any) => `${r.title} (${r.slug})`).join(", ") : "none"} (one answered "Not tried yet, back to the book" leaves no item: check the conversation before asking).`);
   }
   return lines.join("\n");
 }
 
 /** After a Finalise turn: unless the list was reviewed, the tray goes back to collecting. */
-export async function settleFinalise(caller) {
-  await mutate(caller, async (tray) => {
+export async function settleFinalise(caller: any) {
+  await mutate(caller, async (tray: any) => {
     if (!tray || tray.status !== "finalising") return { result: null };
     const { results } = await replay(tray.items, caller, await warmReads());
     return { items: tray.items, status: listState(tray.items, results).reviewed ? "ready" : "collecting", result: null };
   }).catch((err) => console.error("Settling the tray failed:", err.message));
 }
 
-export async function startFinalise(caller) {
-  const { tray } = await mutate(caller, async (tray) => (tray ? { items: tray.items, status: "finalising", result: null } : { result: null }));
+export async function startFinalise(caller: any) {
+  const { tray } = await mutate(caller, async (tray: any) => (tray ? { items: tray.items, status: "finalising", result: null } : { result: null }));
   return tray;
 }
 
@@ -795,12 +795,12 @@ export async function startFinalise(caller) {
  * Where Finalise list stands, for the server's own steps: { list, built, flagsOpen, optionalOpen, reviewed, problems } from a fresh dry run.
  * null when there's no tray.
  */
-export async function finaliseState(caller) {
+export async function finaliseState(caller: any) {
   const tray = await loadTray();
   if (!tray) return null;
   const { results } = await replay(tray.items, caller, await warmReads());
   const state = listState(tray.items, results);
-  return { ...state, items: tray.items, problems: tray.items.filter((i) => i.error || i.clash).length };
+  return { ...state, items: tray.items, problems: tray.items.filter((i: any) => i.error || i.clash).length };
 }
 
 /**
@@ -808,19 +808,19 @@ export async function finaliseState(caller) {
  * card's answers: drops become this-week-only `drop` patches on the list, never catalogue changes). An answer stays with its item, so a rebuild
  * re-applies it. Resolves the new listState.
  */
-export async function markReviewed(caller, { flags = [], optional = {} } = {}) {
+export async function markReviewed(caller: any, { flags = [], optional = {} }: any = {}) {
   assertCanStage(caller);
   const reads = await warmReads();
-  let out = null;
-  await mutate(caller, async (tray) => {
-    const list = tray?.items.find((i) => i.kind === "list");
+  let out: any = null;
+  await mutate(caller, async (tray: any) => {
+    const list = tray?.items.find((i: any) => i.kind === "list");
     if (!list) return { result: null };
     const rev = list.reviewed || { flags: [], optional: [] };
-    const drops = Object.entries(optional).filter(([, a]) => a === "drop").map(([item]) => ({ drop: item }));
-    const keeps = new Set(Object.entries(optional).filter(([, a]) => a === "keep").map(([item]) => item));
-    const edits = [...(list.op.edits || []).filter((e) => !(e.drop && (keeps.has(e.drop) || drops.some((d) => d.drop === e.drop)))), ...drops];
+    const drops = Object.entries<any>(optional).filter(([, a]) => a === "drop").map(([item]) => ({ drop: item }));
+    const keeps = new Set<any>(Object.entries<any>(optional).filter(([, a]) => a === "keep").map(([item]) => item));
+    const edits = [...(list.op.edits || []).filter((e: any) => !(e.drop && (keeps.has(e.drop) || drops.some((d) => d.drop === e.drop)))), ...drops];
     const next = { ...list, op: { ...list.op, edits }, reviewed: { flags: [...new Set([...rev.flags, ...flags])], optional: [...new Set([...rev.optional, ...Object.keys(optional)])] } };
-    const items = tray.items.map((i) => (i === list ? next : i));
+    const items = tray.items.map((i: any) => (i === list ? next : i));
     const { items: checked, state } = await checkItems(items, caller, reads);
     out = state;
     return { items: checked, status: statusFor(tray, state), result: null };
@@ -831,7 +831,7 @@ export async function markReviewed(caller, { flags = [], optional = {} } = {}) {
 // --- Langfuse (design 8.1): tray events, never with emails or tokens ----------------------------------------------------------------
 
 /** Records a tray event: on the turn's trace when there is one, else as a tiny trace of its own. */
-export function trayEvent(name, { trace, userId, sessionId, level = "DEFAULT", ...metadata } = {}) {
+export function trayEvent(name: any, { trace, userId, sessionId, level = "DEFAULT", ...metadata }: any = {}) {
   try {
     if (trace?.enabled) return trace.event({ name, metadata, level });
     const t = startTrace({ name: "tray", sessionId, userId, tags: ["editor", "tray"], metadata: {}, input: name });

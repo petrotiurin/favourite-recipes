@@ -1,10 +1,10 @@
 // The optional items card (docs/structured-ingredients.md section 6, S6): at the end of Finalise list, ONE card lists the items on next week's
 // list that only optional ingredients (garnishes, extras) need, each ticked (kept) to start. The user unticks what they don't want this week and
-// taps Done. Like the drafts review card (lib/draft-review.js) it is drawn and answered by the server, with no model call.
+// taps Done. Like the drafts review card (lib/draft-review.ts) it is drawn and answered by the server, with no model call.
 //
 // Everything on the card comes from the tray's built list: which items are optional is decided by the recipes' data, never by the model or the
 // client. The client sends back only { item: "keep" | "drop" }; an item it leaves out is kept, anything else is refused. The answers become
-// this-week-only `drop` patches on the list card (lib/tray.js markReviewed), never catalogue changes.
+// this-week-only `drop` patches on the list card (lib/tray.ts markReviewed), never catalogue changes.
 import { recipeSummaries } from "./recipes.ts";
 import { cardFor } from "./chat-ui.ts";
 import { slugify } from "./recipe-format.ts";
@@ -18,10 +18,10 @@ export const MAX_OPTIONAL_ITEMS = 30;
  * is the built list's optional items (listState().built.optional, after earlier drops: those are off the list, so they come back unticked).
  * `edits` are the list card's patches: an item already dropped by an answer is shown unticked.
  */
-export async function optionalCard(optional, edits = [], dropped = [], trayItems = []) {
+export async function optionalCard(optional: any, edits: any[] = [], dropped = [], trayItems: any[] = []) {
   const all = [...optional, ...dropped].slice(0, MAX_OPTIONAL_ITEMS);
   if (!all.length) return null;
-  const book = new Map((await recipeSummaries().catch(() => [])).map((r) => [r.slug, r]));
+  const book = new Map<any, any>((await recipeSummaries().catch(() => [])).map((r: any) => [r.slug, r]));
   // a recipe that is new in the tray isn't in the book yet: its title and its staged photo come from its tray card
   const staged = new Map();
   const wanted = new Set(all.flatMap((o) => o.recipes || []).filter((slug) => !book.has(slug)));
@@ -35,7 +35,7 @@ export async function optionalCard(optional, edits = [], dropped = [], trayItems
       item: o.item,
       name: o.name,
       quantity: o.quantity || "",
-      recipes: (o.recipes || []).map((slug) => {
+      recipes: (o.recipes || []).map((slug: any) => {
         const r = book.get(slug);
         const card = r ? cardFor(r) : null;
         const s = staged.get(slug);
@@ -47,10 +47,10 @@ export async function optionalCard(optional, edits = [], dropped = [], trayItems
 }
 
 /** The client's ticks checked against the card's items: { answers: { item: "keep" | "drop" } } or { error }. Unanswered = keep; unknown ids ignored. */
-export function parseOptionalAnswers(raw, items) {
+export function parseOptionalAnswers(raw: any, items: any) {
   if (raw === undefined || raw === null) raw = {};
   if (typeof raw !== "object" || Array.isArray(raw)) return { error: 'Send the ticks as { item: "keep" | "drop" }.' };
-  const answers = {};
+  const answers: Record<string, any> = {};
   for (const o of items) {
     const a = Object.hasOwn(raw, o.item) ? raw[o.item] : undefined;
     if (a === undefined || a === null) answers[o.item] = "keep";
@@ -60,16 +60,16 @@ export function parseOptionalAnswers(raw, items) {
   return { answers };
 }
 
-const list = (names) => (names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
+const list = (names: any) => (names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
 
 /** The editor's answers as their message in the chat: "Leaving off: sesame seeds and chilli oil." / "Keeping all the optional items." */
-export function optionalAnswersText(items, answers) {
-  const off = items.filter((o) => answers[o.item] === "drop").map((o) => o.name.toLowerCase());
+export function optionalAnswersText(items: any, answers: any) {
+  const off = items.filter((o: any) => answers[o.item] === "drop").map((o: any) => o.name.toLowerCase());
   return off.length ? `Leaving off: ${list(off)}.` : "Keeping all the optional items.";
 }
 
 /** Is the newest thing the editor was shown (since their last message) an optional items card that hasn't been answered? Stored rows. */
-export function optionalOpen(rows) {
+export function optionalOpen(rows: any) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
     if (row.role === "user") return false;
@@ -79,5 +79,5 @@ export function optionalOpen(rows) {
 }
 
 /** The line above the card. */
-export const optionalLine = (n) =>
+export const optionalLine = (n: any) =>
   `${n === 1 ? "One item is" : `${n} items are`} only for garnishes and extras. Untick what you don't want this week, then Done.`;

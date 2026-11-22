@@ -1,5 +1,5 @@
 // The photo reader's own prompts (docs/parallel-photo-reading.md 2.3). It does ONE thing: turn recipe screenshots into the schema below.
-// Nothing from the chat goes in here: no catalogue, no page, no conversation, no tray, no tool names, no editor details. lib/chat-prompt.js
+// Nothing from the chat goes in here: no catalogue, no page, no conversation, no tray, no tool names, no editor details. lib/chat-prompt.ts
 // is deliberately not imported. The recipe-writing rules come from the same place as the chat guide (workflows/plan-recipes.md).
 import { createHash } from "node:crypto";
 import { COURSES } from "./config.ts";
@@ -30,7 +30,7 @@ export function readerSystemPrompt() {
 }
 
 /** The fixed instruction that goes with the image parts: the single-photo or the consecutive-screenshots variant. */
-export const readerInstruction = (consecutive) => (consecutive ? CONSECUTIVE : SINGLE);
+export const readerInstruction = (consecutive: any) => (consecutive ? CONSECUTIVE : SINGLE);
 
 const str = { type: "string" };
 const strs = { type: "array", items: str };

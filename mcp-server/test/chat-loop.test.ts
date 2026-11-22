@@ -6,26 +6,26 @@ import { checkEvent } from "./chat-event-check.ts";
 Object.assign(process.env, { GITHUB_TOKEN: "gh-test", MCP_AUTH_TOKEN: "secret", PUBLIC_SITE_URL: "https://site.test/favourite-recipes", SUPABASE_URL: "https://sb.test", SUPABASE_ANON_KEY: "anon-test", SUPABASE_SERVICE_ROLE_KEY: "service-test", EDITORS: "owner@example.com", OPENROUTER_CHAT_PUBLIC_KEY: "or-public-test", CHAT_PUBLIC_MODEL: "test/model", CHAT_PUBLIC_HOURLY_LIMIT: "1000", CHAT_PUBLIC_DAILY_LIMIT: "1000", CHAT_PUBLIC_TOTAL_HOURLY_LIMIT: "100000" });
 const { createFakeGitHub, createFakeSupabase } = await import("../scripts/fakes.ts");
 const github = createFakeGitHub({ clean: true });
-let scripted;
-let requests;
-let failWith;
+let scripted: any;
+let requests: any;
+let failWith: any;
 let rejectForced = false; // the provider refuses a forced tool_choice
-const sse = (events) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
-const modelTurn = ({ text = "", chunks, reasoning, calls = [], finish, usage }) => {
-  const chunk = (delta, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
-  const ev = [];
+const sse = (events: any) => new Response(new ReadableStream({ start(c) { const enc = new TextEncoder(); for (const e of events) c.enqueue(enc.encode(`data: ${e === "[DONE]" ? e : JSON.stringify(e)}\n\n`)); c.close(); } }), { headers: { "content-type": "text/event-stream" } });
+const modelTurn = ({ text = "", chunks, reasoning, calls = [], finish, usage }: any) => {
+  const chunk = (delta: any, finish = null) => ({ choices: [{ index: 0, delta, finish_reason: finish }] });
+  const ev: any[] = [];
   if (reasoning) ev.push(chunk({ role: "assistant", content: "", reasoning }), chunk({ reasoning_content: reasoning }));
   for (const c of chunks || [text]) ev.push(chunk({ content: c }));
-  calls.forEach((c, index) => ev.push(chunk({ tool_calls: [{ index, id: `c${index}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } }] })));
+  calls.forEach((c: any, index: any) => ev.push(chunk({ tool_calls: [{ index, id: `c${index}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.arguments) } }] })));
   if (finish !== false) ev.push(chunk({}, finish || (calls.length ? "tool_calls" : "stop"))); // finish: false = the stream just stops (a timeout)
   if (usage) ev.push({ choices: [], usage });
   if (finish !== false) ev.push("[DONE]");
   return sse(ev);
 };
 const realFetch = globalThis.fetch;
-let supabase, chat;
+let supabase: any, chat: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
     if (s === "https://openrouter.ai/api/v1/chat/completions") {
@@ -54,14 +54,14 @@ beforeEach(() => {
   rejectForced = false;
 });
 let n = 0;
-async function turn(turns, content = "hi") {
+async function turn(turns: any, content = "hi") {
   scripted = turns;
   const res = await chat.POST(new Request("https://mcp.test/chat", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${++n % 250}` }, body: JSON.stringify({ messages: [{ role: "user", content }] }) }));
-  const out = [];
+  const out: any[] = [];
   for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push(checkEvent({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) }));
   return out;
 }
-const textOf = (evs) => evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+const textOf = (evs: any) => evs.filter((e: any) => e.name === "text").map((e: any) => e.data.delta).join("");
 const REPLIES = { name: "suggest_replies", arguments: { replies: ["Quick ones", "Light ones"] } };
 
 test("text plus UI-only tool calls ends the turn: the model isn't called again", async () => {
@@ -121,7 +121,7 @@ test("a turn with no text and nothing shown ends with a short message, never sil
 
 test("a cut-off answer says so and is logged: the token cap and a stream that just stops", async () => {
   const warn = console.warn;
-  const logged = [];
+  const logged: any[] = [];
   console.warn = (...a) => logged.push(a.join(" "));
   try {
     const capped = await turn([{ finish: "length", usage: { prompt_tokens: 9000, completion_tokens: 4000, completion_tokens_details: { reasoning_tokens: 3100 } } }]);
@@ -158,7 +158,7 @@ test("provider errors: out of credit, a text-only model asked to read a photo, a
   assert.equal(friendlyOpenRouterError(500, "boom").kind, "upstream");
   failWith = { status: 400, body: '{"error":{"message":"Model does not support image input (multimodal)"}}' };
   const err = console.error;
-  const logged = [];
+  const logged: any[] = [];
   console.error = (...a) => logged.push(a.join(" "));
   try {
     const evs = await turn([]);
@@ -185,7 +185,7 @@ test("a stream always ends with content or an error event, never empty", async (
 
 test("status lines say what is happening: the recipe being read, being added, the list updated", async () => {
   const { statusFor } = await import("../lib/chat.ts");
-  const titles = new Map([["avocado-toast", "Avocado Toast"]]);
+  const titles = new Map<any, any>([["avocado-toast", "Avocado Toast"]]);
   assert.equal(statusFor("get_recipe", { args: { slug: "avocado-toast" }, titles }), "Reading Avocado Toast…");
   assert.equal(statusFor("get_recipe", { raw: '{"slug": "avocado-toast"', titles }), "Reading Avocado Toast…", "from half-streamed arguments");
   assert.equal(statusFor("stage_create_recipe", { raw: '{"title": "Lemon Garlic Pasta", "course": ["Din' }), "Adding Lemon Garlic Pasta to the tray…");
@@ -200,7 +200,7 @@ test("status lines say what is happening: the recipe being read, being added, th
 test("an answer without chips gets ONE cheap follow-up that offers only suggest_replies; if that fails, safe chips from the page; errors cost nothing extra", async () => {
   let evs = await turn([{ text: "Chicken is great here." }, { calls: [{ name: "suggest_replies", arguments: { replies: ["Under 20 minutes", "Without thighs"] } }] }]);
   assert.equal(requests.length, 2);
-  assert.deepEqual(requests[1].tools.map((t) => t.function.name), ["suggest_replies"]);
+  assert.deepEqual(requests[1].tools.map((t: any) => t.function.name), ["suggest_replies"]);
   assert.deepEqual(requests[1].tool_choice, { type: "function", function: { name: "suggest_replies" } });
   assert.equal(requests[1].max_tokens, 200);
   assert.deepEqual(evs.find((e) => e.name === "suggestions").data.replies, ["Under 20 minutes", "Without thighs"]);
@@ -268,14 +268,14 @@ test("the chips nudge retries once WITHOUT a forced tool_choice when the provide
   rejectForced = true;
   const err = console.error;
   const warn = console.warn;
-  const logged = [];
+  const logged: any[] = [];
   console.error = (...a) => logged.push(a.join(" "));
   console.warn = (...a) => logged.push(a.join(" "));
   try {
     let evs = await turn([{ text: "Sure." }, { calls: [{ name: "suggest_replies", arguments: { replies: ["Another one", "Something lighter"] } }] }]);
     assert.equal(requests.length, 3, "answer, the refused forced nudge, the unforced nudge");
     assert.equal(requests[2].tool_choice, "auto");
-    assert.deepEqual(requests[2].tools.map((t) => t.function.name), ["suggest_replies"]);
+    assert.deepEqual(requests[2].tools.map((t: any) => t.function.name), ["suggest_replies"]);
     assert.match(requests[2].messages.at(-1).content, /Call suggest_replies now with 2-4 short follow-ups to your last answer/);
     assert.deepEqual(evs.find((e) => e.name === "suggestions").data.replies, ["Another one", "Something lighter"]);
     assert.ok(logged.some((l) => /OpenRouter answered 400/.test(l) && /thinking mode/.test(l)), "the provider's reason is logged");

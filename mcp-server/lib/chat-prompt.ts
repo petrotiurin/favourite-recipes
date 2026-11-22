@@ -193,7 +193,7 @@ Safety`
 const EDITOR_GUIDE = `The plan-recipes workflow (the same guide agents follow through the MCP server). Where it mentions batch_changes, AskUserQuestion, upload links or committing, the "In chat" section at the end replaces that: you stage into the tray, ask with ask_user, and a person saves.\n\n${chatGuide()}`;
 
 /** The stable part of the system prompt: instructions, then the whole-book catalogue. Editors get the tray instructions and the plan-recipes guide. */
-export function systemPrompt(catalogueLines, { editor = false } = {}) {
+export function systemPrompt(catalogueLines: any, { editor = false }: any = {}) {
   return `${editor ? `${EDITOR_INSTRUCTIONS}\n\n${EDITOR_GUIDE}` : INSTRUCTIONS}\n\nCatalogue of our recipe book (${catalogueLines ? catalogueLines.split("\n").length : 0} recipes):\n${catalogueLines || "(unavailable right now: use search_recipes)"}`;
 }
 

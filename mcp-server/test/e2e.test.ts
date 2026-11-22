@@ -1,4 +1,4 @@
-// End-to-end: real MCP client -> api/mcp.js handler -> fake in-memory GitHub API.
+// End-to-end: real MCP client -> api/mcp.ts handler -> fake in-memory GitHub API.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
@@ -25,17 +25,17 @@ files.set("build.js", Buffer.from("// build"));
 const blobs = new Map();
 const trees = new Map();
 let head = "c0";
-const commits = new Map([["c0", { tree: "t0" }]]);
+const commits = new Map<any, any>([["c0", { tree: "t0" }]]);
 let n = 0;
-const commitLog = [];
+const commitLog: any[] = [];
 const realFetch = globalThis.fetch;
 
-async function fakeGitHub(url, init = {}) {
+async function fakeGitHub(url: any, init: any = {}) {
   const u = new URL(url);
   const path = decodeURI(u.pathname.replace("/repos/petrotiurin/favourite-recipes", ""));
   const method = init.method || "GET";
   const body = init.body ? JSON.parse(init.body) : null;
-  const json = (o, status = 200) => new Response(JSON.stringify(o), { status });
+  const json = (o: any, status = 200) => new Response(JSON.stringify(o), { status });
   if (method === "GET" && path.startsWith("/contents/")) {
     const p = path.slice("/contents/".length);
     if (files.has(p)) return new Response(files.get(p));
@@ -51,7 +51,7 @@ async function fakeGitHub(url, init = {}) {
     const c = commits.get(body.sha);
     for (const e of trees.get(c.tree)) e.sha === null ? files.delete(e.path) : files.set(e.path, blobs.get(e.sha));
     head = body.sha;
-    commitLog.push({ message: c.message, paths: trees.get(c.tree).map((e) => e.path) });
+    commitLog.push({ message: c.message, paths: trees.get(c.tree).map((e: any) => e.path) });
     return json({});
   }
   throw new Error(`unexpected GitHub call ${method} ${path}`);
@@ -61,10 +61,10 @@ const photo = await sharp({ create: { width: 3000, height: 2000, channels: 3, ba
 
 // --- fake OpenRouter: square images after a short delay, failing for prompts that mention FAIL ---
 const generated = await sharp({ create: { width: 1024, height: 1024, channels: 3, background: "#4a8" } }).png().toBuffer();
-const imageRequests = [];
+const imageRequests: any[] = [];
 let inFlight = 0;
 let maxInFlight = 0;
-async function fakeOpenRouter(init) {
+async function fakeOpenRouter(init: any) {
   const body = JSON.parse(init.body);
   imageRequests.push({ ...body, auth: init.headers.Authorization });
   maxInFlight = Math.max(maxInFlight, ++inFlight);
@@ -75,21 +75,21 @@ async function fakeOpenRouter(init) {
 }
 
 // --- fake Supabase Auth: /auth/v1/user answers for two known access tokens ---
-function fakeSupabase(url, init) {
+function fakeSupabase(url: any, init: any) {
   assert.equal(init.headers.apikey, "anon-test");
-  const users = { "Bearer owner-token": "owner@example.com", "Bearer stranger-token": "stranger@example.com" };
+  const users: Record<string, string> = { "Bearer owner-token": "owner@example.com", "Bearer stranger-token": "stranger@example.com" };
   const email = users[init.headers.Authorization];
   return email ? Response.json({ id: "u1", email }) : Response.json({ msg: "invalid JWT" }, { status: 401 });
 }
 
-let mcp, upload, stocktake, client;
+let mcp: any, upload: any, stocktake: any, client: any;
 before(async () => {
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url: any, init: any) => {
     const s = String(url);
     if (s.startsWith("https://api.github.com/")) return fakeGitHub(s, init);
     if (s === "https://openrouter.ai/api/v1/images") return fakeOpenRouter(init);
     if (s === "https://sb.test/auth/v1/user") return fakeSupabase(s, init);
-    if (s === "https://img.example/dish.png") return new Response(photo, { headers: { "content-type": "image/png" } });
+    if (s === "https://img.example/dish.png") return new Response(new Uint8Array(photo), { headers: { "content-type": "image/png" } });
     if (s.startsWith("https://mcp.test/upload")) return upload[init?.method || "GET"](new Request(s, init));
     if (s.startsWith("https://mcp.test/")) return mcp[init?.method || "GET"](new Request(s, init));
     return realFetch(url, init);
@@ -101,7 +101,7 @@ before(async () => {
   await client.connect(new StreamableHTTPClientTransport(new URL("https://mcp.test/mcp?key=secret")));
 });
 
-const text = (r) => r.content.map((c) => c.text || "").join("\n");
+const text = (r: any) => r.content.map((c: any) => c.text || "").join("\n");
 
 test("rejects requests without the key", async () => {
   const res = await mcp.POST(new Request("https://mcp.test/mcp", { method: "POST", body: "{}" }));
@@ -110,10 +110,10 @@ test("rejects requests without the key", async () => {
 
 test("lists tools and recipes", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "search_recipes", "set_shopping_servings", "set_week_recipes", "start_next_week", "update_recipe", "update_shopping_list"]);
+  assert.deepEqual(tools.map((t: any) => t.name).sort(), ["batch_changes", "create_image_upload_link", "create_recipe", "get_recipe", "get_shopping_list", "get_workflow_guide", "list_recipes", "promote_recipe", "remove_draft", "search_recipes", "set_shopping_servings", "set_week_recipes", "start_next_week", "update_recipe", "update_shopping_list"]);
   const r = await client.callTool({ name: "list_recipes", arguments: {} });
   const list = JSON.parse(text(r));
-  assert.ok(list.find((x) => x.slug === "harissa-tuna-pitta"));
+  assert.ok(list.find((x: any) => x.slug === "harissa-tuna-pitta"));
 });
 
 test("the plan-recipes workflow ships with the server, as a tool and a prompt", async () => {
@@ -123,7 +123,7 @@ test("the plan-recipes workflow ships with the server, as a tool and a prompt", 
   assert.match(guide, /set_shopping_servings/);
   assert.doesNotMatch(guide, /<!--/);
   const { prompts } = await client.listPrompts();
-  assert.deepEqual(prompts.map((p) => p.name), ["plan-recipes", "ocado-shop", "sainsburys-shop"]);
+  assert.deepEqual(prompts.map((p: any) => p.name), ["plan-recipes", "ocado-shop", "sainsburys-shop"]);
   const p = await client.getPrompt({ name: "plan-recipes", arguments: { request: "harissa pitta, the soup just for me" } });
   assert.equal(p.messages[0].role, "user");
   assert.ok(p.messages[0].content.text.startsWith(guide));
@@ -137,8 +137,8 @@ for (const [name, title, own] of [
 ]) {
   test(`the ${name} workflow ships with the server, with the shared shop rules`, async () => {
     const guide = text(await client.callTool({ name: "get_workflow_guide", arguments: { name } }));
-    assert.match(guide, title);
-    assert.match(guide, own);
+    assert.match(guide, title as RegExp);
+    assert.match(guide, own as RegExp);
     for (const shared of ["## What to buy", "## Picking rules", "## Non-negotiable preferences", "## Report back"]) {
       assert.equal(guide.split(shared).length, 2, `${name} has "${shared}" exactly once`);
     }
@@ -217,7 +217,7 @@ ingredients:
 
 test("promote_recipe turns a draft into a regular recipe and leaves its weeks alone", async () => {
   const list = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
-  const draft = list.find((x) => x.slug === "test-lentil-soup");
+  const draft = list.find((x: any) => x.slug === "test-lentil-soup");
   assert.equal(draft.draft, true);
   assert.equal(draft.current, undefined); // a draft isn't in a week unless it's put in one
 
@@ -241,18 +241,18 @@ test("draft: false creates a regular recipe straight away", async () => {
 
 // Every item is tagged with the recipes it is for; here each item is simply for all of the given recipes,
 // split evenly between them (an item for several recipes says how much each one needs).
-const split = (total, recipes) => {
+const split = (total: any, recipes: any) => {
   const slugs = [...new Set(recipes)];
   return slugs.length > 1 ? { amounts: Object.fromEntries(slugs.map((s) => [s, total / slugs.length])) } : {};
 };
-const sectionsFor = (recipes) => [
+const sectionsFor = (recipes: any) => [
   { name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", note: "for both", recipes, ...split(3, recipes) }, { name: "Parsley", recipes }] },
   { name: "Pantry", items: [{ quantity: "400g", name: "Red lentils", recipes, ...split(400, recipes) }] },
 ];
-const shopping = async (name = "get_shopping_list", args = {}) => text(await client.callTool({ name, arguments: args }));
+const shopping = async (name = "get_shopping_list", args: any = {}) => text(await client.callTool({ name, arguments: args }));
 const listed = async () => JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
-const thisWeek = async () => (await listed()).filter((x) => x.current).map((x) => x.slug);
-const nextWeek = async () => (await listed()).filter((x) => x.next).map((x) => x.slug);
+const thisWeek = async () => (await listed()).filter((x: any) => x.current).map((x: any) => x.slug);
+const nextWeek = async () => (await listed()).filter((x: any) => x.next).map((x: any) => x.slug);
 const nextSections = async () => sectionsFor(await nextWeek());
 
 test("weeks: set_week_recipes is one minimal commit, idempotent, works on drafts, and a recipe can be in both weeks", async () => {
@@ -284,10 +284,10 @@ test("weeks: set_week_recipes is one minimal commit, idempotent, works on drafts
 
   // Order: this week (drafts first), then next week, then the rest (alphabetical within each).
   const list = await listed();
-  assert.deepEqual(list.slice(0, 2).map((x) => x.slug), ["steamed-rice", "test-draft-salad"]);
+  assert.deepEqual(list.slice(0, 2).map((x: any) => x.slug), ["steamed-rice", "test-draft-salad"]);
   assert.deepEqual([list[0].current, list[0].next], [true, true]);
   assert.deepEqual([list[1].current, list[1].next, list[1].draft], [undefined, true, true]);
-  assert.ok(list.slice(2).every((x) => !x.current && !x.next));
+  assert.ok(list.slice(2).every((x: any) => !x.current && !x.next));
 
   // Drafts can be taken in and out of a week like anything else.
   await client.callTool({ name: "set_week_recipes", arguments: { week: "this", slugs: ["test-draft-salad"], add: true } });
@@ -315,7 +315,7 @@ test("shopping list covers next week only, and stays as it is after the switch",
 
   // An item for several recipes says how much each one needs, adding up to its quantity.
   const both = ["test-draft-salad", "steamed-rice"];
-  const withOnions = (onions) => [{ name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", recipes: both, ...onions }] }];
+  const withOnions = (onions: any) => [{ name: "Fresh produce", items: [{ quantity: "3", name: "Red onions", recipes: both, ...onions }] }];
   const noSplit = await client.callTool({ name: "update_shopping_list", arguments: { sections: withOnions({}) } });
   assert.ok(noSplit.isError);
   assert.match(text(noSplit), /"Red onions": amounts is required/);
@@ -473,7 +473,7 @@ test("batch_changes lands everything in one commit, each operation seeing the on
 });
 
 test("remove_draft deletes a disliked draft and its photo, refuses regular recipes and drafts planned for next week", async () => {
-  const draftOps = (title, week) => ({ action: "create_recipe", ...base, title, ...(week ? { week } : {}), image: { url: "https://img.example/dish.png" } });
+  const draftOps = (title: any, week: any) => ({ action: "create_recipe", ...base, title, ...(week ? { week } : {}), image: { url: "https://img.example/dish.png" } });
   const created = await client.callTool({ name: "batch_changes", arguments: { operations: [draftOps("Remove Me Stew", "this"), draftOps("Keep Me Stew", "this"), draftOps("Planned Stew", "next")] } });
   assert.ok(!created.isError, text(created));
   await client.callTool({ name: "set_week_recipes", arguments: { week: "next", slugs: ["remove-me-stew"], add: false } });
@@ -506,7 +506,7 @@ test("remove_draft deletes a disliked draft and its photo, refuses regular recip
   assert.match(commitLog.at(-1).message, /^Remove draft recipe: Remove Me Stew/);
   assert.equal(files.has("recipes/remove-me-stew.md"), false);
   assert.equal(files.has("images/recipes/remove-me-stew.jpg"), false);
-  assert.equal((await listed()).some((x) => x.slug === "remove-me-stew"), false);
+  assert.equal((await listed()).some((x: any) => x.slug === "remove-me-stew"), false);
 
   // Clean up the recipes this test created so later tests see the original recipe set.
   for (const slug of ["keep-me-stew", "planned-stew"]) {
@@ -544,7 +544,7 @@ test("upload link flow for a new recipe, and webp -> jpg swap for an existing on
   assert.ok(missing.isError);
 
   const form = new FormData();
-  form.append("photo", new Blob([photo]), "p.png");
+  form.append("photo", new Blob([new Uint8Array(photo)]), "p.png");
   const up = await fetch(link, { method: "POST", body: form, headers: { Accept: "application/json" } });
   assert.equal(up.status, 200, await up.clone().text());
   // Not on any page yet, so it must not trigger a site deploy on its own.
@@ -583,13 +583,13 @@ test("one upload link covers several recipes; each photo is its own upload, only
 
   const page = await (await fetch(link)).text();
   assert.match(page, /Upload 3 recipe photos/);
-  assert.equal(page.match(/<form class="item"/g).length, 3);
+  assert.equal(page.match(/<form class="item"/g)!.length, 3);
   assert.match(page, /value="multi-photo-tart"/);
 
-  const post = (slug) => {
+  const post = (slug: any) => {
     const form = new FormData();
     if (slug) form.append("slug", slug);
-    form.append("photo", new Blob([photo]), "p.png");
+    form.append("photo", new Blob([new Uint8Array(photo)]), "p.png");
     return fetch(link, { method: "POST", body: form, headers: { Accept: "application/json" } });
   };
   const commits = commitLog.length;
@@ -667,7 +667,7 @@ test("batch_changes generates photos in parallel; dry runs and failures commit n
   assert.equal(imageRequests.length - before, 3);
   assert.equal(maxInFlight, 3);
   assert.equal(commitLog.length, commits + 1);
-  assert.equal(commitLog.at(-1).paths.filter((p) => p.startsWith("images/")).length, 3);
+  assert.equal(commitLog.at(-1).paths.filter((p: any) => p.startsWith("images/")).length, 3);
 });
 
 test("links made before multi-recipe uploads still work", async () => {
@@ -695,7 +695,7 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
   const saveList = await client.callTool({ name: "update_shopping_list", arguments: { sections, servings: { "steamed-rice": 2 } } });
   assert.ok(!saveList.isError, text(saveList));
   const site = "https://petrotiurin.github.io";
-  const post = (body, token = "owner-token") =>
+  const post = (body: any, token: string | null = "owner-token") =>
     stocktake.POST(
       new Request("https://mcp.test/stocktake", {
         method: "POST",
@@ -776,13 +776,13 @@ test("stocktake: only a signed-in editor saves what's at home, for the list the 
   assert.equal(JSON.parse(files.get("shopping-list.json").toString()).servings["steamed-rice"], 1);
   const fresh = JSON.parse(files.get("shopping-list.json").toString());
   assert.equal(fresh.stocktake, undefined);
-  assert.ok(fresh.sections.flatMap((s) => s.items).every((i) => !("have" in i)));
+  assert.ok(fresh.sections.flatMap((s: any) => s.items).every((i: any) => !("have" in i)));
   assert.match(await shopping(), /Stocktake: none saved/);
 });
 
 test("batch_changes: the server builds next week's list (build: true), reports what to review and the optional items, and applies patches and catalogue changes in the same commit", async () => {
   const list = JSON.parse(text(await client.callTool({ name: "list_recipes", arguments: {} })));
-  const nextSlugs = list.filter((r) => r.next).map((r) => r.slug);
+  const nextSlugs = list.filter((r: any) => r.next).map((r: any) => r.slug);
   if (nextSlugs.length) await client.callTool({ name: "set_week_recipes", arguments: { week: "next", slugs: nextSlugs, add: false } });
   const recipe = {
     action: "create_recipe", title: "Batch Lime Noodles", course: ["Dinner"], total_mins: 20, serves: 8, calories: 400, week: "next",
@@ -804,11 +804,11 @@ test("batch_changes: the server builds next week's list (build: true), reports w
   assert.equal(commitLog.length, commits + 1, "one commit");
   assert.ok(commitLog.at(-1).paths.includes("data/ingredients.json"));
   const stored = JSON.parse(files.get("shopping-list.json").toString());
-  const all = stored.sections.flatMap((sec) => sec.items.map((i) => ({ ...i, section: sec.name })));
+  const all = stored.sections.flatMap((sec: any) => sec.items.map((i: any) => ({ ...i, section: sec.name })));
   assert.deepEqual(stored.recipes, ["batch-lime-noodles"]);
-  assert.deepEqual(all.find((i) => i.name === "Red lentils"), { name: "Red lentils", quantity: "50g", recipes: ["batch-lime-noodles"], section: "Tins & jars" }, "200g for 8, at 2 servings, in the aisle the catalogue now says");
-  assert.ok(!all.some((i) => i.name === "Sesame seeds"), "dropped this week");
-  assert.equal(Number(all.find((i) => i.name === "Limes").quantity) * stored.servings["batch-lime-noodles"] / 2, 1);
+  assert.deepEqual(all.find((i: any) => i.name === "Red lentils"), { name: "Red lentils", quantity: "50g", recipes: ["batch-lime-noodles"], section: "Tins & jars" }, "200g for 8, at 2 servings, in the aisle the catalogue now says");
+  assert.ok(!all.some((i: any) => i.name === "Sesame seeds"), "dropped this week");
+  assert.equal(Number(all.find((i: any) => i.name === "Limes").quantity) * stored.servings["batch-lime-noodles"] / 2, 1);
   // sections and build together are refused
   const both = await client.callTool({ name: "update_shopping_list", arguments: { build: true, sections: [{ name: "X", items: [{ name: "Y", recipes: ["batch-lime-noodles"] }] }] } });
   assert.ok(both.isError);

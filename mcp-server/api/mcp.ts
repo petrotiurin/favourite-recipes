@@ -5,10 +5,10 @@ import { buildServer } from "../lib/server.ts";
 
 // Stateless Streamable HTTP: a fresh server + transport per request, which is
 // what serverless functions want (no session affinity, no Redis).
-async function handle(request) {
+async function handle(request: any) {
   try {
     assertConfigured();
-  } catch (err) {
+  } catch (err: any) {
     return Response.json({ error: err.message }, { status: 500 });
   }
   if (!isAuthorized(request)) {
