@@ -33,21 +33,25 @@ both.
 - The backend stays the only writer to the repo. Recipes, `shopping-list.json` and `data/ingredients.json` keep their formats.
 - Pages are still rendered to HTML at build time from `recipes/*.md` (section 4.5: build-time HTML, taken over in the browser).
 
-## 3. Proposed shape (updated as questions are decided)
+## 3. Proposed shape
 
 ```
-src/build/          the build (today build.js) and the HTML renderers (today templates/{layout,index,...}.js), TypeScript, ESM
-src/client/         browser entry points: search, servings, wakelock, cook-claude, shopping, auth, chat → bundled into dist/*.js
-shared/             logic and types used by the build, the browser and the backend (section 4.2), own package.json "type": "module"
-tsconfig.json       one strict config, type-checked with tsc --noEmit in the Pages workflow
+src/pages/          one component per page (index, next-week, recipe, shopping) and the layout, .tsx: rendered to HTML at build time
+src/islands/        the interactive parts (servings, search, wakelock, cook-claude, shopping list, chat, sign-in), .tsx: rendered
+                    into the page's HTML and hydrated in the browser, each a Vite browser entry
+src/build/          the build: reads recipes/*.md, shopping-list.json, the catalogue; validates them (shared schemas); renders the pages
+shared/             logic, zod schemas and types used by the build, the browser and the backend; own package.json, "type": "module"
+vite.config.ts      one config for the browser build, the render build, the dev server and Vitest
+tsconfig.json       strict; tsc --noEmit runs in the Pages workflow
 ```
 
-- **Running the build:** `node src/build/build.ts`. Node 24 runs TypeScript directly by stripping the types (section 4), so no
-  `tsx` or compile step for the build itself.
-- **Browser bundles:** a bundler (Vite, section 4.4) turns each `src/client/*.ts` entry into one `dist/<name>.js`. It still copies
-  `auth.js` only when `SUPABASE_URL` + `SUPABASE_ANON_KEY` are set and `chat.js` only when `CHAT_API_URL` is set, as today.
-- **Shared code** replaces the `kept-in-step.md` table, and that file is deleted. The backend's tests import the shared modules
-  instead of reading `templates/` files.
+**The build, in the Pages workflow:** `tsc --noEmit`, `vitest run`, then `vite build` (the islands → `dist/assets/<name>-<hash>.js`
+and the manifest), `vite build --ssr src/build/render.tsx`, and `node` runs that render output, which writes every page's HTML into
+`dist/` with the manifest's hashed script names. `npm run build` does all of it. Images and the stylesheet are copied as today
+(the stylesheet may go through Vite too, for a hashed name).
+
+**The backend** stays a separate Vercel project, converted to `.ts` (4.3), importing `shared/`. `.claude/rules/kept-in-step.md` is
+deleted once its five pieces are in `shared/`.
 
 ## 4. Decided
 
@@ -57,7 +61,8 @@ tsconfig.json       one strict config, type-checked with tsc --noEmit in the Pag
 - `mcp-server/package.json`: `"engines": { "node": "24.x" }` (today 22.x). The Vercel project is already set to 24.x but
   `engines` overrides it: every build logs that warning, three times. That warning goes away.
 - Root `package.json`: add `"engines": { "node": ">=24" }` and `"type": "module"`.
-- **Native type stripping.** Node 24 runs `.ts` files directly, including `node --test` on `.ts` tests. It only strips type
+- **Native type stripping.** Node 24 runs `.ts` files directly, including `node --test` on `.ts` tests. The backend and `shared/`
+  rely on this; the site's build goes through Vite because of JSX (4.6, 4.9). It only strips type
   annotations; it doesn't compile. That rules out TypeScript syntax that generates code (`enum`, `namespace`, constructor parameter
   properties, `import x = require()`). The tsconfig sets `"erasableSyntaxOnly": true` so `tsc` flags them. Relative imports keep their
   `.ts` extension (`import { x } from "./status.ts"`; tsconfig `allowImportingTsExtensions`).
@@ -133,53 +138,49 @@ once as zod schemas in `shared/`, with their TypeScript types inferred (`z.infer
 - One zod version for both sides: `zod` becomes a dependency of `shared/package.json`. The backend is on zod 3 with
   `zod-to-json-schema` (for the MCP tools' JSON Schema); zod 4 has `z.toJSONSchema` built in. Moving to 4 is a step of its own.
 
+### 4.9 Vite runs both builds
+
+`vite build` bundles the islands for the browser; `vite build --ssr` builds the render entry, which Node runs to write the pages.
+One tool and one config for the browser code, the pages, the dev server and the tests (4.11).
+
+### 4.10 Islands: only the interactive parts are hydrated
+
+The servings selector, search, the wake-lock and "Cook with Claude" buttons, the shopping list, sign-in and the chat. Everything
+else (the book, a recipe's text and photo, next week) is plain HTML and ships no JS. Each island's data is embedded next to it as
+JSON (as `#shopping-data` and `#cook-recipe` are today) and validated by its `shared/` type. A page loads only its islands' scripts.
+
+### 4.11 Vitest for the site and `shared/`
+
+It reads `vite.config.ts`, so JSX and imports work as in the build, and it renders components in a fake DOM (`happy-dom`). The
+backend keeps `node --test` on plain `.ts`. The backend's tests of site code (`phase6.test.js` reading `servings.js`,
+`ingredients.test.js`, `chat-render.test.js`) move to `shared/` or to the island they test.
+
+### 4.12 Hashed script names
+
+Each build names a script after its contents (`chat-3f9a.js`), and each page links the exact file it was built with (from Vite's
+manifest). With fixed names a phone can run yesterday's cached `chat.js` against today's page; with hashed names a page always gets
+the script that matches it.
+
 ## 5. Open questions
 
-### 5.1 How does the build run the components?
-
-The build has to render `.tsx` components to HTML, which Node can't run on its own (4.6).
-
-- **A. Vite does both builds:** `vite build` for the browser bundles, then `vite build --ssr` for a render entry
-  (`src/build/render.tsx`) that Node runs to write the pages. The standard pattern for a static site with Vite; one tool, one config,
-  and the dev server reuses it.
-- **B. `htm` instead of JSX:** tagged templates (`` html`<p>${x}</p>` ``) are plain JS, so `node build.ts` still works with no
-  build step. Less familiar, weaker type checking of the markup.
-- **C. `tsx` (the runner) for the build:** `tsx build.ts` handles JSX. One more tool, and Vite still bundles the browser side.
-
-### 5.2 Which parts are taken over in the browser?
-
-- **Islands:** only the interactive parts hydrate (the servings selector, search, the shopping list, the chat). The rest of a page
-  stays plain HTML and ships no JS. Each island's data is embedded next to it.
-- **Whole pages:** every page hydrates. Simpler to reason about, but each page ships its whole content twice (HTML and the data to
-  rebuild it), the recipe page included.
-
-### 5.3 Tests for the site
-
-There are no tests at the root today: the backend's tests (`node --test`) check the site's scripts. With `.tsx` components,
-`node --test` can't load them on its own (4.6).
-
-- **Vitest** for the site and `shared/`: it uses the Vite config, so JSX and imports work as in the build, and it can render
-  components in a fake DOM. The backend keeps `node --test` (plain `.ts`, no JSX).
-- **`node --test` everywhere**, with the components tested only through the built output.
-
-Either way the site's tests run in the Pages workflow before the build, and the backend's tests of shared code move to `shared/`.
-
-### 5.4 File names and caching
-
-Today `dist/` has fixed names (`chat.js`), so a phone may run yesterday's script against today's HTML. Bundling makes it easy to
-emit hashed names (`chat-3f9a.js`) that `layout` writes into the page. Worth doing in this migration or not.
-
-### 5.5 How it ships
+### 5.1 How it ships
 
 Every merge to `main` deploys the site. Options: one PR per step in section 6, each deploying a working site; or one large PR.
 
 ## 6. Order (draft)
 
-1. Node 24, `"type": "module"`, tsconfig, the bundler; the build switches from copying scripts to bundling them, no file converted yet.
-2. The small scripts: `search`, `wakelock`, `servings`, `cook-claude`.
-3. `shared/`: the five kept-in-step pieces, their tests; delete `.claude/rules/kept-in-step.md`.
-4. `shopping` and `auth`: `window.RecipeAuth` becomes an import.
-5. `chat`.
-6. The build and its renderers.
-7. The backend (section 4.3), after a preview test of `.ts` imports on Vercel.
-8. Rewrite the rules and docs that say vanilla JS or JS-off (4.5).
+Each step leaves a working site and backend (see 5.1 for how they ship).
+
+1. **Groundwork:** Node 24 in the workflow and the backend, `.nvmrc`, root `"type": "module"`, `tsconfig.json`, `vite.config.ts`,
+   Vitest, `tsc --noEmit` in the workflow. `build.js` becomes ESM and gets the scripts from `vite build` (still plain JS, now with
+   hashed names) instead of copying them. Dev server working.
+2. **`shared/`:** the five kept-in-step pieces as `.ts`, with their tests; the site and the backend import them; `ignoreCommand`
+   gets `../shared`; delete `.claude/rules/kept-in-step.md`.
+3. **Schemas:** the zod schemas in `shared/` (recipe, ingredients, shopping list, catalogue, page context); the build validates with
+   them; the backend's recipe format uses them.
+4. **Pages as components:** layout, tiles, index, next-week, recipe; the render build replaces `templates/*.js` renderers. Same HTML
+   out (compare `dist/` before and after). Rewrite the JS-off rules (4.5).
+5. **Small islands:** servings, search, wakelock, cook-claude.
+6. **Shopping and sign-in islands:** one render for the shopping list; `window.RecipeAuth` becomes an import.
+7. **Chat:** split `chat.js` into modules, then convert each into components; the safe-render test moves with it.
+8. **The backend to `.ts`:** first a preview test of `.ts` imports on Vercel (4.3), then `lib/`, `api/` and the tests.
