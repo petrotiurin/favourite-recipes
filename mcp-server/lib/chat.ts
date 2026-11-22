@@ -11,7 +11,7 @@ import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION
 import { optionalCard } from "./optional-review.ts";
 import { thisWeeksDrafts, reviewCard } from "./draft-review.ts";
 import { trayAction, trayView, loadTray, finaliseState } from "./tray.ts";
-import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion, isRecord, optionalWire, errorName } from "./chat-ui.ts";
+import { loadBook, buildCards, buildNavigation, cleanReplyList, cleanQuestion, isRecord, errorName } from "./chat-ui.ts";
 import type { Book } from "./chat-ui.ts";
 import { errorMessage, errorStatus } from "./errors.ts";
 import type { Role } from "./types/common.ts";
@@ -503,11 +503,10 @@ const STAGE_TOOLS = new Set<string>(TOOLS.filter((t) => accessOf(t) === "stage")
  * request (POST /chat/plan/apply), a button a person taps.
  */
 export function offeredTools(role: Role): ToolDefinition[] {
-  const definitions = (): ToolDefinition[] => toolDefinitions(role).map((t) => ({ type: "function", function: t.function }));
-  const base = definitions().filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
+  const base = toolDefinitions(role).filter((t) => READ_TOOLS.has(t.function.name) && t.function.name !== "get_workflow_guide" && (role === "editor" || t.function.name !== "fetch_url"));
   const ui = [SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL];
   if (role !== "editor") return [...base, ...ui];
-  return [...base, ...definitions().filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL];
+  return [...base, ...toolDefinitions(role).filter((t) => STAGE_TOOLS.has(t.function.name)), ...ui, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL];
 }
 
 // --- the loop --------------------------------------------------------------------------------------------------
@@ -791,10 +790,7 @@ export async function runChat({ caller, messages, page, emit: rawEmit, trace, si
         if (caller.role === "editor" && offered.has("review_optional") && !askedUser) {
           try {
             const st = await finaliseState(caller);
-            if (st?.built) {
-              const built = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
-              card = built && optionalWire(built);
-            }
+            if (st?.built) card = await optionalCard(st.built.optional, st.list?.op.edits || [], st.built.droppedOptional, st.items);
           } catch (err) {
             console.error("Building the optional items card failed:", errorMessage(err));
           }

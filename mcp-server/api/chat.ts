@@ -12,7 +12,7 @@ import { optionalCard, parseOptionalAnswers, optionalAnswersText, optionalOpen, 
 import { recipeSummaries } from "../lib/recipes.ts";
 import { thisWeeksDrafts, reviewCard, parseAnswers, answersText, stageReview, reviewOpen, isPromoteIt } from "../lib/draft-review.ts";
 import { chatEnabled, publicChatEnabled, DISABLED_BODY, SIGNIN_BODY } from "../lib/chat-switch.ts";
-import { errorName, isRecord, optionalWire } from "../lib/chat-ui.ts";
+import { errorName, isRecord } from "../lib/chat-ui.ts";
 import { errorMessage } from "../lib/errors.ts";
 import type { Caller } from "../lib/types/common.ts";
 import type { OptionalItem } from "../lib/types/shopping.ts";
@@ -767,8 +767,7 @@ export async function POST(request: Request) {
         const optionalStep = async (line: string): Promise<Step> => {
           const st = await finaliseState(caller);
           const built = st?.built;
-          const open = st?.optionalOpen?.length && built ? await optionalCard(built.optional, st.list?.op.edits || [], built.droppedOptional, st.items) : null;
-          const card = open && optionalWire(open);
+          const card = st?.optionalOpen?.length && built ? await optionalCard(built.optional, st.list?.op.edits || [], built.droppedOptional, st.items) : null;
           if (card) {
             const text = [line, optionalLine(card.items.length)].filter(Boolean).join(" ");
             return { text, ui: { optional: card }, event: { type: "optional", ...card } };

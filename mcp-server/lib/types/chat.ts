@@ -196,7 +196,8 @@ export interface GenerationEnd {
   /** An OpenAI-style assistant message, or plain text. */
   output?: unknown;
   usage?: OpenRouterUsage;
-  finishReason?: string;
+  /** The provider's finish reason (read as text; anything else is recorded as no reason). */
+  finishReason?: unknown;
   error?: string;
   completionStartTime?: Date;
   metadata?: Record<string, unknown>;
@@ -218,7 +219,7 @@ export interface SpanEnd {
 
 export interface TraceEvent {
   name: string;
-  metadata?: Record<string, unknown>;
+  metadata?: object;
   /** DEFAULT, WARNING or ERROR (anything else is recorded as DEFAULT). */
   level?: string;
 }

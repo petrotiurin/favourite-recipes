@@ -262,7 +262,7 @@ export function startTrace(opts: TraceOptions = {}): Trace {
       },
       /** A point-in-time event: rate-limit hits, out-of-credit, tray changes. */
       event({ name: eventName, metadata, level = "DEFAULT" }: TraceEvent) {
-        safe(() => inTrace(() => root.startObservation(eventName, { metadata: clip(metadata), level: level === "WARNING" || level === "ERROR" ? level : "DEFAULT" }, { asType: "event" })));
+        safe(() => inTrace(() => root.startObservation(eventName, { metadata: metadata && Object.fromEntries(Object.entries(clip(metadata))), level: level === "WARNING" || level === "ERROR" ? level : "DEFAULT" }, { asType: "event" })));
       },
       /** Ends the trace. metadata: what else the user was shown (cards, chips, a question), next to the text output. */
       finish(output?: unknown, metadata?: Record<string, unknown>) {

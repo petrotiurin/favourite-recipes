@@ -6,7 +6,7 @@ import { config } from "./config.ts";
 import { recipeSummaries } from "./recipes.ts";
 import { errorMessage } from "./errors.ts";
 import type { RecipeSummary } from "./types/recipe.ts";
-import type { ChatEventDataMap, RecipeCard, Suggestion } from "./types/chat.ts";
+import type { RecipeCard, Suggestion } from "./types/chat.ts";
 
 /** An object whose keys are looked at one by one (what JSON.parse and the model give us is `unknown` until it is). */
 export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -152,11 +152,4 @@ export function cleanQuestion(args: unknown): { question: string; options: strin
     if (options.length === 6) break;
   }
   return question && options.length >= 2 ? { question, options, multi: a.multi === true } : null;
-}
-
-// --- the optional items card --------------------------------------------------------------------------------------------
-
-/** An optional-items card as the wire takes it: an item's answer is only ever "drop" (kept items carry none). */
-export function optionalWire(card: { items: (Omit<ChatEventDataMap["optional"]["items"][number], "answer"> & { answer?: string })[] }): ChatEventDataMap["optional"] {
-  return { items: card.items.map(({ answer, ...item }) => (answer === "drop" ? { ...item, answer } : item)) };
 }
