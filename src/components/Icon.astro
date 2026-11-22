@@ -1,0 +1,12 @@
+---
+// The house icon language (design.md): one outline set, 24px grid, round caps; the paths are in src/lib/icons.ts (the islands draw the same ones). `class` is on the <svg> (default "icon").
+import { ICONS, type IconName } from "../lib/icons.ts";
+
+interface Props {
+  name: IconName;
+  class?: string;
+}
+const { name, class: cls = "icon" } = Astro.props;
+const { stroke, paths, filled } = ICONS[name];
+---
+<svg class={cls} viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" stroke-width={stroke} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={paths}></svg>

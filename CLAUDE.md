@@ -2,11 +2,12 @@
 
 The family's cooking app: the recipe book, this week's and next week's plans, and the shopping list. It has three parts:
 
-1. **The site** (GitHub Pages): generated at build time from `recipes/*.md` and `shopping-list.json` by the Node build
-   script (`build.js`) and deployed as static files to GitHub Pages. **The one hard requirement is that it builds in the
+1. **The site** (GitHub Pages): generated at build time from `recipes/*.md` and `shopping-list.json` by Astro
+   (`astro build`: `src/pages`, `src/components`; TypeScript throughout, Node 24) and deployed as static files to GitHub Pages. **The one hard requirement is that it builds in the
    Pages workflow (GitHub Actions) and is served as static files from GitHub Pages**: no server-side rendering or hosting
-   of the site anywhere else. Pages may need JS to work.
-2. **Client-side JS** (`templates/*.js`): today hand-written vanilla JS, copied verbatim into `dist/`. Dynamic JS is allowed
+   of the site anywhere else.
+2. **Client-side JS**: Preact islands in `src/islands/` (search, servings, wake-lock, cook with Claude, the shopping list, sign-in, and the chat in `src/islands/chat/` with its logic in `src/lib/chat/`). Every page is still written to HTML
+   by the build; JS may add features that only exist with JS. Dynamic JS is allowed
    (frameworks, a bundler or npm packages too, as long as the build runs in the Pages workflow and the output is static files).
    Network calls from the browser go only to **our own backend** (part 3), Supabase Auth and the site's own static files, never
    to third-party APIs directly, and no secrets in the browser: anything that needs a key goes through the backend.
@@ -16,7 +17,7 @@ The family's cooking app: the recipe book, this week's and next week's plans, an
    and every commit is a site deploy, so writes are batched.
 
 More context loads when you work in an area: `mcp-server/CLAUDE.md` for the backend, and `.claude/rules/` for the site's
-templates (`site.md`), the chat (`chat.md`), the shopping list (`shopping-list.md`) and code that exists twice (`kept-in-step.md`).
+pages and islands (`site.md`), the chat (`chat.md`) and the shopping list (`shopping-list.md`).
 For the reasoning behind them: `design.md` (UI: read it before changing any page's look or behaviour), `docs/chatbot-design.md`
 (the chat), `docs/structured-ingredients.md` (ingredients as data), `docs/parallel-photo-reading.md` (photo reading).
 
@@ -44,28 +45,44 @@ recipes/            source of truth: one .md file per recipe (frontmatter + body
 images/recipes/     source of truth: one hero image per recipe
 data/ingredients.json the ingredient catalogue: one entry per thing we buy (list name, aisle, shopping unit, conversions, aliases); written by the MCP server
 shopping-list.json  the shopping list for next week's recipes, written via the MCP server (.claude/rules/shopping-list.md)
-build.js            reads recipes/*.md (+ shopping-list.json, checks ingredients against data/ingredients.json) -> writes dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
-templates/          build-time renderers (layout, index, next-week, tiles, recipe, ingredients, shopping-list, status) and the browser scripts (.claude/rules/site.md)
-styles/style.css    the one stylesheet, copied verbatim into dist/
+astro.config.ts     Astro: static output, base `/favourite-recipes`, `build.format: "file"`
+src/pages/          one page per URL: index, next-week, shopping-list, recipes/[slug] -> dist/ (index.html, next-week.html, recipes/<slug>.html, shopping-list.html)
+src/components/     the page pieces as `.astro` (layout, site bar, tile, ingredient list, week heading)
+src/islands/        the interactive parts as Preact `.tsx` islands (.claude/rules/site.md); the chat is `src/islands/chat/` (.claude/rules/chat.md)
+src/lib/            site-only helpers (week rules, status, shopping page numbers, the sign-in store, build env) and the chat's logic (`src/lib/chat/`); Vitest tests sit next to the code (`*.test.ts(x)`); `src/content.config.ts` is the recipes collection (frontmatter validated by the zod schema in shared/recipe.ts, every ingredient `item` checked against data/ingredients.json)
+styles/style.css    the one stylesheet, imported by the layout (Astro bundles it with a hashed name)
 design.md           UI principles: palette tokens, type, the house icon language, shared components
 dist/               build output — gitignored, never hand-edit, regenerated every build
-mcp-server/         separate backend on Vercel: /mcp, /stocktake, /chat (not part of the site; mcp-server/CLAUDE.md)
+shared/             what the site and the backend share: the zod schemas (recipe, catalogue, shopping list, page context, chat events: the source of truth for every data shape) and the logic (ingredient line, quantity formatting, shopping-list reading and amounts); .ts, own package.json, imported by both (docs/typescript-migration.md 4.3, 4.4)
+mcp-server/         separate backend on Vercel, TypeScript run by Node 24: /mcp, /stocktake, /chat (not part of the site; mcp-server/CLAUDE.md)
+.nvmrc, tsconfig.json, vitest.config.ts   Node 24 (`.nvmrc`, `engines`); strict TypeScript for the site and shared/; Vitest for the site's and shared/'s tests
 supabase/           `supabase init` layout: migrations/ (rate limits, chats, the tray, photo buckets, photo_reads), config.toml for `supabase start`
-docs/               design docs (chatbot-design.md, structured-ingredients.md, parallel-photo-reading.md)
+docs/               design docs (chatbot-design.md, structured-ingredients.md, parallel-photo-reading.md, typescript-migration.md: why the site is Astro + TypeScript and how it was built)
 .github/workflows/deploy.yml   GitHub Actions: builds and deploys dist/ to GitHub Pages on push to main (ignores mcp-server/ changes)
 ```
 
 ## Build / preview locally
 
+Needs Node 24 (`.nvmrc`; `nvm use`).
+
 ```
 npm install
-npm run build        # writes dist/
-npx serve dist        # or just open dist/index.html directly in a browser
+npm run dev          # astro dev: live reload; http://localhost:4321/favourite-recipes/
+npm run build        # tsc on shared/, astro check, vitest, astro build -> dist/
+npx astro preview    # serves the built dist/ under /favourite-recipes/
 ```
 
-Run `npm run build` after adding or editing any recipe and sanity-check the new page before committing.
+Pages link their files under `/favourite-recipes/`, so `npx serve dist` and opening `dist/index.html` directly don't work (no styles, broken links): use `dev` or `preview`.
+`npm test` runs only Vitest (the site's and `shared/`'s tests, next to the code); the backend has its own (`cd mcp-server && npm test`: `tsc -p .` first, then `node --test`).
+After an edit (`.claude/settings.json`, PostToolUse hooks), `.claude/hooks/run-site-tests.sh` runs the Vitest tests that cover the edited `src/`, `shared/` or `styles/` file (`vitest related`; all of them for `astro.config.ts`, `vitest.config.ts` or the catalogue) and `.claude/hooks/run-mcp-tests.sh` runs the backend's tests after an edit to `mcp-server/` or to what it uses (`shared/`, `src/lib/chat/clean.ts`, the catalogue); both are silent unless something fails.
+The chat, sign-in and stocktake exist only on a build with the
+public variables set (`CHAT_API_URL`, `SUPABASE_URL` + `SUPABASE_ANON_KEY`, `STOCKTAKE_API_URL`); `cd mcp-server && npm run dev` builds the site with them against fake services.
+
+Run `npm run build` after adding or editing any recipe and sanity-check the new page before committing (`npm run build` fails on a recipe that breaks the schema, naming the file and field).
 
 ## Recipe frontmatter schema
+
+(Enforced by the zod schemas in `shared/recipe.ts` (frontmatter, ingredients) and `shared/catalogue.ts`, which the site's build and the backend both use: **they are the source of truth**. The block below is a summary; the `add-recipe` skill's prose follows them too. Change the schema first, then this and the skill.)
 
 ```yaml
 ---
@@ -74,9 +91,9 @@ slug: ultimate-chicken-salad       # kebab-case of title
 image: /images/recipes/ultimate-chicken-salad.jpg
 course: [Lunch]                    # any of: Breakfast, Lunch, Dinner, Snack, Drink
 tags: [High Protein]               # optional, free text list
-total_mins: 15
-serves: 2                          # number of people the recipe serves, required
-calories: 195                      # kcal per serving, required (source's figure, else estimated from ingredients)
+total_mins: 15                     # positive whole number
+serves: 2                          # number of people the recipe serves, required (positive whole number)
+calories: 195                      # kcal per serving, required (positive whole number) (source's figure, else estimated from ingredients)
 scalable: false                    # optional: hides the servings selector (only when the ingredient list already gives per-person amounts)
 current: true                      # optional: in THIS week (being cooked now). Top of the home page, under a "This week" heading, sorted by meal, kicker = the meal in accent ink.
 next: true                         # optional: in NEXT week (being planned). Listed on next-week.html (linked from the home page); the shopping list is built from these.
@@ -94,14 +111,14 @@ in the `note`), `unit` (one of `g, kg, ml, l, tsp, tbsp, cup, clove, can, slice,
 `name`, `note`, `optional`, `section` (the part of the dish, e.g. "Sauce": a small heading on the page over that part's lines; a section's lines sit
 together, lines without one first; the shopping list ignores it), and `item`: the id of what it's bought as in the **ingredient catalogue**, `data/ingredients.json` (shopping-list name,
 aisle, shopping unit, conversions `per`, `aliases`, `staple` / `skip`). The page's ingredient list, the servings selector (`data-qty` written by
-`templates/ingredients.js`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.
+`shared/ingredient-line.ts`), "Cook with Claude", `scale_recipe` and the shopping list are all generated from it; nothing parses ingredient text.
 The MCP server fills `item` from the name, checks every amount converts, and refuses a write with the
-exact fix (set `item`, or send a `catalogue` change with the recipe: `{ add }`, `{ alias }`, `{ set }`; `mcp-server/lib/catalogue.js`); the build fails on
+exact fix (set `item`, or send a `catalogue` change with the recipe: `{ add }`, `{ alias }`, `{ set }`; `mcp-server/lib/catalogue.ts`); the build fails on
 an unknown `item` or unit. Only the server (or the `add-recipe` skill) writes the catalogue.
 
 New recipes start as drafts (`draft: true`); once the family has cooked one and wants to keep it, it's promoted to a regular recipe (the MCP server's `promote_recipe` tool drops `draft: true`; its weeks don't change). A draft the family didn't like is deleted with the MCP server's `remove_draft` tool (recipe file + photo); it refuses anything that isn't a draft, so regular recipes can't be removed through the server, and it refuses a draft planned for next week (the family keeps those).
 
-**This week and next week.** Two independent flags, neither implied by `draft`: `current: true` is this week (what's being cooked now), `next: true` is next week (what's being planned and shopped for). A recipe can be in this week, next week, both, or neither. The index shows this week at the top (grouped by meal, drafts first inside each), then "The rest of the book" (alphabetical); the filters are courses only. A heading above the grid says "This week" with a teal "Next week · n →" link to `next-week.html` (or "Next week: not planned"). Next week's recipes are unmarked in the book and listed together only on `next-week.html` (`templates/next-week.js`); a draft that's only in next week isn't on the home page at all (search included) until the switch. The MCP's `list_recipes` orders this week, next week, the rest. `set_week_recipes` adds/removes recipes from a week; `start_next_week` is the switch (next week becomes this week, next week is emptied, `carry_over` keeps chosen this-week recipes); both are agent-driven.
+**This week and next week.** Two independent flags, neither implied by `draft`: `current: true` is this week (what's being cooked now), `next: true` is next week (what's being planned and shopped for). A recipe can be in this week, next week, both, or neither. The index shows this week at the top (grouped by meal, drafts first inside each), then "The rest of the book" (alphabetical); the filters are courses only. A heading above the grid says "This week" with a teal "Next week · n →" link to `next-week.html` (or "Next week: not planned"). Next week's recipes are unmarked in the book and listed together only on `next-week.html` (`src/pages/next-week.astro`); a draft that's only in next week isn't on the home page at all (search included) until the switch. The MCP's `list_recipes` orders this week, next week, the rest. `set_week_recipes` adds/removes recipes from a week; `start_next_week` is the switch (next week becomes this week, next week is emptied, `carry_over` keeps chosen this-week recipes); both are agent-driven.
 
 Followed by a Markdown body with `## Instructions` (numbered; the ingredient list is rendered from the frontmatter) and an optional `## Notes`. See the `add-recipe` skill for the exact rules.
 

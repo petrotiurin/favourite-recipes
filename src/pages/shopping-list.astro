@@ -1,0 +1,51 @@
+---
+// The shopping list for next week's recipes (built by the MCP server, .claude/rules/shopping-list.md). The list itself is the Shopping island
+// (src/islands/Shopping.tsx): written here at build time, at the planned servings with what's already at home taken off, and taken over in the
+// browser (servings, ticks while shopping, and for the signed-in editor the "At home" tab and sign-in). Its data is its props.
+import Layout from "../components/Layout.astro";
+import Photo from "../components/Photo.astro";
+import { getImage } from "astro:assets";
+import { photoFor, PHOTO_SIZES } from "../lib/photos.ts";
+import Icon from "../components/Icon.astro";
+import Shopping from "../islands/Shopping.tsx";
+import AccountButton from "../islands/SignIn.tsx";
+import { DEFAULT_SERVINGS } from "../../shared/servings.ts";
+import { stocktakeAuth } from "../lib/env.ts";
+import { formatDate, planOf, shoppingProps } from "../lib/shopping.ts";
+import { getRecipes, getShoppingList } from "../lib/site-data.ts";
+
+const shopping = getShoppingList(await getRecipes());
+const list = shopping?.list ?? null;
+const recipes = shopping?.recipes ?? [];
+// The photos in the island are small round thumbnails: it gets the same small copy through its props.
+const thumbUrls = new Map<string, string>();
+for (const r of recipes) {
+  const w = PHOTO_SIZES.thumb.widths[PHOTO_SIZES.thumb.widths.length - 1];
+  thumbUrls.set(r.slug, (await getImage({ src: await photoFor(r.image, r.slug), width: w, height: w, fit: "cover", format: "webp", quality: 80 })).src);
+}
+const plan = list ? planOf(list) : {};
+const updated = list ? formatDate(list.updated) : "";
+const stocktakeApi = stocktakeAuth()?.api ?? null;
+---
+<Layout title="Shopping list — Our Favourite Recipes" bodyClass="shopping-page" pageContext={{ page: "shopping" }}>
+  <main>
+    <div class="shop-top">
+      <a class="back-link" href="index.html"><Icon name="back" />All recipes</a>
+      <div class="shop-account" id="shopping-account">{list && stocktakeApi && <AccountButton client:load />}</div>
+    </div>
+    <h1 class="shopping-title">Shopping list</h1>
+    {list ? (
+      <Fragment>
+        <details class="shop-for">
+          <summary>{recipes.length > 0 && <span class="bubbles">{recipes.map((r) => <Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" />)}</span>}<span>For {recipes.length} recipe{recipes.length === 1 ? "" : "s"}{updated && <Fragment> &middot; list made {updated}</Fragment>}</span></summary>
+          <div class="shopping-recipes">
+            {recipes.map((r) => <a href={`recipes/${r.slug}.html`}><Photo image={r.image} slug={r.slug} kind="thumb" loading="lazy" /><span>{r.title}</span><small class="planned">for {plan[r.slug] || DEFAULT_SERVINGS}</small></a>)}
+          </div>
+        </details>
+        <Shopping client:load {...shoppingProps(list, recipes, stocktakeApi, plan, (r) => thumbUrls.get(r.slug) ?? r.image)} />
+      </Fragment>
+    ) : (
+      <p class="shopping-empty">Nothing to buy right now. The list appears here once next week's recipes are planned and a shopping list has been made for them.</p>
+    )}
+  </main>
+</Layout>

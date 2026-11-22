@@ -1,0 +1,40 @@
+---
+import Layout from "../components/Layout.astro";
+import SiteBar from "../components/SiteBar.astro";
+import Tile from "../components/Tile.astro";
+import WeekHead from "../components/WeekHead.astro";
+import Search from "../islands/Search.tsx";
+import { getRecipes } from "../lib/site-data.ts";
+import { isThisWeek, isNextWeek } from "../lib/status.ts";
+import { FILTER_COURSES, courseClasses, courseLabel, indexOrder } from "../lib/week.ts";
+
+const recipes = await getRecipes();
+const { shown, restStart } = indexOrder(recipes);
+---
+<Layout title="Our Favourite Recipes" pageContext={{ page: "index" }}>
+  <SiteBar />
+  <main>
+    <h1 class="sr-only">Our Favourite Recipes</h1>
+    <Search client:load />
+    <div class="filter-bar">
+      {/* Each input must sit directly before its label: the CSS highlights the active filter with `.filter-input:checked + .filter-label`. */}
+      {["All", ...FILTER_COURSES].map((c) => (
+        <Fragment>
+          <input type="radio" name="course-filter" id={`filter-${c.toLowerCase()}`} class="filter-input" checked={c === "All"}>
+          <label for={`filter-${c.toLowerCase()}`} class="filter-label">{c}</label>
+        </Fragment>
+      ))}
+    </div>
+    <WeekHead thisWeek={recipes.filter(isThisWeek).length} nextWeek={recipes.filter(isNextWeek).length} />
+    <div class="tile-grid">
+      {shown.map((r, i) => (
+        <Fragment>
+          {/* A divider marks where the rest of the book begins (hidden while filtering or searching). */}
+          {i === restStart && i > 0 && <p class="tile-divider">The rest of the book</p>}
+          {/* The "This week" heading names the section, so this week's kickers name the meal, in the accent ink. */}
+          <Tile recipe={r} kicker={{ label: courseLabel(r), cls: isThisWeek(r) ? "kicker-current" : undefined }} cls={[...courseClasses(r), ...(isThisWeek(r) ? ["is-current"] : [])].join(" ")} />
+        </Fragment>
+      ))}
+    </div>
+  </main>
+</Layout>

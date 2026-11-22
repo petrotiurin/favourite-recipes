@@ -5,11 +5,13 @@
   "description": "MCP server that lets an agent add/edit recipes by committing to the favourite-recipes repo",
   "type": "module",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "dev": "node scripts/dev.js"
+    "postinstall": "npm ci --prefix ../shared --omit=dev --no-audit --no-fund",
+    "typecheck": "tsc -p .",
+    "test": "tsc -p . && node --test test/*.test.{js,ts}",
+    "dev": "node scripts/dev.ts"
   },
   "dependencies": {
     "@langfuse/client": "^6.1.1",
@@ -26,7 +28,10 @@
     "@vercel/functions": "^3.11.0",
     "gray-matter": "^4.0.3",
     "sharp": "^0.34.5",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.25.1"
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^6.0.3"
   }
 }

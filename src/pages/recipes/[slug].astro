@@ -1,0 +1,64 @@
+---
+import { render } from "astro:content";
+import Layout from "../../components/Layout.astro";
+import Photo from "../../components/Photo.astro";
+import Icon from "../../components/Icon.astro";
+import IngredientList from "../../components/IngredientList.astro";
+import CookActions from "../../islands/CookActions.tsx";
+import Servings from "../../islands/Servings.tsx";
+import { hasAmounts } from "../../../shared/ingredient-line.ts";
+import { getRecipes } from "../../lib/site-data.ts";
+import { isThisWeek, isNextWeek } from "../../lib/status.ts";
+import { cookRecipe } from "../../lib/recipe-text.ts";
+
+export async function getStaticPaths() {
+  return (await getRecipes()).map((recipe) => ({ params: { slug: recipe.slug }, props: { recipe } }));
+}
+
+const { recipe } = Astro.props;
+const { Content } = await render(recipe.entry);
+
+// Small-caps line above the name: the week(s) it's planned for, then course and tags. (A draft says so in the line under the title, not here.)
+const kicker: { text: string; cls?: string }[] = [
+  ...(isThisWeek(recipe) ? [{ text: "This week", cls: "kicker-current" }] : []),
+  ...(isNextWeek(recipe) ? [{ text: "Next week", cls: "kicker-next" }] : []),
+  ...[...(recipe.course ?? []), ...(recipe.tags ?? [])].map((text) => ({ text })),
+];
+// `scalable: false` in frontmatter opts a recipe out (e.g. its ingredient list already gives amounts per number of people).
+// Otherwise every amount is a `.qty` the servings selector rescales, written straight from the data.
+const scalable = recipe.scalable !== false && hasAmounts(recipe.ingredients);
+// The recipe as the "Cook with Claude" island needs it, and this page's own address for its prompt.
+const cook = { ...cookRecipe(recipe, scalable), pageUrl: new URL(Astro.url.pathname, Astro.site).href };
+---
+<Layout title={`${recipe.title} — Our Favourite Recipes`} bodyClass="recipe-page" pageContext={{ page: "recipe", slug: recipe.slug, title: recipe.title }}>
+  <main>
+    <a class="back-link" href="../index.html"><Icon name="back" />All recipes</a>
+    <header class="recipe-head">
+      <p class="kicker">{kicker.map((k, i) => <Fragment>{i > 0 && " · "}{k.cls ? <span class={k.cls}>{k.text}</span> : k.text}</Fragment>)}</p>
+      <h1 class="recipe-title">{recipe.title}</h1>
+      {recipe.draft === true && <p class="recipe-lede">A draft: we haven't tried it enough yet to call it a favourite.</p>}
+    </header>
+    <Photo class="recipe-hero" image={recipe.image} slug={recipe.slug} kind="hero" alt={recipe.title} loading="eager" />
+    <div class="recipe-meta">
+      <span><b>{recipe.total_mins}</b> min</span>
+      {/* With the servings picker on the page, it says how many the recipe serves. */}
+      {!scalable && <span class="serves-chip">Serves <b>{recipe.serves}</b></span>}
+      <span><b>{recipe.calories}</b> kcal each</span>
+    </div>
+    <div class="cook-bar">
+      {scalable && <Servings client:visible serves={recipe.serves} />}
+      <div class="cook-actions"><CookActions client:visible {...cook} /></div>
+    </div>
+    {/* The ingredients (rendered from the data) beside the rest of the body, so wide screens can show them side by side: the ingredients as
+        a sticky pane with its own scroll, the instructions in the page's scroll (see `.recipe-body` in style.css). Narrow screens stack them. */}
+    <div class="recipe-body">
+      <section class="recipe-ingredients">
+        <h2>Ingredients</h2>
+        <IngredientList ingredients={recipe.ingredients} scalable={scalable} />
+      </section>
+      <div class="recipe-steps">
+        <Content />
+      </div>
+    </div>
+  </main>
+</Layout>

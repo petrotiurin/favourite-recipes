@@ -1,0 +1,895 @@
+// Phase 4: editors' writes through the household plan tray. Staging validates with a dry run and never commits; Save is its own request
+// (fresh token + EDITORS), re-validates, commits once with the photos and empties the tray; Finalise builds the shopping list first;
+// clashes stop a Save; expired trays and their photos are purged; photo fetching refuses private addresses.
+import { test, before, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { clearCache } from "../lib/cache.ts";
+
+process.env.GITHUB_TOKEN = "gh-test";
+process.env.MCP_AUTH_TOKEN = "secret";
+process.env.PUBLIC_SITE_URL = "https://site.test/favourite-recipes";
+process.env.SUPABASE_URL = "https://sb.test";
+process.env.SUPABASE_ANON_KEY = "anon-test";
+process.env.SUPABASE_SERVICE_ROLE_KEY = "service-test";
+process.env.EDITORS = "owner@example.com, Partner@Example.com";
+process.env.OPENROUTER_CHAT_PUBLIC_KEY = "or-public-test";
+process.env.OPENROUTER_CHAT_EDITOR_KEY = "or-editor-test";
+process.env.OPENROUTER_API_KEY = "or-image-test";
+process.env.CHAT_PUBLIC_HOURLY_LIMIT = "100000";
+process.env.CHAT_EDITOR_HOURLY_LIMIT = "100000";
+process.env.CHAT_EDITOR_DAILY_LIMIT = "100000";
+process.env.CHAT_PUBLIC_TOTAL_HOURLY_LIMIT = "100000";
+
+const { createFakeGitHub, createMockOpenRouter, createFakeSupabase, createFakeImageApi } = await import("../scripts/fakes.ts");
+let github: any, openrouter: any, supabase: any, images: any, pages: any;
+const realFetch = globalThis.fetch;
+let clock: any;
+
+let chat: any, store: any, tools: any, tray: any, photos: any, config: any, background: any, planApply: any;
+before(async () => {
+  globalThis.fetch = async (url: any, init: any) => {
+    const s = String(url);
+    if (s.startsWith("https://api.github.com/")) return github.fetch(s, init);
+    if (s === "https://openrouter.ai/api/v1/chat/completions") return openrouter.fetch(s, init);
+    if (s === "https://openrouter.ai/api/v1/images") return images.fetch(s, init);
+    if (s.startsWith("https://sb.test/")) return supabase.fetch(s, init);
+    if (s.startsWith("https://site.test/")) return pages(s, init);
+    return realFetch(url, init);
+  };
+  chat = await import("../api/chat.ts");
+  store = await import("../lib/chat-store.ts");
+  tools = await import("../lib/tools.ts");
+  tray = await import("../lib/tray.ts");
+  photos = await import("../lib/tray-photos.ts");
+  background = await import("../lib/background.ts");
+  planApply = await import("../lib/plan-apply.ts");
+  ({ config } = await import("../lib/config.ts"));
+});
+
+const OWNER = "00000000-0000-4000-8000-0000000000e1";
+const PARTNER = "00000000-0000-4000-8000-0000000000e2";
+const STRANGER = "00000000-0000-4000-8000-0000000000a1";
+beforeEach(async () => {
+  clock = Date.now();
+  store.clock.now = () => clock;
+  clearCache();
+  github = createFakeGitHub({ clean: true });
+  openrouter = createMockOpenRouter({ delayMs: 0 });
+  images = createFakeImageApi();
+  pages = () => new Response(null, { status: 404 });
+  supabase = createFakeSupabase({
+    url: "https://sb.test", anonKey: "anon-test", serviceKey: "service-test", now: () => clock,
+    users: { "owner-token": { id: OWNER, email: "owner@example.com" }, "partner-token": { id: PARTNER, email: "partner@example.com" }, "stranger-token": { id: STRANGER, email: "stranger@example.com" } },
+  });
+  config.shoppingEditors = ["owner@example.com", "partner@example.com"];
+  config.supabaseServiceKey = "service-test";
+  photos.deps.lookup = async () => [{ address: "93.184.216.34" }];
+  photos.deps.get = (url: any, _address: any, init: any) => fetch(url, { redirect: "manual", ...init }); // the tests fake the network through the global fetch
+});
+
+let ip = 0;
+const call = (method: any, path: any, { token, body }: any = {}) => {
+  const [route, qs] = path.replace(/^\/chat\/?/, "").split("?");
+  const real = route ? `https://mcp.test/api/chat?route=${route}${qs ? `&${qs}` : ""}` : "https://mcp.test/chat";
+  return chat[method](new Request(real, { method, headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${++ip % 250}`, ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) }));
+};
+async function events(res: any) {
+  const out: any[] = [];
+  for (const block of (await res.text()).split("\n\n").filter(Boolean)) out.push({ name: block.match(/^event: (.*)$/m)[1], data: JSON.parse(block.match(/^data: (.*)$/m)[1]) });
+  return out;
+}
+const say = async (message: any, { token = "owner-token", conversation_id, page, action, answers }: any = {}) => {
+  const res = await call("POST", "/chat", { token, body: { message, conversation_id, page: page || { page: "index" }, ...(action ? { action } : {}), ...(answers ? { answers } : {}) } });
+  assert.equal(res.status, 200, message);
+  const evs = await events(res);
+  await background.backgroundIdle();
+  return { evs, conversation_id: evs.find((e) => e.name === "meta")?.data.conversation_id || conversation_id };
+};
+const plan = async (token = "owner-token") => (await (await call("GET", "/chat/plan", { token })).json()).tray;
+const trayRow = () => supabase.tables.trays[0];
+const recipePath = (slug: any) => `recipes/${slug}.md`;
+const anySlug = (n = 0) => [...github.files.keys()].filter((p) => p.startsWith("recipes/")).map((p) => p.slice(8, -3)).sort()[n];
+const setFlag = (slug: any, flags: any) => {
+  let md = github.files.get(recipePath(slug)).toString().replace(/^(draft|current|next): true\n/gm, "");
+  md = md.replace(/^---\n([\s\S]*?)\n---/, (m: any, fm: any) => `---\n${fm}\n${flags}\n---`);
+  github.files.set(recipePath(slug), Buffer.from(md));
+  clearCache(); // changed behind the server's back: drop its branch snapshot
+};
+const pageOf = (slug: any) => ({ page: "recipe", slug });
+
+// --- staging ---------------------------------------------------------------------------------------------------------------
+
+test("an editor stages a new recipe: it goes in the tray (not the repo), with a photo made in the background and shown by a signed URL", async () => {
+  const { evs } = await say("add a new recipe: test pasta");
+  assert.ok(evs.some((e) => e.name === "tray"), "the panel is told the tray changed");
+  assert.equal(github.commitLog.length, 0, "staging never commits");
+  assert.ok(!github.files.has(recipePath("test-pasta")));
+
+  const t = await plan();
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "the list card follows next week at once, built by the site");
+  const card = t.items[0];
+  assert.equal(card.kind, "new");
+  assert.match(t.items[1].title, /^\d+ items for 1 recipe$/);
+  assert.equal(card.title, "Test Pasta");
+  assert.equal(card.added_by, "Owner");
+  assert.equal(card.error, null);
+  assert.deepEqual(card.detail.ingredients.slice(0, 2), ["200g pasta", "2 cloves garlic"]);
+  assert.equal(card.photo.status, "ready", "the background job finished");
+  assert.equal(images.requests.length, 1, "generated, since no link was given");
+  assert.equal(images.requests[0].auth, "Bearer or-image-test");
+  assert.match(card.photo.url, /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/tray-photos\/.+\/test-pasta\.jpg\?token=/);
+  const img = await supabase.fetch(card.photo.url, {});
+  assert.equal(img.status, 200);
+  assert.equal(img.headers.get("content-type"), "image/jpeg");
+  assert.equal([...supabase.objects.keys()].length, 1);
+  assert.equal(t.needs_list, true, "a new recipe in next week changes the list");
+  assert.equal(t.can_save, false);
+  assert.equal(t.state, "collecting");
+  assert.ok(Math.abs(Date.parse(t.expires_at) - clock - 7 * 86400_000) < 5000, "expires 7 days after the first item");
+});
+
+test("the dry run reports problems on the card at once, and re-staging the same title replaces it", async () => {
+  const slug = anySlug();
+  const out = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
+  assert.match(out.content[0].text, /PROBLEM on the card/);
+  assert.match(out.content[0].text, /needs an amount/);
+  const t = await plan();
+  assert.match(t.items.find((i: any) => i.kind === "new").error, /needs an amount/);
+  assert.equal(t.can_save, false);
+  assert.equal(slug.length > 0, true);
+  const again = await tools.dispatch("stage_create_recipe", { title: "Bad One", course: ["Dinner"], total_mins: 10, serves: 2, calories: 100, ingredients: [{ amount: 1, unit: "tsp", name: "salt" }], instructions: ["Do the **salt**."] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {}, trace: {} } });
+  assert.doesNotMatch(again.content[0].text, /PROBLEM/);
+  await background.backgroundIdle();
+  const t2 = await plan();
+  assert.equal(t2.items.filter((i: any) => i.kind === "new").length, 1, "replaced, not duplicated");
+  assert.equal(t2.items.find((i: any) => i.kind === "new").error, null);
+});
+
+test("stage tools and the tray writes refuse a public caller, whatever called them", async () => {
+  const quiet = console.warn;
+  console.warn = () => {};
+  try {
+    const pub = tools.makeCaller({ role: "public" });
+    for (const t of tools.TOOLS.filter((x: any) => tools.accessOf(x) === "stage")) {
+      const out = await tools.dispatch(t.name, {}, pub, { chat: { emit() {} } });
+      assert.equal(out.isError, true);
+      assert.match(out.content[0].text, /Not allowed/);
+    }
+    await assert.rejects(() => tray.stageOp({ op: { action: "promote_recipe", slug: "x" } }, pub), /only an editor/);
+    await assert.rejects(() => tray.dropItem("abcdef12", pub), /only an editor/);
+    await assert.rejects(() => tray.mutate(pub, async () => ({ result: 1 })), /only an editor/);
+    await assert.rejects(() => planApply.applyPlan({ caller: pub }), /only an editor or the MCP agent/);
+    // an editor caller outside the chat (no chat context) can't use a stage tool either
+    const noChat = await tools.dispatch("stage_promote_recipe", { slug: "x" }, tools.makeCaller({ role: "editor", userId: OWNER }));
+    assert.match(noChat.content[0].text, /only works inside the chat/);
+  } finally {
+    console.warn = quiet;
+  }
+  assert.equal(supabase.tables.trays.length, 0);
+});
+
+test("the MCP server does not expose the stage tools, and its write tools are unchanged", async () => {
+  const { buildServer } = await import("../lib/server.ts");
+  const server = buildServer({ origin: "https://mcp.test" });
+  const names = Object.keys((server as any)._registeredTools);
+  assert.ok(names.includes("create_recipe") && names.includes("batch_changes"));
+  assert.ok(!names.some((n) => n.startsWith("stage_") || ["get_tray", "drop_tray_item", "resolve_clash"].includes(n)));
+});
+
+// --- Save --------------------------------------------------------------------------------------------------------------
+
+async function stagedPastaAndList() {
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  const finalise = await say("ignored", { conversation_id, action: "finalise" });
+  return { conversation_id, finalise };
+}
+
+test("Finalise builds the list, then Save commits ONCE with the photo, empties the tray, deletes the staged photo and posts a summary with a Publishing card", async () => {
+  const { conversation_id } = await stagedPastaAndList();
+  const t = await plan();
+  assert.equal(t.state, "ready");
+  assert.equal(t.list_current, true);
+  assert.equal(t.can_save, true);
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "Save order: new recipes, then the list");
+  assert.match(t.items[1].title, /^\d+ items for 1 recipe$/);
+  assert.equal(github.commitLog.length, 0, "nothing committed yet");
+
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  assert.equal(out.saved, 2);
+  assert.equal(github.commitLog.length, 1, "one commit");
+  assert.deepEqual(github.commitLog[0].paths.sort(), ["images/recipes/test-pasta.jpg", "recipes/test-pasta.md", "shopping-list.json"]);
+  assert.match(github.files.get(recipePath("test-pasta")).toString(), /draft: true/);
+  assert.match(github.files.get(recipePath("test-pasta")).toString(), /next: true/);
+  assert.ok(github.files.get("images/recipes/test-pasta.jpg").length > 1000, "the photo bytes went into the commit");
+  assert.equal(JSON.parse(github.files.get("shopping-list.json")).recipes[0], "test-pasta");
+  assert.equal(supabase.tables.trays.length, 0, "the tray is empty");
+  assert.equal(supabase.objects.size, 0, "the staged photo is gone");
+  assert.deepEqual(out.cards.map((c: any) => [c.slug, c.publishing]), [["test-pasta", true]]);
+  assert.match(out.summary, /Saved 2 changes/);
+  const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
+  const last = convo.messages.at(-1);
+  assert.match(last.content, /Saved 2 changes/);
+  assert.equal(last.cards[0].publishing, true, "the panel shows it as Publishing until the page is live");
+  assert.equal((await plan()), null);
+});
+
+test("Save needs a fresh token AND EDITORS: no token 401, expired 401, a non-editor 403, an editor removed from the list 403, and nothing is committed", async () => {
+  await stagedPastaAndList();
+  const apply = (token: any) => call("POST", "/chat/plan/apply", { token, body: {} });
+  assert.equal((await apply(undefined)).status, 401);
+  assert.equal((await apply("nope")).status, 401);
+  assert.equal((await apply("stranger-token")).status, 403);
+  supabase.expire("partner-token");
+  assert.equal((await apply("partner-token")).status, 401, "a token that expired mid-session means signing in again");
+  config.shoppingEditors = ["partner@example.com"]; // the owner is taken off the list while their session is still valid
+  assert.equal((await apply("owner-token")).status, 403, "removal takes effect at once");
+  assert.equal(github.commitLog.length, 0);
+  assert.equal(supabase.tables.trays[0].items.length, 2, "the tray is untouched");
+  config.shoppingEditors = ["owner@example.com"];
+  assert.equal((await apply("owner-token")).status, 200, "an editor who is on the list can");
+});
+
+test("a visitor's request body can't Save: forged roles are ignored (the token decides)", async () => {
+  await stagedPastaAndList();
+  const res = await call("POST", "/chat/plan/apply", { body: { role: "editor", caller: { role: "editor" } } });
+  assert.equal(res.status, 401);
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("the list is rebuilt on every change: a change after the review keeps Save, unless it brings an optional item the user hasn't seen", async () => {
+  const { conversation_id } = await stagedPastaAndList();
+  let t = await plan();
+  assert.equal(t.can_save, true);
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  const base = { course: ["Dinner"], total_mins: 10, serves: 2, calories: 300, instructions: ["Cook the **pasta**."] };
+  // nothing new to look at: the list just updates, Save stays
+  await tools.dispatch("stage_create_recipe", { ...base, title: "Plain Pasta", ingredients: [{ amount: 100, unit: "g", name: "pasta" }] }, ed, ctx);
+  await background.backgroundIdle(); // its photo
+  t = await plan();
+  assert.equal(t.list_current, true, "still reviewed");
+  assert.equal(t.can_save, true);
+  assert.match(t.items.find((i: any) => i.kind === "list").title, /for 2 recipes$/, "the List card is live");
+  // a new optional item: Finalise list comes back, for just that
+  await tools.dispatch("stage_create_recipe", { ...base, title: "Chilli Pasta", ingredients: [{ amount: 100, unit: "g", name: "pasta" }, { name: "chilli flakes", note: "to serve", optional: true }] }, ed, ctx);
+  await background.backgroundIdle();
+  t = await plan();
+  assert.equal(t.list_current, false);
+  assert.equal(t.can_save, false);
+  assert.equal(t.state, "collecting");
+  assert.deepEqual(t.review, { flags: 0, optional: 1 });
+  assert.equal(t.items.find((i: any) => i.kind === "list").sub, "Changed since the review: Finalise list");
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /Finalise the list first/);
+  assert.equal(github.commitLog.length, 0);
+  // Finalise again: no model call, the optional items card
+  const calls = openrouter.requests.length;
+  const fin = await say("ignored", { conversation_id, action: "finalise" });
+  assert.equal(openrouter.requests.length, calls, "nothing flagged: no model call");
+  const card = fin.evs.find((e) => e.name === "optional").data;
+  assert.deepEqual(card.items.map((i: any) => [i.item, i.name]), [["chilli-flakes", "Chilli flakes"]]);
+  assert.equal(card.items[0].recipes[0].slug, "chilli-pasta");
+  assert.equal(card.items[0].recipes[0].title, "Chilli Pasta", "a recipe new in the tray: its title from its card, not its address");
+  assert.match(card.items[0].recipes[0].image, /^https:\/\/sb\.test\/storage\/v1\/object\/sign\/tray-photos\/.+\/chilli-pasta\.jpg\?token=/, "and its staged photo");
+  assert.equal(tray.trayAction(await plan()), "finalise_plan", "until Done, the list isn't reviewed");
+  // anything but keep / drop is refused; Done once only
+  const bad = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: { "chilli-flakes": "maybe" }, page: {} } });
+  assert.equal(bad.status, 400);
+  const done = await say("ignored", { conversation_id, action: "review_optional", answers: { "chilli-flakes": "drop" } });
+  assert.match(done.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /off this week's list.*tap Save to site/);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
+  assert.equal(user.content, "Leaving off: chilli flakes.", "the answers are the editor's message, in words");
+  const again = await call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_optional", answers: {}, page: {} } });
+  assert.equal(again.status, 409, "answered once only");
+  t = await plan();
+  assert.equal(t.can_save, true);
+  assert.deepEqual(t.items.find((i: any) => i.kind === "list").edits, ["leave off chilli-flakes"]);
+  const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(saved.status, 200);
+  const list = JSON.parse(github.files.get("shopping-list.json"));
+  assert.ok(!list.sections.flatMap((s: any) => s.items).some((i: any) => /chilli/i.test(i.name)), "left off this week's list");
+  assert.ok(list.sections.flatMap((s: any) => s.items).some((i: any) => i.name === "Dried pasta" && i.recipes.length === 3), "the list is the sum of the recipes");
+});
+
+test("a tray that doesn't change next week needs no list: Save is available straight away", async () => {
+  const slug = anySlug();
+  setFlag(slug, "draft: true");
+  const { conversation_id } = await say("hello", {});
+  await tools.dispatch("stage_promote_recipe", { slug }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {} } });
+  const t = await plan();
+  assert.equal(t.needs_list, false);
+  assert.equal(t.can_save, true);
+  assert.equal(t.state, "ready");
+  const finalise = await call("POST", "/chat", { token: "owner-token", body: { action: "finalise", conversation_id, page: {} } });
+  assert.equal(finalise.status, 409, "no Finalise when no list is needed");
+  await finalise.text();
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(res.status, 200);
+  assert.doesNotMatch(github.files.get(recipePath(slug)).toString(), /draft: true/);
+  assert.equal(github.commitLog.length, 1);
+});
+
+test("planned servings can be staged at any time: against the list the tray rebuilds, never making it need a review", async () => {
+  const editor = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  const staged = await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 2 } }, editor, ctx);
+  assert.match(staged.content[0].text, /^Staged the planned servings/);
+  assert.doesNotMatch(staged.content[0].text, /PROBLEM/);
+  let t = await plan();
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list", "servings"]);
+  assert.equal(t.items.find((i: any) => i.kind === "servings").error, null);
+  await say("ignored", { conversation_id, action: "finalise" });
+  t = await plan();
+  assert.equal(t.list_current, true);
+  await tools.dispatch("stage_set_shopping_servings", { servings: { "test-pasta": 1 } }, editor, ctx);
+  t = await plan();
+  assert.equal(t.can_save, true, "servings never need the list reviewed again");
+  const saved = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal(github.commitLog.length, 1, "one commit");
+  assert.equal(JSON.parse(github.files.get("shopping-list.json")).servings["test-pasta"], 1);
+});
+
+// --- Save now ----------------------------------------------------------------------------------------------------------------
+
+test("Save now: a quick fix commits alone; new recipes and next-week changes can't be saved on their own; ingredient edits to a next-week recipe wait", async () => {
+  const slug = anySlug(1);
+  const other = anySlug(2);
+  setFlag(other, "next: true");
+  await say("it's 35 minutes", { page: pageOf(slug) });
+  await say("add a new recipe: test pasta");
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  await tools.dispatch("stage_update_recipe", { slug: other, ingredients: [{ amount: 1, name: "egg" }] }, ed, { chat: { emit() {} } });
+  let t = await plan();
+  const byKind = (kind: any, s?: any) => t.items.find((i: any) => i.kind === kind && (!s || i.recipe?.url.includes(s)));
+  const fix = byKind("edit", slug);
+  assert.equal(fix.save_now, true, "time is a quick fix");
+  assert.equal(byKind("new").save_now, false);
+  assert.equal(byKind("edit", other).save_now, false, "ingredients of a next-week recipe change the list");
+
+  const refused = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { item_id: byKind("new").id } });
+  assert.equal(refused.status, 409);
+  assert.equal(github.commitLog.length, 0);
+
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { item_id: fix.id } });
+  assert.equal(res.status, 200);
+  assert.equal(github.commitLog.length, 1);
+  assert.deepEqual(github.commitLog[0].paths, [recipePath(slug)], "just that item");
+  assert.match(github.files.get(recipePath(slug)).toString(), /total_mins: 35/);
+  t = await plan();
+  assert.equal(t.count, 3, "the rest of the tray waits (with the list card)");
+  assert.ok(!t.items.some((i: any) => i.id === fix.id));
+});
+
+// --- clashes -------------------------------------------------------------------------------------------------------------------
+
+test("a clash (the recipe changed on the site since staging) stops Save: nothing committed, the card flagged, and the bot resolves it", async () => {
+  const slug = anySlug(1);
+  await say("it's 35 minutes", { page: pageOf(slug) });
+  // someone changes the same recipe elsewhere (e.g. through the MCP)
+  github.files.set(recipePath(slug), Buffer.from(github.files.get(recipePath(slug)).toString().replace(/total_mins: \d+/, "total_mins: 20")));
+  clearCache();
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(res.status, 409);
+  const body = await res.json();
+  assert.equal(body.clash.length, 1);
+  assert.match(body.clash[0].reason, /changed on the site since this was staged/);
+  assert.match(body.clash[0].details[0], /total_mins: you set 35, the site now has 20/);
+  assert.equal(github.commitLog.length, 0, "nothing committed");
+  const t = await plan();
+  assert.match(t.items[0].clash.reason, /changed on the site/);
+  assert.equal(t.can_save, false);
+  assert.equal(t.items[0].save_now, false);
+
+  // the bot is told about it (the tray note) and resolves it with chips: Keep yours
+  const { conversation_id } = await say("there was a clash, help me resolve it");
+  const q = openrouter.requests.at(-1).messages;
+  assert.ok(JSON.stringify(q).includes("CLASH"), "the model's note carries the clash");
+  await say("Keep yours", { conversation_id });
+  assert.equal((await plan()).items[0].clash, null, "kept yours: rebased on the site's version");
+  const again = await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  assert.equal(again.status, 200);
+  assert.match(github.files.get(recipePath(slug)).toString(), /total_mins: 35/, "yours overwrote theirs");
+});
+
+test("a clash resolved with Keep theirs / Drop it removes the item", async () => {
+  const slug = anySlug(1);
+  await say("it's 35 minutes", { page: pageOf(slug) });
+  github.files.set(recipePath(slug), Buffer.from(github.files.get(recipePath(slug)).toString().replace(/total_mins: \d+/, "total_mins: 20")));
+  clearCache();
+  await call("POST", "/chat/plan/apply", { token: "owner-token", body: {} });
+  const { conversation_id } = await say("there was a clash, help me resolve it");
+  await say("Keep theirs", { conversation_id });
+  assert.equal(await plan(), null);
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("an editor's turn carries on when the panel drops the stream (a phone switching apps): the answer and the tray change are stored, ended_turns says so", async () => {
+  openrouter = createMockOpenRouter({ delayMs: 10 }); // slow enough that the stream is dropped mid-turn
+  const res = await call("POST", "/chat", { token: "owner-token", body: { message: "add a new recipe: test pasta", page: { page: "index" } } });
+  assert.equal(res.status, 200);
+  const reader = res.body.getReader();
+  const first = new TextDecoder().decode((await reader.read()).value);
+  const meta = JSON.parse(first.match(/^event: meta\ndata: (.*)$/m)![1]);
+  await reader.cancel(); // the browser went away
+  await background.backgroundIdle();
+  assert.equal((await plan()).items.filter((i: any) => i.kind === "new").length, 1, "the staged recipe is in the tray");
+  const convo = await (await call("GET", `/chat/conversations/${meta.conversation_id}`, { token: "owner-token" })).json();
+  assert.deepEqual(convo.ended_turns, { [meta.turn_id]: null }, "the turn ended with an answer");
+  assert.ok(convo.messages.some((m: any) => m.role === "assistant" && m.turn_id === meta.turn_id && m.content), "the answer was saved");
+});
+
+test("an editor's turn that failed leaves a marker the panel can find, which the model never sees", async () => {
+  const { conversation_id } = await say("mock-402");
+  const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
+  const [[, err]] = Object.entries<any>(convo.ended_turns);
+  assert.equal(typeof err, "string");
+  assert.ok(err.length > 0, "the error the panel showed");
+  assert.ok(!convo.messages.some((m: any) => m.role === "assistant"), "nothing to show in the chat itself");
+  const { historyForModel, getMessages } = store;
+  assert.ok(!historyForModel(await getMessages(conversation_id)).some((m: any) => m.role === "assistant"));
+});
+
+test("a Finalise turn that never ended (its function was killed) doesn't leave the tray without its button for good", async () => {
+  await say("add a new recipe: test pasta");
+  assert.equal((await plan()).state, "collecting");
+  const row = trayRow();
+  row.status = "finalising"; // what a killed Finalise turn leaves behind: startFinalise ran, settleFinalise never did
+  row.updated_at = new Date(clock).toISOString();
+  assert.equal((await plan()).state, "finalising", "while a turn could still be running, the button waits");
+  clock += tray.FINALISE_STALE_MS + 1000;
+  const t = await plan();
+  assert.equal(t.state, "collecting", "past any turn's lifetime the flag no longer counts");
+  assert.equal(tray.trayAction(t), "finalise_plan", "Finalise list is offered again");
+});
+
+// --- Finalise: asks to promote when next week has recipes ----------------------------------------------------------------------------
+
+test("Finalise asks 'Is it ready to become this week?' when next week has recipes; 'Not yet' stages nothing and leaves the tray as it was", async () => {
+  const nextOne = anySlug(4);
+  setFlag(nextOne, "next: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  const fin = await say("x", { conversation_id, action: "finalise" });
+  const q = fin.evs.find((e) => e.name === "question").data;
+  assert.match(q.question, /Next week has 1 recipe\. Is it ready to become this week\?/);
+  assert.deepEqual(q.options, ["Promote it", "Not yet"]);
+  assert.equal((await plan()).state, "collecting", "no list was built");
+  const not = await say("Not yet", { conversation_id });
+  assert.match(not.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /nothing changes/i);
+  const t = await plan();
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "list"], "nothing staged, the tray as it was");
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("Finalise > Promote it: the server stages the switch and shows ONE review card (no model call); Done stages every answer at once, the model builds the list; Save applies them in one commit", async () => {
+  const nextOne = anySlug(4);
+  const draft = anySlug(5);
+  setFlag(nextOne, "next: true");
+  setFlag(draft, "current: true\ndraft: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  await say("x", { conversation_id, action: "finalise" });
+  const calls = openrouter.requests.length;
+  let r = await say("Promote it", { conversation_id });
+  assert.equal(openrouter.requests.length, calls, "Promote it needs no model call");
+  const card = r.evs.find((e) => e.name === "review").data;
+  assert.deepEqual(card.drafts.map((d: any) => d.slug), [draft]);
+  assert.equal(card.drafts[0].answer, undefined, "no thumb yet");
+  assert.ok(!r.evs.some((e) => e.name === "question"), "no per-draft question");
+  assert.deepEqual((await plan()).items.map((i: any) => i.kind), ["switch", "new", "list"], "the switch is staged at once");
+  const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
+  assert.deepEqual(convo.messages.at(-1).review.drafts.map((d: any) => d.slug), [draft], "the card is stored with the turn");
+
+  r = await say("ignored", { conversation_id, action: "review_drafts", answers: { [draft]: "liked" } });
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
+  assert.match(user.content, /^Liked: /, "the answers are the editor's message, in words");
+  const text = r.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+  assert.match(text, /In the tray: the switch to a new week\. .+ becomes a regular recipe\./);
+  const t = await plan();
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["switch", "promote", "new", "list"], "Save order: switch, drafts, new, list");
+  assert.equal(t.state, "ready");
+  assert.equal(t.can_save, true);
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  assert.equal(github.commitLog.length, 1);
+  const files = Object.fromEntries([nextOne, draft, "test-pasta"].map((s) => [s, github.files.get(recipePath(s)).toString()]));
+  assert.match(files[nextOne], /current: true/, "next week became this week");
+  assert.doesNotMatch(files[nextOne], /next: true/);
+  assert.doesNotMatch(files[draft], /draft: true/, "the liked draft was promoted");
+  assert.doesNotMatch(files[draft], /current: true/, "and left this week");
+  assert.match(files["test-pasta"], /next: true/, "the new recipe is in the fresh next week");
+});
+
+test("the review card: thumbs up promotes, thumbs down removes, no thumb keeps it for the coming week; a draft also in next week is kept; a second Done is refused", async () => {
+  const [nextOne, a, b, c, e] = [0, 1, 2, 3, 5].map((n) => anySlug(n));
+  setFlag(nextOne, "next: true");
+  for (const s of [a, b, c]) setFlag(s, "current: true\ndraft: true");
+  setFlag(e, "current: true\nnext: true\ndraft: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  await say("x", { conversation_id, action: "finalise" });
+  const r = await say("yes", { conversation_id });
+  const card = r.evs.find((ev) => ev.name === "review").data;
+  assert.equal(card.drafts.length, 4);
+  assert.equal(card.drafts.find((x: any) => x.slug === e).also_next, true);
+
+  // only thumbs are answers; photos and a non-object are refused before anything is stored
+  const bad = (body: any) => call("POST", "/chat", { token: "owner-token", body: { conversation_id, action: "review_drafts", page: { page: "index" }, ...body } });
+  assert.equal((await bad({ answers: { [a]: "keep" } })).status, 400);
+  assert.equal((await bad({ answers: { [a]: "book" } })).status, 400);
+  assert.equal((await bad({ answers: "liked" })).status, 400);
+  const answers = { [a]: "liked", [b]: "remove", [e]: "remove", "not-a-draft": "remove" }; // c: no thumb
+  assert.equal((await call("POST", "/chat", { token: "partner-token", body: { conversation_id, action: "review_drafts", answers, page: {} } })).status, 404, "someone else's chat");
+
+  const done = await say("x", { conversation_id, action: "review_drafts", answers });
+  const text = done.evs.filter((ev) => ev.name === "text").map((ev) => ev.data.delta).join("");
+  assert.match(text, /stays? for the coming week/);
+  assert.match(text, /stays: it's on next week's plan/);
+  const user = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages.filter((m: any) => m.role === "user").at(-1);
+  assert.match(user.content, /^Liked: .+\. Not for us: .+\. Kept for the coming week: .+\.$/);
+  const items = trayRow().items;
+  assert.deepEqual(items.filter((i: any) => i.kind === "promote").map((i: any) => i.op.slug), [a]);
+  assert.deepEqual(items.filter((i: any) => i.kind === "remove").map((i: any) => i.op.slug), [b], "only the draft that isn't planned for next week is removed");
+  assert.deepEqual(items.find((i: any) => i.kind === "switch").op.carry_over, [c], "the draft with no thumb is carried over (the one also in next week needs no carry-over)");
+
+  assert.equal((await bad({ answers })).status, 409, "answered once only");
+  assert.equal(github.commitLog.length, 0, "nothing commits before Save");
+});
+
+test("Done with no thumbs at all keeps every draft for the coming week", async () => {
+  const [nextOne, a, b] = [0, 1, 2].map((n) => anySlug(n));
+  setFlag(nextOne, "next: true");
+  setFlag(a, "current: true\ndraft: true");
+  setFlag(b, "current: true\ndraft: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  await say("x", { conversation_id, action: "finalise" });
+  await say("Promote it", { conversation_id });
+  await say("x", { conversation_id, action: "review_drafts", answers: {} });
+  const items = trayRow().items;
+  assert.deepEqual([...items.find((i: any) => i.kind === "switch").op.carry_over].sort(), [a, b].sort());
+  assert.ok(!items.some((i: any) => i.kind === "promote" || i.kind === "remove"));
+});
+
+test("the review card replaces earlier answers in the tray, starts on them, and the model can show it with review_drafts", async () => {
+  const [nextOne, a, b] = [0, 1, 2].map((n) => anySlug(n));
+  setFlag(nextOne, "next: true");
+  setFlag(a, "current: true\ndraft: true");
+  setFlag(b, "current: true\ndraft: true");
+  const { reviewCard, thisWeeksDrafts, parseAnswers, answersText, reviewOpen, isPromoteIt } = await import("../lib/draft-review.ts");
+  const caller = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  await tray.stageMany([{ action: "start_next_week", carry_over: [a] }, { action: "promote_recipe", slug: b }], caller);
+  const drafts = await thisWeeksDrafts();
+  const card: any = reviewCard(drafts, trayRow().items);
+  assert.deepEqual(Object.fromEntries(card.drafts.map((d: any) => [d.slug, d.answer])), { [a]: undefined, [b]: "liked" }, "the card starts on the thumbs the tray holds");
+  assert.equal(reviewCard([], []), null);
+  const answers = parseAnswers({ [a]: "liked" }, drafts).answers!;
+  assert.match(answersText(drafts, answers), /^Liked: .+\. Kept for the coming week: .+\.$/);
+  const { stageReview } = await import("../lib/draft-review.ts");
+  await stageReview(drafts, answers, caller);
+  const items = trayRow().items;
+  assert.deepEqual(items.filter((i: any) => i.kind === "promote").map((i: any) => i.op.slug), [a], "b's thumb was taken back (kept), a is promoted");
+  assert.deepEqual(items.find((i: any) => i.kind === "switch").op.carry_over, [b], "b is carried over, a no longer is");
+  assert.equal(items.filter((i: any) => i.kind === "switch").length, 1);
+  assert.ok(reviewOpen([{ role: "user" }, { role: "assistant", content: { content: "x", ui: { review: card } } }]));
+  assert.ok(!reviewOpen([{ role: "assistant", content: { ui: { review: card } } }, { role: "user" }]));
+  for (const yes of ["Promote it", "promote it.", "Yes", "yes please", "Go ahead"]) assert.ok(isPromoteIt(yes), yes);
+  for (const no of ["Not yet", "yes but add soup", ""]) assert.ok(!isPromoteIt(no), no);
+});
+
+test("asking to save while collecting: the bot explains and offers Finalise list / Not yet chips (it never saves)", async () => {
+  await say("add a new recipe: test pasta");
+  const r = await say("ok save it");
+  const chips = r.evs.find((e) => e.name === "suggestions").data.replies;
+  assert.deepEqual(chips, [{ label: "Finalise list", action: "finalise_plan" }, "Not yet"]);
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("the action chips for Save / Finalise exist only for editors: a visitor's suggest_replies drops them", async () => {
+  const { cleanReplyList } = await import("../lib/chat-ui.ts");
+  assert.deepEqual(cleanReplyList([{ label: "Save to site", action: "apply_plan" }, "Ok"], new Map()), ["Ok"]);
+  assert.deepEqual(cleanReplyList([{ label: "Save to site", action: "apply_plan" }, { label: "Evil", action: "drop_all" }], new Map(), { editor: true }), [{ label: "Save to site", action: "apply_plan" }]);
+});
+
+test("ask_user: solid options, multi, shown once, stored with the turn and returned with the chat", async () => {
+  const { cleanQuestion } = await import("../lib/chat-ui.ts");
+  assert.equal(cleanQuestion({ question: " Which? ", options: ["A", "a", "x".repeat(40)] }), null, "needs two distinct usable options");
+  assert.deepEqual(cleanQuestion({ question: "Which?", options: ["A", "a", "B"], multi: true }), { question: "Which?", options: ["A", "B"], multi: true });
+  const nextOne = anySlug(4);
+  setFlag(nextOne, "next: true");
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  await say("x", { conversation_id, action: "finalise" });
+  const convo = await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json();
+  assert.deepEqual(convo.messages.at(-1).question.options, ["Promote it", "Not yet"]);
+});
+
+// --- expiry -------------------------------------------------------------------------------------------------------------------
+
+test("a tray expires 7 days after its first item: touching it later deletes the items and their staged photos", async () => {
+  await say("add a new recipe: test pasta");
+  assert.equal(supabase.objects.size, 1);
+  clock += 6 * 86400_000;
+  assert.equal((await plan()).count, 2, "still there on day 6 (the recipe and its list)");
+  clock += 2 * 86400_000;
+  assert.equal(await plan(), null, "gone on day 8");
+  assert.equal(supabase.tables.trays.length, 0);
+  assert.equal(supabase.objects.size, 0, "its photo went too");
+  // the next item starts a fresh 7-day tray
+  await say("add a new recipe: second pasta");
+  assert.ok(Math.abs(Date.parse(trayRow().expires_at) - clock - 7 * 86400_000) < 5000);
+  assert.equal(trayRow().items.length, 2);
+});
+
+// --- dropping, photos --------------------------------------------------------------------------------------------------------------
+
+test("dropping an item removes it and its photo; dropping the last item empties the tray; New photo remakes it", async () => {
+  await say("add a new recipe: test pasta");
+  let t = await plan();
+  const id = t.items[0].id;
+  const before = images.requests.length;
+  assert.equal((await call("POST", `/chat/plan/items/${id}/photo`, { token: "owner-token" })).status, 200);
+  await background.backgroundIdle();
+  assert.equal(images.requests.length, before + 1, "regenerated");
+  assert.equal((await plan()).items[0].photo.status, "ready");
+  assert.equal((await call("DELETE", `/chat/plan/items/${id}`, { token: "partner-token" })).status, 200, "the other editor can drop it: the tray is the household's");
+  assert.equal(await plan(), null);
+  assert.equal(supabase.objects.size, 0);
+  assert.equal((await call("DELETE", `/chat/plan/items/${id}`, { token: "owner-token" })).status, 404);
+  assert.equal((await call("DELETE", "/chat/plan/items/not-an-id", { token: "owner-token" })).status, 404);
+});
+
+test("both editors see and add to the same tray", async () => {
+  await say("add a new recipe: test pasta", { token: "owner-token" });
+  await say("add a new recipe: second pasta", { token: "partner-token" });
+  const t = await plan("partner-token");
+  assert.deepEqual(t.items.filter((i: any) => i.kind === "new").map((i: any) => [i.title, i.added_by]).sort(), [["Second Pasta", "Partner"], ["Test Pasta", "Owner"]]);
+  assert.equal(supabase.tables.trays.length, 1);
+});
+
+test("the tray endpoints are editors-only: 401 without or with a bad token, 403 for a signed-in non-editor", async () => {
+  await say("add a new recipe: test pasta");
+  const id = trayRow().items[0].id;
+  for (const [method, path, body] of [["GET", "/chat/plan"], ["DELETE", `/chat/plan/items/${id}`], ["POST", `/chat/plan/items/${id}/photo`], ["POST", "/chat/plan/apply", {}], ["GET", "/chat/status?slugs=a"]]) {
+    assert.equal((await call(method, path, { body })).status, 401, `${method} ${path} without a token`);
+    assert.equal((await call(method, path, { token: "nope", body })).status, 401, `${method} ${path} with a bad token`);
+    assert.equal((await call(method, path, { token: "stranger-token", body })).status, 403, `${method} ${path} as a non-editor`);
+  }
+  assert.equal(trayRow().items.length, 2, "nothing was touched");
+  assert.equal(github.commitLog.length, 0);
+});
+
+test("the tray table and the photo bucket are server-only: the anon key reads neither", async () => {
+  await say("add a new recipe: test pasta");
+  const rows = await supabase.fetch("https://sb.test/rest/v1/trays?select=*", { headers: { apikey: "anon-test", Authorization: "Bearer anon-test" } });
+  assert.equal(rows.status, 401);
+  const key = [...supabase.objects.keys()][0].replace("tray-photos/", "");
+  const obj = await supabase.fetch(`https://sb.test/storage/v1/object/tray-photos/${key}`, { headers: { apikey: "anon-test", Authorization: "Bearer anon-test" } });
+  assert.equal(obj.status, 401);
+});
+
+test("status: which pages are live yet (a server-side HEAD to the Pages URL for validated slugs)", async () => {
+  const seen: any[] = [];
+  pages = (url: any, init: any) => { seen.push([init.method, url]); return new Response(null, { status: url.endsWith("/a-b.html") ? 200 : 404 }); };
+  const res = await call("GET", "/chat/status?slugs=a-b,c-d,../etc/passwd", { token: "owner-token" });
+  assert.deepEqual((await res.json()).live, { "a-b": true, "c-d": false });
+  assert.deepEqual(seen.map((s) => s[0]), ["HEAD", "HEAD"]);
+  assert.ok(seen.every(([, u]) => u.startsWith("https://site.test/favourite-recipes/recipes/")));
+});
+
+// --- photos from a link: SSRF guard -----------------------------------------------------------------------------------------------
+
+test("photo links: only public http(s); private, loopback, link-local and mapped addresses, odd ports and credentials are refused", async () => {
+  for (const bad of ["http://127.0.0.1/a.jpg", "http://localhost/a.jpg", "http://10.0.0.5/x", "http://192.168.1.1/x", "http://169.254.169.254/latest/meta-data", "http://[::1]/x", "http://[::ffff:7f00:1]/x", "http://[fe80::1]/x", "http://100.64.0.1/x", "ftp://example.com/a.jpg", "file:///etc/passwd", "javascript:alert(1)", "https://user:pw@example.com/a.jpg", "https://example.com:8443/a.jpg", "http://printer.local/x", "http://db.internal/x", "not a url"]) {
+    await assert.rejects(() => photos.assertPublicUrl(bad), photos.UnsafeUrlError, bad);
+  }
+  assert.equal((await photos.assertPublicUrl("https://example.com/a.jpg")).hostname, "example.com");
+  photos.deps.lookup = async () => [{ address: "93.184.216.34" }, { address: "10.0.0.1" }];
+  await assert.rejects(() => photos.assertPublicUrl("https://rebind.example/a.jpg"), /isn't public/, "a name that resolves to a private address");
+  photos.deps.lookup = async () => { throw new Error("ENOTFOUND"); };
+  await assert.rejects(() => photos.assertPublicUrl("https://nope.example/a.jpg"), /couldn't be found/);
+});
+
+test("a redirect to a private address is refused, and a failed link falls back to a generated photo", async () => {
+  const hits: any[] = [];
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url: any, init: any) => {
+    if (String(url).startsWith("https://recipes.example/")) {
+      hits.push(String(url));
+      return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } });
+    }
+    return orig(url, init);
+  };
+  try {
+    await assert.rejects(() => photos.photoFromLink("https://recipes.example/pasta"), /isn't public/);
+    assert.deepEqual(hits, ["https://recipes.example/pasta"], "the private address was never fetched");
+    const made = await photos.makePhoto({ title: "Test Pasta", ingredients: [{ name: "pasta" }], imageUrl: "https://recipes.example/pasta" });
+    assert.equal(made.source, "generated");
+    assert.match(made.note, /couldn't use the link's photo/);
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+test("a recipe page's og:image (or JSON-LD Recipe image) is found and used; the staged photo comes from the link, not from generation", async () => {
+  assert.equal(photos.pageImageUrl('<meta property="og:image" content="/img/p.jpg">', "https://r.example/x/y"), "https://r.example/img/p.jpg");
+  assert.equal(photos.pageImageUrl('<script type="application/ld+json">{"@graph":[{"@type":"Recipe","image":[{"url":"https://r.example/ld.jpg"}]}]}</script>', "https://r.example/"), "https://r.example/ld.jpg");
+  assert.equal(photos.pageImageUrl("<p>nothing</p>", "https://r.example/"), null);
+  const sharp = (await import("sharp")).default;
+  const jpeg = await sharp({ create: { width: 800, height: 600, channels: 3, background: "#c0a080" } }).jpeg().toBuffer();
+  const orig = globalThis.fetch;
+  globalThis.fetch = async (url: any, init: any) => {
+    const s = String(url);
+    if (s === "https://r.example/pasta") return new Response('<meta property="og:image" content="https://r.example/p.jpg">', { headers: { "content-type": "text/html" } });
+    if (s === "https://r.example/p.jpg") return new Response(new Uint8Array(jpeg), { headers: { "content-type": "image/jpeg" } });
+    return orig(url, init);
+  };
+  try {
+    const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+    await tools.dispatch("stage_create_recipe", { title: "Linked Pasta", course: ["Dinner"], total_mins: 10, serves: 2, calories: 300, ingredients: [{ amount: 100, unit: "g", name: "pasta" }], instructions: ["Cook the **pasta**."], image_url: "https://r.example/pasta" }, ed, { chat: { emit() {} } });
+    await background.backgroundIdle();
+    const t = await plan();
+    assert.equal(t.items[0].photo.status, "ready");
+    assert.equal(images.requests.length, 0, "no generation: the link's photo was used");
+    assert.equal(trayRow().items[0].photo.source, "link");
+  } finally {
+    globalThis.fetch = orig;
+  }
+});
+
+// --- the migrations ---------------------------------------------------------------------------------------------------------------------
+
+test("migrations: trays (one row, RLS, no policies, 7 days) and the private tray-photos bucket", async () => {
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const dir = new URL("../../supabase/migrations/", import.meta.url);
+  const sql = (re: any) => readFileSync(new URL(readdirSync(dir).find((f) => re.test(f))!, dir), "utf8");
+  const trays = sql(/_trays\.sql$/);
+  assert.match(trays, /create table if not exists public\.trays/);
+  assert.match(trays, /unique index if not exists trays_one_per_household on public\.trays \(\(true\)\)/);
+  assert.match(trays, /interval '7 days'/);
+  assert.match(trays, /alter table public\.trays enable row level security/);
+  assert.match(trays, /revoke all on public\.trays from anon, authenticated/);
+  assert.doesNotMatch(trays, /create policy/i);
+  const bucket = sql(/tray_photos_bucket\.sql$/);
+  assert.match(bucket, /'tray-photos', 'tray-photos', false/);
+  assert.doesNotMatch(bucket, /create policy/i);
+  assert.match(sql(/rate_limits_revoke\.sql$/), /revoke all on public\.rate_limits from anon, authenticated/);
+});
+
+test("Finalise with next week empty on the site: no promote question, no questions about this week's drafts, the list is built; the switch card names carried-over recipes", async () => {
+  const draft = anySlug(0);
+  setFlag(draft, "draft: true\ncurrent: true");
+  const { conversation_id } = await say("add a new recipe: empty week pasta");
+  const r = await say("x", { conversation_id, action: "finalise" });
+  assert.ok(!r.evs.some((e) => e.name === "question"), "no question at all");
+  const t = await plan();
+  assert.ok(t.items.some((i: any) => i.kind === "list"), "the list is staged");
+  assert.ok(!t.items.some((i: any) => ["switch", "promote", "remove"].includes(i.kind)), "nothing about this week");
+  // the switch card lists what is carried over
+  await tools.dispatch("stage_start_next_week", { carry_over: [draft] }, tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER }), { chat: { emit() {} } });
+  const sw = (await plan()).items.find((i: any) => i.kind === "switch");
+  assert.match(sw.sub, /^Carried over in this week: /);
+});
+
+test("the tray note says which of this week's drafts already have an answer staged, so a capped history can't make Finalise re-ask", async () => {
+  const [a, b, c] = [anySlug(0), anySlug(1), anySlug(2)];
+  for (const s of [a, b, c]) setFlag(s, "draft: true\ncurrent: true");
+  const caller = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const stage = (name: any, args: any) => tools.dispatch(name, args, caller, { chat: { emit() {} } });
+  await stage("stage_start_next_week", { carry_over: [c] });
+  await stage("stage_promote_recipe", { slug: a });
+  const note = await tray.trayNote(await tray.loadTray(), caller);
+  const line = note.split("\n").find((l: any) => l.startsWith("Finalise progress:"));
+  assert.ok(line, note);
+  assert.match(line, new RegExp(`${a}, liked: promote staged`));
+  assert.match(line, new RegExp(`${c}, kept this week: carry-over staged`));
+  assert.match(line, new RegExp(`not yet answered in the tray: .*${b}`));
+  assert.doesNotMatch(line.split("not yet answered")[1].split("(one answered")[0], new RegExp(`${a}|${c}`));
+  // no switch staged: no progress line
+  supabase.tables.trays.length = 0;
+  assert.doesNotMatch(await tray.trayNote(await tray.loadTray(), caller), /Finalise progress/);
+});
+
+test("'Not yet' to the promote question is answered by the server: nothing staged, no model call, tray back to collecting, a Finalise chip", async () => {
+  const [a] = [anySlug(0)];
+  setFlag(a, "next: true");
+  const { conversation_id } = await say("add a new recipe: not yet pasta");
+  const first = await say("x", { conversation_id, action: "finalise" });
+  assert.match(first.evs.find((e) => e.name === "question").data.question, /ready to become this week/);
+  const before = openrouter.requests.length;
+  const before_items = (await plan()).items.length;
+  for (const word of ["Not yet", "not yet.", "No"]) {
+    // each time the question is the newest thing in the chat
+    const r = word === "Not yet" ? await say(word, { conversation_id }) : null;
+    if (!r) continue;
+    assert.equal(openrouter.requests.length, before, "the model wasn't called");
+    assert.match(r.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join(""), /next week stays as it is/);
+    const chips = r.evs.find((e) => e.name === "suggestions")?.data.replies || [];
+    assert.deepEqual(chips, [{ label: "Finalise list", action: "finalise_plan" }]);
+    assert.equal(r.evs.at(-1).name, "done");
+  }
+  const t = await plan();
+  assert.equal(t.items.length, before_items, "nothing was staged");
+  assert.equal(t.state, "collecting");
+  // a typed equivalent works the same; an unrelated message goes to the model as usual
+  const { isNotYet } = await import("../lib/shortcuts.ts");
+  for (const yes of ["Not yet", "not yet.", "No", "nope", "Not now", "later"]) assert.ok(isNotYet(yes), yes);
+  for (const no of ["not yet, but add soup", "yes", "Promote it", ""]) assert.ok(!isNotYet(no), no);
+  const msgs = (await (await call("GET", `/chat/conversations/${conversation_id}`, { token: "owner-token" })).json()).messages;
+  assert.equal(msgs.at(-1).content.startsWith("OK, next week stays as it is"), true, "the answer is in the stored chat");
+});
+
+test("a turn that staged something but said nothing gets a one-line confirmation built from the staged item, and chips", async () => {
+  const slug = anySlug(1);
+  const { evs } = await say("mock-silent-edit", { page: pageOf(slug) });
+  const text = evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+  const { data } = await (await import("../lib/recipes.ts")).getRecipe(slug);
+  assert.equal(text, `Added to the tray: ${data.title} — new time.`);
+  const chips = evs.find((e) => e.name === "suggestions")?.data.replies;
+  assert.ok(chips?.length >= 1, "chips follow");
+  assert.equal(evs.at(-1).name, "done");
+});
+
+// --- the list the site builds, and Finalise as a review (docs/structured-ingredients.md 6) --------------------------------------------
+
+test("Finalise with something flagged: ONE model call reviews it with patches (never a list), then Save; nothing flagged needs no model at all", async () => {
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const { conversation_id } = await say("hello");
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  // serves 8 and the juice of 1 lime: half a lime at the planned 4 servings
+  await tools.dispatch("stage_create_recipe", { title: "Lime Rice", course: ["Dinner"], total_mins: 20, serves: 8, calories: 300, ingredients: [{ amount: 400, unit: "g", name: "pasta" }, { amount: 1, unit: "juice", name: "lime" }], instructions: ["Cook the **pasta** with the **lime**."] }, ed, ctx);
+  await background.backgroundIdle();
+  let t = await plan();
+  assert.deepEqual(t.review, { flags: 1, optional: 0 });
+  const calls = openrouter.requests.length;
+  const fin = await say("ignored", { conversation_id, action: "finalise" });
+  const reviewCalls = openrouter.requests.slice(calls);
+  assert.ok(reviewCalls.length >= 1 && reviewCalls.length <= 3, "a short review, not a list build");
+  assert.match(JSON.stringify(reviewCalls[0].messages), /\[fraction:lime\]/, "the model is told what the site flags");
+  assert.ok(!reviewCalls.some((r: any) => (r.tools || []).some((x: any) => x.function.name === "stage_update_shopping_list")), "no tool writes a whole list any more");
+  const text = fin.evs.filter((e) => e.name === "text").map((e) => e.data.delta).join("");
+  assert.match(text, /rounded up/);
+  assert.match(text, /tap Save to site/);
+  assert.equal(fin.evs.filter((e) => e.name === "done").length, 1, "one end to the turn");
+  t = await plan();
+  assert.equal(t.can_save, true);
+  assert.deepEqual(t.items.find((i: any) => i.kind === "list").edits, ["round lime up"]);
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200);
+  const list = JSON.parse(github.files.get("shopping-list.json"));
+  const limes = list.sections.flatMap((s: any) => s.items).find((i: any) => i.name === "Limes");
+  assert.equal(Number(limes.quantity) * list.servings["lime-rice"] / 2, 1, "a whole lime at the planned servings");
+});
+
+test("a review patch marked remember becomes an ingredient catalogue change on its own card, committed with Save", async () => {
+  const ed = tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });
+  const { conversation_id } = await say("add a new recipe: test pasta");
+  const ctx = { chat: { emit() {}, conversationId: conversation_id } };
+  const out = await tools.dispatch("stage_shopping_list_edits", { edits: [{ move: { item: "dried-pasta", section: "Tins & jars" }, remember: true }, { note: { item: "parmesan", text: "a wedge" } }] }, ed, ctx);
+  assert.doesNotMatch(out.content[0].text, /PROBLEM/);
+  let t = await plan();
+  assert.deepEqual(t.items.map((i: any) => i.kind), ["new", "catalogue", "list"], "the catalogue card comes before the list it changes");
+  assert.match(t.items[1].sub, /Dried pasta section "Tins & jars"/);
+  const list = t.items.find((i: any) => i.kind === "list");
+  assert.ok(list.preview.find((s: any) => s.name === "Tins & jars").items.some((i: any) => /^Dried pasta/.test(i)), "the list is rebuilt from the catalogue as the tray leaves it");
+  assert.ok(list.preview.flatMap((s: any) => s.items).some((i: any) => /^Parmesan cheese.*a wedge/.test(i)));
+  // a bad patch is refused on its own; the list stays as it was
+  const bad = await tools.dispatch("stage_shopping_list_edits", { edits: [{ round_up: "no-such-item" }] }, ed, ctx);
+  assert.match(bad.content[0].text, /don't apply/);
+  await say("ignored", { conversation_id, action: "finalise" });
+  t = await plan();
+  assert.equal(t.can_save, true);
+  const res = await call("POST", "/chat/plan/apply", { token: "owner-token", body: { conversation_id } });
+  assert.equal(res.status, 200);
+  assert.equal(github.commitLog.length, 1);
+  assert.ok(github.commitLog[0].paths.includes("data/ingredients.json"), "one commit with the catalogue");
+  assert.equal(JSON.parse(github.files.get("data/ingredients.json"))["dried-pasta"].section, "Tins & jars");
+});
+
+test("the list card can't be dropped: it follows next week", async () => {
+  await say("add a new recipe: test pasta");
+  const list = (await plan()).items.find((i: any) => i.kind === "list");
+  const res = await call("DELETE", `/chat/plan/items/${list.id}`, { token: "owner-token" });
+  assert.notEqual(res.status, 200);
+  assert.ok((await plan()).items.some((i: any) => i.kind === "list"));
+});

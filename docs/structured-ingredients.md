@@ -2,14 +2,14 @@
 
 Status: **built on the server and the site** (phase 7 of `docs/chatbot-design.md`): all three rollout steps (catalogue, schema,
 renderer and migration; `buildShoppingList`, the rebuild on every tray change and Finalise as review; catalogue write-back
-from `remember: true` patches). The chat panel's side is built too: the optional items card (`optionalEl` in `templates/chat.js`, tick boxes, all ticked to start),
+from `remember: true` patches). The chat panel's side is built too: the optional items card (`OptionalView` in `src/islands/chat/Review.tsx`, then `optionalEl` in `templates/chat.js`, tick boxes, all ticked to start),
 the live List card (no ×, its patches and stale-patch notes) and "Reviewing the list…". Each recipe's ingredients become structured
 data in its frontmatter, the only place a recipe's ingredients live; the page's ingredient list, the servings
 selector, `scale_recipe`, the "Cook with Claude" prompt and the shopping list are all generated from it. The
 shopping list becomes a sum the server computes with an ingredient catalogue, and the model only reviews it.
 The tray keeps the list current on every change, so Finalise list becomes a short review (section 6). Replaces the
 list-building step of Finalise and the "out of date" rule (`docs/chatbot-design.md` 7.1) and step 3 of
-`mcp-server/workflows/plan-recipes.md`, for both the chat and `/mcp`. The list format (`shopping-list.json`), `shopping.js`, the stocktake and the shop
+`mcp-server/workflows/plan-recipes.md`, for both the chat and `/mcp`. The list format (`shopping-list.json`), `shopping.js` (now the island `src/islands/Shopping.tsx`), the stocktake and the shop
 workflows do not change.
 
 The goal is the simplest, least error-prone design for both the model and the server code: nothing parses free
@@ -39,7 +39,7 @@ The underlying problem is that a recipe's ingredients are **free text** ("1 cup 
 "2–3 tbsp", "4 salmon fillets, 5oz each", "2 tbsp olive oil, split: 1½ tbsp for the salmon + ½ tbsp for the
 pan"). Anything that computes with them has to parse that text: the model every week for the list, and the site
 with a list of regex exceptions for the servings selector (`templates/quantities.js`, duplicated in
-`mcp-server/lib/scaling.js`: numbers after an "x", inside a bracket with "each", percentages). Earlier drafts of
+`mcp-server/lib/scaling.js`; both since removed: numbers after an "x", inside a bracket with "each", percentages). Earlier drafts of
 this design kept the text and stored computed shopping data next to it; that needed hashes and alignment rules
 to stop the two drifting apart. Storing the ingredients as data removes both the parsing and the second copy.
 
@@ -109,27 +109,27 @@ not on the list is refused by the schema; adding one is a code change, on purpos
 **One measure per ingredient.** "1 cup (200g)" becomes `200 g`; metric wherever the source gives it, which suits
 UK shopping. If the second measure is worth showing, it goes in the `note`.
 
-**Rules that disappear** from the `add-recipe` skill and `lib/recipe-format.js`, because the renderer does them:
+**Rules that disappear** from the `add-recipe` skill and `lib/recipe-format.ts`, because the renderer does them:
 bolding the name, quantities outside the bold, numerals instead of words, unicode fractions. Rules that stay:
 every ingredient has an amount unless it's "to taste" / "to serve"; a split goes in the `note`; the
 instructions bold every ingredient mention and never repeat an amount.
 
 **What is generated from it:**
 
-- **The recipe page** (`build.js`, `templates/recipe.js`): the ingredient list, rendered from the data.
-- **The servings selector** (`templates/servings.js`): the build writes each `amount` (and range) as `data-qty`
+- **The recipe page** (`src/pages/recipes/[slug].astro`, `src/components/IngredientList.astro`; then `build.js`, `templates/recipe.js`): the ingredient list, rendered from the data.
+- **The servings selector** (`src/islands/Servings.tsx`, `src/lib/rescale.ts`; then `templates/servings.js`): the build writes each `amount` (and range) as `data-qty`
   directly, so `templates/quantities.js`'s tagging and its exceptions go away. `scalable: false` stays as is.
-- **`scale_recipe`** (`mcp-server/lib/scaling.js`): multiplies `amount`, formats with the same rounding as the page
-  (`formatQuantity`, kept in step with `servings.js` by `test/phase6.test.js` as today).
-- **"Cook with Claude"** (`recipePlainText` in `templates/recipe.js`, the `#cook-recipe` JSON) and the tray card's
-  ingredient lines (`lib/tray.js`): the same rendered lines.
-- **The duplicate check** and search (`recipeIngredients()` / `recipeIndex()` in `lib/recipes.js`): the `name`s.
+- **`scale_recipe`** (`scaledMarkdown` in `shared/ingredient-line.ts`; then `mcp-server/lib/scaling.js`): multiplies `amount`, formats with the same rounding as the page
+  (`formatQuantity` in `shared/quantity.ts`, the one copy the page and the server both use).
+- **"Cook with Claude"** (`recipePlainText` in `src/lib/recipe-text.ts`; then `templates/recipe.js` and the `#cook-recipe` JSON) and the tray card's
+  ingredient lines (`lib/tray.ts`): the same rendered lines.
+- **The duplicate check** and search (`recipeIngredients()` / `recipeIndex()` in `lib/recipes.ts`): the `name`s.
 - **The shopping list** (section 3).
 
 The line renderer exists twice, in the site build and in the server (deployed on its own, so it can't import the
 site's templates), like `formatQuantity` today; a test checks both render the same lines.
 
-**`renderFrontmatter`** (`lib/recipe-format.js`) learns to write a list of objects, one flow mapping per line as
+**`renderFrontmatter`** (`lib/recipe-format.ts`) learns to write a list of objects, one flow mapping per line as
 above (today it writes only scalars and lists of scalars, so a list of objects would come out as
 `[object Object]`). `ingredients` goes last in `KEY_ORDER`.
 
@@ -165,13 +165,13 @@ names recipes use.
   committed with the recipe that needed them (one deploy), read through the cached recipe index. The build reads it
   too, to check that every recipe's `item` exists (a build that fails beats a wrong list).
 - Only the MCP server writes it (section 5).
-- Other users of ingredient matching get it for free: `sameIngredient` (`lib/ingredient-match.js`, used by
+- Other users of ingredient matching get it for free: `sameIngredient` (`lib/ingredient-match.ts`, used by
   `recipes_from_home` and the stocktake by chat) can match by `item` first and fall back to words. The shop
   workflows' product preferences could live on the same entries later.
 
 ## 3. `buildShoppingList(nextSlugs)`: the list as a sum
 
-A pure function in `lib/shopping-list.js`. For each next-week recipe and each ingredient whose item isn't
+A pure function in `lib/shopping-list.ts`. For each next-week recipe and each ingredient whose item isn't
 `skip`:
 
 1. take `amount` (the top of a range: buy enough),
@@ -248,7 +248,7 @@ Gochujang · Tins & jars") and land in the same commit (S4).
 | `rename: { item, name }` | the item's `name` |
 
 These have no recipe to ride on, so they go on one **Catalogue** card in the tray. The staged list is rebuilt from
-the catalogue as the tray's replay leaves it (`lib/tray.js` `replay`), so the list and the catalogue never disagree.
+the catalogue as the tray's replay leaves it (`lib/tray.ts` `replay`), so the list and the catalogue never disagree.
 
 ### What the model may change
 
@@ -262,7 +262,7 @@ the catalogue as the tray's replay leaves it (`lib/tray.js` `replay`), so the li
 
 ### How the server checks it
 
-One function, `applyCatalogueChange(catalogue, change, recipes)` in a new `lib/catalogue.js`, used everywhere:
+One function, `applyCatalogueChange(catalogue, change, recipes)` in a new `lib/catalogue.ts`, used everywhere:
 `/mcp` `batch_changes`, the tray dry run and Save. It refuses:
 
 - an id that already exists (for `add`), or one that isn't kebab-case;
@@ -302,10 +302,10 @@ next-week recipe, a dropped item) rebuilds it with `buildShoppingList` inside th
 - the stored **review patches** and **optional-item answers** (below) are re-applied by item id; one whose item is
   gone is dropped and the card says so ("1 edit no longer applies: cherry tomatoes was removed");
 - **planned servings** can be staged at any time, against the current list: the special case for servings asked for
-  before the list exists (`servingsBeforeList` / `servingsFromRows` in `lib/tools.js`, and the follow-up `ask_user`
+  before the list exists (`servingsBeforeList` / `servingsFromRows` in `lib/tools.ts`, and the follow-up `ask_user`
   after Finalise) goes away;
 - **Save now** gets an exact rule: a quick fix is allowed when the rebuild shows it doesn't change the list
-  (`saveNowRule` in `lib/tray.js` today has to classify the item instead);
+  (`saveNowRule` in `lib/tray.ts` today has to classify the item instead);
 - a staged **"At home" (stocktake) card** is checked against the rebuilt list (items by name), not against the list
   as it was when the card was staged, so rebuilds don't make Save refuse it with a 409.
 
@@ -329,7 +329,7 @@ collecting, the button is Finalise list; after the review it is **Save to site (
    catalogue change (section 5). The tray shows "Reviewing the list…" while the model runs.
 3. **The optional items card (S6), at the end.** If the list has optional items, the server shows one card listing
    them, each ticked (kept) by default; the user unticks what they don't want this week and taps **Done**. It works
-   like the drafts review card (`lib/draft-review.js`, `.chat-review` in `templates/chat.js`): shown by the server
+   like the drafts review card (`lib/draft-review.ts`, `.chat-review` in `src/islands/chat/Review.tsx`): shown by the server
    with no model call, `POST /chat { action: "review_optional", answers: { item: "keep" | "drop" } }`, once only while
    the card is the open question, any other value refused. The answers are stored as `drop` patches for this week
    only (never catalogue changes) and stored as the editor's message in words ("Leaving off: sesame seeds, chilli
@@ -404,6 +404,8 @@ Recipes with no ingredients yet ("Ingredients not yet recorded") get `ingredient
 
 ## Code changes
 
+(Written for the first build. The site files named here moved in the TypeScript/Astro migration, `docs/typescript-migration.md`: `build.js` and `templates/*` are now `src/` and `shared/`; the backend's `lib/*.js` are `.ts`.)
+
 - **Chat panel:** `templates/chat.js` (the live List card, the optional items card, the tray button states).
 - **Site:** `build.js` (reads `ingredients`, checks `item` against the catalogue, renders the list),
   `templates/recipe.js` (renders lines and `data-qty` from the data, `recipePlainText`), `templates/quantities.js`
@@ -446,7 +448,7 @@ card checked against the rebuilt list), new `optional-review.js` (the optional i
 
 Meanwhile, two small server changes unblock today's flow: drop `amounts` shares of 0 (and their slugs) instead of
 rejecting, and convert tbsp/tsp quantities to ml instead of rejecting (`validateSections` / `amountErrors` in
-`lib/shopping-list.js`).
+`lib/shopping-list.ts`).
 
 ## Open questions
 

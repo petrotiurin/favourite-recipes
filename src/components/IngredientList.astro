@@ -1,0 +1,21 @@
+---
+// A recipe's ingredients, rendered from the data (docs/structured-ingredients.md): in sections when the lines have `section`, each number a
+// `.qty` with `data-qty` (and the unit word a `.qty-unit`) that the servings selector rescales when `scalable`.
+import { ingredientGroups, ingredientHtml, type Ingredient } from "../../shared/ingredient-line.ts";
+
+interface Props {
+  ingredients: readonly Ingredient[];
+  scalable: boolean;
+}
+const { ingredients, scalable } = Astro.props;
+const groups = ingredientGroups(ingredients);
+---
+{ingredients.length === 0 && <p>Ingredients not yet recorded.</p>}
+{groups.map((g) => (
+  <Fragment>
+    {g.section && <h3 class="ingredient-section">{g.section}</h3>}
+    <ul>
+      {g.items.map((i) => <li set:html={ingredientHtml(i, { scalable })} />)}
+    </ul>
+  </Fragment>
+))}

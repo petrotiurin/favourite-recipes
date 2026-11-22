@@ -1,12 +1,12 @@
 # UI design
 
 The principles behind how the site looks and behaves, and the small vocabulary (colours, type, icons, components) every page
-is built from. This is not a spec of each page: exact copy, sizes, flows and states live in the templates and `styles/style.css`
+is built from. This is not a spec of each page: exact copy, sizes, flows and states live in the components and `styles/style.css`
 (and, for the chat, in `docs/chatbot-design.md`). Change this file only when a principle, a token or a shared component changes,
 not for every new feature or tweak.
 
-The site is static HTML + one stylesheet + small browser scripts (see CLAUDE.md). Every page must read fine with JS off; JS
-only adds interaction on top.
+The site is static HTML + one stylesheet + browser scripts (see CLAUDE.md). Every page is still written to HTML by the build, so it
+shows at once and reads if a script fails; JS may add features that only exist with JS.
 
 The look is **"Journal"**: a family cookbook you flick through. Names and headings in a serif, everything you read while
 cooking in a plain sans, black ink on white, square-cornered photos. Photos lead every list, because that's how we pick what
@@ -73,7 +73,7 @@ tokens, never raw hex values in rules.
 
 ## Type
 
-Two Google Fonts families, loaded in `templates/layout.js` with system fallbacks (`--serif`, `--sans`), so the page still
+Two Google Fonts families, loaded in `src/components/Layout.astro` with system fallbacks (`--serif`, `--sans`), so the page still
 reads if they don't load:
 
 - **Newsreader** (`--serif`), weight 400, for names and headings: the brand (italic), page and recipe titles, tile names, section
@@ -119,7 +119,7 @@ gets a line here.
 - **Icon button** (`.icon-button`): square or round, outline, icon only, `aria-label`.
 - **Bottom sheet** (`.sheet`): slides up over a dimmed backdrop for short tasks; Escape or a tap on the backdrop closes it,
   focus moves into it.
-- **Collapsible section**: a `<details open>` whose whole heading row is the tap target, so it works without JS.
+- **Collapsible section**: a `<details open>` whose whole heading row is the tap target (native, no script needed).
 - **Fill bar**: a row whose background fills in proportion to an amount (`--fill-some` / `--fill-all`), set by sliding or
   tapping, with a hidden range input for keyboard and screen readers.
 - **Photo bubbles**: overlapping round recipe photos with a ring, showing which recipes something is for.

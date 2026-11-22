@@ -357,6 +357,7 @@ main:has(.tile-grid.is-searching) .week-label {
 
 .tile-image {
   width: 100%;
+  height: auto; /* the img's height attribute (set so the page doesn't jump) must not win over aspect-ratio */
   aspect-ratio: 1 / 1;
   object-fit: cover;
   display: block;
@@ -470,6 +471,7 @@ main:has(.tile-grid.is-searching) .week-label {
 
 .recipe-hero {
   display: block;
+  height: auto; /* as .tile-image: aspect-ratio and max-height decide, not the height attribute */
   width: calc(100% + 2.5rem);
   max-width: none;
   margin: 0 -1.25rem;
@@ -517,7 +519,7 @@ main:has(.tile-grid.is-searching) .week-label {
 }
 
 /* Cooking controls under the facts: servings on the left, "Keep screen on" on the
-   right. Hidden until servings.js or wakelock.js fills it, so no-JS pages skip it. */
+   right (the islands in src/islands/: Servings, CookActions). */
 .cook-bar {
   display: flex;
   flex-wrap: wrap;
@@ -548,7 +550,7 @@ main:has(.tile-grid.is-searching) .week-label {
   display: none;
 }
 
-/* Opens a new Claude chat with the recipe (templates/cook-claude.js): the same pill as
+/* Opens a new Claude chat with the recipe (src/islands/CookClaude.tsx): the same pill as
    "Keep screen on", in accent ink with the "opens elsewhere" arrow. */
 .pill.cook-claude {
   min-height: 2.75rem;
@@ -764,7 +766,7 @@ footer.site-footer {
 }
 
 /* Shopping list page (shopping-list.json, written by the MCP server's agent).
-   templates/shopping-list.js renders the static page, templates/shopping.js the interactive one.
+   src/islands/Shopping.tsx draws the list (at build time, then in the browser).
    Patterns and the icon language are described in design.md. */
 .shopping-page main {
   max-width: 560px;
@@ -1394,7 +1396,7 @@ footer.site-footer {
   text-decoration: line-through;
 }
 
-/* With JS a row is: the tick + name label, the recipe photos button, the quantity (a second label
+/* A row of the list (src/islands/Shopping.tsx) is: the tick + name label, the recipe photos button, the quantity (a second label
    for the same checkbox, so tapping it still ticks), then the recipe names once the photos are tapped. */
 .shop-row {
   display: flex;
@@ -1870,7 +1872,7 @@ body.sheet-open {
   font-size: 0.8rem !important;
 }
 
-/* Recipe chat (templates/chat.js): a bubble bottom right, a bottom sheet on phones, a floating panel from 720px. See design.md. */
+/* Recipe chat (src/islands/chat/): a bubble bottom right, a bottom sheet on phones, a floating panel from 720px. See design.md. */
 .chat-bubble[hidden] {
   display: none;
 }
@@ -2650,7 +2652,7 @@ button.chat-attachment-state {
   }
 }
 
-/* Recipe chat, signed-in editors (templates/chat.js + templates/auth.js): account button, chats list, thumbs up / down. See design.md. */
+/* Recipe chat, signed-in editors (src/islands/chat/ + src/islands/SignIn.tsx): account button, chats list, thumbs up / down. See design.md. */
 .chat-title {
   min-width: 0;
   overflow: hidden;
@@ -2949,7 +2951,7 @@ button.chat-attachment-state {
   cursor: pointer;
 }
 
-/* Recipe chat, phase 4 (templates/chat.js): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
+/* Recipe chat, phase 4 (src/islands/chat/): ask_user answers, the household plan tray, "Publishing…" cards. See design.md. */
 .chat-question {
   display: flex;
   flex-direction: column;
