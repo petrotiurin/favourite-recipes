@@ -564,7 +564,7 @@ test("the review card replaces earlier answers in the tray, starts on them, and 
   const card: any = reviewCard(drafts, trayRow().items);
   assert.deepEqual(Object.fromEntries(card.drafts.map((d: any) => [d.slug, d.answer])), { [a]: undefined, [b]: "liked" }, "the card starts on the thumbs the tray holds");
   assert.equal(reviewCard([], []), null);
-  const { answers } = parseAnswers({ [a]: "liked" }, drafts);
+  const answers = parseAnswers({ [a]: "liked" }, drafts).answers!;
   assert.match(answersText(drafts, answers), /^Liked: .+\. Kept for the coming week: .+\.$/);
   const { stageReview } = await import("../lib/draft-review.ts");
   await stageReview(drafts, answers, caller);
