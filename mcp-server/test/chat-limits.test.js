@@ -74,7 +74,7 @@ test("every model request has max_tokens (public and editor defaults)", async ()
   script = () => say("ok");
   await turn("hello", "198.51.100.8");
   assert.equal(requests[0].max_tokens, 1500);
-  const { config } = await import("../lib/config.js");
+  const { config } = await import("../lib/config.ts");
   assert.equal(config.chatEditorMaxTokens, 16000);
 });
 

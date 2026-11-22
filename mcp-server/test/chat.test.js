@@ -34,7 +34,7 @@ before(async () => {
     return realFetch(url, init);
   };
   chat = await import("../api/chat.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
   rateLimit = await import("../lib/rate-limit.js");
   langfuse = await import("../lib/langfuse.js");
   langfuse.useTestExporter(spans);

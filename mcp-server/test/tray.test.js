@@ -43,7 +43,7 @@ before(async () => {
   photos = await import("../lib/tray-photos.js");
   background = await import("../lib/background.js");
   planApply = await import("../lib/plan-apply.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
 });
 
 const OWNER = "00000000-0000-4000-8000-0000000000e1";

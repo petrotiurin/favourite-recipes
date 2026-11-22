@@ -1,7 +1,7 @@
 import { ChangeSet, assertCanCommit } from "./github.js";
 import { listRecipes, isNextWeek, bookIngredients } from "./recipes.js";
 import { loadCatalogue, shopAmount, SECTIONS, CatalogueError } from "./catalogue.js";
-import { config, SHOPPING_LIST_PATH } from "./config.js";
+import { config, SHOPPING_LIST_PATH } from "./config.ts";
 import { cached } from "./cache.js";
 import { createHash } from "node:crypto";
 import { sameIngredient } from "./ingredient-match.js";

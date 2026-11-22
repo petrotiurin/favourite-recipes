@@ -2,7 +2,7 @@
 // They never touch the repo; they only decide what the BROWSER shows. Everything the browser gets is built here from server data
 // (our recipe files, the site's own URL pattern), never from model text, and every URL is on the site's origin by construction:
 // the model can only name a slug or a page key, and anything unknown is dropped.
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { recipeSummaries } from "./recipes.js";
 
 export const MAX_CARDS = 8;

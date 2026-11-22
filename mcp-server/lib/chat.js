@@ -4,7 +4,7 @@
 // to plain user/assistant text before it gets here.
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { config, COURSES } from "./config.js";
+import { config, COURSES } from "./config.ts";
 import { TOOLS, accessOf, toolDefinitions, dispatch } from "./tools.js";
 import { catalogue, catalogueText, getRecipe, isDraft, isThisWeek, isNextWeek } from "./recipes.js";
 import { systemPrompt, SUGGEST_REPLIES_TOOL, SHOW_RECIPES_TOOL, OFFER_NAVIGATION_TOOL, ASK_USER_TOOL, REVIEW_DRAFTS_TOOL, REVIEW_OPTIONAL_TOOL, PROMPT_VERSION } from "./chat-prompt.js";

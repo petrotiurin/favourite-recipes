@@ -4,7 +4,7 @@
 // like one that doesn't exist (callers answer 404, never 403, so ids can't be probed). The browser can't reach these tables:
 // RLS is on with no policies for anon/authenticated.
 import { randomUUID } from "node:crypto";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 
 /** Chats are deleted this long after their last message (Q8). Keep in step with purge_old_chats() in the migration. */
 export const RETENTION_DAYS = 14;

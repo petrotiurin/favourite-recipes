@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { COURSES } from "./config.js";
+import { COURSES } from "./config.ts";
 import { WORKFLOWS } from "./workflows.js";
 import { TOOLS, accessOf, dispatch, makeCaller } from "./tools.js";
 import { DEFAULT_SERVINGS, MAX_SERVINGS } from "./shopping-list.js";

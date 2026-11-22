@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { MAX_IMAGE_EDGE } from "./config.js";
+import { MAX_IMAGE_EDGE } from "./config.ts";
 
 const MAX_PIXELS = 40_000_000; // decompression-bomb guard for every decode
 const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;

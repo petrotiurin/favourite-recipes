@@ -7,7 +7,7 @@
 // are therefore visible to later ones (a recipe staged as new can be read, put in next week and listed), and any problem shows on the
 // item's card straight away.
 import { createHash, randomBytes } from "node:crypto";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { ChangeSet, assertAllowedPath, branchSnapshot } from "./github.js";
 import { slugify, parseRecipe, ingredientsOf } from "./recipe-format.js";
 import { ingredientText } from "../../shared/ingredient-line.ts";

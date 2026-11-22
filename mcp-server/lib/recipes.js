@@ -1,4 +1,4 @@
-import { config, COURSES, CARD_ASPECT } from "./config.js";
+import { config, COURSES, CARD_ASPECT } from "./config.ts";
 import { cached } from "./cache.js";
 import { ChangeSet, isAllowedPath, assertCanCommit } from "./github.js";
 import { normalizeImage, downloadImage, decodeBase64Image } from "./images.js";

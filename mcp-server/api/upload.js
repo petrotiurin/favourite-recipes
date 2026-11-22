@@ -1,5 +1,5 @@
-import { assertConfigured } from "../lib/config.js";
-import { verifyUploadToken } from "../lib/auth.js";
+import { assertConfigured } from "../lib/config.ts";
+import { verifyUploadToken } from "../lib/auth.ts";
 import { saveUploadedImage, pageUrl } from "../lib/recipes.js";
 import { makeCaller } from "../lib/tools.js";
 

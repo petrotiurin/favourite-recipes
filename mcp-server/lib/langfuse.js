@@ -22,7 +22,7 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { LangfuseSpanProcessor } from "@langfuse/otel";
 import { propagateAttributes, setLangfuseTracerProvider, startObservation } from "@langfuse/tracing";
 import { LangfuseClient } from "@langfuse/client";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 
 const MAX_TEXT = 40_000; // per string: as much as the model itself is given (the system prompt, the largest tool result), no more
 

@@ -3,7 +3,7 @@
 // by a salted hash of their IP: the raw IP is never stored, logged or traced.
 import { createHmac } from "node:crypto";
 import net from "node:net";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 
 /**
  * What a visitor is counted as: an IPv4 address as is, an IPv6 address by its /64 (one household or one rented block, so rotating

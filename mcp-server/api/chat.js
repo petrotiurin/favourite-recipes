@@ -1,5 +1,5 @@
-import { config, assertChatConfigured, warnSharedKeys } from "../lib/config.js";
-import { verifyUser } from "../lib/auth.js";
+import { config, assertChatConfigured, warnSharedKeys } from "../lib/config.ts";
+import { verifyUser } from "../lib/auth.ts";
 import { makeCaller } from "../lib/tools.js";
 import { checkRateLimit, checkPanelLimit, clientIp, hashIp, authBlocked, recordAuthFailure } from "../lib/rate-limit.js";
 import { runChat, sanitizeMessages, ChatError, MAX_USER_CHARS } from "../lib/chat.js";

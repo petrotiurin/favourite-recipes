@@ -5,7 +5,7 @@
 // A tray row is { id, status, items (jsonb array), list_hash, version, created_at, expires_at, updated_at, updated_by }. Writes are
 // optimistic: patchTray() only succeeds when `version` is still what the caller read, so two editors (or a background photo job and an
 // editor) adding at the same moment never overwrite each other; callers re-read and retry (see lib/tray.js mutate()).
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { rest, q, clock, StoreError } from "./chat-store.js";
 
 export const TRAY_DAYS = 7;

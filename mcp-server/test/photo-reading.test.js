@@ -37,7 +37,7 @@ before(async () => {
   reader = await import("../lib/photo-reader.js");
   store = await import("../lib/chat-store.js");
   followUp = await import("../lib/follow-up.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
   queue.deps.sleep = () => new Promise((r) => setImmediate(r));
 });
 const OWNER = "00000000-0000-4000-8000-0000000000e1";

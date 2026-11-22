@@ -42,7 +42,7 @@ before(async () => {
     return realFetch(url, init);
   };
   chat = await import("../api/chat.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
   langfuse = await import("../lib/langfuse.js");
   langfuse.useTestExporter(spans);
   store = await import("../lib/chat-store.js");

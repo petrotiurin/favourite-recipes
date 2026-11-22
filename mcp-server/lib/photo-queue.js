@@ -10,14 +10,14 @@
 //   kick         from the panel's polling: restarts work an instance left behind (an expired lease, a report never made, a follow-up never run)
 // Everything here is server-side; the main chat model only ever sees the text report.
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { rest, q, clock, appendEvent, unhandledEvents, conversationById, lockHeld } from "./chat-store.js";
 import { downloadUpload, dataUrl } from "./chat-uploads.js";
 import { readPhotos, groupPhotos, fieldsFromRead, findDuplicate, photoLabel, ReaderError, readerConfigured } from "./photo-reader.js";
 import { PHOTO_READER_PROMPT_VERSION } from "./photo-reader-prompt.js";
 import { background } from "./background.js";
 import { startTrace } from "./langfuse.js";
-import { userEmail } from "./auth.js";
+import { userEmail } from "./auth.ts";
 
 export const MAX_UNREPORTED = 30; // photos per conversation not reported yet
 export const MAX_ATTEMPTS = 2;

@@ -10,7 +10,7 @@ import net from "node:net";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
-import { CARD_ASPECT } from "./config.js";
+import { CARD_ASPECT } from "./config.ts";
 import { normalizeImage } from "./images.js";
 import { generateDishImage } from "./image-generation.js";
 import { downloadUpload } from "./chat-uploads.js";

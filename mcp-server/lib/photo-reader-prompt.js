@@ -2,7 +2,7 @@
 // Nothing from the chat goes in here: no catalogue, no page, no conversation, no tray, no tool names, no editor details. lib/chat-prompt.js
 // is deliberately not imported. The recipe-writing rules come from the same place as the chat guide (workflows/plan-recipes.md).
 import { createHash } from "node:crypto";
-import { COURSES } from "./config.js";
+import { COURSES } from "./config.ts";
 import { recipeRules } from "./workflows.js";
 import { UNITS } from "../../shared/ingredient-line.ts";
 

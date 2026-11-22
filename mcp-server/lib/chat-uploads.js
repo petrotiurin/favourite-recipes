@@ -5,10 +5,10 @@
 // only the path. Server-only, with the service-role key.
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
-import { MAX_IMAGE_EDGE } from "./config.js";
+import { MAX_IMAGE_EDGE } from "./config.ts";
 import { q, rest, isUuid, StoreError } from "./chat-store.js";
 import { storage, objectPath, SIGNED_URL_SECONDS } from "./tray-store.js";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 
 export const UPLOAD_BUCKET = "chat-uploads";
 export const MAX_IMAGES = 8; // per message (docs/parallel-photo-reading.md P7)

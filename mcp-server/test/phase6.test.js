@@ -28,7 +28,7 @@ before(async () => {
   tools = await import("../lib/tools.js");
   background = await import("../lib/background.js");
   photos = await import("../lib/tray-photos.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
 });
 const OWNER = "00000000-0000-4000-8000-0000000000e1";
 const editor = () => tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });

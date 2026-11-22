@@ -1,6 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { assertConfigured } from "../lib/config.js";
-import { isAuthorized } from "../lib/auth.js";
+import { assertConfigured } from "../lib/config.ts";
+import { isAuthorized } from "../lib/auth.ts";
 import { buildServer } from "../lib/server.js";
 
 // Stateless Streamable HTTP: a fresh server + transport per request, which is

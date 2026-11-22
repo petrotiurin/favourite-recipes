@@ -1,7 +1,7 @@
 // The chat's system prompt (docs/chatbot-design.md 6, 6.1, 7.2). Order matters for prompt caching: the stable instructions
 // and the catalogue come first and are identical for every visitor; the page note (volatile) is added last, by the caller.
 import { createHash } from "node:crypto";
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { chatGuide } from "./workflows.js";
 
 export const SUGGEST_REPLIES_TOOL = {

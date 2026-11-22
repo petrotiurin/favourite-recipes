@@ -1,7 +1,7 @@
 // The ingredient catalogue, data/ingredients.json (docs/structured-ingredients.md sections 2, 4 and 5): one entry per thing we buy, keyed by
 // a stable id, with its shopping-list name, aisle, shopping unit, how recipe units convert to it and the other names recipes use for it.
 // Every recipe ingredient points at one (`item`). Only the server writes the file, and only through applyCatalogueChange.
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { cached } from "./cache.js";
 import { ChangeSet } from "./github.js";
 import { UNITS, sectionErrors } from "../../shared/ingredient-line.ts";

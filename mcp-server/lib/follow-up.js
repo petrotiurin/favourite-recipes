@@ -6,11 +6,11 @@
 // Exactly once: whoever claims the conversation's unhandled notes first (claimEvents, atomic) hands them to the model: this follow-up, or the
 // user's own next turn. Every turn holds the conversation's turn lock; a follow-up that finds it taken leaves the note for the running turn, which
 // starts the follow-up itself when it ends (afterTurn).
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { makeCaller } from "./tools.js";
 import { runChat } from "./chat.js";
 import { startTrace } from "./langfuse.js";
-import { userEmail } from "./auth.js";
+import { userEmail } from "./auth.ts";
 import { loadTray, trayNote } from "./tray.js";
 import { getEvent, conversationById, takeTurnLock, releaseTurnLock, claimEvents, unhandledEvents, getMessages, appendMessages, historyForModel, withPhotoNotes, photoList, newId } from "./chat-store.js";
 import { readsOf, progressNote, startFollowUp } from "./photo-queue.js";

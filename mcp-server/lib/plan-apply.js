@@ -2,7 +2,7 @@
 // (POST /chat/plan/apply), never a model tool: a person taps the button, the server checks their token and EDITORS afresh (api/chat.js),
 // re-validates every item against the repo as it is NOW, checks for clashes, and commits ONCE through the same batch machinery as
 // batch_changes (lib/operations.js + ChangeSet.commit), photos included. Then it empties the tray (or removes just the saved item).
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { ChangeSet, assertCanCommit } from "./github.js";
 import { slugify } from "./recipe-format.js";
 import { listRecipes, isNextWeek, pageUrl, UserError } from "./recipes.js";

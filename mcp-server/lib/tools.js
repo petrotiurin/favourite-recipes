@@ -2,8 +2,8 @@
 // once, with the access level it needs, and every call goes through dispatch(), which checks the caller's role
 // before the handler runs. lib/server.js (MCP) and, later, api/chat.js both consume it.
 import { z } from "zod";
-import { COURSES, config } from "./config.js";
-import { createUploadToken } from "./auth.js";
+import { COURSES, config } from "./config.ts";
+import { createUploadToken } from "./auth.ts";
 import { WORKFLOWS, WORKFLOW_NAMES } from "./workflows.js";
 import { ChangeSet } from "./github.js";
 import { slugify } from "./recipe-format.js";

@@ -27,7 +27,7 @@ before(async () => {
   photos = await import("../lib/tray-photos.js");
   chatUi = await import("../lib/chat-ui.js");
   rateLimit = await import("../lib/rate-limit.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
 });
 const OWNER = "00000000-0000-4000-8000-0000000000e1";
 const editor = () => tools.makeCaller({ role: "editor", email: "owner@example.com", userId: OWNER });

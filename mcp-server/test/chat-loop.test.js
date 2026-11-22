@@ -229,7 +229,7 @@ test("an answer without chips gets ONE cheap follow-up that offers only suggest_
 });
 
 test("a turn over its time budget stops between model calls with a clear line", async () => {
-  const { config } = await import("../lib/config.js");
+  const { config } = await import("../lib/config.ts");
   const saved = config.chatTurnBudgetMs;
   config.chatTurnBudgetMs = -1;
   const warn = console.warn;
@@ -246,7 +246,7 @@ test("a turn over its time budget stops between model calls with a clear line", 
 });
 
 test("a model call still running at the turn's deadline is cut short: the turn ends with the clear line instead of being killed mid-stream", async () => {
-  const { config } = await import("../lib/config.js");
+  const { config } = await import("../lib/config.ts");
   const saved = config.chatTurnDeadlineMs;
   config.chatTurnDeadlineMs = 150;
   const warn = console.warn;

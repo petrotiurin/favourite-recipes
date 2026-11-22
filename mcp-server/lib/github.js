@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { clearCache, registerClear } from "./cache.js";
 
 // The ONLY paths this server is ever allowed to write or delete. Everything

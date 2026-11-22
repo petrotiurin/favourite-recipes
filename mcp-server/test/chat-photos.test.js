@@ -34,7 +34,7 @@ before(async () => {
   store = await import("../lib/chat-store.js");
   background = await import("../lib/background.js");
   chatMod = await import("../lib/chat.js");
-  ({ config } = await import("../lib/config.js"));
+  ({ config } = await import("../lib/config.ts"));
 });
 const OWNER = "00000000-0000-4000-8000-0000000000e1";
 const STRANGER = "00000000-0000-4000-8000-0000000000a1";

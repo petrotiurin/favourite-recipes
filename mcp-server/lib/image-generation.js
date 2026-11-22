@@ -1,4 +1,4 @@
-import { config } from "./config.js";
+import { config } from "./config.ts";
 import { startTrace } from "./langfuse.js";
 
 const GENERATION_TIMEOUT_MS = 120_000; // Muse usually answers in 10-20s; leave room for slow runs
