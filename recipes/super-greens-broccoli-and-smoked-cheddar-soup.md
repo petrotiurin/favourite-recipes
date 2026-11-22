@@ -1,5 +1,5 @@
 ---
-title: SUPER GREENS BROCCOLI AND SMOKED CHEDDAR SOUP
+title: Super Greens Broccoli and Smoked Cheddar Soup
 slug: super-greens-broccoli-and-smoked-cheddar-soup
 image: /images/recipes/super-greens-broccoli-and-smoked-cheddar-soup.jpg
 course: [Dinner]
